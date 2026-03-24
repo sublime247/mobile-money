@@ -1,20 +1,25 @@
-version: '3.8'
+# docker-compose.yml
+#
+# Local development environment for sublime247/mobile-money.
+# Starts the app alongside Postgres and Redis with live-reload via ts-node.
+#
+# Usage:
+#   docker compose up          # start everything
+#   docker compose up -d       # start in background
+#   docker compose down        # stop and remove containers
+#   docker compose down -v     # stop and wipe volumes (fresh DB)
+
+version: "3.9"
 
 services:
-  app:
-    build: .
-    ports:
-      - "3000:3000"
-    environment:
-      - NODE_ENV=production
-    env_file:
-      - .env
-    depends_on:
-      - db
-      - redis
 
-  db:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL
+  # ---------------------------------------------------------------------------
+  postgres:
     image: postgres:16-alpine
+    container_name: mobilemoney_postgres
+    restart: unless-stopped
     environment:
       POSTGRES_USER: user
       POSTGRES_PASSWORD: password
@@ -23,14 +28,63 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./database/migrations:/docker-entrypoint-initdb.d/migrations:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d mobilemoney_stellar"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
+  # ---------------------------------------------------------------------------
+  # Redis
+  # ---------------------------------------------------------------------------
   redis:
     image: redis:7-alpine
+    container_name: mobilemoney_redis
+    restart: unless-stopped
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
-    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ---------------------------------------------------------------------------
+  # Application (live reload via ts-node-dev)
+  # ---------------------------------------------------------------------------
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: mobilemoney_app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      # Override the localhost URLs from .env to use Docker service names
+      DATABASE_URL: postgresql://user:password@postgres:5432/mobilemoney_stellar
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "${PORT:-3000}:3000"
+    volumes:
+      # Mount source so edits reflect immediately without rebuilding
+      - .:/app
+      - /app/node_modules
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
 volumes:
   postgres_data:

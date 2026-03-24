@@ -57,6 +57,20 @@ npm start
 docker-compose up
 ```
 
+### Docker (Development)
+
+Starts the app with hot reload, a debugger on port `9229`, PostgreSQL, and Redis.
+
+```bash
+# Start
+npm run docker:dev
+
+# Stop
+npm run docker:dev:down
+```
+
+Attach a debugger (e.g. VS Code) to `localhost:9229`.
+
 ## Testing
 
 ### Run Tests

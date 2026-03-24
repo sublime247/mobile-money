@@ -1,0 +1,28 @@
+# Dockerfile.dev
+#
+# Development image only — NOT for production.
+# Uses ts-node-dev for live TypeScript reload on file changes.
+
+FROM node:20-alpine
+
+# Install curl for the healthcheck in docker-compose
+RUN apk add --no-cache curl
+
+WORKDIR /app
+
+# Copy manifests first to leverage layer caching
+COPY package*.json ./
+
+# Install all deps including devDependencies (needed for ts-node-dev)
+RUN npm ci
+
+# Copy the rest of the source (overridden by the bind mount at runtime)
+COPY . .
+
+EXPOSE 3000
+
+# ts-node-dev watches for file changes and restarts automatically.
+# --respawn      — restart on crash
+# --transpile-only — skip type checking for faster restarts
+# --ignore-watch node_modules — don't watch node_modules
+CMD ["npx", "ts-node-dev", "--respawn", "--transpile-only", "--ignore-watch", "node_modules", "src/index.ts"]

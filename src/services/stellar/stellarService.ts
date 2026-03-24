@@ -1,10 +1,16 @@
 import * as StellarSdk from 'stellar-sdk';
 import { getStellarServer, getNetworkPassphrase } from '../../config/stellar';
+import dotenv from 'dotenv';
+dotenv.config();
 
+
+ console.log(process.env.STELLAR_ISSUER_SECRET);
 export class StellarService {
   private server: StellarSdk.Horizon.Server;
   private issuerKeypair: StellarSdk.Keypair;
 
+ 
+  
   constructor() {
     this.server = getStellarServer();
     const secret = process.env.STELLAR_ISSUER_SECRET;
