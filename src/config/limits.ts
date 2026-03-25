@@ -16,6 +16,10 @@ export const TRANSACTION_LIMITS: LimitConfig = {
   [KYCLevel.Full]: parseFloat(process.env.LIMIT_FULL || '1000000')
 };
 
+// Per-transaction amount limits
+export const MIN_TRANSACTION_AMOUNT = parseFloat(process.env.MIN_TRANSACTION_AMOUNT || '100');
+export const MAX_TRANSACTION_AMOUNT = parseFloat(process.env.MAX_TRANSACTION_AMOUNT || '1000000');
+
 // Validation on module load
 function validateLimits(limits: LimitConfig): void {
   const values = Object.values(limits);
@@ -30,4 +34,17 @@ function validateLimits(limits: LimitConfig): void {
   }
 }
 
+function validateAmountLimits(): void {
+  if (MIN_TRANSACTION_AMOUNT <= 0 || !isFinite(MIN_TRANSACTION_AMOUNT)) {
+    throw new Error('MIN_TRANSACTION_AMOUNT must be a positive finite number');
+  }
+  if (MAX_TRANSACTION_AMOUNT <= 0 || !isFinite(MAX_TRANSACTION_AMOUNT)) {
+    throw new Error('MAX_TRANSACTION_AMOUNT must be a positive finite number');
+  }
+  if (MIN_TRANSACTION_AMOUNT > MAX_TRANSACTION_AMOUNT) {
+    throw new Error('MIN_TRANSACTION_AMOUNT must be <= MAX_TRANSACTION_AMOUNT');
+  }
+}
+
 validateLimits(TRANSACTION_LIMITS);
+validateAmountLimits();

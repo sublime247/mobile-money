@@ -1,4 +1,4 @@
-import { KYCLevel, TRANSACTION_LIMITS } from '../../config/limits';
+import { KYCLevel, TRANSACTION_LIMITS, MIN_TRANSACTION_AMOUNT, MAX_TRANSACTION_AMOUNT } from '../../config/limits';
 import { KYCService } from '../kyc/kycService';
 import { TransactionModel } from '../../models/transaction';
 
@@ -22,6 +22,29 @@ export class TransactionLimitService {
     userId: string,
     transactionAmount: number
   ): Promise<LimitCheckResult> {
+    // Validate per-transaction amount limits first
+    if (transactionAmount < MIN_TRANSACTION_AMOUNT) {
+      return {
+        allowed: false,
+        kycLevel: KYCLevel.Unverified, // Placeholder, actual level not needed for amount validation
+        dailyLimit: 0,
+        currentDailyTotal: 0,
+        remainingLimit: 0,
+        message: `Transaction amount too small. Minimum allowed: ${MIN_TRANSACTION_AMOUNT} XAF. Attempted: ${transactionAmount} XAF.`
+      };
+    }
+    
+    if (transactionAmount > MAX_TRANSACTION_AMOUNT) {
+      return {
+        allowed: false,
+        kycLevel: KYCLevel.Unverified, // Placeholder, actual level not needed for amount validation
+        dailyLimit: 0,
+        currentDailyTotal: 0,
+        remainingLimit: 0,
+        message: `Transaction amount too large. Maximum allowed: ${MAX_TRANSACTION_AMOUNT} XAF. Attempted: ${transactionAmount} XAF.`
+      };
+    }
+    
     // Get user's KYC level
     const kycLevel = await this.kycService.getUserKYCLevel(userId);
     const dailyLimit = TRANSACTION_LIMITS[kycLevel];

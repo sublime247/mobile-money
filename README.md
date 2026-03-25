@@ -103,6 +103,22 @@ npm run test:watch
 
 The system enforces daily transaction limits based on user KYC (Know Your Customer) verification levels to prevent fraud while encouraging users to complete higher levels of verification.
 
+### Per-Transaction Amount Limits
+
+Before checking daily KYC limits, the system validates that each individual transaction falls within acceptable ranges:
+
+| Limit Type | Amount  | Purpose                                      |
+| ---------- | ------- | -------------------------------------------- |
+| Minimum    | 100 XAF | Prevents micro-transactions and spam         |
+| Maximum    | 1,000,000 XAF | Fraud prevention for single large transactions |
+
+These limits can be configured via environment variables:
+
+```bash
+MIN_TRANSACTION_AMOUNT=100        # Minimum per-transaction amount (XAF)
+MAX_TRANSACTION_AMOUNT=1000000    # Maximum per-transaction amount (XAF)
+```
+
 ### KYC Levels and Daily Limits
 
 | KYC Level  | Daily Limit   | Description                             |
@@ -113,17 +129,23 @@ The system enforces daily transaction limits based on user KYC (Know Your Custom
 
 ### How Limits Are Enforced
 
-- Limits are calculated using a **rolling 24-hour window** from the current time
-- Both deposit and withdrawal transactions count toward the daily total
-- Only completed transactions are included in the calculation
-- Limits are checked before each transaction is processed
-- If a transaction would exceed the limit, it is rejected with a detailed error message
+1. **Per-Transaction Validation**: Each transaction is first checked against MIN and MAX amount limits
+2. **Daily Limit Calculation**: Limits are calculated using a **rolling 24-hour window** from the current time
+3. **Transaction Aggregation**: Both deposit and withdrawal transactions count toward the daily total
+4. **Status Filtering**: Only completed transactions are included in the calculation
+5. **Pre-Processing Check**: Limits are checked before each transaction is processed
+6. **Clear Error Messages**: If a transaction is rejected, a detailed error message explains why
 
 ### Configuration
 
 Transaction limits can be configured via environment variables:
 
 ```bash
+# Per-transaction limits
+MIN_TRANSACTION_AMOUNT=100        # Minimum per-transaction amount (XAF)
+MAX_TRANSACTION_AMOUNT=1000000    # Maximum per-transaction amount (XAF)
+
+# Daily KYC limits
 LIMIT_UNVERIFIED=10000    # Daily limit for unverified users (XAF)
 LIMIT_BASIC=100000        # Daily limit for basic KYC users (XAF)
 LIMIT_FULL=1000000        # Daily limit for full KYC users (XAF)
