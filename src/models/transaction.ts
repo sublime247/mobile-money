@@ -159,7 +159,7 @@ export class TransactionModel {
     const result = await pool.query(
       `SELECT * FROM transactions 
        WHERE user_id = $1 
-       AND status = 'completed' 
+       AND status = $3 
        AND created_at >= $2
        ORDER BY created_at DESC`,
       [userId, since],

@@ -43,7 +43,15 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: "npm"
+
+      - name: Verify package-lock.json exists
+        run: |
+          if [ ! -f package-lock.json ]; then
+            echo "⚠️ package-lock.json not found, generating it..."
+            npm install --package-lock-only
+          else
+            echo "✅ package-lock.json found"
+          fi
 
       - name: Install dependencies
         run: npm ci
@@ -80,7 +88,15 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: "npm"
+
+      - name: Verify package-lock.json exists
+        run: |
+          if [ ! -f package-lock.json ]; then
+            echo "⚠️ package-lock.json not found, generating it..."
+            npm install --package-lock-only
+          else
+            echo "✅ package-lock.json found"
+          fi
 
       - name: Install dependencies
         run: npm ci
@@ -150,4 +166,3 @@ jobs:
             echo "  - ${{ github.repository }}:latest"
           fi
           echo "=================================="
-

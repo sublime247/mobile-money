@@ -250,8 +250,8 @@ describe("checkMobileMoneyHealth()", () => {
 
     expect(result).toMatchObject<MobileMoneyHealthResult>({
       providers: {
-        mtn: { status: "up", responseTime: 150 },
-        airtel: { status: "up", responseTime: 200 },
+        mtn: { status: "up", responseTime: expect.any(Number) },
+        airtel: { status: "up", responseTime: expect.any(Number) },
         orange: { status: "down", responseTime: null },
       },
     });

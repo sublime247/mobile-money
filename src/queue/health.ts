@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { transactionQueue, getQueueStats } from "./transactionQueue";
+import { QueueHealthResponse, QueueActionResponse } from "../types/api";
 
 export async function getQueueHealth(req: Request, res: Response) {
   try {
@@ -7,7 +8,7 @@ export async function getQueueHealth(req: Request, res: Response) {
 
     const isHealthy = !stats.isPaused && stats.failed < 100;
 
-    res.json({
+    const body: QueueHealthResponse = {
       status: isHealthy ? "healthy" : "degraded",
       timestamp: new Date().toISOString(),
       queue: "transaction-processing",
@@ -18,9 +19,10 @@ export async function getQueueHealth(req: Request, res: Response) {
         failed: stats.failed,
         paused: stats.isPaused,
       },
-    });
+    };
+    res.json(body);
   } catch (err) {
-    console.error('Failed to fetch queue health:', err);
+    console.error("Failed to fetch queue health:", err);
     res.status(500).json({ error: "Failed to fetch queue health" });
   }
 }
@@ -28,9 +30,13 @@ export async function getQueueHealth(req: Request, res: Response) {
 export async function pauseQueueEndpoint(req: Request, res: Response) {
   try {
     await transactionQueue.pause();
-    res.json({ success: true, message: "Queue paused" });
+    const body: QueueActionResponse = {
+      success: true,
+      message: "Queue paused",
+    };
+    res.json(body);
   } catch (err) {
-    console.error('Failed to pause queue:', err);
+    console.error("Failed to pause queue:", err);
     res.status(500).json({ error: "Failed to pause queue" });
   }
 }
@@ -38,9 +44,13 @@ export async function pauseQueueEndpoint(req: Request, res: Response) {
 export async function resumeQueueEndpoint(req: Request, res: Response) {
   try {
     await transactionQueue.resume();
-    res.json({ success: true, message: "Queue resumed" });
+    const body: QueueActionResponse = {
+      success: true,
+      message: "Queue resumed",
+    };
+    res.json(body);
   } catch (err) {
-    console.error('Failed to resume queue:', err);
+    console.error("Failed to resume queue:", err);
     res.status(500).json({ error: "Failed to resume queue" });
   }
 }

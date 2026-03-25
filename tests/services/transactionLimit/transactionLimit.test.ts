@@ -1,6 +1,6 @@
 import { TransactionLimitService } from '../../../src/services/transactionLimit/transactionLimitService';
 import { KYCService } from '../../../src/services/kyc/kycService';
-import { TransactionModel } from '../../../src/models/transaction';
+import { TransactionModel, TransactionStatus } from '../../../src/models/transaction';
 import { KYCLevel } from '../../../src/config/limits';
 
 // Mock dependencies
@@ -19,13 +19,80 @@ describe('TransactionLimitService', () => {
   });
 
   describe('checkTransactionLimit', () => {
+    it('should reject transaction below minimum amount', async () => {
+      const userId = 'user-123';
+      const transactionAmount = 50; // Below MIN_TRANSACTION_AMOUNT (100)
+
+      const result = await service.checkTransactionLimit(userId, transactionAmount);
+
+      expect(result.allowed).toBe(false);
+      expect(result.message).toContain('Transaction amount too small');
+      expect(result.message).toContain('Minimum allowed: 100 XAF');
+      expect(result.message).toContain('Attempted: 50 XAF');
+      // Should not call KYC service since amount validation happens first
+      expect(mockKycService.getUserKYCLevel).not.toHaveBeenCalled();
+    });
+
+    it('should reject transaction above maximum amount', async () => {
+      const userId = 'user-123';
+      const transactionAmount = 2000000; // Above MAX_TRANSACTION_AMOUNT (1000000)
+
+      const result = await service.checkTransactionLimit(userId, transactionAmount);
+
+      expect(result.allowed).toBe(false);
+      expect(result.message).toContain('Transaction amount too large');
+      expect(result.message).toContain('Maximum allowed: 1000000 XAF');
+      expect(result.message).toContain('Attempted: 2000000 XAF');
+      // Should not call KYC service since amount validation happens first
+      expect(mockKycService.getUserKYCLevel).not.toHaveBeenCalled();
+    });
+
+    it('should proceed to KYC check when amount is within min/max range', async () => {
+      const userId = 'user-123';
+      const transactionAmount = 5000; // Within range
+
+      mockKycService.getUserKYCLevel.mockResolvedValue(KYCLevel.Unverified);
+      mockTransactionModel.findCompletedByUserSince.mockResolvedValue([]);
+
+      await service.checkTransactionLimit(userId, transactionAmount);
+
+      // Should call KYC service since amount validation passed
+      expect(mockKycService.getUserKYCLevel).toHaveBeenCalledWith(userId);
+    });
+
+    it('should allow transaction at exactly minimum amount', async () => {
+      const userId = 'user-123';
+      const transactionAmount = 100; // Exactly MIN_TRANSACTION_AMOUNT
+
+      mockKycService.getUserKYCLevel.mockResolvedValue(KYCLevel.Unverified);
+      mockTransactionModel.findCompletedByUserSince.mockResolvedValue([]);
+
+      const result = await service.checkTransactionLimit(userId, transactionAmount);
+
+      expect(result.allowed).toBe(true);
+      expect(mockKycService.getUserKYCLevel).toHaveBeenCalled();
+    });
+
+    it('should allow transaction at exactly maximum amount', async () => {
+      const userId = 'user-123';
+      const transactionAmount = 1000000; // Exactly MAX_TRANSACTION_AMOUNT
+
+      mockKycService.getUserKYCLevel.mockResolvedValue(KYCLevel.Full);
+      mockTransactionModel.findCompletedByUserSince.mockResolvedValue([]);
+
+      const result = await service.checkTransactionLimit(userId, transactionAmount);
+
+      expect(result.allowed).toBe(true);
+      expect(mockKycService.getUserKYCLevel).toHaveBeenCalled();
+    });
+
     it('should allow transaction when within limit', async () => {
       const userId = 'user-123';
       const transactionAmount = 5000;
 
       mockKycService.getUserKYCLevel.mockResolvedValue(KYCLevel.Unverified);
       mockTransactionModel.findCompletedByUserSince.mockResolvedValue([
-        { amount: '3000', status: 'completed' } as any
+        { amount: '3000', status: TransactionStatus.Completed } as any
       ]);
 
       const result = await service.checkTransactionLimit(userId, transactionAmount);
@@ -43,7 +110,7 @@ describe('TransactionLimitService', () => {
 
       mockKycService.getUserKYCLevel.mockResolvedValue(KYCLevel.Unverified);
       mockTransactionModel.findCompletedByUserSince.mockResolvedValue([
-        { amount: '5000', status: 'completed' } as any
+        { amount: '5000', status: TransactionStatus.Completed } as any
       ]);
 
       const result = await service.checkTransactionLimit(userId, transactionAmount);
@@ -63,9 +130,9 @@ describe('TransactionLimitService', () => {
 
       mockKycService.getUserKYCLevel.mockResolvedValue(KYCLevel.Basic);
       mockTransactionModel.findCompletedByUserSince.mockResolvedValue([
-        { amount: '30000', status: 'completed' } as any,
-        { amount: '20000', status: 'completed' } as any,
-        { amount: '15000', status: 'completed' } as any
+        { amount: '30000', status: TransactionStatus.Completed } as any,
+        { amount: '20000', status: TransactionStatus.Completed } as any,
+        { amount: '15000', status: TransactionStatus.Completed } as any
       ]);
 
       const result = await service.checkTransactionLimit(userId, transactionAmount);
@@ -105,10 +172,12 @@ describe('TransactionLimitService', () => {
 
     it('should not include upgrade suggestion for Full KYC users', async () => {
       const userId = 'user-123';
-      const transactionAmount = 2000000;
+      const transactionAmount = 500000; // Within amount limits but will exceed Full KYC daily limit
 
       mockKycService.getUserKYCLevel.mockResolvedValue(KYCLevel.Full);
-      mockTransactionModel.findCompletedByUserSince.mockResolvedValue([]);
+      mockTransactionModel.findCompletedByUserSince.mockResolvedValue([
+        { amount: '600000', status: TransactionStatus.Completed } as any
+      ]);
 
       const result = await service.checkTransactionLimit(userId, transactionAmount);
 
