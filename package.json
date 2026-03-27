@@ -33,8 +33,8 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1017.0",
-    "@aws-sdk/lib-storage": "^3.1017.0",
+    "@aws-sdk/client-s3": "^3.1018.0",
+    "@aws-sdk/lib-storage": "^3.1018.0",
     "@bull-board/api": "^6.20.6",
     "@bull-board/express": "^6.20.6",
     "@sendgrid/mail": "^8.1.6",
