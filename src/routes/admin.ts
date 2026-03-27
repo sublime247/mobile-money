@@ -1,5 +1,9 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { updateAdminNotesHandler } from "../controllers/transactionController";
+import { MobileMoneyService } from "../services/mobilemoney/mobileMoneyService";
+import { getQueueStats } from "../queue/transactionQueue";
+import { redisClient } from "../config/redis";
+import { checkReplicaHealth } from "../config/database";
 
 const router = Router();
 
@@ -191,6 +195,93 @@ router.patch(
   requireAdmin,
   logAdminAction("UPDATE_TRANSACTION_ADMIN_NOTES"),
   updateAdminNotesHandler,
+);
+
+/**
+ * =========================
+ * HEALTH & MONITORING
+ * =========================
+ */
+
+// GET /api/admin/providers/health
+router.get(
+  "/providers/health",
+  requireAdmin,
+  logAdminAction("GET_PROVIDER_HEALTH"),
+  async (req: Request, res: Response) => {
+    try {
+      const timestamp = new Date().toISOString();
+      const mobileMoneyService = new MobileMoneyService();
+
+      // Get failover stats
+      let providers = {};
+      try {
+        providers = mobileMoneyService.getFailoverStats();
+      } catch (err) {
+        console.error("Error fetching failover stats:", err);
+      }
+
+      // Get queue stats
+      let queue = { status: "unknown", stats: {} };
+      try {
+        const queueStats = await getQueueStats();
+        queue = {
+          status: queueStats.failed > 100 ? "degraded" : "healthy",
+          stats: queueStats,
+        };
+      } catch (err) {
+        console.error("Error fetching queue stats:", err);
+      }
+
+      // Get Redis status
+      const redis = { status: "unknown" };
+      try {
+        if (redisClient.isOpen) {
+          await redisClient.ping();
+          redis.status = "ok";
+        } else {
+          redis.status = "closed";
+        }
+      } catch (err) {
+        console.error("Error checking Redis status:", err);
+        redis.status = "down";
+      }
+
+      // Get database replica health
+      let database: {
+        primary: string;
+        replicas: { url: string; healthy: boolean }[];
+      } = {
+        primary: "unknown",
+        replicas: [],
+      };
+      try {
+        const replicaHealth = await checkReplicaHealth();
+        database = {
+          primary: "ok", // Primary is assumed ok if we can query replicas
+          replicas: replicaHealth,
+        };
+      } catch (err) {
+        console.error("Error checking database health:", err);
+      }
+
+      res.json({
+        status: "healthy",
+        timestamp,
+        providers,
+        queue,
+        redis,
+        database,
+      });
+    } catch (err) {
+      console.error("Health check error:", err);
+      res.status(500).json({
+        status: "error",
+        message: "Failed to retrieve health data",
+        timestamp: new Date().toISOString(),
+      });
+    }
+  },
 );
 
 export const adminRoutes = router;

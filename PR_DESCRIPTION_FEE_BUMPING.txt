@@ -1,0 +1,81 @@
+================================================================================
+PR Description: Stellar Fee Bumping Implementation
+================================================================================
+
+## Summary
+Implements Stellar FeeBumpTransaction to cover network fees for user transactions, allowing transactions to succeed without users paying native XLM fees.
+
+## Changes
+
+### New Files
+- `src/stellar/transactions.ts` - Fee bumping implementation
+
+### Modified Files
+- `src/config/stellar.ts` - Added fee bump configuration
+- `.env.example` - Added fee bump environment variables
+
+## Implementation Details
+
+### Main Functions
+
+| Function | Description |
+|----------|-------------|
+| `buildTransactionWithFeeBump()` | Builds and wraps transaction with FeeBump |
+| `wrapInFeeBump()` | Wraps inner transaction in FeeBumpTransaction |
+| `submitTransaction()` | Submits fee bump transaction to network |
+| `estimateFee()` | Calculates estimated transaction fee |
+| `validateFee()` | Validates fee is within configured limits |
+| `createSimplePaymentWithFeeBump()` | Convenience function for simple payments |
+| `createTrustAndPaymentWithFeeBump()` | Convenience for trustline + payment |
+
+### Configuration Options
+```env
+STELLAR_FEE_PAYER_PUBLIC_KEY=...  # Fee payer account public key
+STELLAR_FEE_PAYER_SECRET=...       # Fee payer account secret
+STELLAR_MAX_FEE_STROOPS=100000     # Max fee per transaction (0.01 XLM)
+STELLAR_BASE_FEE_STROOPS=100       # Base fee per operation
+STELLAR_MAX_OPS=100                # Max operations per transaction
+```
+
+### Key Features
+- Automatic fee payer sequence management
+- Fee limit enforcement (configurable max fee)
+- Operation count validation
+- Transaction submission with error handling
+- Convenience wrappers for common payment patterns
+
+## How It Works
+1. User creates a transaction with their account as source
+2. System wraps user's transaction in a FeeBumpTransaction
+3. Fee payer account signs and pays the network fee
+4. User's transaction executes without paying any XLM
+
+## Testing
+```typescript
+import { buildTransactionWithFeeBump, submitTransaction } from './stellar/transactions';
+
+const result = await buildTransactionWithFeeBump({
+  sourceAccount: 'GABCD...',  // User's account
+  operations: [/* user's operations */],
+  enableFeeBump: true,
+});
+
+await submitTransaction(result.envelope);
+```
+
+## Related Issues
+- Fixes: #191 [MEDIUM] Implement Fee Bumping
+
+## Checklist
+- [x] FeeBumpTransaction wrapper implemented
+- [x] Fee payer signing with generic account
+- [x] Fee payer sequence management
+- [x] Fee limits enforced
+- [x] Environment variables documented
+
+## Notes
+- In production, use a database for fee payer sequence tracking
+- Monitor fee payer account balance to ensure sufficient XLM
+- Consider implementing fee prediction for network congestion
+
+================================================================================

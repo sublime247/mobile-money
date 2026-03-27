@@ -1,4 +1,5 @@
 import { createClient, RedisClientType } from "redis";
+import { healthCheckResponseTimeSeconds } from "../../../utils/metrics";
 
 // ─── Public types ─────────────────────────────────────────────────────────────
 
@@ -243,6 +244,10 @@ export async function pingProvider(
 
     if (response.status < 500) {
       recordSuccess(name);
+      healthCheckResponseTimeSeconds.observe(
+        { provider: name, status: "up" },
+        responseTime / 1000,
+      );
       log("info", "Provider ping succeeded", {
         provider: name,
         httpStatus: response.status,
@@ -252,6 +257,10 @@ export async function pingProvider(
     }
 
     recordFailure(name);
+    healthCheckResponseTimeSeconds.observe(
+      { provider: name, status: "down" },
+      responseTime / 1000,
+    );
     log("error", "Provider returned server error", {
       provider: name,
       httpStatus: response.status,
@@ -276,6 +285,10 @@ export async function pingProvider(
           : String(err),
     });
 
+    healthCheckResponseTimeSeconds.observe(
+      { provider: name, status: "error" },
+      (Date.now() - start) / 1000,
+    );
     return { status: "down", responseTime: null };
   }
 }

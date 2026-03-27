@@ -69,3 +69,25 @@ export const getNetworkPassphrase = () => {
     STELLAR_NETWORKS.TESTNET) as StellarNetwork;
   return NETWORK_PASSPHRASES[network];
 };
+
+// SEP-24 Configuration
+export const getSep24Config = () => ({
+  webAuthDomain: process.env.STELLAR_WEB_AUTH_DOMAIN || "https://api.mobilemoney.com",
+  interactiveUrlBase: process.env.SEP24_INTERACTIVE_URL || "https://wallet.mobilemoney.com",
+  feeServer: process.env.SEP24_FEE_SERVER,
+  issuerAccount: process.env.STELLAR_ISSUER_ACCOUNT,
+  signingKey: process.env.STELLAR_SIGNING_KEY,
+});
+
+// Fee Bump Configuration
+export const getFeeBumpConfig = () => ({
+  // Fee payer account that covers network fees for user transactions
+  feePayerPublicKey: process.env.STELLAR_FEE_PAYER_PUBLIC_KEY || "",
+  feePayerPrivateKey: process.env.STELLAR_FEE_PAYER_SECRET || "",
+  // Maximum fee willing to pay (in stroops)
+  maxFeePerTransaction: parseInt(process.env.STELLAR_MAX_FEE_STROOPS || "100000", 10),
+  // Base fee for transactions (in stroops)
+  baseFeeStroops: parseInt(process.env.STELLAR_BASE_FEE_STROOPS || "100", 10),
+  // Maximum number of operations per transaction
+  maxOperationsPerTransaction: parseInt(process.env.STELLAR_MAX_OPS || "100", 10),
+});

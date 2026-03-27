@@ -36,7 +36,6 @@
     "@bull-board/api": "^6.20.6",
     "@bull-board/express": "^6.20.6",
     "@types/speakeasy": "^2.0.10",
-    "@types/uuid": "^11.0.0",
     "apollo-server-core": "^3.13.0",
     "apollo-server-express": "^3.13.0",
     "axios": "^1.6.2",
@@ -71,6 +70,7 @@
     "stellar-sdk": "^11.3.0",
     "twilio": "^5.13.1",
     "ua-parser-js": "^2.0.9",
+    "uuid": "^9.0.0",
     "ws": "^8.18.0",
     "zod": "^4.3.6"
   },
@@ -95,6 +95,7 @@
     "@types/speakeasy": "^2.0.10",
     "@types/supertest": "^7.2.0",
     "@types/ua-parser-js": "^0.7.39",
+    "@types/uuid": "^10.0.0",
     "@types/ws": "^8.5.14",
     "@typescript-eslint/eslint-plugin": "^8.57.2",
     "@typescript-eslint/parser": "^8.57.2",

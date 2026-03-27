@@ -2,10 +2,7 @@ import * as StellarSdk from "stellar-sdk";
 import { getStellarServer, getNetworkPassphrase } from "../../config/stellar";
 import dotenv from "dotenv";
 import { transactionTotal, transactionErrorsTotal } from "../../utils/metrics";
-import {
-  AssetService,
-  getConfiguredPaymentAsset,
-} from "./assetService";
+import { AssetService, getConfiguredPaymentAsset } from "./assetService";
 
 dotenv.config();
 
@@ -40,13 +37,21 @@ export class StellarService {
   constructor() {
     this.server = getStellarServer();
 
-    const secret = process.env.STELLAR_ISSUER_SECRET;
+    const secret = process.env.STELLAR_ISSUER_SECRET?.trim();
 
     if (!secret) {
       console.warn("STELLAR_ISSUER_SECRET not set - running in MOCK mode");
       this.isMockMode = true;
     } else {
-      this.issuerKeypair = StellarSdk.Keypair.fromSecret(secret);
+      try {
+        this.issuerKeypair = StellarSdk.Keypair.fromSecret(secret);
+      } catch (err) {
+        console.warn(
+          "STELLAR_ISSUER_SECRET invalid - falling back to mock mode",
+          err instanceof Error ? err.message : err,
+        );
+        this.isMockMode = true;
+      }
     }
   }
 

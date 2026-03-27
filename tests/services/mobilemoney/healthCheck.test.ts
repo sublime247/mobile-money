@@ -18,6 +18,17 @@ import {
   _circuitMap,
 } from "../../../src/services/mobilemoney/providers/healthCheck";
 
+// ✅ Mock the metrics to prevent "Cannot read properties of undefined (reading 'observe')"
+jest.mock("../../../src/utils/metrics", () => ({
+  healthCheckResponseTimeSeconds: {
+    observe: jest.fn(),
+  },
+  register: {
+    contentType: "text/plain",
+    metrics: jest.fn().mockResolvedValue(""),
+  },
+}));
+
 // ─── Shared fixtures ──────────────────────────────────────────────────────────
 
 const MTN: ProviderConfig = {

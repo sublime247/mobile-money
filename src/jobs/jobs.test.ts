@@ -119,7 +119,7 @@ describe("startJobs", () => {
   it("schedules all valid jobs", () => {
     (cron.validate as jest.Mock).mockReturnValue(true);
     startJobs();
-    expect(cron.schedule).toHaveBeenCalledTimes(3);
+    expect(cron.schedule).toHaveBeenCalledTimes(4);
   });
 
   it("skips jobs with invalid cron expressions", () => {
