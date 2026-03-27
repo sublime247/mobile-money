@@ -2,11 +2,13 @@
 -- Description: Increase column sizes to accommodate encrypted PII blobs
 
 -- Transactions table
-ALTER TABLE transactions 
+-- NOTE: `notes` and `admin_notes` are intentionally omitted here.
+-- Those columns are created in database/migrations/add_notes_to_transactions.sql,
+-- which runs outside this numbered sequence. Altering them here would fail on a
+-- fresh database where they don't exist yet.
+ALTER TABLE transactions
   ALTER COLUMN phone_number TYPE TEXT,
-  ALTER COLUMN stellar_address TYPE TEXT,
-  ALTER COLUMN notes TYPE TEXT,
-  ALTER COLUMN admin_notes TYPE TEXT;
+  ALTER COLUMN stellar_address TYPE TEXT;
 
 -- Users table
 ALTER TABLE users 
