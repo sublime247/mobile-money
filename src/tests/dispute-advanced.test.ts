@@ -1,5 +1,7 @@
 import { DisputeStateMachine } from "../services/disputeStateMachine";
 import { DisputeModel } from "../models/dispute";
+import { validateDisputeEvidenceFile } from "../services/disputeS3Upload";
+import { generateUniqueFilename, generateDisputeS3Key } from "../middleware/disputeUpload";
 
 describe("Advanced Dispute Resolution", () => {
   describe("DisputeStateMachine", () => {
@@ -98,7 +100,6 @@ describe("Advanced Dispute Resolution", () => {
 
   describe("Evidence File Validation", () => {
     test("should validate allowed file types", () => {
-      const { validateDisputeEvidenceFile } = require("../services/disputeS3Upload");
       
       const validFile = {
         originalname: "receipt.pdf",
@@ -111,7 +112,6 @@ describe("Advanced Dispute Resolution", () => {
     });
 
     test("should reject invalid file types", () => {
-      const { validateDisputeEvidenceFile } = require("../services/disputeS3Upload");
       
       const invalidFile = {
         originalname: "malware.exe",
@@ -125,7 +125,6 @@ describe("Advanced Dispute Resolution", () => {
     });
 
     test("should reject oversized files", () => {
-      const { validateDisputeEvidenceFile } = require("../services/disputeS3Upload");
       
       const oversizedFile = {
         originalname: "large.pdf",
@@ -141,7 +140,6 @@ describe("Advanced Dispute Resolution", () => {
 
   describe("Filename Generation", () => {
     test("should generate unique filenames", () => {
-      const { generateUniqueFilename } = require("../middleware/disputeUpload");
       
       const filename1 = generateUniqueFilename("receipt.pdf");
       const filename2 = generateUniqueFilename("receipt.pdf");
@@ -152,7 +150,6 @@ describe("Advanced Dispute Resolution", () => {
     });
 
     test("should sanitize filenames", () => {
-      const { generateUniqueFilename } = require("../middleware/disputeUpload");
       
       const filename = generateUniqueFilename("my file with spaces & symbols!.pdf");
       expect(filename).toMatch(/my_file_with_spaces___symbols_-\d+-[a-f0-9]+\.pdf/);
@@ -161,7 +158,6 @@ describe("Advanced Dispute Resolution", () => {
 
   describe("S3 Key Generation", () => {
     test("should generate proper S3 keys", () => {
-      const { generateDisputeS3Key } = require("../middleware/disputeUpload");
       
       const disputeId = "dispute-123";
       const filename = "receipt-123-abc.pdf";
