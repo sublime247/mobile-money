@@ -1,0 +1,26 @@
+# terraform.tfvars.example
+# Copy to terraform.tfvars and fill in real values.
+# NEVER commit terraform.tfvars — it is listed in .gitignore.
+
+aws_region  = "us-east-1"
+environment = "dev"
+app_name    = "mobile-money"
+
+# Networking
+vpc_cidr = "10.0.0.0/16"
+
+# Database
+db_name           = "mobilemoney_stellar"
+db_username       = "mmadmin"
+db_password       = "CHANGE_ME_use_a_strong_password"
+db_instance_class = "db.t4g.micro"
+
+# Redis
+redis_node_type = "cache.t4g.micro"
+
+# Web / ECS
+app_image  = "shantelpeters/mobile-money:latest"
+app_count  = 3
+app_port   = 3000
+cpu        = 512
+memory     = 1024
