@@ -1,8 +1,9 @@
 import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { feeService, CreateFeeConfigRequest, UpdateFeeConfigRequest } from "../services/feeService";
+import { calculateFee, calculateFeeForUser, VipFeeResult } from "../utils/fees";
 import { requirePermission } from "../middleware/rbac";
-import { authenticateJWT } from "../middleware/auth";
+import { authenticateToken } from "../middleware/auth";
 
 const router = Router();
 
@@ -39,6 +40,19 @@ const calculateFeeSchema = z.object({
 });
 
 /**
+ * Validation schema for the pre-flight fee estimate endpoint.
+ * `currency` and `transactionType` are captured for logging / future
+ * routing rules but do not yet alter the fee calculation.
+ */
+const estimateTransactionSchema = z.object({
+  amount: z.number().positive("amount must be a positive number"),
+  currency: z.string().length(3, "currency must be a 3-letter ISO code").toUpperCase(),
+  transactionType: z.enum(["send", "receive", "withdraw", "deposit"]),
+  /** Optional — used to look up recipient-specific rules in future iterations. */
+  recipientId: z.string().uuid().optional(),
+});
+
+/**
  * Middleware: Log admin fee actions
  */
 const logFeeAction = (action: string) => {
@@ -53,6 +67,85 @@ const logFeeAction = (action: string) => {
     next();
   };
 };
+
+/**
+ * POST /api/fees/estimate
+ * Pre-flight endpoint — returns the exact fee breakdown for a proposed
+ * transaction WITHOUT committing anything to the database.
+ *
+ * - Authenticated users receive VIP-tier-aware discounts.
+ * - Unauthenticated callers receive the standard (base) fee.
+ */
+router.post("/estimate", async (req: Request, res: Response) => {
+  try {
+    const payload = estimateTransactionSchema.parse(req.body);
+    const { amount, currency, transactionType } = payload;
+
+    let feeBreakdown: Record<string, unknown>;
+
+    if (req.jwtUser?.userId) {
+      // Authenticated path — apply VIP tier discount if applicable
+      const result: VipFeeResult = await calculateFeeForUser(amount, req.jwtUser.userId);
+
+      const effectiveFeePercentage =
+        result.fee > 0
+          ? parseFloat(((result.fee / amount) * 100).toFixed(4))
+          : 0;
+
+      feeBreakdown = {
+        grossAmount: amount,
+        feeAmount: result.fee,
+        netAmount: parseFloat((amount - result.fee).toFixed(2)),
+        effectiveFeePercentage,
+        configUsed: result.configUsed,
+        tier: result.tier,
+        discountPercent: result.discountPercent,
+        thirtyDayVolume: result.thirtyDayVolume,
+        currency,
+        transactionType,
+      };
+    } else {
+      // Anonymous path — standard fee, no VIP discounts
+      const result = await calculateFee(amount);
+
+      const effectiveFeePercentage =
+        result.fee > 0
+          ? parseFloat(((result.fee / amount) * 100).toFixed(4))
+          : 0;
+
+      feeBreakdown = {
+        grossAmount: amount,
+        feeAmount: result.fee,
+        netAmount: parseFloat((amount - result.fee).toFixed(2)),
+        effectiveFeePercentage,
+        configUsed: result.configUsed,
+        tier: null,
+        discountPercent: 0,
+        currency,
+        transactionType,
+      };
+    }
+
+    return res.json({
+      success: true,
+      data: feeBreakdown,
+    });
+  } catch (error: any) {
+    if (error.name === "ZodError") {
+      return res.status(400).json({
+        success: false,
+        error: "Validation error",
+        details: error.errors,
+      });
+    }
+
+    console.error("Fee estimate error:", error);
+    return res.status(500).json({
+      success: false,
+      error: "Failed to estimate fee",
+    });
+  }
+});
 
 /**
  * GET /api/fees/calculate
@@ -90,7 +183,7 @@ router.post("/calculate", async (req: Request, res: Response) => {
  */
 router.get(
   "/configurations",
-  authenticateJWT,
+  authenticateToken,
   requirePermission("admin:system"),
   logFeeAction("LIST_CONFIGURATIONS"),
   async (req: Request, res: Response) => {
@@ -138,7 +231,7 @@ router.get("/configurations/active", async (req: Request, res: Response) => {
  */
 router.get(
   "/configurations/:id",
-  authenticateJWT,
+  authenticateToken,
   requirePermission("admin:system"),
   logFeeAction("GET_CONFIGURATION"),
   async (req: Request, res: Response) => {
@@ -173,7 +266,7 @@ router.get(
  */
 router.post(
   "/configurations",
-  authenticateJWT,
+  authenticateToken,
   requirePermission("admin:system"),
   logFeeAction("CREATE_CONFIGURATION"),
   async (req: Request, res: Response) => {
@@ -220,7 +313,7 @@ router.post(
  */
 router.put(
   "/configurations/:id",
-  authenticateJWT,
+  authenticateToken,
   requirePermission("admin:system"),
   logFeeAction("UPDATE_CONFIGURATION"),
   async (req: Request, res: Response) => {
@@ -270,7 +363,7 @@ router.put(
  */
 router.delete(
   "/configurations/:id",
-  authenticateJWT,
+  authenticateToken,
   requirePermission("admin:system"),
   logFeeAction("DELETE_CONFIGURATION"),
   async (req: Request, res: Response) => {
@@ -318,7 +411,7 @@ router.delete(
  */
 router.post(
   "/configurations/:id/activate",
-  authenticateJWT,
+  authenticateToken,
   requirePermission("admin:system"),
   logFeeAction("ACTIVATE_CONFIGURATION"),
   async (req: Request, res: Response) => {
@@ -359,7 +452,7 @@ router.post(
  */
 router.get(
   "/configurations/:id/audit",
-  authenticateJWT,
+  authenticateToken,
   requirePermission("admin:system"),
   logFeeAction("GET_AUDIT_HISTORY"),
   async (req: Request, res: Response) => {

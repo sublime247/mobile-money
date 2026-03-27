@@ -28,6 +28,7 @@ import { reportsRoutes } from "./routes/reports";
 import { createKYCRoutes } from "./routes/kycRoutes";
 import { vaultRoutes } from "./routes/vaults";
 import { adminRoutes } from "./routes/admin";
+import feesRouter from "./routes/fees";
 import { errorHandler } from "./middleware/errorHandler";
 import {
   connectRedis,
@@ -221,6 +222,7 @@ app.use("/api/contacts", contactsRoutes);
 app.use("/api/reports", reportsRoutes);
 app.use("/api/kyc", createKYCRoutes(pool));
 app.use("/api/admin", requireAuth, adminRoutes);
+app.use("/api/fees", feesRouter);
 app.use("/sep31", sep31Router);
 
 // SEP-24 Interactive Deposit/Withdrawal Flow
