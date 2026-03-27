@@ -3,6 +3,7 @@ import {
   Counter,
   Histogram,
   Gauge,
+  Summary,
   collectDefaultMetrics,
 } from "prom-client";
 

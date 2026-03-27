@@ -43,8 +43,9 @@ import { responseTime } from "./middleware/responseTime";
 import { requestId } from "./middleware/requestId";
 import { metricsMiddleware } from "./middleware/metrics";
 import { validateStellarNetwork, logStellarNetwork } from "./config/stellar";
+import { sessionAnomalyLogger } from "./services/logger";
 import { HealthCheckResponse, ReadinessCheckResponse } from "./types/api";
-import sep24Router from "./stellar/sep24";
+import sep31Router from "./stellar/sep31";
 
 dotenv.config();
 
@@ -133,6 +134,7 @@ app.use(
     },
   }),
 );
+app.use(sessionAnomalyLogger);
 
 app.get("/health", (_req: Request, res: Response) => {
   const body: HealthCheckResponse = {
@@ -211,6 +213,7 @@ app.use("/api/disputes", disputeRoutes);
 app.use("/api/stats", statsRoutes);
 app.use("/api/reports", reportsRoutes);
 app.use("/api/kyc", createKYCRoutes(pool));
+app.use("/sep31", sep31Router);
 
 // SEP-24 Interactive Deposit/Withdrawal Flow
 app.use("/sep24", sep24Router);

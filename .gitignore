@@ -1,4 +1,5 @@
 node_modules/
+contracts/target/
 dist/
 .env
 *.log
