@@ -42,13 +42,21 @@ interface ReconciliationReport {
   }>;
 }
 
-// Helper function to calculate fees (2% of amount)
-const calculateFee = (amount: number): number => {
-  return amount * 0.02;
+import { feeService } from "../services/feeService";
+
+// Helper function to calculate fees using dynamic configuration
+const calculateFee = async (amount: number): Promise<number> => {
+  try {
+    const result = await feeService.calculateFee(amount);
+    return result.fee;
+  } catch (error) {
+    console.warn("Failed to calculate dynamic fee, using fallback 2%:", error);
+    return amount * 0.02;
+  }
 };
 
 // Helper function to format CSV
-const formatCSV = (report: ReconciliationReport): string => {
+const formatCSV = async (report: ReconciliationReport): Promise<string> => {
   const headers = [
     'Date',
     'Provider',
@@ -75,7 +83,8 @@ const formatCSV = (report: ReconciliationReport): string => {
   ].join(','));
 
   // Add provider breakdown
-  Object.entries(report.byProvider).forEach(([provider, data]) => {
+  for (const [provider, data] of Object.entries(report.byProvider)) {
+    const providerFee = await calculateFee(data.volume);
     rows.push([
       report.period.start + ' to ' + report.period.end,
       provider,
@@ -84,9 +93,9 @@ const formatCSV = (report: ReconciliationReport): string => {
       '',
       '',
       data.volume.toString(),
-      calculateFee(data.volume).toString()
+      providerFee.toString()
     ].join(','));
-  });
+  }
 
   // Add daily breakdown if available
   if (report.dailyBreakdown) {
@@ -236,7 +245,7 @@ reportsRoutes.get(
 
       // Calculate success rate
       const successRate = totalTransactions > 0 ? (successfulTransactions / totalTransactions) * 100 : 0;
-      const totalFees = calculateFee(totalVolume);
+      const totalFees = await calculateFee(totalVolume);
 
       // Build provider breakdown
       const byProvider: { [provider: string]: { count: number; volume: number } } = {};
@@ -248,16 +257,17 @@ reportsRoutes.get(
       });
 
       // Build daily breakdown
-      const dailyBreakdown = Object.entries(dailyData)
-        .map(([date, data]) => ({
+      const dailyBreakdown = await Promise.all(
+        Object.entries(dailyData).map(async ([date, data]) => ({
           date,
           totalTransactions: data.total,
           successfulTransactions: data.successful,
           failedTransactions: data.failed,
           totalVolume: data.volume,
-          totalFees: calculateFee(data.volume)
+          totalFees: await calculateFee(data.volume)
         }))
-        .sort((a, b) => a.date.localeCompare(b.date));
+      );
+      dailyBreakdown.sort((a, b) => a.date.localeCompare(b.date));
 
       // Build report
       const report: ReconciliationReport = {
@@ -280,7 +290,7 @@ reportsRoutes.get(
       // Cache the result for 1 hour (3600 seconds)
       if (redisClient?.isOpen) {
         try {
-          const cacheValue = format === 'csv' ? formatCSV(report) : JSON.stringify(report);
+          const cacheValue = format === 'csv' ? await formatCSV(report) : JSON.stringify(report);
           await redisClient.setEx(cacheKey, 3600, cacheValue);
           console.log(`Cached ${cacheKey} for 1 hour`);
         } catch (cacheError) {
@@ -290,7 +300,7 @@ reportsRoutes.get(
 
       // Return response
       if (format === 'csv') {
-        const csv = formatCSV(report);
+        const csv = await formatCSV(report);
         res.header('Content-Type', 'text/csv');
         res.header('Content-Disposition', `attachment; filename="reconciliation_report_${startDate}_to_${endDate}.csv"`);
         return res.send(csv);
