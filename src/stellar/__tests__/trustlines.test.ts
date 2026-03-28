@@ -60,6 +60,8 @@ function makeAccount(
     account_id: publicKey,
     balances,
     sequence: "1",
+    sequenceNumber: () => "1",
+    accountId: () => publicKey,
     incrementSequenceNumber: () => {},
   } as unknown as StellarSdk.Horizon.AccountResponse;
 }
@@ -129,7 +131,7 @@ describe("createTrustline", () => {
 
     const tx = mockSubmitTransaction.mock.calls[0][0] as StellarSdk.Transaction;
     const op = tx.operations[0] as StellarSdk.Operation.ChangeTrust;
-    expect(op.limit).toBe("1000");
+    expect(op.limit).toBe("1000.0000000");
   });
 });
 
@@ -182,7 +184,7 @@ describe("removeTrustline", () => {
 
     const tx = mockSubmitTransaction.mock.calls[0][0] as StellarSdk.Transaction;
     const op = tx.operations[0] as StellarSdk.Operation.ChangeTrust;
-    expect(op.limit).toBe("0");
+    expect(op.limit).toBe("0.0000000");
   });
 });
 
