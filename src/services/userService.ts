@@ -1,5 +1,8 @@
 import { pool } from "../config/database";
 import { encrypt, decrypt } from "../utils/encryption";
+import * as StellarSdk from "stellar-sdk";
+import { ensureTrustlines } from "../stellar/trustlines";
+import { getConfiguredPaymentAsset } from "./stellar/assetService";
 
 export interface User {
   id: string;
@@ -9,6 +12,8 @@ export interface User {
   role_name?: string;
   two_factor_secret?: string | null;
   backup_codes?: string[] | null;
+  stellar_address?: string | null;
+  encrypted_seed?: string | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -39,6 +44,8 @@ export async function getUserByPhoneNumber(
       u.role_id,
       u.two_factor_secret,
       u.backup_codes,
+      u.stellar_address,
+      u.encrypted_seed,
       u.created_at,
       u.updated_at,
       r.name as role_name
@@ -55,6 +62,8 @@ export async function getUserByPhoneNumber(
     ...row,
     phone_number: decrypt(row.phone_number) as string,
     two_factor_secret: decrypt(row.two_factor_secret),
+    stellar_address: row.stellar_address,
+    encrypted_seed: decrypt(row.encrypted_seed),
   };
 }
 
@@ -70,6 +79,8 @@ export async function getUserById(userId: string): Promise<User | null> {
       u.role_id,
       u.two_factor_secret,
       u.backup_codes,
+      u.stellar_address,
+      u.encrypted_seed,
       u.created_at,
       u.updated_at,
       r.name as role_name
@@ -86,6 +97,8 @@ export async function getUserById(userId: string): Promise<User | null> {
     ...row,
     phone_number: decrypt(row.phone_number) as string,
     two_factor_secret: decrypt(row.two_factor_secret),
+    stellar_address: row.stellar_address,
+    encrypted_seed: decrypt(row.encrypted_seed),
   };
 }
 
@@ -109,20 +122,53 @@ export async function createUser(userData: CreateUserRequest): Promise<User> {
 
   const roleId = roleResult.rows[0].id;
 
+  const encryptedPhone = encrypt(phone_number, true);
+  
+  // Generate Stellar account for custodial user
+  const userKeypair = StellarSdk.Keypair.random();
+  const stellarAddress = userKeypair.publicKey();
+  const encryptedSeed = encrypt(userKeypair.secret());
+
   const query = `
-    INSERT INTO users (phone_number, kyc_level, role_id)
-    VALUES ($1, $2, $3)
-    RETURNING id, phone_number, kyc_level, role_id, two_factor_secret, backup_codes, created_at, updated_at
+    INSERT INTO users (phone_number, kyc_level, role_id, stellar_address, encrypted_seed)
+    VALUES ($1, $2, $3, $4, $5)
+    RETURNING id, phone_number, kyc_level, role_id, two_factor_secret, backup_codes, stellar_address, encrypted_seed, created_at, updated_at
   `;
 
-  const encryptedPhone = encrypt(phone_number, true);
-  const result = await pool.query(query, [encryptedPhone, kyc_level, roleId]);
+  const result = await pool.query(query, [
+    encryptedPhone,
+    kyc_level,
+    roleId,
+    stellarAddress,
+    encryptedSeed,
+  ]);
   const row = result.rows[0];
+
+  // Auto-create trustlines for internal assets
+  try {
+    const asset = getConfiguredPaymentAsset();
+    const sponsorSecret = process.env.STELLAR_ISSUER_SECRET;
+    
+    if (sponsorSecret && !asset.isNative()) {
+      const sponsorKeypair = StellarSdk.Keypair.fromSecret(sponsorSecret);
+      await ensureTrustlines({
+        accountKeypair: userKeypair,
+        assets: [asset],
+        sponsored: true,
+        sponsorKeypair,
+      });
+    }
+  } catch (error) {
+    console.error("Failed to auto-create trustlines during user registration:", error);
+    // We don't throw here to avoid failing registration if Stellar is down
+  }
 
   const user = {
     ...row,
     phone_number: decrypt(row.phone_number) as string,
     two_factor_secret: decrypt(row.two_factor_secret),
+    stellar_address: row.stellar_address,
+    encrypted_seed: decrypt(row.encrypted_seed),
     role_name
   };
 

@@ -193,6 +193,8 @@ export async function ensureTrustlines(
         continue;
       }
 
+      console.log(`[Stellar] Creating trustline for ${asset.getCode()} on account ${accountPublicKey}${sponsored ? " (sponsored)" : ""}`);
+
       // Trustline missing — submit ChangeTrust (sponsored or direct)
       if (sponsored && sponsorKeypair) {
         await createSponsoredTrustline({
@@ -205,7 +207,9 @@ export async function ensureTrustlines(
       }
 
       result.created.push(asset);
+      console.log(`[Stellar] Successfully created trustline for ${asset.getCode()} on account ${accountPublicKey}`);
     } catch (err: unknown) {
+      console.error(`[Stellar] Failed to create trustline for ${asset.getCode()} on account ${accountPublicKey}:`, err);
       result.failed.push({
         asset,
         error: err instanceof Error ? err : new Error(String(err)),

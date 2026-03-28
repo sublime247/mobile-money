@@ -22,3 +22,4 @@ update-issues-batch*.sh
 run-all-updates.sh
 create-next-100-issues.sh
 yarn.lock
+package-lock.json
