@@ -1,0 +1,158 @@
+FAIL src/tests/rbac.test.ts (19.922 s)
+  Casbin ABAC RBAC Policies
+    × should allow admin:system to do anything (14 ms)
+    × should allow user to create disputes (2 ms)
+    √ should deny user from creating random objects (1 ms)
+    √ should allow user to write to their own transaction (2 ms)
+    √ should deny user from writing to someone else's transaction (2 ms)
+    × should hot load policies (15 ms)
+
+  ● Casbin ABAC RBAC Policies › should allow admin:system to do anything
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+    [0m [90m 15 |[39m   it([32m"should allow admin:system to do anything"[39m[33m,[39m [36masync[39m () [33m=>[39m {
+     [90m 16 |[39m     [36mconst[39m allowed [33m=[39m [36mawait[39m authorizeDynamic([32m"admin123"[39m[33m,[39m [32m"admin:system"[39m[33m,[39m [32m"any-resource"[39m[33m,[39m [32m"some-user-id"[39m[33m,[39m [32m"read"[39m)[33m;[39m
+    [31m[1m>[22m[39m[90m 17 |[39m     expect(allowed)[33m.[39mtoBe([36mtrue[39m)[33m;[39m
+     [90m    |[39m                     [31m[1m^[22m[39m
+     [90m 18 |[39m   })[33m;[39m
+     [90m 19 |[39m
+     [90m 20 |[39m   it([32m"should allow user to create disputes"[39m[33m,[39m [36masync[39m () [33m=>[39m {[0m
+
+      at Object.<anonymous> (src/tests/rbac.test.ts:17:21)
+
+  ● Casbin ABAC RBAC Policies › should allow user to create disputes
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+    [0m [90m 20 |[39m   it([32m"should allow user to create disputes"[39m[33m,[39m [36masync[39m () [33m=>[39m {
+     [90m 21 |[39m     [36mconst[39m allowed [33m=[39m [36mawait[39m authorizeDynamic([32m"user1"[39m[33m,[39m [32m"user"[39m[33m,[39m [32m"dispute"[39m[33m,[39m [32m"owner1"[39m[33m,[39m [32m"create"[39m)[33m;[39m
+    [31m[1m>[22m[39m[90m 22 |[39m     expect(allowed)[33m.[39mtoBe([36mtrue[39m)[33m;[39m
+     [90m    |[39m                     [31m[1m^[22m[39m
+     [90m 23 |[39m   })[33m;[39m
+     [90m 24 |[39m
+     [90m 25 |[39m   it([32m"should deny user from creating random objects"[39m[33m,[39m [36masync[39m () [33m=>[39m {[0m
+
+      at Object.<anonymous> (src/tests/rbac.test.ts:22:21)
+
+  ● Casbin ABAC RBAC Policies › should hot load policies
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+    [0m [90m 53 |[39m     [36mtry[39m {
+     [90m 54 |[39m       [36mconst[39m allowed [33m=[39m [36mawait[39m authorizeDynamic([32m"user2"[39m[33m,[39m [32m"custom_role"[39m[33m,[39m [32m"special_resource"[39m[33m,[39m [32m"owner2"[39m[33m,[39m [32m"read"[39m)[33m;[39m
+    [31m[1m>[22m[39m[90m 55 |[39m       expect(allowed)[33m.[39mtoBe([36mtrue[39m)[33m;[39m
+     [90m    |[39m                       [31m[1m^[22m[39m
+     [90m 56 |[39m     } [36mfinally[39m {
+     [90m 57 |[39m       [90m// Revert the file[39m
+     [90m 58 |[39m       fs[33m.[39mwriteFileSync(policyPath[33m,[39m originalPolicies)[33m;[39m[0m
+
+      at Object.<anonymous> (src/tests/rbac.test.ts:55:23)
+
+Test Suites: 1 failed, 1 total
+Tests:       3 failed, 3 passed, 6 total
+Snapshots:   0 total
+Time:        20.886 s, estimated 31 s
+Ran all test suites matching /src\\tests\\rbac.test.ts/i.
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "Casbin policy file changed, reloading policies...".
+
+    [0m [90m 32 |[39m           console[33m.[39mlog([32m'Casbin policy file changed, reloading policies...'[39m)[33m;[39m
+     [90m 33 |[39m           [36mawait[39m enforcer[33m.[39mloadPolicy()[33m;[39m
+    [31m[1m>[22m[39m[90m 34 |[39m         }
+     [90m    |[39m          [31m[1m^[22m[39m
+     [90m 35 |[39m       })[33m;[39m
+     [90m 36 |[39m       isWatching [33m=[39m [36mtrue[39m[33m;[39m
+     [90m 37 |[39m     }[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at FSWatcher.<anonymous> (src/middleware/rbac.ts:34:29)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "Casbin policy file changed, reloading policies...".
+
+    [0m [90m 32 |[39m           console[33m.[39mlog([32m'Casbin policy file changed, reloading policies...'[39m)[33m;[39m
+     [90m 33 |[39m           [36mawait[39m enforcer[33m.[39mloadPolicy()[33m;[39m
+    [31m[1m>[22m[39m[90m 34 |[39m         }
+     [90m    |[39m          [31m[1m^[22m[39m
+     [90m 35 |[39m       })[33m;[39m
+     [90m 36 |[39m       isWatching [33m=[39m [36mtrue[39m[33m;[39m
+     [90m 37 |[39m     }[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at FSWatcher.<anonymous> (src/middleware/rbac.ts:34:29)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "Casbin policy file changed, reloading policies...".
+
+    [0m [90m 32 |[39m           console[33m.[39mlog([32m'Casbin policy file changed, reloading policies...'[39m)[33m;[39m
+     [90m 33 |[39m           [36mawait[39m enforcer[33m.[39mloadPolicy()[33m;[39m
+    [31m[1m>[22m[39m[90m 34 |[39m         }
+     [90m    |[39m          [31m[1m^[22m[39m
+     [90m 35 |[39m       })[33m;[39m
+     [90m 36 |[39m       isWatching [33m=[39m [36mtrue[39m[33m;[39m
+     [90m 37 |[39m     }[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at FSWatcher.<anonymous> (src/middleware/rbac.ts:34:29)
+
+Jest did not exit one second after the test run has completed.
+
+'This usually means that there are asynchronous operations that weren't stopped in your tests. Consider running Jest with `--detectOpenHandles` to troubleshoot this issue.
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "Casbin policy file changed, reloading policies...".
+
+    [0m [90m 32 |[39m           console[33m.[39mlog([32m'Casbin policy file changed, reloading policies...'[39m)[33m;[39m
+     [90m 33 |[39m           [36mawait[39m enforcer[33m.[39mloadPolicy()[33m;[39m
+    [31m[1m>[22m[39m[90m 34 |[39m         }
+     [90m    |[39m          [31m[1m^[22m[39m
+     [90m 35 |[39m       })[33m;[39m
+     [90m 36 |[39m       isWatching [33m=[39m [36mtrue[39m[33m;[39m
+     [90m 37 |[39m     }[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at FSWatcher.<anonymous> (src/middleware/rbac.ts:34:29)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "Casbin policy file changed, reloading policies...".
+
+    [0m [90m 32 |[39m           console[33m.[39mlog([32m'Casbin policy file changed, reloading policies...'[39m)[33m;[39m
+     [90m 33 |[39m           [36mawait[39m enforcer[33m.[39mloadPolicy()[33m;[39m
+    [31m[1m>[22m[39m[90m 34 |[39m         }
+     [90m    |[39m          [31m[1m^[22m[39m
+     [90m 35 |[39m       })[33m;[39m
+     [90m 36 |[39m       isWatching [33m=[39m [36mtrue[39m[33m;[39m
+     [90m 37 |[39m     }[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at FSWatcher.<anonymous> (src/middleware/rbac.ts:34:29)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "Casbin policy file changed, reloading policies...".
+
+    [0m [90m 32 |[39m           console[33m.[39mlog([32m'Casbin policy file changed, reloading policies...'[39m)[33m;[39m
+     [90m 33 |[39m           [36mawait[39m enforcer[33m.[39mloadPolicy()[33m;[39m
+    [31m[1m>[22m[39m[90m 34 |[39m         }
+     [90m    |[39m          [31m[1m^[22m[39m
+     [90m 35 |[39m       })[33m;[39m
+     [90m 36 |[39m       isWatching [33m=[39m [36mtrue[39m[33m;[39m
+     [90m 37 |[39m     }[0m
+
+      at console.log (node_modules/@jest/console/build/CustomConsole.js:141:10)
+      at FSWatcher.<anonymous> (src/middleware/rbac.ts:34:29)
+

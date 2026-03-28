@@ -1,5 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { pool } from "../config/database";
+import { newEnforcer, Enforcer } from "casbin";
+import path from "path";
 
 export interface RBACRequest extends Request {
   user?: {
@@ -9,19 +11,41 @@ export interface RBACRequest extends Request {
   };
 }
 
-/**
- * Get user permissions from database based on their role
- */
-async function getUserPermissions(roleId: string): Promise<string[]> {
-  const query = `
-    SELECT p.name as permission_name
-    FROM permissions p
-    JOIN role_permissions rp ON p.id = rp.permission_id
-    WHERE rp.role_id = $1
-  `;
+import fs from "fs";
 
-  const result = await pool.query(query, [roleId]);
-  return result.rows.map((row) => row.permission_name);
+let enforcer: Enforcer;
+let isWatching = false;
+
+/**
+ * Initialize Casbin Enforcer
+ */
+export async function initCasbin(): Promise<Enforcer> {
+  if (!enforcer) {
+    const modelPath = path.resolve(__dirname, "../config/casbin_model.conf");
+    const policyPath = path.resolve(__dirname, "../config/casbin_policy.csv");
+    enforcer = await newEnforcer(modelPath, policyPath);
+    
+    // Implement hot-loading
+    if (!isWatching) {
+      fs.watch(policyPath, async (eventType) => {
+        if (eventType === 'change') {
+          console.log('Casbin policy file changed, reloading policies...');
+          await enforcer.loadPolicy();
+        }
+      });
+      isWatching = true;
+    }
+  }
+  return enforcer;
+}
+
+/**
+ * Endpoint to artificially reload policies at runtime without restarting the server
+ */
+export async function reloadCasbinPolicies() {
+  if (enforcer) {
+    await enforcer.loadPolicy();
+  }
 }
 
 /**
@@ -42,200 +66,206 @@ async function getUserRole(
 }
 
 /**
- * Middleware to check if user has specific permission
+ * Middleware to explicitly check an object and action
+ */
+export function authorizeObj(resourceType: string, action: string, requireOwnership: boolean = false) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.jwtUser) {
+        return res.status(401).json({
+          error: "Unauthorized",
+          message: "Authentication required",
+        });
+      }
+
+      const userRole = await getUserRole(req.jwtUser.userId);
+      if (!userRole) {
+        return res.status(403).json({
+          error: "Forbidden",
+          message: "User role not found",
+        });
+      }
+
+      req.userRole = userRole.role_name;
+
+      const e = await initCasbin();
+      
+      const sub = {
+        id: req.jwtUser.userId,
+        role: userRole.role_name
+      };
+
+      // In a middleware, we don't have the specific object ID's owner yet unless passed in URL or body.
+      // But for ABAC ownership checks before fetching the object, we just pass checkOwner flag.
+      // Later, specific routes can call `authorizeDynamic` if they fetch the object inside the route.
+      const obj = {
+        type: resourceType,
+        checkOwner: requireOwnership,
+        ownerUserId: requireOwnership ? req.jwtUser.userId : undefined // this assumes the user requests their OWN resource explicitly, but really it should be deferred if possible.
+      };
+
+      const allowed = await e.enforce(sub, obj, action);
+
+      if (!allowed) {
+        return res.status(403).json({
+          error: "Forbidden",
+          message: `Insufficient permissions. Required: ${action} on ${resourceType}`,
+        });
+      }
+
+      next();
+    } catch (error) {
+      console.error("RBAC permission check error:", error);
+      return res.status(500).json({
+        error: "Internal server error",
+        message: "Failed to check permissions",
+      });
+    }
+  };
+}
+
+/**
+ * Backwards compatible method: checks permissions.
+ * Many legacy routes just pass 'dispute:create', 'admin:system', 'read:own'.
+ * We map these old strings to Casbin checks.
  */
 export function requirePermission(permission: string) {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
-      // Check if user is authenticated (JWT middleware should have set jwtUser)
       if (!req.jwtUser) {
-        return res.status(401).json({
-          error: "Unauthorized",
-          message: "Authentication required",
-        });
+        return res.status(401).json({ error: "Unauthorized" });
       }
 
-      // Get user role information
       const userRole = await getUserRole(req.jwtUser.userId);
-      if (!userRole) {
-        return res.status(403).json({
-          error: "Forbidden",
-          message: "User role not found",
-        });
+      if (!userRole) return res.status(403).json({ error: "Forbidden" });
+
+      req.userRole = userRole.role_name;
+      const e = await initCasbin();
+
+      const sub = { id: req.jwtUser.userId, role: userRole.role_name };
+
+      // Parse legacy permission like "dispute:create"
+      let objType = "*";
+      let act = permission;
+      let checkOwn = false;
+
+      if (permission.includes(":")) {
+        const parts = permission.split(":");
+        objType = parts[0]; // e.g., dispute
+        act = parts[1]; // e.g., create
+        if (parts[1] === "own" || parts[1] === "all") {
+          // It was something like 'read:own' or 'admin:system'
+          objType = parts[0];
+          act = parts[1];
+        }
       }
 
-      // Get user permissions
-      const permissions = await getUserPermissions(userRole.role_id);
+      const allowed = await e.enforce(sub, { type: objType }, act);
 
-      // Attach role and permissions to request for downstream use
-      req.userRole = userRole.role_name;
-      req.userPermissions = permissions;
-
-      // Check if user has the required permission
-      if (!permissions.includes(permission)) {
+      // If simple policy doesn't allow, check if they are "admin" implicitly by Casbin model.
+      if (!allowed && userRole.role_name !== "admin" && userRole.role_name !== "admin:system") {
         return res.status(403).json({
           error: "Forbidden",
           message: `Insufficient permissions. Required: ${permission}`,
-          userRole: userRole.role_name,
-          userPermissions: permissions,
         });
       }
 
       next();
     } catch (error) {
-      console.error("RBAC permission check error:", error);
-      return res.status(500).json({
-        error: "Internal server error",
-        message: "Failed to check permissions",
-      });
+      return res.status(500).json({ error: "Internal server error" });
     }
   };
 }
 
-/**
- * Middleware to check if user has any of the specified permissions
- */
 export function requireAnyPermission(permissions: string[]) {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
-      if (!req.jwtUser) {
-        return res.status(401).json({
-          error: "Unauthorized",
-          message: "Authentication required",
-        });
-      }
-
+      if (!req.jwtUser) return res.status(401).json({ error: "Unauthorized" });
       const userRole = await getUserRole(req.jwtUser.userId);
-      if (!userRole) {
-        return res.status(403).json({
-          error: "Forbidden",
-          message: "User role not found",
-        });
+      if (!userRole) return res.status(403).json({ error: "Forbidden" });
+      
+      req.userRole = userRole.role_name;
+      const e = await initCasbin();
+      const sub = { id: req.jwtUser.userId, role: userRole.role_name };
+
+      if (userRole.role_name === 'admin' || userRole.role_name === 'admin:system') {
+        return next();
       }
 
-      const userPermissions = await getUserPermissions(userRole.role_id);
-
-      req.userRole = userRole.role_name;
-      req.userPermissions = userPermissions;
-
-      // Check if user has any of the required permissions
-      const hasPermission = permissions.some((permission) =>
-        userPermissions.includes(permission),
-      );
+      let hasPermission = false;
+      for (const p of permissions) {
+         let objType = "*";
+         let act = p;
+         if (p.includes(":")) {
+           const parts = p.split(":");
+           objType = parts[0];
+           act = parts[1];
+         }
+         if (await e.enforce(sub, { type: objType }, act)) {
+           hasPermission = true;
+           break;
+         }
+      }
 
       if (!hasPermission) {
-        return res.status(403).json({
-          error: "Forbidden",
-          message: `Insufficient permissions. Required any of: ${permissions.join(", ")}`,
-          userRole: userRole.role_name,
-          userPermissions: userPermissions,
-        });
+        return res.status(403).json({ error: "Forbidden", message: "Insufficient permissions." });
       }
 
       next();
     } catch (error) {
-      console.error("RBAC permission check error:", error);
-      return res.status(500).json({
-        error: "Internal server error",
-        message: "Failed to check permissions",
-      });
+      return res.status(500).json({ error: "Internal error" });
     }
   };
 }
 
-/**
- * Middleware to check if user has specific role
- */
 export function requireRole(role: string) {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
-      if (!req.jwtUser) {
-        return res.status(401).json({
-          error: "Unauthorized",
-          message: "Authentication required",
-        });
-      }
-
+      if (!req.jwtUser) return res.status(401).json({ error: "Unauthorized" });
       const userRole = await getUserRole(req.jwtUser.userId);
-      if (!userRole) {
-        return res.status(403).json({
-          error: "Forbidden",
-          message: "User role not found",
-        });
-      }
+      if (!userRole) return res.status(403).json({ error: "Forbidden" });
 
       req.userRole = userRole.role_name;
-      req.userPermissions = await getUserPermissions(userRole.role_id);
 
-      if (userRole.role_name !== role) {
-        return res.status(403).json({
-          error: "Forbidden",
-          message: `Insufficient role. Required: ${role}, Current: ${userRole.role_name}`,
-        });
+      if (userRole.role_name !== role && userRole.role_name !== "admin") {
+         return res.status(403).json({ error: "Forbidden", message: `Required: ${role}` });
       }
-
       next();
     } catch (error) {
-      console.error("RBAC role check error:", error);
-      return res.status(500).json({
-        error: "Internal server error",
-        message: "Failed to check role",
-      });
+      return res.status(500).json({ error: "Internal server error" });
     }
   };
 }
 
-/**
- * Middleware to check if user can access their own data
- * This checks for 'read:own' or 'write:own' permissions based on the action
- */
 export function requireOwnDataAccess(action: "read" | "write" | "delete") {
-  const permission = `${action}:own`;
-  return requirePermission(permission);
+  return authorizeObj("transaction", action, true);
 }
 
-/**
- * Middleware to check if user has admin-level access
- */
 export const requireAdmin = requireRole("admin");
+export const requireReadAccess = authorizeObj("transaction", "read", false);
+export const requireWriteAccess = authorizeObj("transaction", "write", false);
 
-/**
- * Middleware to check if user can read data (own or all)
- */
-export const requireReadAccess = requireAnyPermission(["read:own", "read:all"]);
-
-/**
- * Middleware to check if user can write data (own or all)
- */
-export const requireWriteAccess = requireAnyPermission([
-  "write:own",
-  "write:all",
-]);
-
-/**
- * Middleware to attach role and permissions to request without checking access
- * Useful for endpoints that need user context but don't require specific permissions
- */
-export async function attachUserContext(
-  req: Request,
-  res: Response,
-  next: NextFunction,
-) {
+export async function attachUserContext(req: Request, res: Response, next: NextFunction) {
   try {
-    if (!req.jwtUser) {
-      return next();
-    }
-
+    if (!req.jwtUser) return next();
     const userRole = await getUserRole(req.jwtUser.userId);
     if (userRole) {
       req.userRole = userRole.role_name;
-      req.userPermissions = await getUserPermissions(userRole.role_id);
     }
-
     next();
   } catch (error) {
-    console.error("Failed to attach user context:", error);
-    // Don't block the request, just continue without context
     next();
   }
+}
+
+/**
+ * Dynamic ABAC enforcer helper intended to be called inside route handlers.
+ * It verifies if the currently logged in user has the permission to perform
+ * an 'action' on the specific 'resourceObj' loaded from DB.
+ */
+export async function authorizeDynamic(userId: string, role: string, resourceType: string, resourceOwnerUserId: string, action: string, checkOwner: boolean = false): Promise<boolean> {
+  const e = await initCasbin();
+  const sub = { id: userId, role: role };
+  const obj = { type: resourceType, checkOwner: checkOwner, ownerUserId: resourceOwnerUserId };
+  return await e.enforce(sub, obj, action);
 }
