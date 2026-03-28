@@ -1,3 +1,4 @@
+import "./tracer";
 import express, { NextFunction, Request, Response } from "express";
 import { IncomingMessage } from "http";
 import cors from "cors";
@@ -5,6 +6,10 @@ import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import compression from "compression";
 import dotenv from "dotenv";
+
+import spdy from "spdy";
+import fs from "fs";
+import path from "path";
 import session from "express-session";
 import * as Sentry from "@sentry/node";
 
@@ -55,6 +60,7 @@ import { sessionAnomalyLogger } from "./services/logger";
 import { HealthCheckResponse, ReadinessCheckResponse } from "./types/api";
 import sep31Router from "./stellar/sep31";
 import sep24Router from "./stellar/sep24";
+import { createSep12Router } from "./stellar/sep12";
 
 // 1. Import Sentry Middleware
 import { initSentry, sentryBreadcrumbMiddleware } from "./middleware/sentry";
@@ -245,6 +251,7 @@ app.use("/api/kyc", createKYCRoutes(pool));
 app.use("/api/admin", requireAuth, adminRoutes);
 app.use("/sep31", sep31Router);
 app.use("/sep24", sep24Router);
+app.use("/sep12", createSep12Router(pool));
 
 app.use(
   (
@@ -295,11 +302,27 @@ async function initializeRuntime(): Promise<void> {
   const { createQueueDashboard } = await import("./queue/dashboard");
   app.use("/admin/queues", createQueueDashboard());
 
-  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+  // 
+  const useHTTP2 = process.env.USE_HTTP2 === "true";
+
+  if (useHTTP2) {
+    const sslOptions = {
+      key: fs.readFileSync(path.join(__dirname, "../certs/key.pem")),
+      cert: fs.readFileSync(path.join(__dirname, "../certs/cert.pem")),
+    };
+    spdy.createServer(sslOptions, app).listen(PORT, () => {
+      console.log(`HTTP/2 server running on https://localhost:${PORT}`);
+    });
+  } else {
+    app.listen(PORT, () =>
+      console.log(`HTTP/1.1 server running on http://localhost:${PORT}`)
+    );
+  }
 }
 
 if (process.env.NODE_ENV !== "test") {
   void initializeRuntime();
 }
+
 
 export default app;

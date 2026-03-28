@@ -771,4 +771,3 @@ router.get(
   },
 );
 
-export const adminRoutes = router;

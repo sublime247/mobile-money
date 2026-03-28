@@ -51,6 +51,21 @@ services:
       retries: 10
 
   # ---------------------------------------------------------------------------
+  # Datadog Agent
+  # ---------------------------------------------------------------------------
+  datadog-agent:
+    image: gcr.io/datadoghq/agent:latest
+    container_name: mobilemoney_datadog_agent
+    environment:
+      - DD_API_KEY=${DD_API_KEY}
+      - DD_SITE=datadoghq.com
+      - DD_APM_ENABLED=true
+      - DD_APM_NON_LOCAL_TRAFFIC=true
+      - DD_ENV=development
+    ports:
+      - "8126:8126"
+
+  # ---------------------------------------------------------------------------
   # Application (live reload via ts-node-dev)
   # ---------------------------------------------------------------------------
   app:
@@ -68,6 +83,10 @@ services:
       LOG_FILE_PATH: /var/log/mobile-money/app.log
       ELASTICSEARCH_URL: http://elasticsearch:9200
       KIBANA_URL: http://kibana:5601
+      DD_AGENT_HOST: datadog-agent
+      DD_ENV: development
+      DD_SERVICE: mobile-money
+      DD_VERSION: 1.0.0
     ports:
       - "${PORT:-3000}:3000"
     volumes:

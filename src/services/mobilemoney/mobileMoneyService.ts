@@ -7,6 +7,7 @@ import {
   providerFailoverTotal,
   providerFailoverAlerts,
 } from "../../utils/metrics";
+import { executeWithCircuitBreaker } from "../../utils/circuitBreaker";
 import { pool } from "../../config/database";
 import { MonitoringService } from "../monitoringService";
 
@@ -19,6 +20,13 @@ interface MobileMoneyProvider {
     phoneNumber: string,
     amount: string,
   ): Promise<{ success: boolean; data?: unknown; error?: unknown }>;
+}
+
+interface ProviderExecutionResult {
+  success: boolean;
+  provider?: string;
+  data?: unknown;
+  error?: unknown;
 }
 
 class MobileMoneyError extends Error {
@@ -92,93 +100,165 @@ export class MobileMoneyService {
     phoneNumber: string,
     amount: string,
   ) {
-    const primary = this.providers.get(primaryKey);
-    if (!primary) {
+    const result = await this.executeProviderOperation(
+      op,
+      primaryKey,
+      phoneNumber,
+      amount,
+      true,
+    );
+
+    if (result.success) {
+      return result;
+    }
+
+    throw new MobileMoneyError(
+      "PROVIDER_ERROR",
+      `Payment flow failed for provider '${primaryKey}'`,
+    );
+  }
+
+  private getProviderOrThrow(providerKey: string): MobileMoneyProvider {
+    const provider = this.providers.get(providerKey);
+    if (!provider) {
       const availableProviders = Array.from(this.providers.keys()).join(", ");
       throw new MobileMoneyError(
         "PROVIDER_NOT_SUPPORTED",
-        `Provider '${primaryKey}' not supported. Available: ${availableProviders}`,
+        `Provider '${providerKey}' not supported. Available: ${availableProviders}`,
       );
     }
 
-    // Helper to call operation on a provider instance
-    const call = async (prov: MobileMoneyProvider) => {
-      if (op === "requestPayment")
-        return prov.requestPayment(phoneNumber, amount);
-      return prov.sendPayout(phoneNumber, amount);
-    };
+    return provider;
+  }
 
-    // Try primary
+  private async callProvider(
+    provider: MobileMoneyProvider,
+    op: "requestPayment" | "sendPayout",
+    phoneNumber: string,
+    amount: string,
+  ) {
+    if (op === "requestPayment") {
+      return provider.requestPayment(phoneNumber, amount);
+    }
+
+    return provider.sendPayout(phoneNumber, amount);
+  }
+
+  private getOperationType(op: "requestPayment" | "sendPayout") {
+    return op === "requestPayment" ? "payment" : "payout";
+  }
+
+  private buildProviderFailureMessage(
+    providerKey: string,
+    error: unknown,
+    phase: "primary" | "backup",
+  ): string {
+    const reason =
+      error instanceof Error && error.message
+        ? error.message
+        : "provider operation failed";
+
+    return `${phase} provider '${providerKey}' failed: ${reason}`;
+  }
+
+  private async executeProviderOperation(
+    op: "requestPayment" | "sendPayout",
+    providerKey: string,
+    phoneNumber: string,
+    amount: string,
+    allowFailover: boolean,
+  ): Promise<ProviderExecutionResult> {
+    const provider = this.getProviderOrThrow(providerKey);
+    const operationType = this.getOperationType(op);
+    const backupKey =
+      allowFailover && this.failoverEnabled()
+        ? this.getBackupProviderKey(providerKey)
+        : null;
+
     try {
-      const res = await call(primary);
-      if (res.success)
-        return { success: true, provider: primaryKey, data: res.data };
-      // primary returned failure — treat as provider failure and fall through to failover
-      throw new Error("provider_failure");
-    } catch (err: unknown) {
-      // Record metrics for primary failure
+      return await executeWithCircuitBreaker({
+        provider: providerKey,
+        operation: op,
+        execute: async () => {
+          const result = await this.callProvider(
+            provider,
+            op,
+            phoneNumber,
+            amount,
+          );
+
+          if (result.success) {
+            return {
+              success: true,
+              provider: providerKey,
+              data: result.data,
+            };
+          }
+
+          return {
+            success: false,
+            provider: providerKey,
+            error: result.error ?? new Error("provider_failure"),
+          };
+        },
+        fallback: backupKey
+          ? async (error: unknown) => {
+              if (backupKey === providerKey) {
+                return {
+                  success: false,
+                  provider: providerKey,
+                  error,
+                };
+              }
+
+              this.getProviderOrThrow(backupKey);
+
+              console.warn(
+                `Failing over from ${providerKey} to ${backupKey} for ${op}`,
+              );
+              providerFailoverTotal.inc({
+                type: operationType,
+                from_provider: providerKey,
+                to_provider: backupKey,
+                reason: String(
+                  error instanceof Error ? error.message : error,
+                ).slice(0, 100),
+              });
+              this.recordFailover(providerKey);
+              if (this.checkRepeatedFailovers(providerKey)) {
+                this.notifyRepeatedFailovers(providerKey);
+              }
+
+              return this.executeProviderOperation(
+                op,
+                backupKey,
+                phoneNumber,
+                amount,
+                false,
+              );
+            }
+          : undefined,
+      });
+    } catch (error) {
       transactionTotal.inc({
-        type: op === "requestPayment" ? "payment" : "payout",
-        provider: primaryKey,
+        type: operationType,
+        provider: providerKey,
         status: "failure",
       });
       transactionErrorsTotal.inc({
-        type: op === "requestPayment" ? "payment" : "payout",
-        provider: primaryKey,
-        error_type: "provider_or_exception",
+        type: operationType,
+        provider: providerKey,
+        error_type: allowFailover ? "provider_or_exception" : "backup_failure",
       });
 
-      // If failover not enabled, rethrow as MobileMoneyError
-      if (!this.failoverEnabled()) {
-        throw new MobileMoneyError(
-          "PROVIDER_ERROR",
-          `Primary provider '${primaryKey}' failed`,
-        );
-      }
-
-      const backupKey = this.getBackupProviderKey(primaryKey);
-      if (!backupKey) {
-        // no backup configured
-        throw new MobileMoneyError(
-          "PROVIDER_ERROR",
-          `Primary provider '${primaryKey}' failed and no backup configured`,
-        );
-      }
-
-      const backup = this.providers.get(backupKey);
-      if (!backup) {
-        throw new MobileMoneyError(
-          "PROVIDER_ERROR",
-          `Backup provider '${backupKey}' not available`,
-        );
-      }
-
-      // Attempt backup
-      console.warn(`Failing over from ${primaryKey} to ${backupKey} for ${op}`);
-      providerFailoverTotal.inc({
-        type: op === "requestPayment" ? "payment" : "payout",
-        from_provider: primaryKey,
-        to_provider: backupKey,
-        reason: String(err instanceof Error ? err.message : err),
-      });
-      this.recordFailover(primaryKey);
-      if (this.checkRepeatedFailovers(primaryKey)) {
-        this.notifyRepeatedFailovers(primaryKey);
-      }
-
-      try {
-        const res2 = await call(backup);
-        if (res2.success)
-          return { success: true, provider: backupKey, data: res2.data };
-        // backup also failed
-        throw new Error("backup_provider_failure");
-      } catch (err2: unknown) {
-        // Both failed — surface as provider error
-        throw new MobileMoneyError(
-          "PROVIDER_ERROR",
-          `Both primary '${primaryKey}' and backup '${backupKey}' failed`,
-        );
-      }
+      throw new MobileMoneyError(
+        "PROVIDER_ERROR",
+        this.buildProviderFailureMessage(
+          providerKey,
+          error,
+          allowFailover ? "primary" : "backup",
+        ),
+      );
     }
   }
 

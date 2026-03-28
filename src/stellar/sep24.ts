@@ -1,9 +1,16 @@
-import { Router, Request, Response } from "express"; // Removed NextFunction
-import { Router, Request, Response, NextFunction } from "express";
+import { Router, Request, Response } from "express";
 import rateLimit from "express-rate-limit";
 import { v4 as uuidv4 } from "uuid";
-import { Keypair } from "stellar-sdk"; // Removed Asset and getStellarServer
-import rateLimit from "express-rate-limit";
+import { Keypair } from "stellar-sdk";
+
+function isValidStellarPublicKey(key: string): boolean {
+  try {
+    Keypair.fromPublicKey(key);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 // ============================================================================
 // Types and Interfaces
@@ -125,7 +132,7 @@ export const getSep24Config = () => ({
       min_amount: 1,
       max_amount: 1000000,
     } as Sep24Asset,
-  },
+  } as Record<string, Sep24Asset>,
   features: {
     account_creation: true,
     claimable_balances: true,
@@ -216,7 +223,7 @@ export const initiateDeposit = async (request: DepositRequest): Promise<Interact
   const amount = parseFloat(request.amount);
   if (asset.min_amount && amount < asset.min_amount) throw new Error(`Min: ${asset.min_amount}`);
   if (asset.max_amount && amount > asset.max_amount) throw new Error(`Max: ${asset.max_amount}`);
-  if (!request.account || !Keypair.isValidPublicKey(request.account)) throw new Error("Invalid address");
+  if (!request.account || !isValidStellarPublicKey(request.account)) throw new Error("Invalid address");
 
   return generateInteractiveUrl(request, "deposit");
 };
@@ -232,7 +239,7 @@ export const initiateWithdrawal = async (request: WithdrawRequest): Promise<Inte
   const amount = parseFloat(request.amount);
   if (asset.min_amount && amount < asset.min_amount) throw new Error(`Min: ${asset.min_amount}`);
   if (asset.max_amount && amount > asset.max_amount) throw new Error(`Max: ${asset.max_amount}`);
-  if (!request.account || !Keypair.isValidPublicKey(request.account)) throw new Error("Invalid address");
+  if (!request.account || !isValidStellarPublicKey(request.account)) throw new Error("Invalid address");
 
   return generateInteractiveUrl(request, "withdrawal");
 };
@@ -328,14 +335,6 @@ const sep24Limiter = rateLimit({
   max: 10,
   message: { error: "Too many requests, please try again later" },
 });
-// Rate limiter for SEP-24 endpoints
-const sep24Limiter = (() => {
-  return rateLimit({
-    windowMs: 60 * 1000,
-    max: 10,
-    message: { error: "Too many requests, please try again later" },
-  });
-})();
 
 sep24Router.get("/info", async (_req: Request, res: Response) => {
   try {
@@ -428,10 +427,3 @@ sep24Router.get("/health", (_req: Request, res: Response) => {
 });
 
 export default sep24Router;
-export {
-  initiateDeposit,
-  initiateWithdrawal,
-  updateTransactionStatus,
-  processCallback,
-  calculateFee,
-};

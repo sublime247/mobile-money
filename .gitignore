@@ -23,3 +23,13 @@ run-all-updates.sh
 create-next-100-issues.sh
 yarn.lock
 package-lock.json
+certs/
+
+# Terraform
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.*
+terraform/*.tfvars
+!terraform/terraform.tfvars.example
+terraform/.terraform.lock.hcl
+terraform/crash.log
