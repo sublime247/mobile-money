@@ -8,6 +8,7 @@ import { TransactionModel, TransactionStatus } from "../models/transaction";
 import { MobileMoneyService } from "../services/mobilemoney/mobileMoneyService";
 import { StellarService } from "../services/stellar/stellarService";
 import { notifyTransactionWebhook, WebhookService } from "../services/webhook";
+import { checkAccountStatusStrict } from "../middleware/checkAccountStatus";
 
 
 interface CsvRow {
@@ -233,6 +234,7 @@ export const bulkRoutes = Router();
 bulkRoutes.post(
   "/",
   authenticateToken,
+  checkAccountStatusStrict,
   upload.single("file"),
   async (req: Request, res: Response) => {
     if (!req.file) {

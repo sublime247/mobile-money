@@ -3,6 +3,7 @@ import { z } from "zod";
 import { feeService, CreateFeeConfigRequest, UpdateFeeConfigRequest } from "../services/feeService";
 import { requirePermission } from "../middleware/rbac";
 import { authenticateJWT } from "../middleware/auth";
+import { calculateFeeForUser } from "../utils/fees";
 
 const router = Router();
 
@@ -38,6 +39,14 @@ const calculateFeeSchema = z.object({
   amount: z.number().positive(),
 });
 
+const estimateFeeSchema = z.object({
+  amount: z.number().positive("Transaction amount must be a positive number"),
+  userId: z.string().uuid().optional(),
+  senderPhone: z.string().optional(),
+  recipientPhone: z.string().optional(),
+  transactionType: z.enum(["send", "deposit", "withdraw", "payment"]).optional(),
+});
+
 /**
  * Middleware: Log admin fee actions
  */
@@ -55,7 +64,147 @@ const logFeeAction = (action: string) => {
 };
 
 /**
- * GET /api/fees/calculate
+ * POST /api/fees/estimate
+ * Pre-flight endpoint: calculate exact fees / net amount before committing.
+ * Accepts a mock transaction payload and returns a detailed breakdown.
+ */
+router.post("/estimate", async (req: Request, res: Response) => {
+  try {
+    const payload = estimateFeeSchema.parse(req.body);
+    const { amount, userId, senderPhone, recipientPhone, transactionType } = payload;
+
+    let responseData: Record<string, unknown>;
+
+    if (userId) {
+      // VIP-tier-aware calculation
+      const vipResult = await calculateFeeForUser(amount, userId);
+
+      // Derive effective rate from the fee and amount
+      const effectiveRate = amount > 0
+        ? parseFloat(((vipResult.fee / amount) * 100).toFixed(4))
+        : 0;
+
+      // Fetch base config for breakdown details
+      let baseFeeRate = 1.5;
+      let feeMinimum = 50;
+      let feeMaximum = 5000;
+      try {
+        const activeCfg = await feeService.getActiveConfiguration();
+        baseFeeRate = activeCfg.feePercentage;
+        feeMinimum = activeCfg.feeMinimum;
+        feeMaximum = activeCfg.feeMaximum;
+      } catch {
+        // Use env fallback defaults already assigned
+      }
+
+      const multiplier = 1 - vipResult.discountPercent / 100;
+      const discountedMin = parseFloat((feeMinimum * multiplier).toFixed(2));
+      const discountedMax = parseFloat((feeMaximum * multiplier).toFixed(2));
+      const feeBeforeClamping = parseFloat(
+        (amount * ((baseFeeRate * multiplier) / 100)).toFixed(2),
+      );
+      const wasClamped = vipResult.fee !== feeBeforeClamping;
+
+      responseData = {
+        transactionAmount: amount,
+        fee: vipResult.fee,
+        netAmount: parseFloat((amount - vipResult.fee).toFixed(2)),
+        totalCharged: vipResult.total,
+        feePercentageApplied: effectiveRate,
+        configUsed: vipResult.configUsed,
+        tier: vipResult.tier,
+        discountPercent: vipResult.discountPercent,
+        thirtyDayVolume: vipResult.thirtyDayVolume,
+        breakdown: {
+          baseFeeRate: `${baseFeeRate}%`,
+          vipDiscount: `${vipResult.discountPercent}%`,
+          effectiveRate: `${effectiveRate}%`,
+          feeBeforeClamping,
+          feeMinimum: discountedMin,
+          feeMaximum: discountedMax,
+          wasClamped,
+        },
+        ...(senderPhone && { senderPhone }),
+        ...(recipientPhone && { recipientPhone }),
+        ...(transactionType && { transactionType }),
+        estimatedAt: new Date().toISOString(),
+        disclaimer:
+          "This is an estimate. Final fees may vary based on configuration at time of transaction.",
+      };
+    } else {
+      // Standard fee calculation (no VIP tier)
+      const result = await feeService.calculateFee(amount);
+
+      const effectiveRate = amount > 0
+        ? parseFloat(((result.fee / amount) * 100).toFixed(4))
+        : 0;
+
+      // Fetch active config for breakdown
+      let baseFeeRate = 1.5;
+      let feeMinimum = 50;
+      let feeMaximum = 5000;
+      try {
+        const activeCfg = await feeService.getActiveConfiguration();
+        baseFeeRate = activeCfg.feePercentage;
+        feeMinimum = activeCfg.feeMinimum;
+        feeMaximum = activeCfg.feeMaximum;
+      } catch {
+        // Use env fallback defaults already assigned
+      }
+
+      const feeBeforeClamping = parseFloat(
+        (amount * (baseFeeRate / 100)).toFixed(2),
+      );
+      const wasClamped = result.fee !== feeBeforeClamping;
+
+      responseData = {
+        transactionAmount: amount,
+        fee: result.fee,
+        netAmount: parseFloat((amount - result.fee).toFixed(2)),
+        totalCharged: result.total,
+        feePercentageApplied: effectiveRate,
+        configUsed: result.configUsed,
+        breakdown: {
+          baseFeeRate: `${baseFeeRate}%`,
+          vipDiscount: "0%",
+          effectiveRate: `${effectiveRate}%`,
+          feeBeforeClamping,
+          feeMinimum,
+          feeMaximum,
+          wasClamped,
+        },
+        ...(senderPhone && { senderPhone }),
+        ...(recipientPhone && { recipientPhone }),
+        ...(transactionType && { transactionType }),
+        estimatedAt: new Date().toISOString(),
+        disclaimer:
+          "This is an estimate. Final fees may vary based on configuration at time of transaction.",
+      };
+    }
+
+    res.json({
+      success: true,
+      data: responseData,
+    });
+  } catch (error: any) {
+    if (error.name === "ZodError") {
+      return res.status(400).json({
+        success: false,
+        error: "Validation error",
+        details: error.errors,
+      });
+    }
+
+    console.error("Fee estimation error:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to estimate fee",
+    });
+  }
+});
+
+/**
+ * POST /api/fees/calculate
  * Calculate fee for given amount using active configuration
  */
 router.post("/calculate", async (req: Request, res: Response) => {

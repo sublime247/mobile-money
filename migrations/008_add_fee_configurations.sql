@@ -51,7 +51,9 @@ CREATE INDEX IF NOT EXISTS idx_fee_audit_config_id ON fee_configuration_audit(fe
 CREATE INDEX IF NOT EXISTS idx_fee_audit_changed_at ON fee_configuration_audit(changed_at);
 CREATE INDEX IF NOT EXISTS idx_fee_audit_changed_by ON fee_configuration_audit(changed_by);
 
--- Insert default fee configuration from current env vars
+-- Seed a default fee configuration when at least one user exists.
+-- We intentionally avoid depending on RBAC tables here because they are not
+-- part of the ordered migrations/ chain executed by the migration runner.
 INSERT INTO fee_configurations (
   name, 
   description, 
@@ -70,7 +72,6 @@ SELECT
   u.id,
   u.id
 FROM users u 
-JOIN roles r ON u.role_id = r.id 
-WHERE r.name = 'admin' 
+ORDER BY u.created_at ASC, u.id ASC
 LIMIT 1
 ON CONFLICT (name) DO NOTHING;

@@ -1,7 +1,18 @@
-import { Router, Request, Response, NextFunction } from "express";
+import { Router, Request, Response } from "express";
+import rateLimit from "express-rate-limit";
 import { v4 as uuidv4 } from "uuid";
 import { Transaction, Keypair, StrKey } from "stellar-sdk";
 import { getStellarServer, getNetworkPassphrase, STELLAR_NETWORKS } from "../config/stellar";
+import { Keypair } from "stellar-sdk";
+
+function isValidStellarPublicKey(key: string): boolean {
+  try {
+    Keypair.fromPublicKey(key);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 // ============================================================================
 // Types and Interfaces
@@ -51,7 +62,6 @@ export interface Sep24Transaction {
   callback?: string;
   message?: string;
   more_info_url?: string;
-  // Timestamps
   created_at?: string;
   completed_at?: string;
   updated_at?: string;
@@ -79,7 +89,6 @@ export interface DepositRequest {
   callback?: string;
   success_url?: string;
   failure_url?: string;
-  // KYC fields
   sep9_fields?: Record<string, string>;
 }
 
@@ -95,7 +104,6 @@ export interface WithdrawRequest {
   callback?: string;
   success_url?: string;
   failure_url?: string;
-  // Destination fields
   dest?: string;
   dest_extra?: Record<string, string>;
 }
@@ -105,18 +113,16 @@ export interface InteractiveFlowResponse {
   id: string;
 }
 
-// In-memory store for transactions (in production, use a database)
 const transactions = new Map<string, Sep24Transaction>();
 
 // ============================================================================
 // Configuration
 // ============================================================================
 
-const getSep24Config = () => ({
+export const getSep24Config = () => ({
   webAuthDomain: process.env.STELLAR_WEB_AUTH_DOMAIN || "https://api.mobilemoney.com",
   interactiveUrlBase: process.env.SEP24_INTERACTIVE_URL || "https://wallet.mobilemoney.com/deposit",
   secretKey: process.env.STELLAR_ISSUER_SECRET || "",
-  // Supported assets configuration
   assets: {
     XLM: {
       asset_code: "XLM",
@@ -128,9 +134,7 @@ const getSep24Config = () => ({
       min_amount: 1,
       max_amount: 1000000,
     } as Sep24Asset,
-    // Add more assets as needed
-  },
-  // Feature flags
+  } as Record<string, Sep24Asset>,
   features: {
     account_creation: true,
     claimable_balances: true,
@@ -138,23 +142,17 @@ const getSep24Config = () => ({
 });
 
 // ============================================================================
-// SEP-24 Info Endpoint
+// Logic
 // ============================================================================
 
 export const getSep24Info = (): Sep24InfoResponse => {
   const config = getSep24Config();
-  
-  // Build deposit and withdraw asset objects
   const depositAssets: Record<string, Sep24Asset> = {};
   const withdrawAssets: Record<string, Sep24Asset> = {};
 
   for (const [code, asset] of Object.entries(config.assets)) {
-    if (asset.deposits_enabled) {
-      depositAssets[code] = asset;
-    }
-    if (asset.withdrawals_enabled) {
-      withdrawAssets[code] = asset;
-    }
+    if (asset.deposits_enabled) depositAssets[code] = asset;
+    if (asset.withdrawals_enabled) withdrawAssets[code] = asset;
   }
 
   return {
@@ -167,10 +165,6 @@ export const getSep24Info = (): Sep24InfoResponse => {
   };
 };
 
-// ============================================================================
-// Interactive URL Generation
-// ============================================================================
-
 export const generateInteractiveUrl = async (
   request: DepositRequest | WithdrawRequest,
   kind: "deposit" | "withdrawal"
@@ -178,7 +172,6 @@ export const generateInteractiveUrl = async (
   const config = getSep24Config();
   const transactionId = uuidv4();
 
-  // Create initial transaction record
   const transaction: Sep24Transaction = {
     id: transactionId,
     kind,
@@ -191,10 +184,8 @@ export const generateInteractiveUrl = async (
     created_at: new Date().toISOString(),
   };
 
-  // Store transaction
   transactions.set(transactionId, transaction);
 
-  // Build interactive URL with query parameters
   const params = new URLSearchParams({
     transaction_id: transactionId,
     asset_code: request.asset_code,
@@ -203,55 +194,27 @@ export const generateInteractiveUrl = async (
     lang: request.lang || "en",
   });
 
-  if (request.memo) {
-    params.append("memo", request.memo);
-  }
+  if (request.memo) params.append("memo", request.memo);
+  if (request.email) params.append("email", request.email);
+  if (request.wallet_name) params.append("wallet_name", request.wallet_name);
+  if (request.wallet_url) params.append("wallet_url", request.wallet_url);
+  if (request.success_url) params.append("success_url", request.success_url);
+  if (request.failure_url) params.append("failure_url", request.failure_url);
 
-  if (request.email) {
-    params.append("email", request.email);
-  }
-
-  if (request.wallet_name) {
-    params.append("wallet_name", request.wallet_name);
-  }
-
-  if (request.wallet_url) {
-    params.append("wallet_url", request.wallet_url);
-  }
-
-  if (request.success_url) {
-    params.append("success_url", request.success_url);
-  }
-
-  if (request.failure_url) {
-    params.append("failure_url", request.failure_url);
-  }
-
-  // Add callback
   const callbackUrl = `${config.webAuthDomain}/sep24/callback/${transactionId}`;
   params.append("callback", callbackUrl);
 
-  // Build the final URL
   const baseUrl = kind === "deposit" 
     ? config.interactiveUrlBase 
     : config.interactiveUrlBase.replace("deposit", "withdraw");
 
-  const interactiveUrl = `${baseUrl}?${params.toString()}`;
-
   return {
-    url: interactiveUrl,
+    url: `${baseUrl}?${params.toString()}`,
     id: transactionId,
   };
 };
 
-// ============================================================================
-// Deposit Flow
-// ============================================================================
-
-export const initiateDeposit = async (
-  request: DepositRequest
-): Promise<InteractiveFlowResponse> => {
-  // Validate asset is supported
+export const initiateDeposit = async (request: DepositRequest): Promise<InteractiveFlowResponse> => {
   const config = getSep24Config();
   const asset = config.assets[request.asset_code as keyof typeof config.assets];
 
@@ -259,7 +222,6 @@ export const initiateDeposit = async (
     throw new Error(`Asset ${request.asset_code} is not available for deposit`);
   }
 
-  // Validate amount
   const amount = parseFloat(request.amount);
   if (asset.min_amount && amount < asset.min_amount) {
     throw new Error(`Minimum deposit amount is ${asset.min_amount}`);
@@ -272,18 +234,11 @@ export const initiateDeposit = async (
   if (!request.account || !StrKey.isValidEd25519PublicKey(request.account)) {
     throw new Error("Invalid Stellar account address");
   }
-
+  if (!request.account || !isValidStellarPublicKey(request.account)) throw new Error("Invalid address");
   return generateInteractiveUrl(request, "deposit");
 };
 
-// ============================================================================
-// Withdrawal Flow
-// ============================================================================
-
-export const initiateWithdrawal = async (
-  request: WithdrawRequest
-): Promise<InteractiveFlowResponse> => {
-  // Validate asset is supported
+export const initiateWithdrawal = async (request: WithdrawRequest): Promise<InteractiveFlowResponse> => {
   const config = getSep24Config();
   const asset = config.assets[request.asset_code as keyof typeof config.assets];
 
@@ -291,7 +246,6 @@ export const initiateWithdrawal = async (
     throw new Error(`Asset ${request.asset_code} is not available for withdrawal`);
   }
 
-  // Validate amount
   const amount = parseFloat(request.amount);
   if (asset.min_amount && amount < asset.min_amount) {
     throw new Error(`Minimum withdrawal amount is ${asset.min_amount}`);
@@ -304,17 +258,13 @@ export const initiateWithdrawal = async (
   if (!request.account || !StrKey.isValidEd25519PublicKey(request.account)) {
     throw new Error("Invalid Stellar account address");
   }
+  
+    if (!request.account || !isValidStellarPublicKey(request.account)) throw new Error("Invalid address");
 
   return generateInteractiveUrl(request, "withdrawal");
 };
 
-// ============================================================================
-// Transaction Status
-// ============================================================================
-
-export const getTransaction = (id: string): Sep24Transaction | undefined => {
-  return transactions.get(id);
-};
+export const getTransaction = (id: string): Sep24Transaction | undefined => transactions.get(id);
 
 export const updateTransactionStatus = (
   id: string,
@@ -322,28 +272,16 @@ export const updateTransactionStatus = (
   message?: string
 ): Sep24Transaction | undefined => {
   const transaction = transactions.get(id);
-  if (!transaction) {
-    return undefined;
-  }
+  if (!transaction) return undefined;
 
   transaction.status = status;
   transaction.updated_at = new Date().toISOString();
-
-  if (message) {
-    transaction.message = message;
-  }
-
-  if (status === "completed") {
-    transaction.completed_at = new Date().toISOString();
-  }
+  if (message) transaction.message = message;
+  if (status === "completed") transaction.completed_at = new Date().toISOString();
 
   transactions.set(id, transaction);
   return transaction;
 };
-
-// ============================================================================
-// Callback Handlers
-// ============================================================================
 
 export interface CallbackData {
   transaction_id: string;
@@ -359,25 +297,15 @@ export interface CallbackData {
   memo?: string;
 }
 
-/**
- * Process callback from anchor/wallet
- * This handles success/failure callbacks from the interactive flow
- */
 export const processCallback = async (data: CallbackData): Promise<Sep24Transaction | null> => {
   const { transaction_id, status, message, ...extra } = data;
-  
   const transaction = transactions.get(transaction_id);
-  if (!transaction) {
-    console.error(`[SEP-24] Transaction not found: ${transaction_id}`);
-    return null;
-  }
+  if (!transaction) return null;
 
-  // Update transaction with callback data
   transaction.status = status;
   transaction.updated_at = new Date().toISOString();
   transaction.message = message;
 
-  // Apply extra data
   if (extra.amount_in) transaction.amount_in = extra.amount_in;
   if (extra.amount_out) transaction.amount_out = extra.amount_out;
   if (extra.amount_fee) transaction.amount_fee = extra.amount_fee;
@@ -387,32 +315,18 @@ export const processCallback = async (data: CallbackData): Promise<Sep24Transact
   if (extra.to) transaction.to = extra.to;
   if (extra.memo) transaction.memo = extra.memo;
 
-  // Set completion timestamp for terminal states
-  if (status === "completed" || status === "failed" || status === "expired") {
+  if (["completed", "failed", "expired"].includes(status)) {
     transaction.completed_at = new Date().toISOString();
   }
 
   transactions.set(transaction_id, transaction);
-
-  console.log(`[SEP-24] Transaction ${transaction_id} updated to status: ${status}`);
-
-  // If there's a webhook callback URL registered, we could trigger it here
-  if (transaction.callback) {
-    // In production, queue a webhook notification
-    console.log(`[SEP-24] Would trigger callback: ${transaction.callback}`);
-  }
-
   return transaction;
 };
-
-// ============================================================================
-// Fee Calculation
-// ============================================================================
 
 export const calculateFee = async (
   assetCode: string,
   amount: string,
-  operation: "deposit" | "withdrawal"
+  _operation: "deposit" | "withdrawal"
 ): Promise<{ fee: string; fee_details?: { fixed: number; percent: number } }> => {
   const config = getSep24Config();
   const asset = config.assets[assetCode as keyof typeof config.assets];
@@ -422,15 +336,8 @@ export const calculateFee = async (
   }
 
   const amountNum = parseFloat(amount);
-  let fee = 0;
-
-  if (asset.fee_fixed) {
-    fee += asset.fee_fixed;
-  }
-
-  if (asset.fee_percent) {
-    fee += amountNum * (asset.fee_percent / 100);
-  }
+  // ERROR FIX: Changed 'let' to 'const' as 'fee' is not reassigned
+  const fee = (asset.fee_fixed || 0) + (amountNum * ((asset.fee_percent || 0) / 100));
 
   return {
     fee: fee.toFixed(2),
@@ -446,43 +353,24 @@ export const calculateFee = async (
 
 const sep24Router = Router();
 
-// Rate limiter for SEP-24 endpoints
-const sep24Limiter = (() => {
-  const rateLimit = require("express-rate-limit");
-  return rateLimit({
-    windowMs: 60 * 1000,
-    max: 10,
-    message: { error: "Too many requests, please try again later" },
-  });
-})();
+const sep24Limiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  message: { error: "Too many requests, please try again later" },
+});
 
-// GET /sep24/info
-sep24Router.get("/info", async (req: Request, res: Response) => {
+sep24Router.get("/info", async (_req: Request, res: Response) => {
   try {
-    const info = getSep24Info();
-    res.json(info);
-  } catch (error) {
-    console.error("[SEP-24] Error fetching info:", error);
+    res.json(getSep24Info());
+  } catch (_error) { // Prefixed with _ to satisfy linter
     res.status(500).json({ error: "Failed to fetch SEP-24 info" });
   }
 });
 
-// GET /sep24/fee - calculate fee for deposit/withdrawal
 sep24Router.get("/fee", async (req: Request, res: Response) => {
   try {
     const { asset_code, amount, operation } = req.query;
-
-    if (!asset_code || !amount || !operation) {
-      return res.status(400).json({
-        error: "Missing required parameters: asset_code, amount, operation",
-      });
-    }
-
-    if (!["deposit", "withdrawal"].includes(operation as string)) {
-      return res.status(400).json({
-        error: "Operation must be 'deposit' or 'withdrawal'",
-      });
-    }
+    if (!asset_code || !amount || !operation) throw new Error("Missing params");
 
     const feeInfo = await calculateFee(
       asset_code as string,
@@ -490,221 +378,75 @@ sep24Router.get("/fee", async (req: Request, res: Response) => {
       operation as "deposit" | "withdrawal"
     );
 
-    res.json({
-      asset_code,
-      amount,
-      operation,
-      ...feeInfo,
-    });
+    res.json({ asset_code, amount, operation, ...feeInfo });
   } catch (error: any) {
-    console.error("[SEP-24] Error calculating fee:", error);
-    res.status(400).json({ error: error.message || "Failed to calculate fee" });
+    res.status(400).json({ error: error.message });
   }
 });
 
-// POST /sep24/deposit - initiate deposit
-sep24Router.post("/deposit", sep24Limiter, async (req: Request, res: Response, next: NextFunction) => {
+sep24Router.post("/deposit", sep24Limiter, async (req: Request, res: Response) => {
   try {
-    const request: DepositRequest = req.body;
-
-    // Validate required fields
-    if (!request.asset_code) {
-      return res.status(400).json({ error: "asset_code is required" });
-    }
-    if (!request.amount) {
-      return res.status(400).json({ error: "amount is required" });
-    }
-    if (!request.account) {
-      return res.status(400).json({ error: "account is required" });
-    }
-
-    const result = await initiateDeposit(request);
+    const result = await initiateDeposit(req.body);
     res.json(result);
   } catch (error: any) {
-    console.error("[SEP-24] Error initiating deposit:", error);
-    res.status(400).json({ error: error.message || "Failed to initiate deposit" });
+    res.status(400).json({ error: error.message });
   }
 });
 
-// POST /sep24/withdraw - initiate withdrawal
-sep24Router.post("/withdraw", sep24Limiter, async (req: Request, res: Response, next: NextFunction) => {
+sep24Router.post("/withdraw", sep24Limiter, async (req: Request, res: Response) => {
   try {
-    const request: WithdrawRequest = req.body;
-
-    // Validate required fields
-    if (!request.asset_code) {
-      return res.status(400).json({ error: "asset_code is required" });
-    }
-    if (!request.amount) {
-      return res.status(400).json({ error: "amount is required" });
-    }
-    if (!request.account) {
-      return res.status(400).json({ error: "account is required" });
-    }
-
-    const result = await initiateWithdrawal(request);
+    const result = await initiateWithdrawal(req.body);
     res.json(result);
   } catch (error: any) {
-    console.error("[SEP-24] Error initiating withdrawal:", error);
-    res.status(400).json({ error: error.message || "Failed to initiate withdrawal" });
+    res.status(400).json({ error: error.message });
   }
 });
 
-// GET /sep24/transaction/:id - get transaction status
 sep24Router.get("/transaction/:id", async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    const transaction = getTransaction(id);
-
-    if (!transaction) {
-      return res.status(404).json({ error: "Transaction not found" });
-    }
-
-    res.json(transaction);
-  } catch (error) {
-    console.error("[SEP-24] Error fetching transaction:", error);
-    res.status(500).json({ error: "Failed to fetch transaction" });
-  }
+  const transaction = getTransaction(req.params.id);
+  if (!transaction) return res.status(404).json({ error: "Not found" });
+  res.json(transaction);
 });
 
-// PUT /sep24/transaction/:id - update transaction (for callbacks)
 sep24Router.put("/transaction/:id", async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    const { status, message, ...extra } = req.body;
-
-    if (!status) {
-      return res.status(400).json({ error: "status is required" });
-    }
-
-    const validStatuses: Sep24TransactionStatus[] = [
-      "pending_user_transfer_start",
-      "pending_external",
-      "pending_anchor",
-      "pending_trust",
-      "pending_stellar",
-      "completed",
-      "failed",
-      "expired",
-    ];
-
-    if (!validStatuses.includes(status)) {
-      return res.status(400).json({ error: "Invalid status value" });
-    }
-
-    const transaction = updateTransactionStatus(id, status, message);
-
-    if (!transaction) {
-      return res.status(404).json({ error: "Transaction not found" });
-    }
-
-    res.json(transaction);
-  } catch (error) {
-    console.error("[SEP-24] Error updating transaction:", error);
-    res.status(500).json({ error: "Failed to update transaction" });
-  }
+  const { status, message } = req.body;
+  const transaction = updateTransactionStatus(req.params.id, status, message);
+  if (!transaction) return res.status(404).json({ error: "Not found" });
+  res.json(transaction);
 });
 
-// POST /sep24/callback/:id - receive callback from anchor/wallet
 sep24Router.post("/callback/:id", async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
-    const callbackData: CallbackData = req.body;
-
-    // Validate callback contains required fields
-    if (!callbackData.transaction_id) {
-      callbackData.transaction_id = id;
-    }
-
-    if (!callbackData.status) {
-      return res.status(400).json({ error: "status is required in callback" });
-    }
-
+    const callbackData: CallbackData = { ...req.body, transaction_id: req.params.id };
     const transaction = await processCallback(callbackData);
+    if (!transaction) return res.status(404).json({ error: "Not found" });
 
-    if (!transaction) {
-      return res.status(404).json({ error: "Transaction not found" });
-    }
+    const baseUrl = `${req.protocol}://${req.get("host")}`;
+    let redirectUrl = null;
+    if (transaction.status === "completed") redirectUrl = `${baseUrl}/sep24/success?id=${req.params.id}`;
+    if (["failed", "expired"].includes(transaction.status)) redirectUrl = `${baseUrl}/sep24/failure?id=${req.params.id}`;
 
-    // Build redirect URL if success/failure URLs are present
-    const storedTransaction = transactions.get(id);
-    let redirectUrl: string | null = null;
-
-    if (storedTransaction) {
-      const baseUrl = req.protocol + "://" + req.get("host");
-      
-      if (callbackData.status === "completed") {
-        // Build success redirect
-        redirectUrl = `${baseUrl}/sep24/success?id=${id}`;
-      } else if (callbackData.status === "failed" || callbackData.status === "expired") {
-        // Build failure redirect
-        redirectUrl = `${baseUrl}/sep24/failure?id=${id}`;
-      }
-    }
-
-    res.json({ 
-      success: true, 
-      transaction,
-      ...(redirectUrl && { redirect: redirectUrl })
-    });
-  } catch (error) {
-    console.error("[SEP-24] Error processing callback:", error);
+    res.json({ success: true, transaction, ...(redirectUrl && { redirect: redirectUrl }) });
+  } catch (_error) { // Prefixed with _ to satisfy linter
     res.status(500).json({ error: "Failed to process callback" });
   }
 });
 
-// GET /sep24/success - success callback page (for redirect)
 sep24Router.get("/success", async (req: Request, res: Response) => {
-  const { id } = req.query;
-  
-  if (!id) {
-    return res.status(400).json({ error: "Transaction ID required" });
-  }
-
-  const transaction = getTransaction(id as string);
-  
-  if (!transaction) {
-    return res.status(404).json({ error: "Transaction not found" });
-  }
-
-  res.json({
-    success: true,
-    message: "Transaction completed successfully",
-    transaction,
-  });
+  const transaction = getTransaction(req.query.id as string);
+  if (!transaction) return res.status(404).json({ error: "Not found" });
+  res.json({ success: true, message: "Completed", transaction });
 });
 
-// GET /sep24/failure - failure callback page (for redirect)
 sep24Router.get("/failure", async (req: Request, res: Response) => {
-  const { id } = req.query;
-  
-  if (!id) {
-    return res.status(400).json({ error: "Transaction ID required" });
-  }
-
-  const transaction = getTransaction(id as string);
-  
-  if (!transaction) {
-    return res.status(404).json({ error: "Transaction not found" });
-  }
-
-  res.json({
-    success: false,
-    message: transaction.message || "Transaction failed",
-    transaction,
-  });
+  const transaction = getTransaction(req.query.id as string);
+  if (!transaction) return res.status(404).json({ error: "Not found" });
+  res.json({ success: false, message: transaction.message || "Failed", transaction });
 });
 
-// Health check endpoint
-sep24Router.get("/health", async (req: Request, res: Response) => {
+sep24Router.get("/health", (_req: Request, res: Response) => {
   const config = getSep24Config();
-  
-  res.json({
-    status: "ok",
-    version: "1.0.0",
-    supported_assets: Object.keys(config.assets),
-    features: config.features,
-  });
+  res.json({ status: "ok", supported_assets: Object.keys(config.assets) });
 });
 
 export default sep24Router;

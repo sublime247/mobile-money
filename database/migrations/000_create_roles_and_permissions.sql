@@ -1,4 +1,23 @@
--- Seed default roles and permissions for RBAC system
+-- Create roles table
+CREATE TABLE IF NOT EXISTS roles (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(50) UNIQUE NOT NULL,
+    description TEXT
+);
+
+-- Create permissions table
+CREATE TABLE IF NOT EXISTS permissions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(100) UNIQUE NOT NULL,
+    description TEXT
+);
+
+-- Create role_permissions join table
+CREATE TABLE IF NOT EXISTS role_permissions (
+    role_id UUID REFERENCES roles(id) ON DELETE CASCADE,
+    permission_id UUID REFERENCES permissions(id) ON DELETE CASCADE,
+    PRIMARY KEY (role_id, permission_id)
+);
 
 -- Insert default roles
 INSERT INTO roles (name, description) VALUES 
@@ -19,7 +38,6 @@ INSERT INTO permissions (name, description) VALUES
 ON CONFLICT (name) DO NOTHING;
 
 -- Assign permissions to roles
-
 -- Admin role gets all permissions
 INSERT INTO role_permissions (role_id, permission_id)
 SELECT r.id, p.id

@@ -21,6 +21,7 @@ jest.mock("../src/config/redis", () => ({
 
 jest.mock("../src/middleware/timeout", () => ({
   TimeoutPresets: {
+    quick: (_req: unknown, _res: unknown, next: () => void) => next(),
     medium: (_req: unknown, _res: unknown, next: () => void) => next(),
   },
   haltOnTimedout: (_req: unknown, _res: unknown, next: () => void) => next(),

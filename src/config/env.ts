@@ -29,7 +29,11 @@ export const env = cleanEnv(process.env, {
     default: "testnet",
     desc: "Stellar network (testnet or mainnet)",
   }),
+  DB_ENCRYPTION_KEY: str({
+    default: "development-encryption-key-32-chars-long",
+    desc: "Secret key for PII encryption in database",
+  }),
 });
 
 // Re-export specific values for convenience
-export const { DATABASE_URL, STELLAR_ISSUER_SECRET, REDIS_URL, STELLAR_HORIZON_URL, STELLAR_NETWORK } = env;
+export const { DATABASE_URL, STELLAR_ISSUER_SECRET, REDIS_URL, STELLAR_HORIZON_URL, STELLAR_NETWORK, DB_ENCRYPTION_KEY } = env;

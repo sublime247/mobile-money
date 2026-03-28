@@ -1,290 +1,248 @@
 import {
-  Transaction,
+  Asset,
   FeeBumpTransaction,
   Keypair,
+  Memo,
   Operation,
   StrKey,
+  Transaction,
   TransactionBuilder,
-  Memo,
-  Timebounds,
 } from "stellar-sdk";
-import { getStellarServer, getNetworkPassphrase, getFeeBumpConfig } from "../config/stellar";
+import {
+  getFeeBumpConfig,
+  getNetworkPassphrase,
+  getStellarServer,
+} from "../config/stellar";
 
-// ============================================================================
-// Types
-// ============================================================================
+type StellarOperation = Parameters<TransactionBuilder["addOperation"]>[0];
+type StellarTimebounds = { minTime: string; maxTime: string };
 
 export interface FeeBumpOptions {
-  /** Source account that creates the inner transaction */
   sourceAccount: string;
-  /** Operations to include in the inner transaction */
-  operations: Operation[];
-  /** Memo to attach to the transaction */
+  operations: StellarOperation[];
   memo?: Memo;
-  /** Timebounds for transaction validity */
-  timebounds?: Timebounds;
-  /** Whether to enable fee bumping (default: true) */
+  timebounds?: StellarTimebounds;
   enableFeeBump?: boolean;
 }
 
 export interface FeeBumpResult {
-  /** The transaction envelope (base64 encoded) */
   envelope: string;
-  /** The inner transaction hash */
   innerTransactionHash: string;
-  /** The fee bump transaction hash */
   feeBumpTransactionHash: string;
-  /** Fee amount in stroops */
   fee: number;
-  /** Whether fee bump was used */
   usedFeeBump: boolean;
 }
 
 export interface FeeEstimate {
-  /** Base fee in stroops per operation */
   baseFee: number;
-  /** Number of operations */
   operationCount: number;
-  /** Estimated total fee in stroops */
   estimatedFee: number;
-  /** Maximum allowed fee in stroops */
   maxFee: number;
-  /** Whether the estimated fee exceeds the maximum */
   exceedsMax: boolean;
 }
 
-// In-memory store for fee payer sequence (in production, use a database or cache)
 let feePayerSequence: number | null = null;
 
-// ============================================================================
-// Fee Bump Transaction Builder
-// ============================================================================
-
-/**
- * Wraps a transaction in a FeeBumpTransaction.
- * This allows the fee payer to cover network fees for user transactions.
- * 
- * @param innerTransaction - The user's transaction to wrap
- * @param feePayerKeypair - Keypair of the fee payer account
- * @param maxFee - Maximum fee willing to pay (in stroops)
- * @returns FeeBumpTransaction
- */
-export const wrapInFeeBump = (
-  innerTransaction: Transaction,
-  feePayerKeypair: Keypair,
-  maxFee: number
-): FeeBumpTransaction => {
-  return new FeeBumpTransactionBuilder({
-    innerTransaction,
-    feePayer: feePayerKeypair.publicKey(),
-    maxFee,
-  }).build();
-};
-
-/**
- * Builds and optionally wraps a transaction with fee bumping.
- * 
- * @param options - Transaction building options
- * @returns FeeBumpResult containing the transaction envelope and details
- */
-export const buildTransactionWithFeeBump = async (
-  options: FeeBumpOptions
-): Promise<FeeBumpResult> => {
-  const config = getFeeBumpConfig();
-  const server = getStellarServer();
-  const networkPassphrase = getNetworkPassphrase();
-  
-  const { 
-    sourceAccount, 
-    operations, 
-    memo, 
-    timebounds, 
-    enableFeeBump = true 
-  } = options;
-
-  // Validate source account
-  if (!StrKey.isValidEd25519PublicKey(sourceAccount)) {
-    throw new Error("Invalid source account address");
+function assertValidPublicKey(accountId: string, fieldName: string): void {
+  if (!StrKey.isValidEd25519PublicKey(accountId)) {
+    throw new Error(`Invalid ${fieldName}`);
   }
+}
 
-  // Check operation count limit
-  if (operations.length > config.maxOperationsPerTransaction) {
+function getChargedOperationCount(operationCount: number): number {
+  return operationCount + 1;
+}
+
+function getConfiguredBaseFee(networkBaseFee: number): number {
+  const config = getFeeBumpConfig();
+  return Math.max(config.baseFeeStroops, networkBaseFee);
+}
+
+function getInnerTransactionFee(operationCount: number, baseFee: number): number {
+  return operationCount * baseFee;
+}
+
+function getRequiredFeeBumpFee(operationCount: number, baseFee: number): number {
+  return getChargedOperationCount(operationCount) * baseFee;
+}
+
+function assertFeeLimit(operationCount: number, baseFee: number): void {
+  const config = getFeeBumpConfig();
+  const requiredFee = getRequiredFeeBumpFee(operationCount, baseFee);
+
+  if (requiredFee > config.maxFeePerTransaction) {
     throw new Error(
-      `Too many operations: ${operations.length}. Maximum is ${config.maxOperationsPerTransaction}`
+      `Fee bump fee ${requiredFee} stroops exceeds max allowed ${config.maxFeePerTransaction}`,
     );
   }
+}
 
-  // Get source account to establish sequence number
-  const sourceAccountRecord = await server.loadAccount(sourceAccount);
-  
-  // Get timebounds if not provided
-  const txTimebounds = timebounds || await server.getTimebounds(300); // 5 min default
-  
-  // Build the inner transaction (user's transaction)
-  let transactionBuilder = new TransactionBuilder(sourceAccountRecord, {
-    fee: config.baseFeeStroops.toString(),
+function getFeePayerKeypair(): Keypair {
+  const config = getFeeBumpConfig();
+  if (!config.feePayerPublicKey || !config.feePayerPrivateKey) {
+    throw new Error("Fee payer not configured");
+  }
+
+  assertValidPublicKey(config.feePayerPublicKey, "fee payer public key");
+  const feePayerKeypair = Keypair.fromSecret(config.feePayerPrivateKey);
+
+  if (feePayerKeypair.publicKey() !== config.feePayerPublicKey) {
+    throw new Error("Fee payer secret does not match configured public key");
+  }
+
+  return feePayerKeypair;
+}
+
+async function getTransactionBaseFee(): Promise<number> {
+  const server = getStellarServer();
+  const fetchedBaseFee = await server.fetchBaseFee();
+  return getConfiguredBaseFee(Number(fetchedBaseFee));
+}
+
+async function buildInnerTransaction(
+  options: FeeBumpOptions,
+  baseFee: number,
+): Promise<Transaction> {
+  const server = getStellarServer();
+  const networkPassphrase = getNetworkPassphrase();
+  const sourceAccountRecord = await server.loadAccount(options.sourceAccount);
+  const txTimebounds = options.timebounds ?? (await server.fetchTimebounds(300));
+
+  let builder = new TransactionBuilder(sourceAccountRecord, {
+    fee: String(getInnerTransactionFee(options.operations.length, baseFee)),
     timebounds: txTimebounds,
     networkPassphrase,
   });
 
-  // Add memo if provided
-  if (memo) {
-    transactionBuilder = transactionBuilder.addMemo(memo);
+  if (options.memo) {
+    builder = builder.addMemo(options.memo);
   }
 
-  // Add operations
-  for (const op of operations) {
-    transactionBuilder = transactionBuilder.addOperation(op);
+  for (const operation of options.operations) {
+    builder = builder.addOperation(operation);
   }
 
-  const innerTransaction = transactionBuilder.build();
+  return builder.build();
+}
 
-  // If fee bumping is disabled, return the regular transaction
+export const wrapInFeeBump = (
+  innerTransaction: Transaction,
+  feePayerKeypair: Keypair,
+  baseFee: number,
+): FeeBumpTransaction => {
+  return TransactionBuilder.buildFeeBumpTransaction(
+    feePayerKeypair,
+    String(baseFee),
+    innerTransaction,
+    getNetworkPassphrase(),
+  );
+};
+
+export const buildTransactionWithFeeBump = async (
+  options: FeeBumpOptions,
+): Promise<FeeBumpResult> => {
+  const config = getFeeBumpConfig();
+  const { sourceAccount, operations, enableFeeBump = true } = options;
+
+  assertValidPublicKey(sourceAccount, "source account address");
+
+  if (operations.length === 0) {
+    throw new Error("At least one operation is required");
+  }
+
+  if (operations.length > config.maxOperationsPerTransaction) {
+    throw new Error(
+      `Too many operations: ${operations.length}. Maximum is ${config.maxOperationsPerTransaction}`,
+    );
+  }
+
+  const baseFee = await getTransactionBaseFee();
+  const innerTransaction = await buildInnerTransaction(options, baseFee);
+
   if (!enableFeeBump) {
-    const envelope = innerTransaction.toEnvelope().toXDR("base64");
     return {
-      envelope,
+      envelope: innerTransaction.toEnvelope().toXDR("base64"),
       innerTransactionHash: innerTransaction.hash().toString("hex"),
       feeBumpTransactionHash: "",
-      fee: innerTransaction.fee,
+      fee: Number(innerTransaction.fee),
       usedFeeBump: false,
     };
   }
 
-  // Validate fee payer configuration
-  if (!config.feePayerPublicKey || !config.feePayerPrivateKey) {
-    throw new Error("Fee payer not configured. Set STELLAR_FEE_PAYER_PUBLIC_KEY and STELLAR_FEE_PAYER_SECRET");
-  }
-
-  // Create fee payer keypair
-  const feePayerKeypair = Keypair.fromSecret(config.feePayerPrivateKey);
-  
-  if (feePayerKeypair.publicKey() !== config.feePayerPublicKey) {
-    throw new Error("Fee payer keypair mismatch");
-  }
-
-  // Get current fee bump sequence
+  const feePayerKeypair = getFeePayerKeypair();
   await updateFeePayerSequence();
+  assertFeeLimit(operations.length, baseFee);
 
-  // Calculate max fee for the transaction
-  const maxFee = calculateMaxFee(operations.length, config.baseFeeStroops, config.maxFeePerTransaction);
-
-  // Wrap in fee bump
   const feeBumpTransaction = wrapInFeeBump(
     innerTransaction,
     feePayerKeypair,
-    maxFee
+    baseFee,
   );
 
-  // Sign the fee bump transaction
   feeBumpTransaction.sign(feePayerKeypair);
 
-  const envelope = feeBumpTransaction.toEnvelope().toXDR("base64");
-
   return {
-    envelope,
+    envelope: feeBumpTransaction.toEnvelope().toXDR("base64"),
     innerTransactionHash: innerTransaction.hash().toString("hex"),
     feeBumpTransactionHash: feeBumpTransaction.hash().toString("hex"),
-    fee: maxFee,
+    fee: Number(feeBumpTransaction.fee),
     usedFeeBump: true,
   };
 };
 
-// ============================================================================
-// Fee Payer Sequence Management
-// ============================================================================
-
-/**
- * Updates the fee payer sequence number from Horizon
- */
 export const updateFeePayerSequence = async (): Promise<number> => {
   const config = getFeeBumpConfig();
-  
   if (!config.feePayerPublicKey) {
-    throw new Error("Fee payer public key not configured");
+    throw new Error("Fee payer not configured");
   }
+
+  assertValidPublicKey(config.feePayerPublicKey, "fee payer public key");
 
   const server = getStellarServer();
   const feePayerAccount = await server.loadAccount(config.feePayerPublicKey);
-  
-  feePayerSequence = Number(feePayerAccount.sequenceNumber);
-  
-  console.log(`[FeeBump] Updated fee payer sequence: ${feePayerSequence}`);
-  
+  feePayerSequence = Number(feePayerAccount.sequence);
+
   return feePayerSequence;
 };
 
-/**
- * Gets the current fee payer sequence number
- */
-export const getFeePayerSequence = (): number | null => {
-  return feePayerSequence;
-};
+export const getFeePayerSequence = (): number | null => feePayerSequence;
 
-/**
- * Increments the fee payer sequence (for internal use after transaction submission)
- */
 export const incrementFeePayerSequence = (): void => {
   if (feePayerSequence !== null) {
     feePayerSequence += 1;
-    console.log(`[FeeBump] Incremented fee payer sequence to: ${feePayerSequence}`);
   }
 };
 
-// ============================================================================
-// Fee Estimation
-// ============================================================================
-
-/**
- * Estimates the fee for a transaction
- * 
- * @param operationCount - Number of operations in the transaction
- * @returns FeeEstimate with fee details
- */
 export const estimateFee = (operationCount: number): FeeEstimate => {
   const config = getFeeBumpConfig();
-  
-  const baseFee = config.baseFeeStroops;
-  const estimatedFee = baseFee * operationCount;
-  const maxFee = config.maxFeePerTransaction;
-  
+  const estimatedFee = getRequiredFeeBumpFee(
+    operationCount,
+    config.baseFeeStroops,
+  );
+
   return {
-    baseFee,
+    baseFee: config.baseFeeStroops,
     operationCount,
     estimatedFee,
-    maxFee,
-    exceedsMax: estimatedFee > maxFee,
+    maxFee: config.maxFeePerTransaction,
+    exceedsMax: estimatedFee > config.maxFeePerTransaction,
   };
 };
 
-/**
- * Calculates the maximum fee for a given number of operations
- */
 export const calculateMaxFee = (
   operationCount: number,
   baseFee: number,
-  maxAllowedFee: number
+  maxAllowedFee: number,
 ): number => {
-  // Add 10% buffer to the base fee calculation
-  const calculatedFee = Math.ceil(operationCount * baseFee * 1.1);
-  
-  // Cap at max allowed fee
-  return Math.min(calculatedFee, maxAllowedFee);
-};
+  const totalFee = getRequiredFeeBumpFee(operationCount, baseFee);
+  if (totalFee > maxAllowedFee) {
+    throw new Error(
+      `Fee bump fee ${totalFee} stroops exceeds max allowed ${maxAllowedFee}`,
+    );
+  }
 
-/**
- * Validates if a transaction fee is within acceptable limits
- */
-export const validateFee = (fee: number, operationCount: number): boolean => {
-  const config = getFeeBumpConfig();
-  const maxFee = calculateMaxFee(operationCount, config.baseFeeStroops, config.maxFeePerTransaction);
-  
-  return fee <= maxFee;
+  return totalFee;
 };
-
-// ============================================================================
-// Transaction Submission
-// ============================================================================
 
 export interface SubmitTransactionResult {
   success: boolean;
@@ -295,118 +253,120 @@ export interface SubmitTransactionResult {
   error?: string;
 }
 
-/**
- * Submits a transaction with fee bumping to the network
- * 
- * @param envelope - Base64 encoded transaction envelope
- * @returns SubmitTransactionResult
- */
+function parseTransactionEnvelope(
+  envelope: string,
+): Transaction | FeeBumpTransaction {
+  return TransactionBuilder.fromXDR(envelope, getNetworkPassphrase());
+}
+
+function validateEnvelopeFeeLimit(
+  transaction: Transaction | FeeBumpTransaction,
+): void {
+  const maxFee = getFeeBumpConfig().maxFeePerTransaction;
+  if (transaction instanceof FeeBumpTransaction) {
+    const fee = Number(transaction.fee);
+    if (fee <= maxFee) {
+      return;
+    }
+
+    throw new Error(
+      `Fee bump fee ${fee} stroops exceeds max allowed ${maxFee}`,
+    );
+  }
+}
+
 export const submitTransaction = async (
-  envelope: string
+  envelope: string,
 ): Promise<SubmitTransactionResult> => {
   const server = getStellarServer();
 
   try {
-    console.log(`[FeeBump] Submitting transaction...`);
-    
-    const response = await server.submitTransaction(envelope, {
-      skipMemoRequiredCheck: false,
-    });
+    const transaction = parseTransactionEnvelope(envelope);
+    validateEnvelopeFeeLimit(transaction);
 
-    console.log(`[FeeBump] Transaction submitted successfully: ${response.hash}`);
+    const response = await server.submitTransaction(transaction);
 
-    // Update fee payer sequence after successful submission
-    await updateFeePayerSequence();
+    if (transaction instanceof FeeBumpTransaction) {
+      await updateFeePayerSequence();
+    }
 
     return {
       success: true,
       transactionHash: response.hash,
       envelope,
-      feeCharged: response.fee_charged,
+      feeCharged: Number(
+        (response as { fee_charged?: number | string }).fee_charged ??
+          transaction.fee,
+      ),
       resultXdr: response.result_xdr,
     };
-  } catch (error: any) {
-    console.error(`[FeeBump] Transaction submission failed:`, error);
-    
-    // If it's a transaction failure, still update sequence
-    if (error.response?.status === 400) {
-      await updateFeePayerSequence();
+  } catch (error: unknown) {
+    const err = error as { message?: string; response?: { status?: number } };
+
+    if (err.response?.status === 400) {
+      try {
+        await updateFeePayerSequence();
+      } catch {
+        // Preserve the original submit error when sequence refresh also fails.
+      }
     }
 
     return {
       success: false,
-      error: error.message || "Transaction submission failed",
+      error: err.message || "Transaction submission failed",
     };
   }
 };
 
-// ============================================================================
-// Convenience Functions
-// ============================================================================
-
-/**
- * Creates a simple payment with fee bump
- */
 export const createSimplePaymentWithFeeBump = async (
   sourceAccount: string,
   destination: string,
   asset: "native" | { code: string; issuer: string },
   amount: string,
-  memo?: string
+  memo?: string,
 ): Promise<FeeBumpResult> => {
-  const operation = Operation.payment({
-    destination,
-    asset: asset === "native" 
-      ? new (require("stellar-sdk").Asset)() 
-      : new (require("stellar-sdk").Asset)(asset.code, asset.issuer),
-    amount,
-  });
-
-  const memoObj = memo ? Memo.text(memo) : undefined;
+  const stellarAsset =
+    asset === "native" ? Asset.native() : new Asset(asset.code, asset.issuer);
 
   return buildTransactionWithFeeBump({
     sourceAccount,
-    operations: [operation],
-    memo: memoObj,
+    operations: [
+      Operation.payment({
+        destination,
+        asset: stellarAsset,
+        amount,
+      }) as StellarOperation,
+    ],
+    memo: memo ? Memo.text(memo) : undefined,
   });
 };
 
-/**
- * Creates a simple asset transfer (change trust + payment) with fee bump
- */
 export const createTrustAndPaymentWithFeeBump = async (
   sourceAccount: string,
   destination: string,
   assetCode: string,
   assetIssuer: string,
   amount: string,
-  memo?: string
+  memo?: string,
 ): Promise<FeeBumpResult> => {
-  const Asset = require("stellar-sdk").Asset;
   const asset = new Asset(assetCode, assetIssuer);
-
-  const operations: Operation[] = [
-    // Create trustline (if destination doesn't have it)
-    Operation.changeTrust({
-      asset,
-      limit: amount,
-      source: destination,
-    }),
-    // Send payment
-    Operation.payment({
-      destination,
-      asset,
-      amount,
-      source: sourceAccount,
-    }),
-  ];
-
-  const memoObj = memo ? Memo.text(memo) : undefined;
 
   return buildTransactionWithFeeBump({
     sourceAccount,
-    operations,
-    memo: memoObj,
+    operations: [
+      Operation.changeTrust({
+        asset,
+        limit: amount,
+        source: destination,
+      }) as StellarOperation,
+      Operation.payment({
+        destination,
+        asset,
+        amount,
+        source: sourceAccount,
+      }) as StellarOperation,
+    ],
+    memo: memo ? Memo.text(memo) : undefined,
   });
 };
 
@@ -415,9 +375,10 @@ export default {
   submitTransaction,
   wrapInFeeBump,
   estimateFee,
-  validateFee,
+  calculateMaxFee,
   createSimplePaymentWithFeeBump,
   createTrustAndPaymentWithFeeBump,
   updateFeePayerSequence,
   getFeePayerSequence,
+  incrementFeePayerSequence,
 };

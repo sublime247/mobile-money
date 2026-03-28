@@ -8,6 +8,7 @@ import * as s3Upload from '../../services/s3Upload';
 jest.mock('../../services/s3Upload');
 jest.mock('../../middleware/auth', () => ({
   authenticateToken: (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    req.jwtUser = { userId: 'test-user-id', role: 'user' } as any;
     req.user = { id: 'test-user-id', email: 'test@example.com', role: 'user' };
     next();
   },
@@ -205,6 +206,7 @@ describe('File Validation', () => {
 
   it('should reject invalid file types', () => {
     const file = {
+      originalname: 'notes.txt',
       mimetype: 'text/plain',
       size: 1024,
     } as Express.Multer.File;
@@ -216,6 +218,7 @@ describe('File Validation', () => {
 
   it('should reject files exceeding size limit', () => {
     const file = {
+      originalname: 'large.pdf',
       mimetype: 'application/pdf',
       size: 6 * 1024 * 1024, // 6MB
     } as Express.Multer.File;

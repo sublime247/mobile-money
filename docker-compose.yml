@@ -9,8 +9,6 @@
 #   docker compose down        # stop and remove containers
 #   docker compose down -v     # stop and wipe volumes (fresh DB)
 
-version: "3.9"
-
 services:
   # ---------------------------------------------------------------------------
   # PostgreSQL
@@ -53,6 +51,21 @@ services:
       retries: 10
 
   # ---------------------------------------------------------------------------
+  # Datadog Agent
+  # ---------------------------------------------------------------------------
+  datadog-agent:
+    image: gcr.io/datadoghq/agent:latest
+    container_name: mobilemoney_datadog_agent
+    environment:
+      - DD_API_KEY=${DD_API_KEY}
+      - DD_SITE=datadoghq.com
+      - DD_APM_ENABLED=true
+      - DD_APM_NON_LOCAL_TRAFFIC=true
+      - DD_ENV=development
+    ports:
+      - "8126:8126"
+
+  # ---------------------------------------------------------------------------
   # Application (live reload via ts-node-dev)
   # ---------------------------------------------------------------------------
   app:
@@ -61,30 +74,126 @@ services:
       dockerfile: Dockerfile.dev
     container_name: mobilemoney_app
     restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     env_file:
       - .env
     environment:
       # Override the localhost URLs from .env to use Docker service names
       DATABASE_URL: postgresql://user:password@postgres:5432/mobilemoney_stellar
       REDIS_URL: redis://redis:6379
+      LOG_FILE_PATH: /var/log/mobile-money/app.log
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+      KIBANA_URL: http://kibana:5601
+      DD_AGENT_HOST: datadog-agent
+      DD_ENV: development
+      DD_SERVICE: mobile-money
+      DD_VERSION: 1.0.0
     ports:
       - "${PORT:-3000}:3000"
     volumes:
       # Mount source so edits reflect immediately without rebuilding
       - .:/app
       - /app/node_modules
+      - app_logs:/var/log/mobile-money
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:3000/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 15s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+      logstash:
+        condition: service_started
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.12.2
+    container_name: mobilemoney_elasticsearch
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS http://localhost:9200/_cluster/health || exit 1",
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.12.2
+    container_name: mobilemoney_logstash
+    restart: unless-stopped
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    ports:
+      - "5044:5044"
+    volumes:
+      - ./elk/logstash/pipeline:/usr/share/logstash/pipeline:ro
+      - ./elk/logstash/templates:/usr/share/logstash/templates:ro
+
+  filebeat:
+    image: docker.elastic.co/beats/filebeat:8.12.2
+    container_name: mobilemoney_filebeat
+    user: root
+    restart: unless-stopped
+    depends_on:
+      logstash:
+        condition: service_started
+    command: ["filebeat", "-e", "--strict.perms=false"]
+    volumes:
+      - ./elk/filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      - app_logs:/var/log/mobile-money:ro
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.12.2
+    container_name: mobilemoney_kibana
+    restart: unless-stopped
+    environment:
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+      XPACK_SECURITY_ENABLED: "false"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    ports:
+      - "5601:5601"
+    volumes:
+      - kibana_data:/usr/share/kibana/data
+    healthcheck:
+      test:
+        ["CMD-SHELL", "curl -fsS http://localhost:5601/api/status || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 20
+
+  kibana-importer:
+    image: curlimages/curl:8.7.1
+    container_name: mobilemoney_kibana_importer
+    restart: "no"
+    depends_on:
+      kibana:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "/scripts/import-kibana.sh"]
+    volumes:
+      - ./elk/scripts/import-kibana.sh:/scripts/import-kibana.sh:ro
+      - ./elk/kibana/mobile-money-dashboard.ndjson:/usr/share/kibana/import/mobile-money-dashboard.ndjson:ro
 
 volumes:
   postgres_data:
   redis_data:
+  app_logs:
+  elasticsearch_data:
+  kibana_data:

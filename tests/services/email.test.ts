@@ -1,25 +1,21 @@
 import { EmailService } from "../../src/services/email";
-import nodemailer from "nodemailer";
+import sgMail from "@sendgrid/mail";
 
-jest.mock("nodemailer");
+jest.mock("@sendgrid/mail");
 
 describe("EmailService", () => {
   let emailService: EmailService;
   let mockSendMail: jest.Mock;
 
   beforeEach(() => {
-    mockSendMail = jest.fn().mockResolvedValue({ messageId: "123" });
-    (nodemailer.createTransport as jest.Mock).mockReturnValue({
-      sendMail: mockSendMail,
-    });
-    
+    mockSendMail = jest.fn().mockResolvedValue([{ statusCode: 202 }]);
+    (sgMail.send as jest.Mock) = mockSendMail;
+
     // Reset env
     process.env.NODE_ENV = "development";
-    process.env.SMTP_HOST = "smtp.test.com";
-    process.env.SMTP_PORT = "587";
-    process.env.SMTP_USER = "user";
-    process.env.SMTP_PASS = "pass";
-    
+    process.env.SENDGRID_RECEIPT_TEMPLATE_ID = "receipt-template-id";
+    process.env.SENDGRID_FAILURE_TEMPLATE_ID = "failure-template-id";
+
     emailService = new EmailService();
   });
 
@@ -41,13 +37,21 @@ describe("EmailService", () => {
       updatedAt: new Date(),
     } as any;
 
-    await emailService.sendTransactionReceipt("user@example.com", mockTransaction);
+    await emailService.sendTransactionReceipt(
+      "user@example.com",
+      mockTransaction
+    );
 
-    expect(mockSendMail).toHaveBeenCalledWith(expect.objectContaining({
-      to: "user@example.com",
-      subject: expect.stringContaining("REF-123"),
-      html: expect.stringContaining("100.00 XAF"),
-    }));
+    expect(mockSendMail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: "user@example.com",
+        templateId: "receipt-template-id",
+        dynamicTemplateData: expect.objectContaining({
+          amount: "100.00",
+          referenceNumber: "REF-123",
+        }),
+      })
+    );
   });
 
   it("should send a transaction failure email", async () => {
@@ -64,23 +68,31 @@ describe("EmailService", () => {
       updatedAt: new Date(),
     } as any;
 
-    await emailService.sendTransactionFailure("user@example.com", mockTransaction, "Insufficient funds");
+    await emailService.sendTransactionFailure(
+      "user@example.com",
+      mockTransaction,
+      "Insufficient funds"
+    );
 
-    expect(mockSendMail).toHaveBeenCalledWith(expect.objectContaining({
-      to: "user@example.com",
-      subject: expect.stringContaining("REF-456"),
-      html: expect.stringContaining("Insufficient funds"),
-    }));
+    expect(mockSendMail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: "user@example.com",
+        templateId: "failure-template-id",
+        dynamicTemplateData: expect.objectContaining({
+          referenceNumber: "REF-456",
+          reason: "Insufficient funds",
+        }),
+      })
+    );
   });
 
   it("should skip email sending in test environment", async () => {
     process.env.NODE_ENV = "test";
-    
+
     await emailService.sendEmail({
       to: "test@test.com",
-      subject: "test",
-      html: "test",
-      text: "test"
+      templateId: "test-template",
+      dynamicTemplateData: {},
     });
 
     expect(mockSendMail).not.toHaveBeenCalled();

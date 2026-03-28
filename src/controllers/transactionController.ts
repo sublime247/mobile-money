@@ -94,7 +94,17 @@ export const getTransactionHistoryHandler = async (
   res: Response,
 ) => {
   try {
-    const { startDate, endDate, offset = "0", limit = "20" } = req.query;
+    const {
+      startDate,
+      endDate,
+      offset = "0",
+      limit = "20",
+      // Advanced Filters
+      minAmount,
+      maxAmount,
+      provider,
+      tags,
+    } = req.query;
 
     const isValidISO = (dateStr: unknown) => {
       if (!dateStr) return true;
@@ -105,6 +115,7 @@ export const getTransactionHistoryHandler = async (
       return !Number.isNaN(d.getTime()) && d.toISOString().startsWith(dateStr);
     };
 
+    // Date Validation
     if (!isValidISO(startDate) || !isValidISO(endDate)) {
       return res.status(400).json({
         error: "Invalid date format. Please use ISO 8601 (YYYY-MM-DD)",
@@ -121,25 +132,39 @@ export const getTransactionHistoryHandler = async (
         .json({ error: "startDate cannot be greater than endDate" });
     }
 
+    // Pagination Parsing
     const limitNum = Math.max(
       1,
       Math.min(100, parseInt(limit as string) || 20),
     );
     const offsetNum = Math.max(0, parseInt(offset as string) || 0);
 
+    // Filter Construction
+    // Note: tags are expected as a comma-separated string in the query (e.g. ?tags=refund,priority)
+    const filters = {
+      minAmount: minAmount ? parseFloat(minAmount as string) : undefined,
+      maxAmount: maxAmount ? parseFloat(maxAmount as string) : undefined,
+      provider: provider as string | undefined,
+      tags: tags ? (tags as string).split(",").map((t) => t.trim().toLowerCase()) : undefined,
+    };
+
+    // Database Queries
     const [transactions, total] = await Promise.all([
       transactionModel.list(
         limitNum,
         offsetNum,
         startDate as string | undefined,
         endDate as string | undefined,
+        filters,
       ),
       transactionModel.count(
         startDate as string | undefined,
         endDate as string | undefined,
+        filters,
       ),
     ]);
 
+    // Response
     return res.json({
       data: transactions,
       pagination: {

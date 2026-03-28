@@ -18,7 +18,7 @@ const mockSubmit = jest.fn();
 const mockLoadAccount = jest.fn();
 const mockStrictReceivePaths = jest.fn();
 
-jest.mock("../../../src/config/stellar", () => ({
+jest.mock("../../src/config/stellar", () => ({
   getStellarServer: () => ({
     loadAccount: mockLoadAccount,
     submitTransaction: mockSubmit,
@@ -29,7 +29,7 @@ jest.mock("../../../src/config/stellar", () => ({
 
 // ── mock AssetService ────────────────────────────────────────────────────────
 const mockHasTrustline = jest.fn().mockResolvedValue(true);
-jest.mock("../../../src/services/stellar/assetService", () => ({
+jest.mock("../../src/services/stellar/assetService", () => ({
   AssetService: jest.fn().mockImplementation(() => ({
     hasTrustline: mockHasTrustline,
   })),

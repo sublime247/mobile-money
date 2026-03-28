@@ -25,6 +25,12 @@ jest.mock("../../models/transaction", () => {
   };
 });
 
+const mockNotifyTransactionWebhook = jest.fn();
+jest.mock("../../services/webhook", () => ({
+  notifyTransactionWebhook: (...args: unknown[]) =>
+    mockNotifyTransactionWebhook(...args),
+}));
+
 import stellarWebhookRoutes from "../webhooks";
 
 describe("Stellar Webhooks", () => {
@@ -119,7 +125,8 @@ describe("Stellar Webhooks", () => {
         .send(invalidPayload);
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe("Missing required fields");
+      expect(response.body.error).toBe("Validation failed");
+      expect(response.body.details).toBeDefined();
     });
 
     it("should reject webhook with missing status", async () => {
@@ -137,7 +144,8 @@ describe("Stellar Webhooks", () => {
         .send(invalidPayload);
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe("Missing required fields");
+      expect(response.body.error).toBe("Validation failed");
+      expect(response.body.details).toBeDefined();
     });
 
     it("should reject webhook with unknown status", async () => {
@@ -155,7 +163,8 @@ describe("Stellar Webhooks", () => {
         .send(invalidPayload);
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe("Unknown status");
+      expect(response.body.error).toBe("Validation failed");
+      expect(response.body.details).toBeDefined();
     });
 
     it("should return 404 when transaction not found", async () => {
@@ -191,6 +200,7 @@ describe("Stellar Webhooks", () => {
       mockFindByMetadata.mockResolvedValue([mockTransaction]);
       mockUpdateStatus.mockResolvedValue(undefined);
       mockPatchMetadata.mockResolvedValue(mockTransaction);
+      mockNotifyTransactionWebhook.mockResolvedValue(null);
 
       const rawPayload = JSON.stringify(validPayload);
       const signature = generateSignature(rawPayload, "test-secret");
@@ -217,6 +227,12 @@ describe("Stellar Webhooks", () => {
         stellar_ledger: 12345678,
         webhook_processed_at: expect.any(String),
       });
+
+      expect(mockNotifyTransactionWebhook).toHaveBeenCalledWith(
+        "tx-uuid-123",
+        "transaction.completed",
+        expect.objectContaining({ transactionModel: expect.any(Object) }),
+      );
     });
 
     it("should successfully process webhook and update transaction to failed", async () => {
@@ -241,6 +257,7 @@ describe("Stellar Webhooks", () => {
       mockFindByMetadata.mockResolvedValue([mockTransaction]);
       mockUpdateStatus.mockResolvedValue(undefined);
       mockPatchMetadata.mockResolvedValue(mockTransaction);
+      mockNotifyTransactionWebhook.mockResolvedValue(null);
 
       const rawPayload = JSON.stringify(failedPayload);
       const signature = generateSignature(rawPayload, "test-secret");
@@ -257,6 +274,12 @@ describe("Stellar Webhooks", () => {
       expect(mockUpdateStatus).toHaveBeenCalledWith(
         "tx-uuid-456",
         TransactionStatus.Failed,
+      );
+
+      expect(mockNotifyTransactionWebhook).toHaveBeenCalledWith(
+        "tx-uuid-456",
+        "transaction.failed",
+        expect.objectContaining({ transactionModel: expect.any(Object) }),
       );
     });
 
@@ -291,6 +314,7 @@ describe("Stellar Webhooks", () => {
       mockFindByMetadata.mockResolvedValue(mockTransactions);
       mockUpdateStatus.mockResolvedValue(undefined);
       mockPatchMetadata.mockResolvedValue({});
+      mockNotifyTransactionWebhook.mockResolvedValue(null);
 
       const rawPayload = JSON.stringify(validPayload);
       const signature = generateSignature(rawPayload, "test-secret");
@@ -306,6 +330,126 @@ describe("Stellar Webhooks", () => {
 
       expect(mockUpdateStatus).toHaveBeenCalledTimes(2);
       expect(mockPatchMetadata).toHaveBeenCalledTimes(2);
+      expect(mockNotifyTransactionWebhook).toHaveBeenCalledTimes(2);
+    });
+
+    it("should skip transactions already in completed state", async () => {
+      const mockTransaction = {
+        id: "tx-uuid-done",
+        status: TransactionStatus.Completed,
+        referenceNumber: "REF_DONE",
+        type: "deposit" as const,
+        amount: "100",
+        phoneNumber: "+111",
+        provider: "mtn",
+        stellarAddress: "GDEF456",
+        tags: [],
+        createdAt: new Date(),
+      };
+
+      mockFindByMetadata.mockResolvedValue([mockTransaction]);
+
+      const rawPayload = JSON.stringify(validPayload);
+      const signature = generateSignature(rawPayload, "test-secret");
+
+      const response = await request(app)
+        .post("/webhook")
+        .set("X-Stellar-Signature", signature)
+        .send(validPayload);
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.updated).toBe(0);
+
+      expect(mockUpdateStatus).not.toHaveBeenCalled();
+      expect(mockPatchMetadata).not.toHaveBeenCalled();
+      expect(mockNotifyTransactionWebhook).not.toHaveBeenCalled();
+    });
+
+    it("should skip transactions already in failed state", async () => {
+      const mockTransaction = {
+        id: "tx-uuid-failed",
+        status: TransactionStatus.Failed,
+        referenceNumber: "REF_FAILED",
+        type: "withdraw" as const,
+        amount: "50",
+        phoneNumber: "+222",
+        provider: "airtel",
+        stellarAddress: "GABC123",
+        tags: [],
+        createdAt: new Date(),
+      };
+
+      mockFindByMetadata.mockResolvedValue([mockTransaction]);
+
+      const failedPayload = { ...validPayload, status: "failed" };
+      const rawPayload = JSON.stringify(failedPayload);
+      const signature = generateSignature(rawPayload, "test-secret");
+
+      const response = await request(app)
+        .post("/webhook")
+        .set("X-Stellar-Signature", signature)
+        .send(failedPayload);
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.updated).toBe(0);
+
+      expect(mockUpdateStatus).not.toHaveBeenCalled();
+      expect(mockNotifyTransactionWebhook).not.toHaveBeenCalled();
+    });
+
+    it("should only update pending transactions in a mixed batch", async () => {
+      const mockTransactions = [
+        {
+          id: "tx-pending",
+          status: TransactionStatus.Pending,
+          referenceNumber: "REF_P",
+          type: "deposit" as const,
+          amount: "100",
+          phoneNumber: "+111",
+          provider: "mtn",
+          stellarAddress: "GDEF456",
+          tags: [],
+          createdAt: new Date(),
+        },
+        {
+          id: "tx-already-done",
+          status: TransactionStatus.Completed,
+          referenceNumber: "REF_D",
+          type: "deposit" as const,
+          amount: "100",
+          phoneNumber: "+222",
+          provider: "mtn",
+          stellarAddress: "GDEF456",
+          tags: [],
+          createdAt: new Date(),
+        },
+      ];
+
+      mockFindByMetadata.mockResolvedValue(mockTransactions);
+      mockUpdateStatus.mockResolvedValue(undefined);
+      mockPatchMetadata.mockResolvedValue({});
+      mockNotifyTransactionWebhook.mockResolvedValue(null);
+
+      const rawPayload = JSON.stringify(validPayload);
+      const signature = generateSignature(rawPayload, "test-secret");
+
+      const response = await request(app)
+        .post("/webhook")
+        .set("X-Stellar-Signature", signature)
+        .send(validPayload);
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.updated).toBe(1);
+
+      expect(mockUpdateStatus).toHaveBeenCalledTimes(1);
+      expect(mockUpdateStatus).toHaveBeenCalledWith(
+        "tx-pending",
+        TransactionStatus.Completed,
+      );
+      expect(mockNotifyTransactionWebhook).toHaveBeenCalledTimes(1);
     });
 
     it("should return 500 on database error", async () => {

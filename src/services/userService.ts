@@ -1,4 +1,5 @@
 import { pool } from "../config/database";
+import { encrypt, decrypt } from "../utils/encryption";
 
 export interface User {
   id: string;
@@ -29,6 +30,7 @@ export interface LoginRequest {
 export async function getUserByPhoneNumber(
   phoneNumber: string,
 ): Promise<User | null> {
+  const encryptedPhone = encrypt(phoneNumber, true);
   const query = `
     SELECT 
       u.id,
@@ -45,8 +47,15 @@ export async function getUserByPhoneNumber(
     WHERE u.phone_number = $1
   `;
 
-  const result = await pool.query(query, [phoneNumber]);
-  return result.rows.length > 0 ? result.rows[0] : null;
+  const result = await pool.query(query, [encryptedPhone]);
+  if (result.rows.length === 0) return null;
+  
+  const row = result.rows[0];
+  return {
+    ...row,
+    phone_number: decrypt(row.phone_number) as string,
+    two_factor_secret: decrypt(row.two_factor_secret),
+  };
 }
 
 /**
@@ -70,7 +79,14 @@ export async function getUserById(userId: string): Promise<User | null> {
   `;
 
   const result = await pool.query(query, [userId]);
-  return result.rows.length > 0 ? result.rows[0] : null;
+  if (result.rows.length === 0) return null;
+
+  const row = result.rows[0];
+  return {
+    ...row,
+    phone_number: decrypt(row.phone_number) as string,
+    two_factor_secret: decrypt(row.two_factor_secret),
+  };
 }
 
 /**
@@ -99,11 +115,16 @@ export async function createUser(userData: CreateUserRequest): Promise<User> {
     RETURNING id, phone_number, kyc_level, role_id, two_factor_secret, backup_codes, created_at, updated_at
   `;
 
-  const result = await pool.query(query, [phone_number, kyc_level, roleId]);
-  const user = result.rows[0];
+  const encryptedPhone = encrypt(phone_number, true);
+  const result = await pool.query(query, [encryptedPhone, kyc_level, roleId]);
+  const row = result.rows[0];
 
-  // Get role name
-  user.role_name = role_name;
+  const user = {
+    ...row,
+    phone_number: decrypt(row.phone_number) as string,
+    two_factor_secret: decrypt(row.two_factor_secret),
+    role_name
+  };
 
   return user;
 }
@@ -138,8 +159,13 @@ export async function updateUserRole(
     throw new Error("User not found");
   }
 
-  const user = result.rows[0];
-  user.role_name = roleName;
+  const row = result.rows[0];
+  const user = {
+    ...row,
+    phone_number: decrypt(row.phone_number) as string,
+    two_factor_secret: decrypt(row.two_factor_secret),
+    role_name: roleName
+  };
 
   return user;
 }
@@ -187,7 +213,11 @@ export async function getAllUsers(): Promise<User[]> {
   `;
 
   const result = await pool.query(query);
-  return result.rows;
+  return result.rows.map(row => ({
+    ...row,
+    phone_number: decrypt(row.phone_number) as string,
+    two_factor_secret: decrypt(row.two_factor_secret),
+  }));
 }
 
 /**

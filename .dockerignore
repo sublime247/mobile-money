@@ -1,0 +1,44 @@
+# Dependencies
+node_modules
+npm-debug.log
+
+# Build output
+dist
+
+# Test files
+coverage
+*.test.ts
+*.test.js
+__tests__
+**/tests/
+
+# Development files
+.env
+.env.*
+!.env.example
+*.md
+*.log
+
+# IDE and editor files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Docker files (not needed inside container)
+Dockerfile
+Dockerfile.*
+docker-compose*.yml
+.dockerignore
+
+# Git
+.git
+.gitignore
+
+# Documentation
+docs/
+*.md
+
+# Scripts not needed in production
+scripts/

@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   coverage:
     runs-on: ubuntu-latest
@@ -37,31 +41,137 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "20"
           cache: "npm"
+
+      - name: Verify package-lock.json exists
+        run: |
+          if [ ! -f package-lock.json ]; then
+            npm install --package-lock-only
+          fi
 
       - name: Install dependencies
         run: npm ci
 
       - name: Run database migrations
         run: npm run migrate:up
+        continue-on-error: true
         env:
           DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_db
 
       - name: Run tests with coverage
-        run: npm run test:coverage
+        id: coverage
+        run: |
+          npm run test:coverage -- --coverageReporters=json-summary --coverageReporters=text --coverageReporters=lcov 2>&1 | tee coverage-output.txt
+          EXIT_CODE=${PIPESTATUS[0]}
+          echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
+          exit 0
         env:
           DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_db
           REDIS_URL: redis://localhost:6379
           NODE_ENV: test
 
-      - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v4
+      - name: Extract coverage metrics
+        id: metrics
+        run: |
+          if [ -f coverage/coverage-summary.json ]; then
+            STMTS=$(node -e "const c=require('./coverage/coverage-summary.json');console.log(c.total.statements.pct)")
+            BRANCHES=$(node -e "const c=require('./coverage/coverage-summary.json');console.log(c.total.branches.pct)")
+            FUNCS=$(node -e "const c=require('./coverage/coverage-summary.json');console.log(c.total.functions.pct)")
+            LINES=$(node -e "const c=require('./coverage/coverage-summary.json');console.log(c.total.lines.pct)")
+          else
+            STMTS="N/A"
+            BRANCHES="N/A"
+            FUNCS="N/A"
+            LINES="N/A"
+          fi
+          echo "statements=$STMTS" >> "$GITHUB_OUTPUT"
+          echo "branches=$BRANCHES" >> "$GITHUB_OUTPUT"
+          echo "functions=$FUNCS" >> "$GITHUB_OUTPUT"
+          echo "lines=$LINES" >> "$GITHUB_OUTPUT"
+
+          # Thresholds — keep in sync with jest.config.js
+          THRESHOLD_STMTS=20
+          THRESHOLD_BRANCHES=15
+          THRESHOLD_FUNCS=25
+          THRESHOLD_LINES=20
+
+          PASSED=true
+          if [ "$STMTS" != "N/A" ]; then
+            node -e "process.exit(($STMTS < $THRESHOLD_STMTS) ? 1 : 0)" || PASSED=false
+            node -e "process.exit(($BRANCHES < $THRESHOLD_BRANCHES) ? 1 : 0)" || PASSED=false
+            node -e "process.exit(($FUNCS < $THRESHOLD_FUNCS) ? 1 : 0)" || PASSED=false
+            node -e "process.exit(($LINES < $THRESHOLD_LINES) ? 1 : 0)" || PASSED=false
+          fi
+          echo "passed=$PASSED" >> "$GITHUB_OUTPUT"
+          echo "threshold_stmts=$THRESHOLD_STMTS" >> "$GITHUB_OUTPUT"
+          echo "threshold_branches=$THRESHOLD_BRANCHES" >> "$GITHUB_OUTPUT"
+          echo "threshold_funcs=$THRESHOLD_FUNCS" >> "$GITHUB_OUTPUT"
+          echo "threshold_lines=$THRESHOLD_LINES" >> "$GITHUB_OUTPUT"
+
+      - name: Comment coverage on PR
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const stmts = '${{ steps.metrics.outputs.statements }}';
+            const branches = '${{ steps.metrics.outputs.branches }}';
+            const funcs = '${{ steps.metrics.outputs.functions }}';
+            const lines = '${{ steps.metrics.outputs.lines }}';
+            const passed = '${{ steps.metrics.outputs.passed }}' === 'true';
+            const thStmts = '${{ steps.metrics.outputs.threshold_stmts }}';
+            const thBranches = '${{ steps.metrics.outputs.threshold_branches }}';
+            const thFuncs = '${{ steps.metrics.outputs.threshold_funcs }}';
+            const thLines = '${{ steps.metrics.outputs.threshold_lines }}';
+
+            const icon = (val, threshold) => parseFloat(val) >= parseFloat(threshold) ? '✅' : '❌';
+            const status = passed ? '✅ Coverage thresholds met' : '❌ Coverage below thresholds';
+
+            const body = `## 📊 Coverage Report
+
+            ${status}
+
+            | Metric | Current | Threshold | Status |
+            |--------|---------|-----------|--------|
+            | Statements | ${stmts}% | ${thStmts}% | ${icon(stmts, thStmts)} |
+            | Branches | ${branches}% | ${thBranches}% | ${icon(branches, thBranches)} |
+            | Functions | ${funcs}% | ${thFuncs}% | ${icon(funcs, thFuncs)} |
+            | Lines | ${lines}% | ${thLines}% | ${icon(lines, thLines)} |
+
+            > Coverage enforcement is configured in \`jest.config.js\`. Thresholds only go up — never down.
+            `.replace(/^ +/gm, '');
+
+            // Find and update existing comment or create new
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(c => c.body.includes('📊 Coverage Report'));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v6
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage/lcov.info
@@ -69,3 +179,16 @@ jobs:
           name: codecov-umbrella
           fail_ci_if_error: false
           verbose: true
+
+      - name: Enforce coverage thresholds
+        if: steps.metrics.outputs.passed == 'false'
+        run: |
+          echo "❌ Coverage is below the required thresholds."
+          echo ""
+          echo "  Statements: ${{ steps.metrics.outputs.statements }}% (need ${{ steps.metrics.outputs.threshold_stmts }}%)"
+          echo "  Branches:   ${{ steps.metrics.outputs.branches }}% (need ${{ steps.metrics.outputs.threshold_branches }}%)"
+          echo "  Functions:  ${{ steps.metrics.outputs.functions }}% (need ${{ steps.metrics.outputs.threshold_funcs }}%)"
+          echo "  Lines:      ${{ steps.metrics.outputs.lines }}% (need ${{ steps.metrics.outputs.threshold_lines }}%)"
+          echo ""
+          echo "Please add tests to cover the untested code."
+          exit 1

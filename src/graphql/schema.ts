@@ -97,6 +97,23 @@ export const typeDefs = gql`
     completedAt: String
   }
 
+  # Subscription types for real-time updates
+  type Subscription {
+    # Subscribe to transaction events
+    transactionCreated: Transaction!
+    transactionUpdated(id: ID): Transaction!
+    transactionCompleted: Transaction!
+    transactionFailed: Transaction!
+    
+    # Subscribe to dispute events
+    disputeCreated: Dispute!
+    disputeUpdated(id: ID): Dispute!
+    disputeNoteAdded(disputeId: ID): DisputeNote!
+    
+    # Subscribe to bulk import job events
+    bulkImportJobUpdated(jobId: ID!): BulkImportJob!
+  }
+
   input DepositInput {
     amount: String!
     phoneNumber: String!

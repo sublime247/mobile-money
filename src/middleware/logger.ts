@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { UAParser } from "ua-parser-js";
+import { logStructured } from "../services/structuredLogger";
 
 /**
  * Request pathname without query string (avoids logging ?api_key=…, ?token=…, etc.).
@@ -83,10 +84,18 @@ export function requestLogger(
       path: loggedPath(req),
       statusCode: res.statusCode,
       responseTimeMs: Math.round(responseTimeMs * 1000) / 1000,
+      http: {
+        request: {
+          method: req.method,
+        },
+        response: {
+          status_code: res.statusCode,
+        },
+      },
       userAgent: parseUserAgent(req.headers["user-agent"]),
     };
 
-    console.log(JSON.stringify(line));
+    logStructured("info", line);
   };
 
   res.on("finish", writeLog);

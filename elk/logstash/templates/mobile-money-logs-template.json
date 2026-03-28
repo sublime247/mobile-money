@@ -1,0 +1,102 @@
+{
+  "index_patterns": ["mobile-money-logs-*"],
+  "template": {
+    "settings": {
+      "index.refresh_interval": "1s",
+      "number_of_shards": 1,
+      "number_of_replicas": 0
+    },
+    "mappings": {
+      "dynamic_templates": [
+        {
+          "strings_as_keywords": {
+            "match_mapping_type": "string",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 256
+            }
+          }
+        }
+      ],
+      "properties": {
+        "@timestamp": { "type": "date" },
+        "message": {
+          "type": "text",
+          "fields": {
+            "keyword": { "type": "keyword", "ignore_above": 256 }
+          }
+        },
+        "log": {
+          "properties": {
+            "level": { "type": "keyword" }
+          }
+        },
+        "event": {
+          "properties": {
+            "dataset": { "type": "keyword" }
+          }
+        },
+        "service": {
+          "properties": {
+            "name": { "type": "keyword" },
+            "environment": { "type": "keyword" }
+          }
+        },
+        "http": {
+          "properties": {
+            "request": {
+              "properties": {
+                "method": { "type": "keyword" }
+              }
+            },
+            "response": {
+              "properties": {
+                "status_code": { "type": "integer" }
+              }
+            }
+          }
+        },
+        "method": { "type": "keyword" },
+        "path": {
+          "type": "keyword",
+          "fields": {
+            "text": { "type": "text" }
+          }
+        },
+        "statusCode": { "type": "integer" },
+        "responseTimeMs": { "type": "float" },
+        "duration": { "type": "float" },
+        "threshold": { "type": "float" },
+        "sessionId": { "type": "keyword" },
+        "transactionId": { "type": "keyword" },
+        "jobId": { "type": "keyword" },
+        "userAgent": {
+          "properties": {
+            "raw": {
+              "type": "text",
+              "fields": {
+                "keyword": { "type": "keyword", "ignore_above": 256 }
+              }
+            },
+            "browser": { "type": "keyword" },
+            "os": { "type": "keyword" },
+            "device": { "type": "keyword" }
+          }
+        },
+        "error": {
+          "properties": {
+            "name": { "type": "keyword" },
+            "message": {
+              "type": "text",
+              "fields": {
+                "keyword": { "type": "keyword", "ignore_above": 256 }
+              }
+            },
+            "stack": { "type": "text" },
+            "code": { "type": "keyword" }
+          }
+        }
+      }
+    }
+  }
+}

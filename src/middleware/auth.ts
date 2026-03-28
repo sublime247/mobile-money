@@ -14,6 +14,48 @@ export interface AuthRequest extends Request {
   user?: RequestUser;
 }
 
+const SAFE_IMPERSONATION_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
+function logImpersonationEvent(
+  event: "IMPERSONATION_MUTATION_BLOCKED",
+  req: Request,
+  claims: JWTPayload,
+): void {
+  console.warn("[IMPERSONATION]", {
+    event,
+    actorUserId: claims.impersonation?.actorUserId,
+    actorRole: claims.impersonation?.actorRole,
+    impersonatedUserId: claims.userId,
+    reason: claims.impersonation?.reason,
+    method: req.method,
+    path: req.originalUrl,
+    ip: req.ip,
+    userAgent: req.get("user-agent"),
+    timestamp: new Date().toISOString(),
+  });
+}
+
+function rejectMutationDuringImpersonation(
+  req: Request,
+  res: Response,
+  claims: JWTPayload,
+): boolean {
+  if (
+    claims.impersonation?.active &&
+    claims.impersonation.readOnly &&
+    !SAFE_IMPERSONATION_METHODS.has(req.method.toUpperCase())
+  ) {
+    logImpersonationEvent("IMPERSONATION_MUTATION_BLOCKED", req, claims);
+    res.status(403).json({
+      error: "Impersonation session is read-only",
+      message: "Mutations are disabled while impersonating a user",
+    });
+    return true;
+  }
+
+  return false;
+}
+
 declare module "express-serve-static-core" {
   interface Request {
     jwtUser?: JWTPayload;
@@ -95,6 +137,9 @@ export function authenticateToken(
 
   try {
     const decoded = verifyToken(token);
+    if (rejectMutationDuringImpersonation(req, res, decoded)) {
+      return;
+    }
     req.jwtUser = decoded;
     next();
   } catch (error) {
@@ -143,6 +188,9 @@ export function optionalAuthentication(
 
   try {
     const decoded = verifyToken(token);
+    if (rejectMutationDuringImpersonation(req, res, decoded)) {
+      return;
+    }
     req.jwtUser = decoded;
   } catch {
     // Silently ignore token errors for optional authentication

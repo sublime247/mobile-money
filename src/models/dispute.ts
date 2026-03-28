@@ -1,4 +1,5 @@
 import { pool } from "../config/database";
+import { encrypt, decrypt } from "../utils/encryption";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -129,7 +130,12 @@ export class DisputeModel {
         input.category ?? null
       ],
     );
-    return result.rows[0];
+    const row = result.rows[0];
+    return {
+      ...row,
+      reason: decrypt(row.reason) || "",
+      resolution: decrypt(row.resolution) ?? null,
+    };
   }
 
   /** Find a dispute by its ID (without notes). */
@@ -154,7 +160,13 @@ export class DisputeModel {
        WHERE id = $1`,
       [disputeId],
     );
-    return result.rows[0] ?? null;
+    const row = result.rows[0];
+    if (!row) return null;
+    return {
+      ...row,
+      reason: decrypt(row.reason) || "",
+      resolution: decrypt(row.resolution) ?? null,
+    };
   }
 
   /** Find a dispute with all its notes. */
@@ -180,7 +192,8 @@ export class DisputeModel {
       [disputeId],
     );
 
-    if (!disputeResult.rows[0]) return null;
+    const disputeRow = disputeResult.rows[0];
+    if (!disputeRow) return null;
 
     const notesResult = await pool.query<DisputeNote>(
       `SELECT
@@ -195,7 +208,17 @@ export class DisputeModel {
       [disputeId],
     );
 
-    return { ...disputeResult.rows[0], notes: notesResult.rows };
+    const notes = notesResult.rows.map((n) => ({
+      ...n,
+      note: decrypt(n.note) || "",
+    }));
+
+    return {
+      ...disputeRow,
+      reason: decrypt(disputeRow.reason) || "",
+      resolution: decrypt(disputeRow.resolution) ?? null,
+      notes,
+    };
   }
 
   /** Find a dispute with all details (notes, evidence, timeline). */
@@ -273,7 +296,13 @@ export class DisputeModel {
        LIMIT 1`,
       [transactionId],
     );
-    return result.rows[0] ?? null;
+    const row = result.rows[0];
+    if (!row) return null;
+    return {
+      ...row,
+      reason: decrypt(row.reason) || "",
+      resolution: decrypt(row.resolution) ?? null,
+    };
   }
 
   /** Update dispute fields. */
@@ -332,7 +361,12 @@ export class DisputeModel {
          updated_at      AS "updatedAt"`,
       params,
     );
-    return result.rows[0];
+    const row = result.rows[0];
+    return {
+      ...row,
+      reason: decrypt(row.reason) || "",
+      resolution: decrypt(row.resolution) ?? null,
+    };
   }
 
   /** Assign a dispute to a support agent. */
@@ -358,7 +392,12 @@ export class DisputeModel {
          updated_at      AS "updatedAt"`,
       [disputeId, agentName],
     );
-    return result.rows[0];
+    const row = result.rows[0];
+    return {
+      ...row,
+      reason: decrypt(row.reason) || "",
+      resolution: decrypt(row.resolution) ?? null,
+    };
   }
 
   /** Add evidence attachment to a dispute. */
@@ -489,9 +528,13 @@ export class DisputeModel {
          author,
          note,
          created_at  AS "createdAt"`,
-      [disputeId, author, note],
+      [disputeId, author, encrypt(note)],
     );
-    return result.rows[0];
+    const row = result.rows[0];
+    return {
+      ...row,
+      note: decrypt(row.note) as string,
+    };
   }
 
   /** Aggregate report: counts and average resolution time, grouped by status. */

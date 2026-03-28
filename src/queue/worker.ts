@@ -13,6 +13,7 @@ import { UserModel } from "../models/users";
 import { withRetry } from "../services/retry";
 import { WhatsappService } from "../services/whatsapp";
 import { notifyTransactionWebhook, WebhookService } from "../services/webhook";
+import { pushNotificationService } from "../services/push";
 
 const transactionModel = new TransactionModel();
 const mobileMoneyService = new MobileMoneyService();
@@ -21,6 +22,7 @@ const emailService = new EmailService();
 const userModel = new UserModel();
 const whatsappService = new WhatsappService();
 const webhookService = new WebhookService();
+const pushService = pushNotificationService;
 
 const workerOptions = {
   ...queueOptions,
@@ -74,6 +76,42 @@ async function sendFailureEmail(
   const user = await userModel.findById(transaction.userId);
   if (user?.email) {
     await emailService.sendTransactionFailure(user.email, transaction, reason);
+  }
+}
+
+async function sendTransactionPush(
+  transactionId: string,
+  status: "completed" | "failed",
+  error?: string,
+): Promise<void> {
+  const transaction = await transactionModel.findById(transactionId);
+  if (!transaction?.userId) {
+    return;
+  }
+
+  try {
+    if (status === "completed") {
+      await pushService.sendTransactionComplete(transaction.userId, {
+        transactionId: transaction.id,
+        referenceNumber: transaction.referenceNumber,
+        type: transaction.type as "deposit" | "withdraw",
+        amount: String(transaction.amount),
+        status: "completed",
+        error,
+      });
+    } else {
+      await pushService.sendTransactionFailed(transaction.userId, {
+        transactionId: transaction.id,
+        referenceNumber: transaction.referenceNumber,
+        type: transaction.type as "deposit" | "withdraw",
+        amount: String(transaction.amount),
+        status: "failed",
+        error,
+      });
+    }
+  } catch (pushError) {
+    console.error(`[${transactionId}] Push notification failed:`, pushError);
+    // Don't throw - push failures shouldn't block the transaction flow
   }
 }
 
@@ -182,6 +220,7 @@ export const transactionWorker = new Worker<
           webhookService,
         });
         await sendTransactionEmail(transactionId);
+        await sendTransactionPush(transactionId, "completed");
 
         await sendTxnSms("transaction_completed");
 
@@ -226,6 +265,7 @@ export const transactionWorker = new Worker<
           webhookService,
         });
         await sendTransactionEmail(transactionId);
+        await sendTransactionPush(transactionId, "completed");
 
         await sendTxnSms("transaction_completed");
 
@@ -251,6 +291,7 @@ export const transactionWorker = new Worker<
         webhookService,
       });
       await sendFailureEmail(transactionId, getErrorMessage(error));
+      await sendTransactionPush(transactionId, "failed", getErrorMessage(error));
       throw error;
     }
   },

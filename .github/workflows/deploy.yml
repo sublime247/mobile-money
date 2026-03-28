@@ -17,7 +17,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Check if deployment credentials are configured
         id: check_secrets
@@ -33,7 +33,7 @@ jobs:
 
       - name: Log in to Container Registry
         if: steps.check_secrets.outputs.credentials_available == 'true'
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           username: ${{ secrets.REGISTRY_USERNAME }}
           password: ${{ secrets.REGISTRY_PASSWORD }}
@@ -44,6 +44,37 @@ jobs:
           echo "Pulling Docker image for commit: ${{ github.event.workflow_run.head_sha }}"
           docker pull ${{ github.repository }}:${{ github.event.workflow_run.head_sha }}
           echo "Image pulled successfully!"
+
+      - name: Run database migrations
+        if: steps.check_secrets.outputs.credentials_available == 'true'
+        run: |
+          echo "=========================================="
+          echo "Running database migrations..."
+          echo "=========================================="
+          echo "Commit SHA: ${{ github.event.workflow_run.head_sha }}"
+          echo ""
+          
+          # Run migrations using the new image before swapping pods
+          # This ensures the database schema is up-to-date before the new app version starts
+          # Migration failures will halt the deployment automatically (set -e in entrypoint)
+          if docker run --rm \
+            --network host \
+            -e DATABASE_URL="${{ secrets.DATABASE_URL }}" \
+            -e REDIS_URL="${{ secrets.REDIS_URL }}" \
+            ${{ github.repository }}:${{ github.event.workflow_run.head_sha }} \
+            npm run migrate:up; then
+            echo ""
+            echo "✅ Database migrations completed successfully"
+          else
+            echo ""
+            echo "❌ Database migrations FAILED!"
+            echo "Deployment halted to prevent split-brain state."
+            echo "Please review the migration logs above and fix any issues."
+            exit 1
+          fi
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          REDIS_URL: ${{ secrets.REDIS_URL }}
 
       - name: Validate environment variables
         if: steps.check_secrets.outputs.credentials_available == 'true'

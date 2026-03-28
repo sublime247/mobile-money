@@ -1,0 +1,23 @@
+filebeat.inputs:
+  - type: filestream
+    id: mobile-money-app-logs
+    enabled: true
+    paths:
+      - /var/log/mobile-money/*.log
+    parsers:
+      - ndjson:
+          target: ""
+          overwrite_keys: true
+          add_error_key: true
+
+processors:
+  - add_fields:
+      target: ""
+      fields:
+        service.name: mobile-money-api
+        observer.type: filebeat
+
+output.logstash:
+  hosts: ["logstash:5044"]
+
+logging.level: info
