@@ -1,0 +1,50 @@
+{
+  "errors": {
+    "INVALID_INPUT": "Ingizo si sahihi",
+    "MISSING_FIELD": "Sehemu inayohitajika haipo",
+    "INVALID_PHONE_FORMAT": "Muundo wa namba ya simu si sahihi",
+    "INVALID_AMOUNT": "Kiasi lazima kiwe namba chanya",
+    "UNAUTHORIZED": "Ufikiaji haujaruhusiwa",
+    "INVALID_CREDENTIALS": "Taarifa za uthibitisho si sahihi",
+    "TOKEN_EXPIRED": "Tokeni ya uthibitisho imekwisha muda",
+    "INVALID_TOKEN": "Tokeni ya uthibitisho si sahihi",
+    "FORBIDDEN": "Ufikiaji umekatazwa",
+    "INSUFFICIENT_PERMISSIONS": "Ruhusa hazitoshi kwa hatua hii",
+    "NOT_FOUND": "Rasilimali haijapatikana",
+    "RESOURCE_NOT_FOUND": "Rasilimali iliyoombwa haikupatikana",
+    "TRANSACTION_NOT_FOUND": "Muamala haujapatikana",
+    "CONFLICT": "Ombi linakinzana na hali iliyopo",
+    "DUPLICATE_REQUEST": "Ombi la marudio limegunduliwa",
+    "TRANSACTION_EXISTS": "Muamala tayari upo",
+    "LIMIT_EXCEEDED": "Kikomo cha miamala ya kila siku kimezidiwa",
+    "INSUFFICIENT_BALANCE": "Salio halitoshi kwa muamala huu",
+    "TRANSACTION_FAILED": "Uchakataji wa muamala umeshindikana",
+    "PROVIDER_ERROR": "Hitilafu ya mtoa huduma wa fedha za simu",
+    "RATE_LIMIT": "Maombi ni mengi sana. Tafadhali jaribu tena baadaye",
+    "INTERNAL_ERROR": "Hitilafu ya ndani ya seva",
+    "SERVICE_UNAVAILABLE": "Huduma haipatikani kwa muda",
+    "DATABASE_ERROR": "Uendeshaji wa hifadhidata umeshindikana",
+    "DEFAULT": "Hitilafu imetokea"
+  },
+  "sms": {
+    "action": {
+      "deposit": "kuweka fedha",
+      "withdraw": "kutoa fedha"
+    },
+    "transaction_completed": "Mobile Money: {{action}} ya {{amount}} ({{provider}}) imekamilika. Ref: {{referenceNumber}}.",
+    "transaction_failed": "Mobile Money: {{action}} yako haikuweza kukamilika. Ref: {{referenceNumber}}.{{detail}}",
+    "reason_detail": " Sababu: {{reason}}"
+  },
+  "whatsapp": {
+    "otp": "Nambari yako ya uthibitisho ya Mobile Money ni: {{otp}}. Usimpe mtu yeyote nambari hii."
+  },
+  "email": {
+    "transaction_type": {
+      "deposit": "Uwekaji",
+      "withdraw": "Utoaji"
+    },
+    "labels": {
+      "reason": "Sababu"
+    }
+  }
+}

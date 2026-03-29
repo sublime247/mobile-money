@@ -82,17 +82,22 @@ describe("errorHandler middleware - Integration Tests", () => {
       {
         language: "fr",
         code: ERROR_CODES.INVALID_PHONE_FORMAT,
-        expected: "Le format du numéro de téléphone est invalide",
+        expected: "Le format du numero de telephone est invalide",
+      },
+      {
+        language: "sw",
+        code: ERROR_CODES.INVALID_PHONE_FORMAT,
+        expected: "Muundo wa namba ya simu si sahihi",
       },
       {
         language: "es",
         code: ERROR_CODES.INVALID_PHONE_FORMAT,
-        expected: "El formato del número de teléfono es inválido",
+        expected: "El formato del numero de telefono es invalido",
       },
       {
         language: "pt",
         code: ERROR_CODES.INVALID_PHONE_FORMAT,
-        expected: "O formato do número de telefone é inválido",
+        expected: "O formato do numero de telefone e invalido",
       },
     ];
 
@@ -189,7 +194,7 @@ describe("errorHandler middleware - Integration Tests", () => {
 
       const response = jsonMock.mock.calls[jsonMock.mock.calls.length - 1][0];
 
-      expect(response.message).toBe("Entrée invalide fournie");
+      expect(response.message).toBe("Entree invalide fournie");
       expect(response.message_en).toBe("Invalid input provided");
     });
 

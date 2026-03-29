@@ -1,0 +1,50 @@
+{
+  "errors": {
+    "INVALID_INPUT": "Entree invalide fournie",
+    "MISSING_FIELD": "Le champ requis est manquant",
+    "INVALID_PHONE_FORMAT": "Le format du numero de telephone est invalide",
+    "INVALID_AMOUNT": "Le montant doit etre un nombre positif",
+    "UNAUTHORIZED": "Acces non autorise",
+    "INVALID_CREDENTIALS": "Identifiants invalides fournis",
+    "TOKEN_EXPIRED": "Le jeton d authentification a expire",
+    "INVALID_TOKEN": "Jeton d authentification invalide",
+    "FORBIDDEN": "Acces interdit",
+    "INSUFFICIENT_PERMISSIONS": "Permissions insuffisantes pour cette action",
+    "NOT_FOUND": "Ressource non trouvee",
+    "RESOURCE_NOT_FOUND": "La ressource demandee est introuvable",
+    "TRANSACTION_NOT_FOUND": "Transaction non trouvee",
+    "CONFLICT": "La demande entre en conflit avec l etat existant",
+    "DUPLICATE_REQUEST": "Demande en double detectee",
+    "TRANSACTION_EXISTS": "La transaction existe deja",
+    "LIMIT_EXCEEDED": "Limite de transactions quotidiennes depassee",
+    "INSUFFICIENT_BALANCE": "Solde insuffisant pour cette transaction",
+    "TRANSACTION_FAILED": "Echec du traitement de la transaction",
+    "PROVIDER_ERROR": "Erreur du fournisseur de monnaie mobile",
+    "RATE_LIMIT": "Trop de demandes. Veuillez reessayer plus tard",
+    "INTERNAL_ERROR": "Erreur interne du serveur",
+    "SERVICE_UNAVAILABLE": "Le service est temporairement indisponible",
+    "DATABASE_ERROR": "L operation de base de donnees a echoue",
+    "DEFAULT": "Une erreur est survenue"
+  },
+  "sms": {
+    "action": {
+      "deposit": "depot",
+      "withdraw": "retrait"
+    },
+    "transaction_completed": "Mobile Money: Votre {{action}} de {{amount}} ({{provider}}) est terminee. Ref: {{referenceNumber}}.",
+    "transaction_failed": "Mobile Money: Votre {{action}} n a pas pu etre terminee. Ref: {{referenceNumber}}.{{detail}}",
+    "reason_detail": " Raison: {{reason}}"
+  },
+  "whatsapp": {
+    "otp": "Votre code de verification Mobile Money est: {{otp}}. Ne partagez pas ce code."
+  },
+  "email": {
+    "transaction_type": {
+      "deposit": "Depot",
+      "withdraw": "Retrait"
+    },
+    "labels": {
+      "reason": "Raison"
+    }
+  }
+}

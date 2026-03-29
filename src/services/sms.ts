@@ -3,6 +3,7 @@ import {
   parsePhoneNumberFromString,
   type CountryCode,
 } from "libphonenumber-js";
+import { resolveLocale, translate } from "../utils/i18n";
 
 export type SmsEventKind = "transaction_completed" | "transaction_failed";
 
@@ -13,6 +14,7 @@ export interface TransactionSmsContext {
   provider: string;
   kind: SmsEventKind;
   errorMessage?: string;
+  locale?: string;
 }
 
 /** Normalize to E.164; uses SMS_DEFAULT_REGION (ISO 3166-1 alpha-2) when number has no country code */
@@ -30,14 +32,30 @@ export function formatPhoneE164(
 }
 
 function templateCompleted(ctx: TransactionSmsContext): string {
-  const action = ctx.type === "deposit" ? "deposit" : "withdrawal";
-  return `Mobile Money: Your ${action} of ${ctx.amount} (${ctx.provider.toUpperCase()}) completed. Ref: ${ctx.referenceNumber}.`;
+  const locale = resolveLocale(ctx.locale);
+  const action = translate(`sms.action.${ctx.type}`, locale);
+  return translate("sms.transaction_completed", locale, {
+    action,
+    amount: ctx.amount,
+    provider: ctx.provider.toUpperCase(),
+    referenceNumber: ctx.referenceNumber,
+  });
 }
 
 function templateFailed(ctx: TransactionSmsContext): string {
-  const action = ctx.type === "deposit" ? "deposit" : "withdrawal";
-  const detail = ctx.errorMessage ? ` Reason: ${ctx.errorMessage.slice(0, 120)}` : "";
-  return `Mobile Money: Your ${action} could not be completed. Ref: ${ctx.referenceNumber}.${detail}`;
+  const locale = resolveLocale(ctx.locale);
+  const action = translate(`sms.action.${ctx.type}`, locale);
+  const detail = ctx.errorMessage
+    ? translate("sms.reason_detail", locale, {
+        reason: ctx.errorMessage.slice(0, 120),
+      })
+    : "";
+
+  return translate("sms.transaction_failed", locale, {
+    action,
+    referenceNumber: ctx.referenceNumber,
+    detail,
+  });
 }
 
 export function buildTransactionSmsBody(ctx: TransactionSmsContext): string {

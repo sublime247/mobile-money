@@ -1,5 +1,6 @@
 import twilio from "twilio";
 import { SmsService, TransactionSmsContext, formatPhoneE164 } from "./sms";
+import { resolveLocale, translate } from "../utils/i18n";
 
 export interface WhatsappSendResult {
   sent: boolean;
@@ -117,13 +118,14 @@ export class WhatsappService {
     phoneNumber: string,
     ctx: TransactionSmsContext,
   ): Promise<WhatsappSendResult> {
+    const locale = resolveLocale(ctx.locale);
     const body = this.buildTransactionMessage(ctx);
 
     // In a real production environment, you would use a Twilio Content SID (template)
     // for WhatsApp business-initiated messages.
     const templateSid = process.env.TWILIO_WHATSAPP_TRANSACTION_TEMPLATE_SID;
     const templateVariables = {
-      "1": ctx.type === "deposit" ? "deposit" : "withdrawal",
+      "1": translate(`sms.action.${ctx.type}`, locale),
       "2": ctx.amount,
       "3": ctx.provider.toUpperCase(),
       "4": ctx.referenceNumber,
@@ -135,8 +137,12 @@ export class WhatsappService {
   /**
    * Send OTP via WhatsApp (with SMS fallback)
    */
-  async sendOTP(phoneNumber: string, otp: string): Promise<WhatsappSendResult> {
-    const body = `Your Mobile Money verification code is: ${otp}. Do not share this code with anyone.`;
+  async sendOTP(
+    phoneNumber: string,
+    otp: string,
+    locale = "en",
+  ): Promise<WhatsappSendResult> {
+    const body = translate("whatsapp.otp", resolveLocale(locale), { otp });
 
     const templateSid = process.env.TWILIO_WHATSAPP_OTP_TEMPLATE_SID;
     const templateVariables = { "1": otp };
@@ -145,12 +151,26 @@ export class WhatsappService {
   }
 
   private buildTransactionMessage(ctx: TransactionSmsContext): string {
-    const action = ctx.type === "deposit" ? "deposit" : "withdrawal";
+    const locale = resolveLocale(ctx.locale);
+    const action = translate(`sms.action.${ctx.type}`, locale);
     if (ctx.kind === "transaction_completed") {
-      return `Mobile Money: Your ${action} of ${ctx.amount} (${ctx.provider.toUpperCase()}) completed. Ref: ${ctx.referenceNumber}.`;
+      return translate("sms.transaction_completed", locale, {
+        action,
+        amount: ctx.amount,
+        provider: ctx.provider.toUpperCase(),
+        referenceNumber: ctx.referenceNumber,
+      });
     } else {
-      const detail = ctx.errorMessage ? ` Reason: ${ctx.errorMessage.slice(0, 120)}` : "";
-      return `Mobile Money: Your ${action} could not be completed. Ref: ${ctx.referenceNumber}.${detail}`;
+      const detail = ctx.errorMessage
+        ? translate("sms.reason_detail", locale, {
+            reason: ctx.errorMessage.slice(0, 120),
+          })
+        : "";
+      return translate("sms.transaction_failed", locale, {
+        action,
+        referenceNumber: ctx.referenceNumber,
+        detail,
+      });
     }
   }
 }

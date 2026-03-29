@@ -1,7 +1,17 @@
 import { EmailService } from "../../src/services/email";
 import sgMail from "@sendgrid/mail";
 
-jest.mock("@sendgrid/mail");
+jest.mock(
+  "@sendgrid/mail",
+  () => ({
+    __esModule: true,
+    default: {
+      setApiKey: jest.fn(),
+      send: jest.fn(),
+    },
+  }),
+  { virtual: true },
+);
 
 describe("EmailService", () => {
   let emailService: EmailService;
@@ -15,6 +25,8 @@ describe("EmailService", () => {
     process.env.NODE_ENV = "development";
     process.env.SENDGRID_RECEIPT_TEMPLATE_ID = "receipt-template-id";
     process.env.SENDGRID_FAILURE_TEMPLATE_ID = "failure-template-id";
+    process.env.SENDGRID_RECEIPT_TEMPLATE_ID_FR = "receipt-template-id-fr";
+    process.env.SENDGRID_FAILURE_TEMPLATE_ID_SW = "failure-template-id-sw";
 
     emailService = new EmailService();
   });
@@ -39,16 +51,18 @@ describe("EmailService", () => {
 
     await emailService.sendTransactionReceipt(
       "user@example.com",
-      mockTransaction
+      mockTransaction,
+      "fr"
     );
 
     expect(mockSendMail).toHaveBeenCalledWith(
       expect.objectContaining({
         to: "user@example.com",
-        templateId: "receipt-template-id",
+        templateId: "receipt-template-id-fr",
         dynamicTemplateData: expect.objectContaining({
           amount: "100.00",
           referenceNumber: "REF-123",
+          locale: "fr",
         }),
       })
     );
@@ -71,16 +85,18 @@ describe("EmailService", () => {
     await emailService.sendTransactionFailure(
       "user@example.com",
       mockTransaction,
-      "Insufficient funds"
+      "Insufficient funds",
+      "sw"
     );
 
     expect(mockSendMail).toHaveBeenCalledWith(
       expect.objectContaining({
         to: "user@example.com",
-        templateId: "failure-template-id",
+        templateId: "failure-template-id-sw",
         dynamicTemplateData: expect.objectContaining({
           referenceNumber: "REF-456",
           reason: "Insufficient funds",
+          locale: "sw",
         }),
       })
     );

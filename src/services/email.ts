@@ -1,15 +1,26 @@
 import sgMail from "@sendgrid/mail";
 import { Transaction } from "../models/transaction";
+import { resolveLocale, translate } from "../utils/i18n";
 
 sgMail.setApiKey(process.env.SENDGRID_API_KEY || "");
 
 export interface EmailOptions {
   to: string;
-  templateId: string,
-  dynamicTemplateData: Record<string, any>
+  templateId: string;
+  dynamicTemplateData: Record<string, any>;
 }
 
 export class EmailService {
+  private resolveTemplateId(
+    baseEnvName: "SENDGRID_RECEIPT_TEMPLATE_ID" | "SENDGRID_FAILURE_TEMPLATE_ID",
+    locale: string,
+  ): string {
+    const resolvedLocale = resolveLocale(locale).toUpperCase();
+    const localizedEnvKey = `${baseEnvName}_${resolvedLocale}`;
+
+    return process.env[localizedEnvKey] || process.env[baseEnvName] || "";
+  }
+
   async sendEmail(options: EmailOptions): Promise<void> {
     if (process.env.NODE_ENV === "test") {
       console.log("Skipping email send in test environment");
@@ -28,30 +39,62 @@ export class EmailService {
     }
   }
 
-  async sendTransactionReceipt(email: string, transaction: Transaction): Promise<void> {
+  async sendTransactionReceipt(
+    email: string,
+    transaction: Transaction,
+    locale = "en",
+  ): Promise<void> {
+    const resolvedLocale = resolveLocale(locale);
     await this.sendEmail({
-      to: email, templateId: process.env.SENDGRID_RECEIPT_TEMPLATE_ID || "", dynamicTemplateData: {
+      to: email,
+      templateId: this.resolveTemplateId(
+        "SENDGRID_RECEIPT_TEMPLATE_ID",
+        resolvedLocale,
+      ),
+      dynamicTemplateData: {
         amount: transaction.amount,
         type: transaction.type,
+        typeLocalized: translate(
+          `email.transaction_type.${transaction.type}`,
+          resolvedLocale,
+        ),
         referenceNumber: transaction.referenceNumber,
         provider: transaction.provider.toUpperCase(),
         phoneNumber: transaction.phoneNumber,
         stellarAddress: transaction.stellarAddress,
-        createdAt: new Date(transaction.createdAt).toLocaleString(),
+        createdAt: new Date(transaction.createdAt).toLocaleString(resolvedLocale),
+        locale: resolvedLocale,
         year: new Date().getFullYear(),
-      }
+      },
     });
   }
 
-  async sendTransactionFailure(email: string, transaction: Transaction, reason: string): Promise<void> {
+  async sendTransactionFailure(
+    email: string,
+    transaction: Transaction,
+    reason: string,
+    locale = "en",
+  ): Promise<void> {
+    const resolvedLocale = resolveLocale(locale);
     await this.sendEmail({
-      to: email, templateId: process.env.SENDGRID_FAILURE_TEMPLATE_ID || "", dynamicTemplateData: {
+      to: email,
+      templateId: this.resolveTemplateId(
+        "SENDGRID_FAILURE_TEMPLATE_ID",
+        resolvedLocale,
+      ),
+      dynamicTemplateData: {
         amount: transaction.amount,
         type: transaction.type,
+        typeLocalized: translate(
+          `email.transaction_type.${transaction.type}`,
+          resolvedLocale,
+        ),
         referenceNumber: transaction.referenceNumber,
         reason,
+        reasonLabel: translate("email.labels.reason", resolvedLocale),
+        locale: resolvedLocale,
         year: new Date().getFullYear(),
-      }
+      },
     });
   }
 }

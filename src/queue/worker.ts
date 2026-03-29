@@ -60,7 +60,11 @@ async function sendTransactionEmail(transactionId: string): Promise<void> {
 
   const user = await userModel.findById(transaction.userId);
   if (user?.email) {
-    await emailService.sendTransactionReceipt(user.email, transaction);
+    await emailService.sendTransactionReceipt(
+      user.email,
+      transaction,
+      user.preferredLanguage,
+    );
   }
 }
 
@@ -75,7 +79,12 @@ async function sendFailureEmail(
 
   const user = await userModel.findById(transaction.userId);
   if (user?.email) {
-    await emailService.sendTransactionFailure(user.email, transaction, reason);
+    await emailService.sendTransactionFailure(
+      user.email,
+      transaction,
+      reason,
+      user.preferredLanguage,
+    );
   }
 }
 
@@ -166,6 +175,13 @@ export const transactionWorker = new Worker<
       try {
         const txRow = await transactionModel.findById(transactionId);
         const ref = txRow?.referenceNumber ?? transactionId;
+        let locale = "en";
+
+        if (txRow?.userId) {
+          const user = await userModel.findById(txRow.userId);
+          locale = user?.preferredLanguage || "en";
+        }
+
         await whatsappService.notifyTransactionEvent(phoneNumber, {
           referenceNumber: ref,
           type,
@@ -173,6 +189,7 @@ export const transactionWorker = new Worker<
           provider,
           kind,
           errorMessage,
+          locale,
         });
       } catch (smsErr) {
         console.error(`[${job.id}] Notification error`, smsErr);

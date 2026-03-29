@@ -5,6 +5,7 @@ export interface User {
   id: string;
   phoneNumber: string;
   kycLevel: string;
+  preferredLanguage?: string;
   email?: string;
   two_factor_secret?: string | null;
   backup_codes?: string[] | null;
@@ -25,6 +26,7 @@ export class UserModel {
       id: row.id,
       phoneNumber: decrypt(row.phone_number) as string,
       kycLevel: row.kyc_level,
+      preferredLanguage: row.preferred_language ?? row.language ?? undefined,
       email: decrypt(row.email) as string,
       two_factor_secret: decrypt(row.two_factor_secret) ?? null,
       backup_codes: row.backup_codes ?? null,
@@ -98,6 +100,7 @@ export class UserModel {
         id: row.id,
         phoneNumber: decrypt(row.phone_number) as string,
         kycLevel: row.kyc_level,
+        preferredLanguage: row.preferred_language ?? row.language ?? undefined,
         email: decrypt(row.email) as string,
         two_factor_secret: decrypt(row.two_factor_secret) ?? null,
         backup_codes: row.backup_codes ?? null,

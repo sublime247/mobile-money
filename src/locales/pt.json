@@ -1,0 +1,50 @@
+{
+  "errors": {
+    "INVALID_INPUT": "Entrada invalida fornecida",
+    "MISSING_FIELD": "O campo obrigatorio esta faltando",
+    "INVALID_PHONE_FORMAT": "O formato do numero de telefone e invalido",
+    "INVALID_AMOUNT": "O valor deve ser um numero positivo",
+    "UNAUTHORIZED": "Acesso nao autorizado",
+    "INVALID_CREDENTIALS": "Credenciais invalidas fornecidas",
+    "TOKEN_EXPIRED": "Token de autenticacao expirado",
+    "INVALID_TOKEN": "Token de autenticacao invalido",
+    "FORBIDDEN": "Acesso proibido",
+    "INSUFFICIENT_PERMISSIONS": "Permissoes insuficientes para esta acao",
+    "NOT_FOUND": "Recurso nao encontrado",
+    "RESOURCE_NOT_FOUND": "O recurso solicitado nao foi encontrado",
+    "TRANSACTION_NOT_FOUND": "Transacao nao encontrada",
+    "CONFLICT": "A solicitacao entra em conflito com o estado existente",
+    "DUPLICATE_REQUEST": "Solicitacao duplicada detectada",
+    "TRANSACTION_EXISTS": "A transacao ja existe",
+    "LIMIT_EXCEEDED": "Limite de transacoes diarias excedido",
+    "INSUFFICIENT_BALANCE": "Saldo insuficiente para esta transacao",
+    "TRANSACTION_FAILED": "Falha no processamento da transacao",
+    "PROVIDER_ERROR": "Erro do provedor de dinheiro movel",
+    "RATE_LIMIT": "Muitas solicitacoes. Tente novamente mais tarde",
+    "INTERNAL_ERROR": "Erro interno do servidor",
+    "SERVICE_UNAVAILABLE": "O servico esta temporariamente indisponivel",
+    "DATABASE_ERROR": "Falha na operacao do banco de dados",
+    "DEFAULT": "Ocorreu um erro"
+  },
+  "sms": {
+    "action": {
+      "deposit": "deposito",
+      "withdraw": "saque"
+    },
+    "transaction_completed": "Mobile Money: Seu {{action}} de {{amount}} ({{provider}}) foi concluido. Ref: {{referenceNumber}}.",
+    "transaction_failed": "Mobile Money: Seu {{action}} nao pode ser concluido. Ref: {{referenceNumber}}.{{detail}}",
+    "reason_detail": " Motivo: {{reason}}"
+  },
+  "whatsapp": {
+    "otp": "Seu codigo de verificacao do Mobile Money e: {{otp}}. Nao compartilhe este codigo com ninguem."
+  },
+  "email": {
+    "transaction_type": {
+      "deposit": "Deposito",
+      "withdraw": "Saque"
+    },
+    "labels": {
+      "reason": "Motivo"
+    }
+  }
+}

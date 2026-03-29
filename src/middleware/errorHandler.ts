@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import { ErrorResponse } from "../types/api";
 import { ERROR_CODES, getHttpStatus } from "../constants/errorCodes";
 import { getLocalizedMessage } from "../locales/messages";
+import { resolveLocale, resolveLocaleFromRequest } from "../utils/i18n";
 
 /**
  * Extended Error interface with error-specific properties.
@@ -22,7 +23,49 @@ export interface AppError extends Error {
   code?: string;
   statusCode?: number;
   details?: Record<string, unknown>;
+  locale?: string;
+  requestId?: string;
 }
+
+const RESERVED_ERROR_FIELDS = new Set([
+  "name",
+  "message",
+  "stack",
+  "code",
+  "statusCode",
+  "details",
+  "locale",
+  "requestId",
+]);
+
+const getCodeFromStatus = (statusCode: number): string => {
+  if (statusCode === 400) return ERROR_CODES.INVALID_INPUT;
+  if (statusCode === 401) return ERROR_CODES.UNAUTHORIZED;
+  if (statusCode === 403) return ERROR_CODES.FORBIDDEN;
+  if (statusCode === 404) return ERROR_CODES.NOT_FOUND;
+  if (statusCode === 409) return ERROR_CODES.CONFLICT;
+  if (statusCode === 429) return ERROR_CODES.LIMIT_EXCEEDED;
+  if (statusCode === 503) return ERROR_CODES.SERVICE_UNAVAILABLE;
+  return ERROR_CODES.INTERNAL_ERROR;
+};
+
+const extractLegacyDetails = (err: AppError): Record<string, unknown> => {
+  if (err.details && typeof err.details === "object") {
+    return err.details;
+  }
+
+  const details = Object.entries(err as Record<string, unknown>).reduce(
+    (acc, [key, value]) => {
+      if (!RESERVED_ERROR_FIELDS.has(key) && value !== undefined) {
+        acc[key] = value;
+      }
+      return acc;
+    },
+    {} as Record<string, unknown>,
+  );
+
+  return details;
+};
 
 /**
  * Creates a standardized error with code, status, and optional details.
@@ -147,16 +190,25 @@ export const errorHandler = (
   res: Response,
   _next: NextFunction,
 ) => {
-  (res.locals as Record<string, unknown>)["__criticalError"] = err;
-  console.error(err.stack);
+  const responseWithLocals = res as Response & {
+    locals?: Record<string, unknown>;
+  };
+  responseWithLocals.locals = responseWithLocals.locals || {};
+  responseWithLocals.locals["__criticalError"] = err;
+  const inferredCode = err.code || getCodeFromStatus(err.statusCode || 500);
+  const statusCode =
+    typeof err.statusCode === "number" && err.statusCode >= 400
+      ? err.statusCode
+      : getHttpStatus(inferredCode) || 500;
 
-  // Determine HTTP status code
-  const statusCode = err.statusCode || getHttpStatus(errorCode) || 500;
+  const errorCode = err.code || getCodeFromStatus(statusCode);
 
-  // Get request ID if available
-  const requestId = (req as any).requestId || undefined;
+  const locale = resolveLocale(err.locale || resolveLocaleFromRequest(req));
+  const localizedMessage = getLocalizedMessage(errorCode, locale);
+  const englishMessage = getLocalizedMessage(errorCode, "en");
 
-  // Log error for debugging
+  const requestId = err.requestId || (req as any).requestId || undefined;
+
   console.error({
     timestamp: new Date().toISOString(),
     requestId,
@@ -166,18 +218,17 @@ export const errorHandler = (
     statusCode,
   });
 
-  // Build error response
-  const body: ErrorResponse = {
+  const body: ErrorResponse & { statusCode: number } = {
     code: errorCode,
     message: localizedMessage,
     message_en: englishMessage,
     timestamp: new Date().toISOString(),
+    statusCode,
     requestId,
-    details: err.details,
+    details: extractLegacyDetails(err),
   };
 
-  // Don't expose stack traces or detailed errors in production
-  if (process.env.NODE_ENV !== "development") {
+  if (process.env.NODE_ENV === "production") {
     delete body.details;
   }
 

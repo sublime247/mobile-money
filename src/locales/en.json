@@ -1,0 +1,50 @@
+{
+  "errors": {
+    "INVALID_INPUT": "Invalid input provided",
+    "MISSING_FIELD": "Required field is missing",
+    "INVALID_PHONE_FORMAT": "Phone number format is invalid",
+    "INVALID_AMOUNT": "Amount must be a positive number",
+    "UNAUTHORIZED": "Unauthorized access",
+    "INVALID_CREDENTIALS": "Invalid credentials provided",
+    "TOKEN_EXPIRED": "Authentication token has expired",
+    "INVALID_TOKEN": "Invalid authentication token",
+    "FORBIDDEN": "Access forbidden",
+    "INSUFFICIENT_PERMISSIONS": "Insufficient permissions for this action",
+    "NOT_FOUND": "Resource not found",
+    "RESOURCE_NOT_FOUND": "The requested resource could not be found",
+    "TRANSACTION_NOT_FOUND": "Transaction not found",
+    "CONFLICT": "Request conflicts with existing state",
+    "DUPLICATE_REQUEST": "Duplicate request detected",
+    "TRANSACTION_EXISTS": "Transaction already exists",
+    "LIMIT_EXCEEDED": "Daily transaction limit exceeded",
+    "INSUFFICIENT_BALANCE": "Insufficient balance for this transaction",
+    "TRANSACTION_FAILED": "Transaction processing failed",
+    "PROVIDER_ERROR": "Mobile money provider error",
+    "RATE_LIMIT": "Too many requests. Please try again later",
+    "INTERNAL_ERROR": "Internal server error",
+    "SERVICE_UNAVAILABLE": "Service temporarily unavailable",
+    "DATABASE_ERROR": "Database operation failed",
+    "DEFAULT": "An error occurred"
+  },
+  "sms": {
+    "action": {
+      "deposit": "deposit",
+      "withdraw": "withdrawal"
+    },
+    "transaction_completed": "Mobile Money: Your {{action}} of {{amount}} ({{provider}}) completed. Ref: {{referenceNumber}}.",
+    "transaction_failed": "Mobile Money: Your {{action}} could not be completed. Ref: {{referenceNumber}}.{{detail}}",
+    "reason_detail": " Reason: {{reason}}"
+  },
+  "whatsapp": {
+    "otp": "Your Mobile Money verification code is: {{otp}}. Do not share this code with anyone."
+  },
+  "email": {
+    "transaction_type": {
+      "deposit": "Deposit",
+      "withdraw": "Withdrawal"
+    },
+    "labels": {
+      "reason": "Reason"
+    }
+  }
+}

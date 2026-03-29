@@ -40,6 +40,20 @@ describe("SMS service", () => {
       expect(body).toContain("TXN-2");
       expect(body.toLowerCase()).toContain("could not");
     });
+
+    it("builds localized template when locale is provided", () => {
+      const body = buildTransactionSmsBody({
+        referenceNumber: "TXN-3",
+        type: "deposit",
+        amount: "80",
+        provider: "mtn",
+        kind: "transaction_completed",
+        locale: "fr",
+      });
+
+      expect(body).toContain("Votre depot");
+      expect(body).toContain("TXN-3");
+    });
   });
 
   describe("SmsRateLimiter", () => {

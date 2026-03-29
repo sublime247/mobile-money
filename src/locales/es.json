@@ -1,0 +1,50 @@
+{
+  "errors": {
+    "INVALID_INPUT": "Entrada invalida proporcionada",
+    "MISSING_FIELD": "Falta el campo requerido",
+    "INVALID_PHONE_FORMAT": "El formato del numero de telefono es invalido",
+    "INVALID_AMOUNT": "La cantidad debe ser un numero positivo",
+    "UNAUTHORIZED": "Acceso no autorizado",
+    "INVALID_CREDENTIALS": "Credenciales invalidas proporcionadas",
+    "TOKEN_EXPIRED": "El token de autenticacion ha expirado",
+    "INVALID_TOKEN": "Token de autenticacion invalido",
+    "FORBIDDEN": "Acceso prohibido",
+    "INSUFFICIENT_PERMISSIONS": "Permisos insuficientes para esta accion",
+    "NOT_FOUND": "Recurso no encontrado",
+    "RESOURCE_NOT_FOUND": "No se pudo encontrar el recurso solicitado",
+    "TRANSACTION_NOT_FOUND": "Transaccion no encontrada",
+    "CONFLICT": "La solicitud entra en conflicto con el estado existente",
+    "DUPLICATE_REQUEST": "Solicitud duplicada detectada",
+    "TRANSACTION_EXISTS": "La transaccion ya existe",
+    "LIMIT_EXCEEDED": "Limite de transacciones diarias excedido",
+    "INSUFFICIENT_BALANCE": "Saldo insuficiente para esta transaccion",
+    "TRANSACTION_FAILED": "Fallo en el procesamiento de la transaccion",
+    "PROVIDER_ERROR": "Error del proveedor de dinero movil",
+    "RATE_LIMIT": "Demasiadas solicitudes. Por favor, intentelo mas tarde",
+    "INTERNAL_ERROR": "Error interno del servidor",
+    "SERVICE_UNAVAILABLE": "El servicio no esta disponible temporalmente",
+    "DATABASE_ERROR": "La operacion de base de datos fallo",
+    "DEFAULT": "Ocurrio un error"
+  },
+  "sms": {
+    "action": {
+      "deposit": "deposito",
+      "withdraw": "retiro"
+    },
+    "transaction_completed": "Mobile Money: Su {{action}} de {{amount}} ({{provider}}) se completo. Ref: {{referenceNumber}}.",
+    "transaction_failed": "Mobile Money: Su {{action}} no pudo completarse. Ref: {{referenceNumber}}.{{detail}}",
+    "reason_detail": " Motivo: {{reason}}"
+  },
+  "whatsapp": {
+    "otp": "Su codigo de verificacion de Mobile Money es: {{otp}}. No comparta este codigo con nadie."
+  },
+  "email": {
+    "transaction_type": {
+      "deposit": "Deposito",
+      "withdraw": "Retiro"
+    },
+    "labels": {
+      "reason": "Motivo"
+    }
+  }
+}

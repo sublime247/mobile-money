@@ -59,6 +59,7 @@ import {
 import { requireAuth } from "./middleware/auth";
 import { responseTime } from "./middleware/responseTime";
 import { requestId } from "./middleware/requestId";
+import { i18nMiddleware } from "./utils/i18n";
 import { metricsMiddleware } from "./middleware/metrics";
 import { validateStellarNetwork, logStellarNetwork } from "./config/stellar";
 import { sessionAnomalyLogger } from "./services/logger";
@@ -149,6 +150,7 @@ app.use(
 app.use(rateLimitMiddleware);
 app.use(responseTime);
 app.use(requestId);
+app.use(i18nMiddleware);
 
 app.use((req: Request, res: Response, next: NextFunction) => {
   if (isShuttingDown) {
