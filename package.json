@@ -87,7 +87,7 @@
     "libphonenumber-js": "^1.12.40",
     "multer": "^2.1.1",
     "node-cache": "^5.1.2",
-    "node-cron": "^3.0.3",
+    "node-cron": "^4.2.1",
     "nodemailer": "^8.0.4",
     "opossum": "^9.0.0",
     "passport": "^0.7.0",
