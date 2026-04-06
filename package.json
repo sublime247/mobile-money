@@ -102,7 +102,7 @@
     "sharp": "^0.34.5",
     "spdy": "^4.0.2",
     "speakeasy": "^2.0.0",
-    "stellar-sdk": "^12.3.0",
+    "stellar-sdk": "^13.3.0",
     "twilio": "^5.13.1",
     "ua-parser-js": "^2.0.9",
     "uuid": "^9.0.0",
