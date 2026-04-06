@@ -62,7 +62,7 @@
     "bullmq": "^5.71.1",
     "casbin": "^5.49.0",
     "compression": "^1.7.4",
-    "connect-redis": "^7.1.1",
+    "connect-redis": "^9.0.0",
     "connect-timeout": "^1.9.0",
     "cors": "^2.8.5",
     "csv-parser": "^3.2.0",
