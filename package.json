@@ -53,7 +53,7 @@
     "@types/passport-saml": "^1.1.7",
     "@types/speakeasy": "^2.0.10",
     "amqp-connection-manager": "^5.0.0",
-    "amqplib": "^0.10.9",
+    "amqplib": "^1.0.3",
     "apollo-server-core": "^3.13.0",
     "apollo-server-express": "^3.13.0",
     "archiver": "^7.0.1",
