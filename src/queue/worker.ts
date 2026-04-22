@@ -22,6 +22,7 @@ const userModel = new UserModel();
 const whatsappService = new WhatsappService();
 const webhookService = new WebhookService();
 const pushService = pushNotificationService;
+const smsService = { notifyTransactionEvent: async (..._args: any[]): Promise<void> => {} };
 
 const CONCURRENCY = 5;
 

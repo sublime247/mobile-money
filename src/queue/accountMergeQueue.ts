@@ -5,6 +5,7 @@ export const ACCOUNT_MERGE_QUEUE_NAME = "account-merge";
 
 export interface AccountMergeJobData {
   sourceSecret: string;
+  sourcePublicKey: string;
   destinationPublicKey: string;
   inactivityDays: number;
   dryRun: boolean;

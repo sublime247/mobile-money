@@ -33,7 +33,7 @@ router.get(
     //Check cache
     const cached = cache.get(address);
     if (cached) {
-      return res.json({ ...cached, cached: true });
+      return res.json({ ...(cached as Record<string, unknown>), cached: true });
     }
 
     try {

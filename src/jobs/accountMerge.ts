@@ -204,6 +204,7 @@ export async function runAccountMergeJob(): Promise<void> {
   // Queue all merge jobs to BullMQ
   const jobs = sourceSecrets.map((secret) => ({
     sourceSecret: secret,
+    sourcePublicKey: StellarSdk.Keypair.fromSecret(secret).publicKey(),
     destinationPublicKey: destination,
     inactivityDays,
     dryRun,

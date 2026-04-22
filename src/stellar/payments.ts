@@ -35,7 +35,7 @@ export async function findPaymentPaths(
 ): Promise<StellarSdk.Horizon.ServerApi.PaymentPathRecord[]> {
   const server = getStellarServer();
   const response = await server
-    .strictReceivePaths([sendAsset], destAmount, [destinationAccount])
+    .strictReceivePaths([sendAsset] as any, destinationAccount as any, destAmount)
     .call();
   // Filter to paths that end in the desired destAsset
   return response.records.filter(

@@ -92,12 +92,12 @@ export class SSOService {
 
     // Serialize user for session
     passport.serializeUser((user: Express.User, done) => {
-      done(null, user);
+      done(null, user as unknown as Record<string, unknown>);
     });
 
     // Deserialize user from session
-    passport.deserializeUser((user: Express.User, done) => {
-      done(null, user);
+    passport.deserializeUser((user: unknown, done) => {
+      done(null, user as Express.User);
     });
 
     // Load active SSO providers and configure strategies
@@ -138,8 +138,8 @@ export class SSOService {
       callbackUrl: provider.callback_url,
       wantAuthnResponseSigned: true,
       wantAssertionsSigned: true,
-      signatureAlgorithm: "sha256",
-      digestAlgorithm: "sha256",
+      signatureAlgorithm: "sha256" as const,
+      digestAlgorithm: "sha256" as const,
       identifierFormat: "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress",
     };
 
@@ -150,20 +150,15 @@ export class SSOService {
         done: VerifiedCallback
       ) => {
         try {
-          // Process SSO profile and create/update user
           const user = await this.processSSOProfile(profile, provider.id);
           return done(null, user);
         } catch (error) {
           return done(error as Error);
         }
-      },
-      (profile: SSOUserProfile, done: VerifiedCallback) => {
-        // Logout callback - handle SLO if needed
-        return done(null, profile);
       }
     );
 
-    passport.use(`saml-${provider.id}`, strategy);
+    passport.use(`saml-${provider.id}`, strategy as any);
     console.log(`[SSO] Configured SAML strategy for provider: ${provider.name}`);
   }
 
@@ -357,7 +352,7 @@ export class SSOService {
    * Get SAML strategy for a specific provider
    */
   public getStrategy(providerId: string): SamlStrategy | null {
-    return passport._strategy(`saml-${providerId}`) as SamlStrategy | null;
+    return (passport as any)._strategies[`saml-${providerId}`] as SamlStrategy | null;
   }
 
   /**
