@@ -16,6 +16,7 @@ interface CsvRow {
   phoneNumber: string;
   provider: string;
   stellarAddress: string;
+  [key: string]: string;
 }
 
 interface ValidationError {
@@ -138,6 +139,11 @@ async function processJob(jobId: string, rows: CsvRow[]): Promise<void> {
       let failedAlreadyHandled = false;
 
       try {
+        const CORE_FIELDS = new Set(["amount", "phoneNumber", "provider", "stellarAddress"]);
+        const metadata = Object.fromEntries(
+          Object.entries(row).filter(([k]) => !CORE_FIELDS.has(k) && row[k] !== ""),
+        );
+
         const transaction = await transactionModel.create({
           type: "deposit",
           amount: row.amount,
@@ -146,6 +152,7 @@ async function processJob(jobId: string, rows: CsvRow[]): Promise<void> {
           stellarAddress: row.stellarAddress,
           status: TransactionStatus.Pending,
           tags: [],
+          ...(Object.keys(metadata).length > 0 && { metadata }),
         });
         transactionId = transaction.id;
 
