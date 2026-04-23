@@ -180,20 +180,33 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 
 const sessionSecret =
   process.env.SESSION_SECRET || "default-secret-change-in-production";
-const redisStore = createRedisStore();
+const isTestEnvironment = process.env.NODE_ENV === "test";
 
 app.use(
-  session({
-    store: redisStore,
-    secret: sessionSecret,
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-      secure: process.env.NODE_ENV === "production",
-      httpOnly: true,
-      maxAge: SESSION_TTL_SECONDS * 1000,
-    },
-  }),
+  session(
+    isTestEnvironment
+      ? {
+          secret: sessionSecret,
+          resave: false,
+          saveUninitialized: false,
+          cookie: {
+            secure: false,
+            httpOnly: true,
+            maxAge: SESSION_TTL_SECONDS * 1000,
+          },
+        }
+      : {
+          store: createRedisStore(),
+          secret: sessionSecret,
+          resave: false,
+          saveUninitialized: false,
+          cookie: {
+            secure: process.env.NODE_ENV === "production",
+            httpOnly: true,
+            maxAge: SESSION_TTL_SECONDS * 1000,
+          },
+        },
+  ),
 );
 app.use(sessionAnomalyLogger);
 
