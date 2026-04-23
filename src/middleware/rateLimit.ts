@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from "express";
+import { redisClient } from "../config/redis";
 
 /**
  * Rate Limit Configuration
@@ -8,6 +9,18 @@ export const RATE_LIMIT_CONFIG = {
   // Export endpoint: 5 requests per hour per admin
   EXPORT_LIMIT: 5,
   EXPORT_WINDOW_MS: 60 * 60 * 1000, // 1 hour in milliseconds
+
+  // SEP-24 (Deposit/Withdrawal): 10 requests per minute per user
+  SEP24_LIMIT: 10,
+  SEP24_WINDOW_MS: 60 * 1000, // 1 minute
+
+  // SEP-31 (Send Payment): 5 requests per minute per user
+  SEP31_LIMIT: 5,
+  SEP31_WINDOW_MS: 60 * 1000, // 1 minute
+
+  // SEP-12 (KYC): 20 requests per hour per user
+  SEP12_LIMIT: 20,
+  SEP12_WINDOW_MS: 60 * 60 * 1000, // 1 hour
 
   // List queries: warn when requesting more than 1000 items
   MASSIVE_LIST_THRESHOLD: 1000,
@@ -31,6 +44,67 @@ interface RateLimitEntry {
 const rateLimitStore = new Map<string, RateLimitEntry>();
 
 /**
+ * Check and increment rate limit using Redis
+ */
+async function checkRateLimit(
+  key: string,
+  limit: number,
+  windowMs: number
+): Promise<{ allowed: boolean; remaining: number; resetTime: number }> {
+  try {
+    const now = Date.now();
+    const windowStart = Math.floor(now / windowMs) * windowMs;
+    const resetTime = windowStart + windowMs;
+
+    // Use Redis to atomically increment and check
+    const count = await redisClient.incr(key);
+    const countNum = typeof count === 'string' ? parseInt(count, 10) : count;
+
+    // Set expiry on first request in this window
+    if (countNum === 1) {
+      await redisClient.pexpire(key, windowMs);
+    }
+
+    const allowed = countNum <= limit;
+    const remaining = Math.max(0, limit - countNum);
+
+    return { allowed, remaining, resetTime };
+  } catch (error) {
+    console.error("Rate limit Redis error:", error);
+    // Fallback to in-memory if Redis fails
+    return checkRateLimitInMemory(key, limit, windowMs);
+  }
+}
+
+/**
+ * Fallback in-memory rate limit check
+ */
+function checkRateLimitInMemory(
+  key: string,
+  limit: number,
+  windowMs: number
+): { allowed: boolean; remaining: number; resetTime: number } {
+  const now = Date.now();
+  const entry = rateLimitStore.get(key);
+
+  if (!entry || now > entry.resetTime) {
+    // New window
+    rateLimitStore.set(key, {
+      count: 1,
+      resetTime: now + windowMs,
+    });
+    return { allowed: true, remaining: limit - 1, resetTime: now + windowMs };
+  }
+
+  if (entry.count >= limit) {
+    return { allowed: false, remaining: 0, resetTime: entry.resetTime };
+  }
+
+  entry.count++;
+  return { allowed: true, remaining: limit - entry.count, resetTime: entry.resetTime };
+}
+
+/**
  * Log high-severity events
  */
 const logHighSeverity = (message: string, context: Record<string, unknown>) => {
@@ -44,85 +118,127 @@ const logHighSeverity = (message: string, context: Record<string, unknown>) => {
  * Generate a rate limit key based on user ID and endpoint
  */
 const generateRateLimitKey = (userId: string, endpoint: string): string => {
-  return `${userId}:${endpoint}`;
+  return `ratelimit:${userId}:${endpoint}`;
 };
 
 /**
- * Check and update rate limit counter
+ * Middleware: for sep24Routes (Deposit/Withdrawal)
+ * Limit: 10 requests per minute per user
  */
-const checkRateLimit = (
-  key: string,
-  limit: number,
-  windowMs: number,
-): { allowed: boolean; remaining: number; resetTime: number } => {
-  const now = Date.now();
-  let entry = rateLimitStore.get(key);
-
-  // If entry doesn't exist or has expired, create a new one
-  if (!entry || now > entry.resetTime) {
-    entry = {
-      count: 0,
-      resetTime: now + windowMs,
-    };
-    rateLimitStore.set(key, entry);
-  }
-
-  const remaining = Math.max(0, limit - entry.count);
-  const allowed = entry.count < limit;
-
-  if (allowed) {
-    entry.count++;
-  }
-
-  return {
-    allowed,
-    remaining,
-    resetTime: entry.resetTime,
-  };
-};
-
-/**
- * Middleware: for sep24Routes
- * Limit: 
- */
-export const sep24RateLimiter = (req: Request, res: Response, next: NextFunction) => {
-  // TODO: This is a STUB and need implmentation
+export const sep24RateLimiter = async (req: Request, res: Response, next: NextFunction) => {
   const userId = (req as any).user?.id;
 
   if (!userId) {
     return res.status(401).json({ message: "Unauthorized" });
   }
- 
- 
 
-  next();
-};
+  const key = generateRateLimitKey(userId, "SEP24");
+  const { allowed, remaining, resetTime } = await checkRateLimit(
+    key,
+    RATE_LIMIT_CONFIG.SEP24_LIMIT,
+    RATE_LIMIT_CONFIG.SEP24_WINDOW_MS,
+  );
 
-/**
- * Middleware: for sep31RateLimiter
- * Limit: 
- */
-export const sep31RateLimiter = (req: Request, res: Response, next: NextFunction) => {
-  // TODO: This is a STUB and need implmentation
-  const userId = (req as any).user?.id;
+  // Set rate limit headers
+  res.setHeader("X-RateLimit-Limit", RATE_LIMIT_CONFIG.SEP24_LIMIT);
+  res.setHeader("X-RateLimit-Remaining", remaining);
+  res.setHeader("X-RateLimit-Reset", new Date(resetTime).toISOString());
 
-  if (!userId) {
-    return res.status(401).json({ message: "Unauthorized" });
+  if (!allowed) {
+    logHighSeverity("SEP-24 rate limit exceeded", {
+      userId,
+      limit: RATE_LIMIT_CONFIG.SEP24_LIMIT,
+      window: "1 minute",
+      path: req.path,
+      method: req.method,
+    });
+
+    return res.status(429).json({
+      error: "Rate limit exceeded for SEP-24 operations",
+      retryAfter: Math.ceil((resetTime - Date.now()) / 1000),
+    });
   }
 
   next();
 };
 
 /**
- * Middleware: for sep12RateLimiter
- * Limit: 
+ * Middleware: for sep31RateLimiter (Send Payment)
+ * Limit: 5 requests per minute per user
  */
-export const sep12RateLimiter = (req: Request, res: Response, next: NextFunction) => {
-  // TODO: This is a STUB and need implmentation
+export const sep31RateLimiter = async (req: Request, res: Response, next: NextFunction) => {
   const userId = (req as any).user?.id;
 
   if (!userId) {
     return res.status(401).json({ message: "Unauthorized" });
+  }
+
+  const key = generateRateLimitKey(userId, "SEP31");
+  const { allowed, remaining, resetTime } = await checkRateLimit(
+    key,
+    RATE_LIMIT_CONFIG.SEP31_LIMIT,
+    RATE_LIMIT_CONFIG.SEP31_WINDOW_MS,
+  );
+
+  // Set rate limit headers
+  res.setHeader("X-RateLimit-Limit", RATE_LIMIT_CONFIG.SEP31_LIMIT);
+  res.setHeader("X-RateLimit-Remaining", remaining);
+  res.setHeader("X-RateLimit-Reset", new Date(resetTime).toISOString());
+
+  if (!allowed) {
+    logHighSeverity("SEP-31 rate limit exceeded", {
+      userId,
+      limit: RATE_LIMIT_CONFIG.SEP31_LIMIT,
+      window: "1 minute",
+      path: req.path,
+      method: req.method,
+    });
+
+    return res.status(429).json({
+      error: "Rate limit exceeded for SEP-31 operations",
+      retryAfter: Math.ceil((resetTime - Date.now()) / 1000),
+    });
+  }
+
+  next();
+};
+
+/**
+ * Middleware: for sep12RateLimiter (KYC)
+ * Limit: 20 requests per hour per user
+ */
+export const sep12RateLimiter = async (req: Request, res: Response, next: NextFunction) => {
+  const userId = (req as any).user?.id;
+
+  if (!userId) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+
+  const key = generateRateLimitKey(userId, "SEP12");
+  const { allowed, remaining, resetTime } = await checkRateLimit(
+    key,
+    RATE_LIMIT_CONFIG.SEP12_LIMIT,
+    RATE_LIMIT_CONFIG.SEP12_WINDOW_MS,
+  );
+
+  // Set rate limit headers
+  res.setHeader("X-RateLimit-Limit", RATE_LIMIT_CONFIG.SEP12_LIMIT);
+  res.setHeader("X-RateLimit-Remaining", remaining);
+  res.setHeader("X-RateLimit-Reset", new Date(resetTime).toISOString());
+
+  if (!allowed) {
+    logHighSeverity("SEP-12 rate limit exceeded", {
+      userId,
+      limit: RATE_LIMIT_CONFIG.SEP12_LIMIT,
+      window: "1 hour",
+      path: req.path,
+      method: req.method,
+    });
+
+    return res.status(429).json({
+      error: "Rate limit exceeded for SEP-12 operations",
+      retryAfter: Math.ceil((resetTime - Date.now()) / 1000),
+    });
   }
 
   next();
@@ -133,7 +249,7 @@ export const sep12RateLimiter = (req: Request, res: Response, next: NextFunction
  * Middleware: Rate limit for export endpoints
  * Limit: 5 exports per hour per admin
  */
-export const rateLimitExport = (
+export const rateLimitExport = async (
   req: Request,
   res: Response,
   next: NextFunction,
@@ -145,7 +261,7 @@ export const rateLimitExport = (
   }
 
   const key = generateRateLimitKey(userId, "EXPORT");
-  const { allowed, remaining, resetTime } = checkRateLimit(
+  const { allowed, remaining, resetTime } = await checkRateLimit(
     key,
     RATE_LIMIT_CONFIG.EXPORT_LIMIT,
     RATE_LIMIT_CONFIG.EXPORT_WINDOW_MS,

@@ -45,6 +45,11 @@ jobs:
           node-version: "20"
           cache: npm
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libvips-dev libjpeg-dev libpng-dev libtiff-dev libgif-dev librsvg2-dev libpoppler-cpp-dev libcairo2-dev libpango1.0-dev libjpeg8-dev libgif-dev build-essential
+
       - name: Verify package-lock.json exists
         run: |
           if [ ! -f package-lock.json ]; then
@@ -73,6 +78,7 @@ jobs:
         env:
           DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_db
           REDIS_URL: redis://localhost:6379
+          STELLAR_ISSUER_SECRET: S-DUMMY-SECRET-KEY-FOR-TESTING-PURPOSES-ONLY
           NODE_ENV: test
 
       - name: Run Playwright e2e tests
@@ -87,6 +93,7 @@ jobs:
         env:
           DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_db
           REDIS_URL: redis://localhost:6379
+          STELLAR_ISSUER_SECRET: S-DUMMY-SECRET-KEY-FOR-TESTING-PURPOSES-ONLY
           NODE_ENV: test
 
       - name: Upload coverage to Codecov

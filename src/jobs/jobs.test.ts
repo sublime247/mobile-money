@@ -1,6 +1,7 @@
 import { runCleanupJob } from "./cleanupJob";
 import { runReportJob } from "./reportJob";
 import { runStatusCheckJob } from "./statusCheckJob";
+import { runBalanceMonitorJob } from "./balanceMonitorJob";
 import { startJobs } from "./scheduler";
 
 // Mock the database pool
@@ -114,12 +115,45 @@ describe("runStatusCheckJob", () => {
   });
 });
 
+// --- balanceMonitorJob ---
+describe("runBalanceMonitorJob", () => {
+  beforeEach(() => {
+    // Mock Stellar SDK
+    jest.mock("stellar-sdk", () => ({
+      Horizon: {
+        Server: jest.fn().mockImplementation(() => ({
+          loadAccount: jest.fn(),
+        })),
+      },
+    }));
+  });
+
+  it("logs when no hot wallets configured", async () => {
+    delete process.env.HOT_WALLET_PUBLIC_KEYS;
+    delete process.env.BALANCE_THRESHOLD_XLM;
+    await runBalanceMonitorJob();
+    expect(console.log).toHaveBeenCalledWith(
+      expect.stringContaining("No hot wallets configured"),
+    );
+  });
+
+  it("logs when no thresholds configured", async () => {
+    process.env.HOT_WALLET_PUBLIC_KEYS = "GABC123";
+    delete process.env.BALANCE_THRESHOLD_XLM;
+    await runBalanceMonitorJob();
+    expect(console.log).toHaveBeenCalledWith(
+      expect.stringContaining("No balance thresholds configured"),
+    );
+  });
+});
+
 // --- scheduler ---
 describe("startJobs", () => {
   it("schedules all valid jobs", () => {
     (cron.validate as jest.Mock).mockReturnValue(true);
     startJobs();
-    expect(cron.schedule).toHaveBeenCalledTimes(6);
+    expect(cron.schedule).toHaveBeenCalledTimes(7);
+    expect(cron.schedule).toHaveBeenCalledTimes(5);
   });
 
   it("skips jobs with invalid cron expressions", () => {

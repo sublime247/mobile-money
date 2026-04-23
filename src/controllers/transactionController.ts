@@ -69,12 +69,16 @@ export const transactionSchema = z.object({
     .string()
     .regex(/^\+?\d{10,15}$/, { message: "Invalid phone number format" }),
   provider: z.enum(["mtn", "airtel", "orange"], {
-    message: "Provider must be one of: mtn, airtel, orange",
+    message: "Provider must be mtn, airtel, or orange",
   }),
   stellarAddress: z
     .string()
     .regex(/^G[A-Z2-7]{55}$/, { message: "Invalid Stellar address format" }),
   userId: z.string().nonempty({ message: "userId is required" }),
+  notes: z
+    .string()
+    .max(256, { message: "Note cannot exceed 256 characters" })
+    .optional(),
 });
 
 export const validateTransaction = (
@@ -362,6 +366,15 @@ async function processTransactionRequest(
       return res
         .status(400)
         .json({ error: "Amount must be a positive number" });
+    }
+
+    // Recipient Mobile Network Validation
+    const networkMatch = validatePhoneProviderMatch(phoneNumber, provider);
+    if (!networkMatch.valid) {
+      return res.status(400).json({
+        error: networkMatch.error,
+        code: "INVALID_NETWORK_FOR_PROVIDER",
+      });
     }
 
     const idempotencyKey = getIdempotencyKey(req);

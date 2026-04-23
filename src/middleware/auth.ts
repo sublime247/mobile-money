@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { verifyOAuthAccessToken } from "../auth/oauth";
 import { verifyToken, JWTPayload } from "../auth/jwt";
-import { redisClient } from "../config/redis";
+import { ADMIN_API_KEY } from "../config/env";
 
 type RequestUser = {
   id: string;
@@ -77,7 +77,7 @@ export const requireAuth = (
   next: NextFunction,
 ) => {
   const apiKey = req.header("X-API-Key");
-  const adminKey = process.env.ADMIN_API_KEY || "dev-admin-key";
+  const adminKey = ADMIN_API_KEY;
 
   if (apiKey && apiKey === adminKey) {
     (req as AuthRequest).user = {

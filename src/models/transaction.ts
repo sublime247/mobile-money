@@ -14,6 +14,7 @@ const MAX_TAGS = 10;
 const TAG_REGEX = /^[a-z0-9-]+$/;
 
 const MAX_METADATA_BYTES = 10240; // 10 KB
+const MAX_NOTES_LENGTH = 256;
 
 const TRANSACTION_SELECT_COLUMNS = `
   id,
@@ -165,7 +166,6 @@ export function mapTransactionRow(
   return {
     id: String(r.id),
     referenceNumber: String(db.reference_number ?? r.referenceNumber ?? ""),
-    providerReference: db.provider_reference ?? db.providerReference ?? null,
     type: (r.type as Transaction["type"]) || "deposit",
     amount: String(r.amount ?? ""),
     phoneNumber: decrypt(
@@ -540,8 +540,8 @@ export class TransactionModel {
   }
 
   async updateNotes(id: string, notes: string): Promise<Transaction | null> {
-    if (notes.length > 1000) {
-      throw new Error("Notes cannot exceed 1000 characters");
+    if (notes.length > MAX_NOTES_LENGTH) {
+      throw new Error(`Notes cannot exceed ${MAX_NOTES_LENGTH} characters`);
     }
 
     const encryptedNotes = encrypt(notes);

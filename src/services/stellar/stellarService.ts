@@ -55,7 +55,10 @@ export class StellarService {
     }
   }
 
-  async sendPayment(destinationAddress: string, amount: string): Promise<void> {
+  async sendPayment(destinationAddress: string, amount: string): Promise<{
+    hash?: string;
+    submittedAt?: Date;
+  }> {
     try {
       // MOCK MODE (no crash)
       if (this.isMockMode || !this.issuerKeypair) {
@@ -70,7 +73,7 @@ export class StellarService {
           status: "success",
         });
 
-        return;
+        return {};
       }
 
       // REAL MODE
@@ -119,6 +122,11 @@ export class StellarService {
         provider: "stellar",
         status: "success",
       });
+
+      return {
+        hash: response.hash,
+        submittedAt: new Date(),
+      };
     } catch (error) {
       transactionTotal.inc({
         type: "stellar_payment",

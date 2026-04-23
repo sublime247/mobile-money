@@ -1,0 +1,265 @@
+{
+  "info": {
+    "name": "AML Audit Dashboard",
+    "description": "API collection for testing the AML Audit Dashboard endpoints",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{jwt_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "jwt_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "alert_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "user_id",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "List All AML Alerts",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/audit/aml/alerts",
+          "host": ["{{base_url}}"],
+          "path": ["api", "audit", "aml", "alerts"]
+        },
+        "description": "List all AML alerts with default pagination (50 per page)"
+      },
+      "response": []
+    },
+    {
+      "name": "List Pending Alerts",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/audit/aml/alerts?status=pending_review&limit=20",
+          "host": ["{{base_url}}"],
+          "path": ["api", "audit", "aml", "alerts"],
+          "query": [
+            {
+              "key": "status",
+              "value": "pending_review"
+            },
+            {
+              "key": "limit",
+              "value": "20"
+            }
+          ]
+        },
+        "description": "List alerts with pending_review status"
+      },
+      "response": []
+    },
+    {
+      "name": "List High Severity Alerts",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/audit/aml/alerts?severity=high",
+          "host": ["{{base_url}}"],
+          "path": ["api", "audit", "aml", "alerts"],
+          "query": [
+            {
+              "key": "severity",
+              "value": "high"
+            }
+          ]
+        },
+        "description": "List alerts with high severity"
+      },
+      "response": []
+    },
+    {
+      "name": "List Alerts by Date Range",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/audit/aml/alerts?startDate=2026-04-01&endDate=2026-04-23",
+          "host": ["{{base_url}}"],
+          "path": ["api", "audit", "aml", "alerts"],
+          "query": [
+            {
+              "key": "startDate",
+              "value": "2026-04-01"
+            },
+            {
+              "key": "endDate",
+              "value": "2026-04-23"
+            }
+          ]
+        },
+        "description": "List alerts within a specific date range"
+      },
+      "response": []
+    },
+    {
+      "name": "Search Alerts by User ID",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/audit/aml/alerts/search?userId={{user_id}}",
+          "host": ["{{base_url}}"],
+          "path": ["api", "audit", "aml", "alerts", "search"],
+          "query": [
+            {
+              "key": "userId",
+              "value": "{{user_id}}"
+            }
+          ]
+        },
+        "description": "Search alerts for a specific user"
+      },
+      "response": []
+    },
+    {
+      "name": "Search Alerts by User ID and Intensity",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/audit/aml/alerts/search?userId={{user_id}}&intensity=high",
+          "host": ["{{base_url}}"],
+          "path": ["api", "audit", "aml", "alerts", "search"],
+          "query": [
+            {
+              "key": "userId",
+              "value": "{{user_id}}"
+            },
+            {
+              "key": "intensity",
+              "value": "high"
+            }
+          ]
+        },
+        "description": "Search high-severity alerts for a specific user"
+      },
+      "response": []
+    },
+    {
+      "name": "Get Alert Details",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/audit/aml/alerts/{{alert_id}}",
+          "host": ["{{base_url}}"],
+          "path": ["api", "audit", "aml", "alerts", "{{alert_id}}"]
+        },
+        "description": "Get detailed information about a specific alert including transaction context and review history"
+      },
+      "response": []
+    },
+    {
+      "name": "Review Alert - Approved",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"reviewed\",\n  \"reviewNotes\": \"Transaction verified as legitimate. Customer provided supporting documentation showing business income.\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/audit/aml/alerts/{{alert_id}}/review",
+          "host": ["{{base_url}}"],
+          "path": ["api", "audit", "aml", "alerts", "{{alert_id}}", "review"]
+        },
+        "description": "Mark an alert as reviewed (legitimate transaction)"
+      },
+      "response": []
+    },
+    {
+      "name": "Review Alert - Dismissed",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"dismissed\",\n  \"reviewNotes\": \"False positive. Transaction is within normal business patterns for this customer.\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/audit/aml/alerts/{{alert_id}}/review",
+          "host": ["{{base_url}}"],
+          "path": ["api", "audit", "aml", "alerts", "{{alert_id}}", "review"]
+        },
+        "description": "Dismiss an alert as false positive"
+      },
+      "response": []
+    },
+    {
+      "name": "Get Dashboard Statistics",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/audit/aml/stats",
+          "host": ["{{base_url}}"],
+          "path": ["api", "audit", "aml", "stats"]
+        },
+        "description": "Get overall AML dashboard statistics"
+      },
+      "response": []
+    },
+    {
+      "name": "Get Dashboard Statistics - Date Range",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/audit/aml/stats?startDate=2026-04-01&endDate=2026-04-23",
+          "host": ["{{base_url}}"],
+          "path": ["api", "audit", "aml", "stats"],
+          "query": [
+            {
+              "key": "startDate",
+              "value": "2026-04-01"
+            },
+            {
+              "key": "endDate",
+              "value": "2026-04-23"
+            }
+          ]
+        },
+        "description": "Get AML statistics for a specific date range"
+      },
+      "response": []
+    }
+  ]
+}

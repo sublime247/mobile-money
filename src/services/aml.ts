@@ -270,7 +270,8 @@ export class AMLService {
       updatedAt: nowIso,
     };
 
-    this.recordAlert(alert);
+    await this.recordAlert(alert);
+    this.logAlert(alert, current);
 
     return { flagged: true, alert, ruleHits };
   }
@@ -414,10 +415,19 @@ export class AMLService {
     this.alerts = [];
   }
 
-  private recordAlert(alert: AMLAlert): void {
-    this.alerts.unshift(alert);
-    if (this.alerts.length > this.config.alertBufferSize) {
-      this.alerts = this.alerts.slice(0, this.config.alertBufferSize);
+  private async recordAlert(alert: AMLAlert): Promise<void> {
+    // Store in database for persistence
+    try {
+      const { AMLAlertModel } = await import("../models/amlAlert");
+      const model = new AMLAlertModel();
+      await model.create(alert);
+    } catch (error) {
+      console.error("Failed to persist AML alert to database:", error);
+      // Fallback to in-memory storage
+      this.alerts.unshift(alert);
+      if (this.alerts.length > this.config.alertBufferSize) {
+        this.alerts = this.alerts.slice(0, this.config.alertBufferSize);
+      }
     }
   }
 

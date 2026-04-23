@@ -184,6 +184,26 @@ async function processTransaction(data: TransactionJobData): Promise<Transaction
     }
   };
 
+        const stellarResult = await withRetry(
+          () => stellarService.sendPayment(stellarAddress, amount),
+          retryConfig,
+        );
+
+        // Store Stellar transaction details in metadata
+        if (stellarResult.hash) {
+          const currentMetadata = (await transactionModel.findById(transactionId))?.metadata || {};
+          const updatedMetadata = {
+            ...currentMetadata,
+            stellar: {
+              transactionHash: stellarResult.hash,
+              submittedAt: stellarResult.submittedAt?.toISOString(),
+              feeBumps: [],
+            },
+          };
+          await transactionModel.updateMetadata(transactionId, updatedMetadata);
+        }
+
+        await job.updateProgress(90);
   try {
     await updateProgress(transactionId, 10);
 

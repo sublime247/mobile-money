@@ -58,6 +58,10 @@ export const env = cleanEnv(process.env, {
     default: "mobile-money",
     desc: "PagerDuty deduplication key prefix for incident grouping",
   }),
+  ADMIN_API_KEY: str({
+    desc: "Administrative API key for system operations",
+    example: "your-secure-admin-api-key-here",
+  }),
 });
 
 // Re-export specific values for convenience
@@ -70,4 +74,5 @@ export const {
   DB_ENCRYPTION_KEY,
   PAGERDUTY_INTEGRATION_KEY,
   PAGERDUTY_DEDUP_KEY,
+  ADMIN_API_KEY,
 } = env;

@@ -32,11 +32,14 @@ import { statsRoutes } from "./routes/stats";
 import { contactsRoutes } from "./routes/contacts";
 import { reportsRoutes } from "./routes/reports";
 import { statementsRoutes } from "./routes/statements";
+import feesRoutes from "./routes/fees";
+import stellarRoutes from "./routes/stellar";
 import { createKYCRoutes } from "./routes/kycRoutes";
 import { vaultRoutes } from "./routes/vaults";
 import { adminRoutes } from "./routes/admin";
 import { makerCheckerRoutes } from "./routes/makerChecker";
 import { userRoutes } from "./routes/users";
+import { auditRoutes } from "./routes/audit";
 import { errorHandler } from "./middleware/errorHandler";
 import {
   connectRedis,
@@ -69,6 +72,7 @@ import sep38Router from "./stellar/sep38";
 import { createSep12Router } from "./stellar/sep12";
 import { createSep10Router } from "./stellar/sep10";
 import tomlRouter from "./routes/toml";
+import { startJobs } from "./jobs/scheduler";
 
 // 1. Import Sentry Middleware
 import { initSentry, sentryBreadcrumbMiddleware } from "./middleware/sentry";
@@ -341,9 +345,12 @@ app.use("/api/disputes", disputeRoutes);
 app.use("/api/stats", statsRoutes);
 app.use("/api/contacts", contactsRoutes);
 app.use("/api/reports", reportsRoutes);
-app.use("/api/statements", statementsRoutes);
+app.use("/api/fees", feesRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/kyc", createKYCRoutes(pool));
+app.use("/api/audit", auditRoutes);
+
+app.use("/api/stellar", stellarRoutes);
 
 // GDPR
 app.use("/api/gdpr", privacyRoutes);
@@ -353,7 +360,6 @@ app.use("/sep31", sep31Router);
 app.use("/sep24", sep24Router);
 app.use("/sep38", sep38Router);
 app.use("/sep12", createSep12Router(pool));
-app.use("/sep10", createSep10Router());
 app.use("/.well-known/stellar.toml", tomlRouter);
 
 app.use(
@@ -502,6 +508,9 @@ async function initializeRuntime(): Promise<void> {
 
   const { createQueueDashboard } = await import("./queue/dashboard");
   app.use("/admin/queues", createQueueDashboard());
+
+  // Start scheduled jobs
+  startJobs();
 
   //
   const useHTTP2 = process.env.USE_HTTP2 === "true";
