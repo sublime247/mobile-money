@@ -132,6 +132,13 @@ export function Cache(opts?: CacheOptions) {
     propertyKey: string | symbol,
     descriptor: PropertyDescriptor,
   ) {
+    // In some transpilation/runtime paths decorators may be invoked without
+    // a legacy property descriptor. In that case, skip wrapping to avoid
+    // crashing application startup.
+    if (!descriptor || typeof descriptor.value !== "function") {
+      return descriptor;
+    }
+
     const original = descriptor.value as (
       ...args: unknown[]
     ) => Promise<unknown> | unknown;

@@ -78,15 +78,12 @@ jobs:
       - name: Run Playwright e2e tests
         run: |
           npx playwright install --with-deps
-          npm run build
-          npm run start &
-          APP_PID=$!
-          sleep 3
-          npm run test:e2e:ci
-          kill $APP_PID
+          npx playwright test --project=chromium --workers=2 --retries=1 --reporter=dot
         env:
           DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_db
           REDIS_URL: redis://localhost:6379
+          STELLAR_ISSUER_SECRET: test-issuer-secret
+          JWT_SECRET: test-jwt-secret
           NODE_ENV: test
 
       - name: Upload coverage to Codecov

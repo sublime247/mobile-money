@@ -4,9 +4,12 @@ import { createSSORouter } from '../auth/sso';
 import { enforceSSOForEmployees } from '../middleware/ssoEnforcement';
 import { tokenController } from '../controllers/tokenController';
 import { authenticateToken } from '../middleware/auth';
-import { authenticateUser, getUserPermissions } from '../services/userService';
+import { authenticateUser, getUserByPhoneNumber, getUserPermissions } from '../services/userService';
+import { getLockoutStatus, recordFailedAttempt, recordSuccessfulLogin } from '../auth/lockout';
+import { EmailService } from '../services/email';
 
 export const authRoutes = Router();
+const emailService = new EmailService();
 
 // Mount SSO routes
 authRoutes.use('/sso', createSSORouter());
@@ -28,14 +31,38 @@ authRoutes.post('/login', async (req: Request, res: Response) => {
   }
 
   try {
-    const user = await authenticateUser(phone_number);
+    const identifier = String(phone_number).trim();
+    const currentLockout = await getLockoutStatus(identifier);
 
-    if (!user) {
-      return res.status(401).json({
-        error: 'Unauthorized',
-        message: 'Invalid credentials',
+    if (currentLockout.isLocked) {
+      return res.status(423).json({
+        error: 'Account locked',
+        message: `Too many failed login attempts. Try again in ${currentLockout.minutesRemaining} minute${currentLockout.minutesRemaining === 1 ? '' : 's'}.`,
       });
     }
+
+    const user = await authenticateUser(identifier);
+
+    if (!user) {
+      const lockoutResult = await recordFailedAttempt(identifier);
+
+      if (lockoutResult.justLocked) {
+        const existingUser = await getUserByPhoneNumber(identifier);
+        if (existingUser?.email) {
+          await emailService.sendAccountLockoutNotice(
+            existingUser.email,
+            lockoutResult.minutesRemaining || 10,
+          );
+        }
+      }
+
+      return res.status(lockoutResult.isLocked ? 423 : 401).json({
+        error: lockoutResult.isLocked ? 'Account locked' : 'Unauthorized',
+        message: lockoutResult.message,
+      });
+    }
+
+    await recordSuccessfulLogin(identifier);
 
     const payload = {
       userId: user.id,

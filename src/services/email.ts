@@ -12,7 +12,10 @@ export interface EmailOptions {
 
 export class EmailService {
   private resolveTemplateId(
-    baseEnvName: "SENDGRID_RECEIPT_TEMPLATE_ID" | "SENDGRID_FAILURE_TEMPLATE_ID",
+    baseEnvName:
+      | "SENDGRID_RECEIPT_TEMPLATE_ID"
+      | "SENDGRID_FAILURE_TEMPLATE_ID"
+      | "SENDGRID_ACCOUNT_LOCKOUT_TEMPLATE_ID",
     locale: string,
   ): string {
     const resolvedLocale = resolveLocale(locale).toUpperCase();
@@ -92,6 +95,26 @@ export class EmailService {
         referenceNumber: transaction.referenceNumber,
         reason,
         reasonLabel: translate("email.labels.reason", resolvedLocale),
+        locale: resolvedLocale,
+        year: new Date().getFullYear(),
+      },
+    });
+  }
+
+  async sendAccountLockoutNotice(
+    email: string,
+    minutesRemaining: number,
+    locale = "en",
+  ): Promise<void> {
+    const resolvedLocale = resolveLocale(locale);
+    await this.sendEmail({
+      to: email,
+      templateId: this.resolveTemplateId(
+        "SENDGRID_ACCOUNT_LOCKOUT_TEMPLATE_ID",
+        resolvedLocale,
+      ),
+      dynamicTemplateData: {
+        minutesRemaining,
         locale: resolvedLocale,
         year: new Date().getFullYear(),
       },
