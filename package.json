@@ -111,6 +111,8 @@
   },
   "devDependencies": {
     "@aws-sdk/client-kms": "^3.1021.0",
+    "@eslint/eslintrc": "^3.3.5",
+    "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.40.0",
     "@stryker-mutator/core": "^9.6.0",
     "@stryker-mutator/jest-runner": "^9.6.0",

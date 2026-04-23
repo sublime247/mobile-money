@@ -63,6 +63,7 @@ declare module "express-serve-static-core" {
     userRole?: string;
     userPermissions?: string[];
     twoFactorVerified?: boolean;
+    isNewDevice?: boolean;
   }
 }
 

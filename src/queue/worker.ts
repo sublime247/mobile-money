@@ -169,7 +169,7 @@ async function processTransaction(data: TransactionJobData): Promise<Transaction
     try {
       const txRow = await transactionModel.findById(transactionId);
       const ref = txRow?.referenceNumber ?? transactionId;
-      await smsService.notifyTransactionEvent(phoneNumber, {
+      await whatsappService.notifyTransactionEvent(phoneNumber, {
         referenceNumber: ref,
         type,
         amount: String(amount),

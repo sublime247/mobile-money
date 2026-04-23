@@ -20,6 +20,11 @@ interface AccountMergeCandidate {
   lastActivityAt: Date | null;
 }
 
+interface AccountLike {
+  balances: Array<{ asset_type: string; balance: string }>;
+  subentry_count: number;
+}
+
 function xlmToStroops(amount: string): bigint {
   const normalized = amount.trim();
   if (!/^\d+(\.\d{1,7})?$/.test(normalized)) {
@@ -96,7 +101,7 @@ function evaluateAccountMergeCandidate(
 }
 
 function getNativeBalance(
-  account: StellarSdk.Horizon.ServerApi.AccountRecord,
+  account: AccountLike,
 ): string {
   const nativeBalance = account.balances.find(
     (balance) => balance.asset_type === "native",
@@ -105,7 +110,7 @@ function getNativeBalance(
 }
 
 function hasNonNativeBalances(
-  account: StellarSdk.Horizon.ServerApi.AccountRecord,
+  account: AccountLike,
 ): boolean {
   return account.balances.some(
     (balance) =>

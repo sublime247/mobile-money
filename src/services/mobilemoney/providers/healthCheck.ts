@@ -122,7 +122,9 @@ async function getCached(): Promise<MobileMoneyHealthResult | null> {
   if (client) {
     try {
       const raw = await client.get(CACHE_KEY);
-      if (raw) return JSON.parse(raw) as MobileMoneyHealthResult;
+      if (typeof raw === "string") {
+        return JSON.parse(raw) as MobileMoneyHealthResult;
+      }
     } catch {
       /* Redis read error → fall through to in-process */
     }
