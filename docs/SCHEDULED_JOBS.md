@@ -8,7 +8,7 @@ Scheduled background jobs run automatically when the server starts, powered by [
 | -------------- | ------------------------ | ------------------------------------------------------------------------------ |
 | `cleanup`      | `0 2 * * *` (daily 2 AM) | Deletes completed/failed transactions older than `LOG_RETENTION_DAYS`          |
 | `report`       | `0 6 * * *` (daily 6 AM) | Logs a summary of the previous day's transactions                              |
-| `status-check` | `0 * * * *` (every hour) | Warns about pending transactions stuck longer than `STUCK_TRANSACTION_MINUTES` |
+| `status-check` | `0 * * * *` (every hour) | Resolves pending transactions older than `STALE_TRANSACTION_HOURS` by checking provider status |
 
 ## Configuration
 
@@ -23,8 +23,8 @@ STATUS_CHECK_CRON=0 * * * *
 # Cleanup retention period in days (default: 90)
 LOG_RETENTION_DAYS=90
 
-# Minutes before a pending transaction is flagged as stuck (default: 60)
-STUCK_TRANSACTION_MINUTES=60
+# Hours before a pending transaction is considered stale (default: 12)
+STALE_TRANSACTION_HOURS=12
 ```
 
 ## File Structure
@@ -34,7 +34,7 @@ src/jobs/
 ├── scheduler.ts      # Registers and starts all cron jobs
 ├── cleanupJob.ts     # Deletes old terminal-state transactions
 ├── reportJob.ts      # Generates daily transaction summary
-└── statusCheckJob.ts # Detects stuck pending transactions
+└── statusCheckJob.ts # Resolves stale pending transactions
 ```
 
 ## Error Handling
