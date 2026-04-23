@@ -20,6 +20,9 @@ interface MobileMoneyProvider {
     phoneNumber: string,
     amount: string,
   ): Promise<{ success: boolean; data?: unknown; error?: unknown }>;
+  checkStatus?(
+    reference: string,
+  ): Promise<{ success: boolean; data?: unknown; error?: unknown }>;
 }
 
 interface ProviderExecutionResult {
@@ -312,6 +315,34 @@ export class MobileMoneyService {
       "PROVIDER_ERROR",
       `Payout failed for provider '${providerKey}'`,
     );
+  }
+
+  async getTransactionStatus(provider: string, reference: string) {
+    const providerKey = provider.toLowerCase();
+    const providerInstance = this.getProviderOrThrow(providerKey);
+
+    if (typeof providerInstance.checkStatus !== "function") {
+      return {
+        success: false,
+        error: new Error(
+          `Provider '${providerKey}' does not support status checks`,
+        ),
+      };
+    }
+
+    try {
+      const result = await providerInstance.checkStatus(reference);
+      if (result?.success) {
+        return { success: true, data: result.data };
+      }
+
+      return {
+        success: false,
+        error: result?.error ?? new Error("provider status request failed"),
+      };
+    } catch (error) {
+      return { success: false, error };
+    }
   }
 
   /**
