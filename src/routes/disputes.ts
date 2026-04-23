@@ -143,7 +143,6 @@ transactionDisputeRoutes.post(
         reportedBy,
         priority,
         category,
-        requesterEmail,
       );
       return res.status(201).json(dispute);
     } catch (error) {

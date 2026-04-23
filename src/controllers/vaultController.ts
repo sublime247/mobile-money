@@ -43,10 +43,14 @@ export const createVault = async (req: Request, res: Response) => {
       });
     }
 
-    const vault = await vaultModel.create({
+    const createInput: CreateVaultInput = {
       userId,
-      ...validatedData,
-    });
+      name: validatedData.name,
+      description: validatedData.description,
+      targetAmount: validatedData.targetAmount,
+    };
+
+    const vault = await vaultModel.create(createInput);
 
     res.status(201).json({
       success: true,

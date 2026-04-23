@@ -131,7 +131,7 @@ export class SSOService {
    * Configure SAML strategy for a specific provider
    */
   private configureSAMLStrategy(provider: SSOProvider): void {
-    const samlConfig = {
+    const samlConfig: any = {
       entryPoint: provider.entry_point,
       issuer: provider.issuer,
       cert: provider.cert,
@@ -152,18 +152,14 @@ export class SSOService {
         try {
           // Process SSO profile and create/update user
           const user = await this.processSSOProfile(profile, provider.id);
-          return done(null, user);
+          return done(null, user as unknown as Record<string, unknown>);
         } catch (error) {
           return done(error as Error);
         }
-      },
-      (profile: SSOUserProfile, done: VerifiedCallback) => {
-        // Logout callback - handle SLO if needed
-        return done(null, profile);
       }
     );
 
-    passport.use(`saml-${provider.id}`, strategy);
+    (passport as any).use(`saml-${provider.id}`, strategy);
     console.log(`[SSO] Configured SAML strategy for provider: ${provider.name}`);
   }
 
@@ -357,7 +353,7 @@ export class SSOService {
    * Get SAML strategy for a specific provider
    */
   public getStrategy(providerId: string): SamlStrategy | null {
-    return passport._strategy(`saml-${providerId}`) as SamlStrategy | null;
+    return (passport as any)._strategy(`saml-${providerId}`) as SamlStrategy | null;
   }
 
   /**

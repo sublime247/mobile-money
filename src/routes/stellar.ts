@@ -32,7 +32,7 @@ router.get(
 
     //Check cache
     const cached = cache.get(address);
-    if (cached) {
+    if (cached && typeof cached === "object") {
       return res.json({ ...cached, cached: true });
     }
 

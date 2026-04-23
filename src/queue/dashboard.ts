@@ -13,7 +13,7 @@ export function createQueueDashboard() {
 
   createBullBoard({
     queues: [
-      new BullMQAdapter(transactionQueue),
+      new BullMQAdapter(transactionQueue as any),
       new BullMQAdapter(providerBalanceAlertQueue),
       new BullMQAdapter(deadLetterQueue),
     ],
