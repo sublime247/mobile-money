@@ -5,6 +5,7 @@ import { encrypt, decrypt } from "../utils/encryption";
 export interface User {
   id: string;
   phone_number: string;
+  email?: string | null;
   kyc_level: string;
   role_id?: string;
   role_name?: string;
@@ -36,6 +37,7 @@ export async function getUserByPhoneNumber(
     SELECT 
       u.id,
       u.phone_number,
+      u.email,
       u.kyc_level,
       u.role_id,
       u.two_factor_secret,
@@ -55,6 +57,7 @@ export async function getUserByPhoneNumber(
   return {
     ...row,
     phone_number: decrypt(row.phone_number) as string,
+    email: decrypt(row.email),
     two_factor_secret: decrypt(row.two_factor_secret),
   };
 }
@@ -67,6 +70,7 @@ export async function getUserById(userId: string): Promise<User | null> {
     SELECT 
       u.id,
       u.phone_number,
+      u.email,
       u.kyc_level,
       u.role_id,
       u.two_factor_secret,
@@ -87,6 +91,7 @@ export async function getUserById(userId: string): Promise<User | null> {
   return {
     ...row,
     phone_number: decrypt(row.phone_number) as string,
+    email: decrypt(row.email),
     two_factor_secret: decrypt(row.two_factor_secret),
   };
 }
@@ -317,6 +322,7 @@ export async function getAllUsers(): Promise<User[]> {
     SELECT 
       u.id,
       u.phone_number,
+      u.email,
       u.kyc_level,
       u.role_id,
       u.two_factor_secret,
@@ -333,6 +339,7 @@ export async function getAllUsers(): Promise<User[]> {
   return result.rows.map(row => ({
     ...row,
     phone_number: decrypt(row.phone_number) as string,
+    email: decrypt(row.email),
     two_factor_secret: decrypt(row.two_factor_secret),
   }));
 }
