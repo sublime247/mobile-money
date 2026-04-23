@@ -109,6 +109,26 @@ export class MTNProvider {
     }
   }
 
+  async checkStatus(reference: string) {
+    try {
+      const token = await this.getAccessToken();
+      const response = await axios.get(
+        `${this.baseUrl}/collection/v1_0/requesttopay/${encodeURIComponent(reference)}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Ocp-Apim-Subscription-Key": this.subscriptionKey,
+            "X-Target-Environment": this.environment,
+          },
+        },
+      );
+
+      return { success: true, data: response.data };
+    } catch (error) {
+      return { success: false, error };
+    }
+  }
+
   async sendPayout(_phoneNumber: string, _amount: string) {
     return { success: true };
   }
