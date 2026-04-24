@@ -12,6 +12,7 @@ stryker-tmp/
 
 .kiro/
 
+yarn.lock
 certs/
 .env
 
