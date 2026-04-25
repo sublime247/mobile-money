@@ -36,3 +36,5 @@ certs/
 tests/load/results/*.json
 package-lock.json
 
+temp_auto_push.bat
+temp_interactive_push.bat

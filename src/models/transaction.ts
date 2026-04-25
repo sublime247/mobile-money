@@ -645,7 +645,10 @@ export class TransactionModel {
           'english',
           COALESCE(notes, '') || ' ' || COALESCE(admin_notes, '')
         ) @@ plainto_tsquery('english', $1)
-        ORDER BY created_at DESC`,
+        ORDER BY ts_rank(
+          to_tsvector('english', COALESCE(notes, '') || ' ' || COALESCE(admin_notes, '')),
+          plainto_tsquery('english', $1)
+        ) DESC, created_at DESC`,
       [query],
     );
 
