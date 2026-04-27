@@ -132,8 +132,8 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@aws-sdk/client-kms": "^3.1036.0",
-    "@cloudflare/workers-types": "4.20250422.0",
+    "@aws-sdk/client-kms": "^3.1037.0",
+    "@cloudflare/workers-types": "4.20260426.1",
     "@pact-foundation/pact": "^16.3.0",
     "@playwright/test": "^1.59.1",
     "@stryker-mutator/core": "^9.6.1",
