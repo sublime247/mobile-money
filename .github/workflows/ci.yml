@@ -183,7 +183,7 @@ jobs:
           SESSION_SECRET: ci-session-secret
 
       - name: Upload Playwright report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: playwright-report
@@ -309,7 +309,7 @@ jobs:
       contains(needs.*.result, 'failure')
     steps:
       - name: Send Slack failure notification
-        uses: slackapi/slack-github-action@v2
+        uses: slackapi/slack-github-action@v3
         with:
           webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
           webhook-type: incoming-webhook

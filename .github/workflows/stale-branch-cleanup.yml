@@ -32,7 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Scan stale branches
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         env:
           STALE_DAYS: ${{ github.event_name == 'workflow_dispatch' && inputs.stale_days || '30' }}
           DELETE_AFTER_DAYS: ${{ github.event_name == 'workflow_dispatch' && inputs.delete_after_days || '7' }}
