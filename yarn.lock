@@ -3924,10 +3924,10 @@
     "@types/express" "*"
     "@types/node" "*"
 
-"@types/connect-timeout@^0.0.38":
-  version "0.0.38"
-  resolved "https://registry.yarnpkg.com/@types/connect-timeout/-/connect-timeout-0.0.38.tgz#6c084437b1fb0ddd300ce4f88bc05436e3d19a33"
-  integrity sha512-ESgSppQVDmCvSGtxrS5/Y4KSdLdykX5uBdxx2879OSgJT9QrpkJ85EOtPU6A/cmA1q4aremzyv1zbb1ZTX/mJQ==
+"@types/connect-timeout@^1.9.0":
+  version "1.9.0"
+  resolved "https://registry.yarnpkg.com/@types/connect-timeout/-/connect-timeout-1.9.0.tgz#fba5eb706b1274269af5a5be37ee9219dd54da0c"
+  integrity sha512-tKAbro0/ATFeaSVa/N3Gv981+7KbuNQjoZEW8uI4NEdyxquWnylC5UTXwIOc2HD2q22ZjLr8H5YVKZL2+pGBGw==
   dependencies:
     "@types/express" "*"
 

@@ -149,7 +149,7 @@
     "@types/archiver": "^7.0.0",
     "@types/bcrypt": "^6.0.0",
     "@types/compression": "^1.7.5",
-    "@types/connect-timeout": "^0.0.38",
+    "@types/connect-timeout": "^1.9.0",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/express-session": "^1.19.0",
