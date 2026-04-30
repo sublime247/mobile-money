@@ -26,6 +26,7 @@ import { ledgerService } from "../services/ledgerService";
 import highThroughputService from "../services/stellar/highThroughputService";
 import multer from "multer";
 import { parseCSV, reconcileTransactions } from "../services/csvReconciliation";
+import { ProviderReconciliationService } from "../services/providerReconciliationService";
 import {
   getTransactionResolutionPercentiles,
   getDisputeResolutionPercentiles,
@@ -1471,6 +1472,189 @@ router.post(
         error: "Reconciliation failed",
         message: "An unexpected error occurred during reconciliation",
       });
+    }
+  },
+);
+
+/**
+ * =========================
+ * PROVIDER RECONCILIATION
+ * =========================
+ */
+
+const providerReconciliationService = new ProviderReconciliationService();
+
+// GET /api/admin/reconciliation/runs - List reconciliation runs
+router.get(
+  "/reconciliation/runs",
+  requireAdmin,
+  logAdminAction("LIST_RECONCILIATION_RUNS"),
+  async (req: Request, res: Response) => {
+    try {
+      const page = Number(req.query.page) || 1;
+      const limit = Number(req.query.limit) || 20;
+      const provider = req.query.provider as string | undefined;
+
+      const offset = (page - 1) * limit;
+      const runs = await providerReconciliationService.getReconciliationHistory(provider, limit);
+
+      // Apply pagination
+      const paginatedRuns = runs.slice(offset, offset + limit);
+      const total = runs.length;
+
+      res.json({
+        data: paginatedRuns,
+        pagination: {
+          total,
+          page,
+          limit,
+          totalPages: Math.ceil(total / limit),
+        },
+      });
+    } catch (error) {
+      console.error("Error fetching reconciliation runs:", error);
+      res.status(500).json({ message: "Failed to fetch reconciliation runs" });
+    }
+  },
+);
+
+// GET /api/admin/reconciliation/alerts - List reconciliation alerts
+router.get(
+  "/reconciliation/alerts",
+  requireAdmin,
+  logAdminAction("LIST_RECONCILIATION_ALERTS"),
+  async (req: Request, res: Response) => {
+    try {
+      const page = Number(req.query.page) || 1;
+      const limit = Number(req.query.limit) || 50;
+      const status = req.query.status as string | undefined;
+      const severity = req.query.severity as string | undefined;
+
+      const alerts = await providerReconciliationService.getPendingAlerts(1000); // Get more to filter
+
+      // Apply filters
+      let filteredAlerts = alerts;
+      if (status) {
+        filteredAlerts = filteredAlerts.filter(alert => alert.status === status);
+      }
+      if (severity) {
+        filteredAlerts = filteredAlerts.filter(alert => alert.severity === severity);
+      }
+
+      // Apply pagination
+      const offset = (page - 1) * limit;
+      const paginatedAlerts = filteredAlerts.slice(offset, offset + limit);
+
+      res.json({
+        data: paginatedAlerts,
+        pagination: {
+          total: filteredAlerts.length,
+          page,
+          limit,
+          totalPages: Math.ceil(filteredAlerts.length / limit),
+        },
+      });
+    } catch (error) {
+      console.error("Error fetching reconciliation alerts:", error);
+      res.status(500).json({ message: "Failed to fetch reconciliation alerts" });
+    }
+  },
+);
+
+// PATCH /api/admin/reconciliation/alerts/:id - Review reconciliation alert
+router.patch(
+  "/reconciliation/alerts/:id",
+  requireAdmin,
+  logAdminAction("REVIEW_RECONCILIATION_ALERT"),
+  async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { status, review_notes } = req.body;
+      const adminUser = (req as AuthRequest).user;
+
+      if (!adminUser) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+
+      const allowedStatuses = ['reviewed', 'dismissed', 'resolved'];
+      if (!allowedStatuses.includes(status)) {
+        return res.status(400).json({
+          message: `Status must be one of: ${allowedStatuses.join(', ')}`,
+        });
+      }
+
+      if (!review_notes || typeof review_notes !== 'string' || review_notes.trim().length === 0) {
+        return res.status(400).json({
+          message: "Review notes are required",
+        });
+      }
+
+      await providerReconciliationService.reviewAlert(
+        id,
+        status,
+        review_notes.trim(),
+        adminUser.id
+      );
+
+      res.json({ message: "Alert reviewed successfully" });
+    } catch (error) {
+      console.error("Error reviewing reconciliation alert:", error);
+      res.status(500).json({ message: "Failed to review alert" });
+    }
+  },
+);
+
+// POST /api/admin/reconciliation/manual - Run manual reconciliation
+router.post(
+  "/reconciliation/manual",
+  requireAdmin,
+  logAdminAction("RUN_MANUAL_RECONCILIATION"),
+  async (req: Request, res: Response) => {
+    try {
+      const { provider, report_date } = req.body;
+
+      if (!provider || !report_date) {
+        return res.status(400).json({
+          message: "Provider and report_date are required",
+        });
+      }
+
+      const reportDate = new Date(report_date);
+      if (isNaN(reportDate.getTime())) {
+        return res.status(400).json({
+          message: "Invalid report_date format. Use ISO date string.",
+        });
+      }
+
+      const { runManualProviderReconciliation } = await import("../jobs/providerReconciliationJob");
+      const result = await runManualProviderReconciliation(provider, reportDate);
+
+      res.json({
+        message: "Manual reconciliation completed",
+        result,
+      });
+    } catch (error) {
+      console.error("Error running manual reconciliation:", error);
+      res.status(500).json({
+        message: "Manual reconciliation failed",
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  },
+);
+
+// GET /api/admin/reconciliation/configs - List provider report configs
+router.get(
+  "/reconciliation/configs",
+  requireAdmin,
+  logAdminAction("LIST_RECONCILIATION_CONFIGS"),
+  async (req: Request, res: Response) => {
+    try {
+      const configs = await providerReconciliationService.getProviderConfigs();
+      res.json({ data: configs });
+    } catch (error) {
+      console.error("Error fetching reconciliation configs:", error);
+      res.status(500).json({ message: "Failed to fetch reconciliation configs" });
     }
   },
 );

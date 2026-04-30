@@ -357,3 +357,5 @@ export function createPagerDutyService(enabled = true): PagerDutyService {
 
   return service;
 }
+
+export const pagerDutyService = createPagerDutyService();

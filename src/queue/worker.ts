@@ -7,25 +7,19 @@ import { rabbitMQManager, EXCHANGES, ROUTING_KEYS, QUEUES } from "./rabbitmq";
 import { TransactionModel, TransactionStatus } from "../models/transaction";
 import { MobileMoneyService } from "../services/mobilemoney/mobileMoneyService";
 import { StellarService } from "../services/stellar/stellarService";
-import { EmailService } from "../services/email";
 import { UserModel } from "../models/users";
 import { withRetry } from "../services/retry";
-import { WhatsappService } from "../services/whatsapp";
-import { SmsService } from "../services/sms";
 import { notifyTransactionWebhook, WebhookService } from "../services/webhook";
-import { pushNotificationService } from "../services/push";
+import { smsService } from "../services/sms";
+import { notificationRouter } from "../services/notificationRouter";
 import { capturePersistentFailure } from "./dlq";
 import { queryRead } from "../config/database";
 import logger from "../utils/logger";
 const transactionModel = new TransactionModel();
 const mobileMoneyService = new MobileMoneyService();
 const stellarService = new StellarService();
-const emailService = new EmailService();
 const userModel = new UserModel();
-const whatsappService = new WhatsappService();
-const smsService = new SmsService();
 const webhookService = new WebhookService();
-const pushService = pushNotificationService;
 
 const CONCURRENCY = 5;
 
@@ -290,9 +284,12 @@ async function processTransaction(data: TransactionJobData): Promise<Transaction
         transactionModel,
         webhookService,
       });
-      await sendTransactionEmail(transactionId);
-      await sendTransactionPush(transactionId, "completed");
-      await sendTxnSms("transaction_completed");
+      
+      // Send notifications via the notification router
+      const transaction = await transactionModel.findById(transactionId);
+      if (transaction) {
+        await notificationRouter.routeTransactionNotification(transaction, "completed");
+      }
       
       // Fan-out event
       await rabbitMQManager.publish(EXCHANGES.TRANSACTIONS, ROUTING_KEYS.TRANSACTION_COMPLETED, {
@@ -343,9 +340,12 @@ async function processTransaction(data: TransactionJobData): Promise<Transaction
         transactionModel,
         webhookService,
       });
-      await sendTransactionEmail(transactionId);
-      await sendTransactionPush(transactionId, "completed");
-      await sendTxnSms("transaction_completed");
+      
+      // Send notifications via the notification router
+      const transaction = await transactionModel.findById(transactionId);
+      if (transaction) {
+        await notificationRouter.routeTransactionNotification(transaction, "completed");
+      }
 
       // Fan-out event
       await rabbitMQManager.publish(EXCHANGES.TRANSACTIONS, ROUTING_KEYS.TRANSACTION_COMPLETED, {
@@ -368,8 +368,12 @@ async function processTransaction(data: TransactionJobData): Promise<Transaction
       transactionModel,
       webhookService,
     });
-    await sendFailureEmail(transactionId, getErrorMessage(error));
-    await sendTransactionPush(transactionId, "failed", getErrorMessage(error));
+    
+    // Send failure notifications via the notification router
+    const transaction = await transactionModel.findById(transactionId);
+    if (transaction) {
+      await notificationRouter.routeTransactionNotification(transaction, "failed", getErrorMessage(error));
+    }
     
     // Fan-out event
     await rabbitMQManager.publish(EXCHANGES.TRANSACTIONS, ROUTING_KEYS.TRANSACTION_FAILED, {

@@ -208,3 +208,5 @@ export class SmsService {
     return this.sendToPhone(phoneNumber, body);
   }
 }
+
+export const smsService = new SmsService();
