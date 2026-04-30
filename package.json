@@ -136,11 +136,11 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@aws-sdk/client-kms": "^3.1036.0",
-    "@cloudflare/workers-types": "^4.20250422.0",
+    "@aws-sdk/client-kms": "^3.1039.0",
+    "@cloudflare/workers-types": "^4.20260430.1",
     "@commitlint/cli": "^19.8.1",
     "@commitlint/config-conventional": "^19.8.1",
-    "@pact-foundation/pact": "^16.3.0",
+    "@pact-foundation/pact": "^16.3.1",
     "@playwright/test": "^1.59.1",
     "@stryker-mutator/core": "^9.6.1",
     "@stryker-mutator/jest-runner": "^9.6.1",
@@ -177,7 +177,7 @@
     "@types/ua-parser-js": "^0.7.39",
     "@types/uuid": "^10.0.0",
     "@types/ws": "^8.5.14",
-    "@typescript-eslint/eslint-plugin": "^8.59.0",
+    "@typescript-eslint/eslint-plugin": "^8.59.1",
     "@typescript-eslint/parser": "^8.57.2",
     "@typescript-eslint/typescript-estree": "^8.57.2",
     "eslint": "^10.2.1",
