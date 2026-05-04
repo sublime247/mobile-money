@@ -128,7 +128,7 @@
     "speakeasy": "^2.0.0",
     "stellar-sdk": "^12.3.0",
     "swagger-ui-express": "5.0.1",
-    "twilio": "^5.13.1",
+    "twilio": "^6.0.0",
     "ua-parser-js": "^2.0.9",
     "uuid": "^9.0.0",
     "ws": "^8.18.0",
