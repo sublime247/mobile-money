@@ -58,7 +58,7 @@
     "@aws-sdk/client-s3": "^3.1017.0",
     "@aws-sdk/lib-storage": "^3.1017.0",
     "@bull-board/api": "^6.20.6",
-    "@bull-board/express": "^6.20.6",
+    "@bull-board/express": "^7.0.0",
     "@node-saml/passport-saml": "^5.1.0",
     "@sendgrid/mail": "^8.1.6",
     "@sentry/node": "^10.47.0",
