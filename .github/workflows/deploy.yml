@@ -16,7 +16,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Check if deployment is configured
         id: check_deploy
@@ -32,11 +32,11 @@ jobs:
 
       - name: Set up Docker Buildx
         if: steps.check_deploy.outputs.deploy_available == 'true'
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Log in to registry
         if: steps.check_deploy.outputs.deploy_available == 'true'
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           username: ${{ secrets.REGISTRY_USERNAME }}
           password: ${{ secrets.REGISTRY_PASSWORD }}
@@ -44,7 +44,7 @@ jobs:
       - name: Build & push image
         if: steps.check_deploy.outputs.deploy_available == 'true'
         id: build
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: true
@@ -57,7 +57,7 @@ jobs:
       # ── Kubernetes deploy ──────────────────────────────────────────────────
       - name: Configure kubectl
         if: steps.check_deploy.outputs.deploy_available == 'true'
-        uses: azure/k8s-set-context@v3
+        uses: azure/k8s-set-context@v5
         with:
           method: kubeconfig
           kubeconfig: ${{ secrets.KUBECONFIG }}
@@ -119,7 +119,7 @@ jobs:
 
       - name: Notify on rollback
         if: steps.check_deploy.outputs.deploy_available == 'true' && steps.check_slack.outputs.slack_available == 'true' && failure() && (steps.rollout.outcome == 'failure' || steps.healthcheck.outcome == 'failure')
-        uses: slackapi/slack-github-action@v1
+        uses: slackapi/slack-github-action@v3
         with:
           payload: |
             {
