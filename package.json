@@ -130,7 +130,7 @@
     "swagger-ui-express": "5.0.1",
     "twilio": "^5.13.1",
     "ua-parser-js": "^2.0.9",
-    "uuid": "^9.0.0",
+    "uuid": "^14.0.0",
     "ws": "^8.18.0",
     "xmlbuilder2": "^4.0.3",
     "zod": "^4.3.6"
