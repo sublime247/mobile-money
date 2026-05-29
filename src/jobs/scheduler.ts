@@ -8,6 +8,7 @@ import { runDisputeSlaJob } from "./disputeSlaJob";
 import { runBalanceMonitorJob } from "./balanceMonitorJob";
 import { runSep31MonitorJob } from "./sep31MonitorJob";
 import { runFeeBumpJob } from "./feeBumpJob";
+import { runSep31FeeBumpJob } from "./sep31FeeBumpJob";
 import { MonitoringService } from "../services/monitoringService";
 import { createPagerDutyService } from "../services/pagerDutyService";
 import { runProviderBalanceAlertJob } from "./balances";
@@ -67,6 +68,12 @@ const JOBS: JobConfig[] = [
     // Every 30 seconds - monitors and bumps fees for stuck transactions
     schedule: process.env.FEE_BUMP_CRON || "*/30 * * * * *",
     handler: runFeeBumpJob,
+  },
+  {
+    name: "sep31-fee-bump",
+    // Every 30 seconds - bumps fees for stuck SEP-31 transactions
+    schedule: process.env.SEP31_FEE_BUMP_CRON || "*/30 * * * * *",
+    handler: runSep31FeeBumpJob,
   },
   {
     name: "provider-balance-alert",
