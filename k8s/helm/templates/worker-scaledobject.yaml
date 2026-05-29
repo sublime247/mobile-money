@@ -1,0 +1,25 @@
+{{- if and .Values.worker.enabled .Values.worker.keda.enabled }}
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "mobile-money.fullname" . }}-worker
+  labels:
+    {{- include "mobile-money.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "mobile-money.fullname" . }}-worker
+  minReplicaCount: {{ .Values.worker.keda.minReplicas }}
+  maxReplicaCount: {{ .Values.worker.keda.maxReplicas }}
+  pollingInterval: {{ .Values.worker.keda.pollingInterval }}
+  cooldownPeriod: {{ .Values.worker.keda.cooldownPeriod }}
+  triggers:
+    {{- range .Values.worker.keda.triggers }}
+    - type: {{ .type }}
+      metadata:
+        {{- range $key, $value := .metadata }}
+        {{ $key }}: {{ $value | quote }}
+        {{- end }}
+    {{- end }}
+{{- end }}

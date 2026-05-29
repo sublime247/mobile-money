@@ -19,6 +19,7 @@ import { TimeoutPresets, haltOnTimedout } from "../middleware/timeout";
 import { authenticateToken } from "../middleware/auth";
 import { checkAccountStatusStrict } from "../middleware/checkAccountStatus";
 import { geolocateMiddleware } from "../middleware/geolocate";
+import { enforceTransactionGeofencing } from "../middleware/geoFencing";
 import { TransactionModel } from "../models/transaction";
 import { generateTransactionPdfBuffer } from "../services/pdfReceipt";
 import { generateShareToken, verifyShareToken } from "../utils/share";
@@ -161,6 +162,7 @@ transactionRoutes.post(
   haltOnTimedout,
   validateTransaction,
   geolocateMiddleware,
+  enforceTransactionGeofencing,
   depositHandler,
 );
 
@@ -172,6 +174,7 @@ transactionRoutes.post(
   haltOnTimedout,
   validateTransaction,
   geolocateMiddleware,
+  enforceTransactionGeofencing,
   withdrawHandler,
 );
 

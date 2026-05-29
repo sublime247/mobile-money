@@ -19,6 +19,7 @@ import { validateTransactionFilters } from "../../utils/transactionFilters";
 import { requireAuth } from "../../middleware/auth";
 import { checkAccountStatusStrict } from "../../middleware/checkAccountStatus";
 import { geolocateMiddleware } from "../../middleware/geolocate";
+import { enforceTransactionGeofencing } from "../../middleware/geoFencing";
 import { createExportRoutes } from "../export";
 
 export const transactionRoutesV1 = Router();
@@ -33,6 +34,7 @@ transactionRoutesV1.post(
   haltOnTimedout,
   setApiVersion("v1"),
   geolocateMiddleware,
+  enforceTransactionGeofencing,
   depositHandler,
 );
 
@@ -45,6 +47,7 @@ transactionRoutesV1.post(
   haltOnTimedout,
   setApiVersion("v1"),
   geolocateMiddleware,
+  enforceTransactionGeofencing,
   withdrawHandler,
 );
 

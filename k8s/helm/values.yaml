@@ -38,6 +38,32 @@ worker:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  keda:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 20
+    pollingInterval: 30
+    cooldownPeriod: 60
+    triggers:
+      - type: prometheus
+        metadata:
+          serverAddress: http://prometheus-service.monitoring.svc.cluster.local:9090
+          metricName: queue_depth_total
+          query: sum(queue_depth_total)
+          threshold: "20"
+      - type: prometheus
+        metadata:
+          serverAddress: http://prometheus-service.monitoring.svc.cluster.local:9090
+          metricName: queue_latency_critical
+          query: max(queue_latency_ms) > 5000
+          threshold: "1"
+          activationThreshold: "0"
+      - type: prometheus
+        metadata:
+          serverAddress: http://prometheus-service.monitoring.svc.cluster.local:9090
+          metricName: transaction_queue_depth
+          query: queue_depth{queue="transaction-processing"}
+          threshold: "10"
 
 redis:
   enabled: true
