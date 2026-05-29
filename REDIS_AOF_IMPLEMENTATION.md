@@ -67,13 +67,13 @@ Data fully restored ✅
 
 ## Benefits
 
-| Benefit | Before | After |
-|---------|--------|-------|
+| Benefit                     | Before      | After              |
+| --------------------------- | ----------- | ------------------ |
 | Container restart data loss | ❌ All lost | ✅ Fully preserved |
-| Queue jobs | ❌ Lost | ✅ Preserved |
-| Session data | ❌ Lost | ✅ Preserved |
-| Setup complexity | Simple | Simple (same) |
-| Performance impact | None | Minimal |
+| Queue jobs                  | ❌ Lost     | ✅ Preserved       |
+| Session data                | ❌ Lost     | ✅ Preserved       |
+| Setup complexity            | Simple      | Simple (same)      |
+| Performance impact          | None        | Minimal            |
 
 ---
 
@@ -107,20 +107,22 @@ docker exec -it mobilemoney_redis redis-cli GET testkey
 
 ### AOF Settings
 
-| Setting | Value | Purpose |
-|---------|-------|---------|
-| `appendonly` | yes | Enable AOF persistence |
-| `appendfsync` | everysec | Balance between safety and performance |
-| `aof-use-rdb-preamble` | yes | Hybrid format for faster startup |
-| `auto-aof-rewrite-percentage` | 100 | Rewrite when file doubles |
-| `auto-aof-rewrite-min-size` | 64mb | Don't rewrite if under 64MB |
+| Setting                       | Value    | Purpose                                |
+| ----------------------------- | -------- | -------------------------------------- |
+| `appendonly`                  | yes      | Enable AOF persistence                 |
+| `appendfsync`                 | everysec | Balance between safety and performance |
+| `aof-use-rdb-preamble`        | yes      | Hybrid format for faster startup       |
+| `auto-aof-rewrite-percentage` | 100      | Rewrite when file doubles              |
+| `auto-aof-rewrite-min-size`   | 64mb     | Don't rewrite if under 64MB            |
 
 ### Volumes
 
 **Production** (`docker-compose.yml`):
+
 - `redis_data` - Named Docker volume, managed by Docker
 
 **Development** (`docker-compose.dev.yml`):
+
 - `redis_dev_data` - Separate volume for dev environment
 
 ### Health Check Improvements
@@ -144,6 +146,7 @@ healthcheck:
 ## Verification
 
 ### Check AOF Status
+
 ```bash
 docker exec -it mobilemoney_redis redis-cli CONFIG GET appendonly
 # Response: ["appendonly", "yes"]
@@ -153,6 +156,7 @@ docker exec -it mobilemoney_redis redis-cli CONFIG GET appendfsync
 ```
 
 ### View AOF File
+
 ```bash
 docker exec -it mobilemoney_redis ls -lh /data/
 # Shows: appendonly.aof
@@ -162,6 +166,7 @@ docker exec -it mobilemoney_redis du -sh /data/
 ```
 
 ### Monitor Persistence
+
 ```bash
 docker exec -it mobilemoney_redis redis-cli INFO persistence
 # Shows detailed AOF and RDB statistics
@@ -181,6 +186,7 @@ docker exec -it mobilemoney_redis redis-cli INFO persistence
 ## Documentation
 
 Comprehensive guide available in **`REDIS_AOF_PERSISTENCE.md`**:
+
 - Detailed configuration explanation
 - Data persistence examples
 - Troubleshooting procedures
@@ -193,12 +199,14 @@ Comprehensive guide available in **`REDIS_AOF_PERSISTENCE.md`**:
 ## Migration Notes
 
 ### For Existing Users
+
 - **No action required** - Configuration is transparent
 - Old containers stop → new ones start with AOF
 - First startup creates new volumes (clean slate)
 - Zero breaking changes
 
 ### Clean Up (if needed)
+
 ```bash
 # Remove volume to start fresh (destroys all data)
 docker volume rm redis_data
@@ -235,6 +243,7 @@ docker volume rm redis_dev_data
 ✅ **Redis AOF persistence is now enabled across all Docker Compose environments**
 
 **Key Points:**
+
 - Data survives container restarts
 - Queue jobs are preserved
 - Session data is maintained

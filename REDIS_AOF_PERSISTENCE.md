@@ -7,16 +7,19 @@ Redis Append Only File (AOF) persistence has been configured for the Docker Comp
 ## Configuration Files Modified
 
 ### 1. `redis.conf` (NEW)
+
 - Created comprehensive Redis configuration file with AOF enabled
 - Centralized configuration for consistent behavior across environments
 - Optimized settings for development workloads
 
 ### 2. `docker-compose.yml`
+
 - Updated Redis service to use `redis.conf` configuration file
 - Added `redis_data` volume for persistent storage
 - Improved healthcheck with timeout and retry settings
 
 ### 3. `docker-compose.dev.yml`
+
 - Updated Redis service to use the same `redis.conf` configuration
 - Replaced inline `--appendonly yes` command with config file approach
 - Now consistent with main docker-compose.yml
@@ -24,7 +27,9 @@ Redis Append Only File (AOF) persistence has been configured for the Docker Comp
 ## AOF Persistence Features
 
 ### What is AOF?
+
 **Append Only File (AOF)** is a Redis persistence mechanism that:
+
 - Logs every write operation received by the server
 - Replays operations on startup to restore state
 - Safer than RDB snapshots (captures intermediate changes)
@@ -80,8 +85,8 @@ Data restored
 
 ```yaml
 volumes:
-  - ./redis.conf:/usr/local/etc/redis/redis.conf:ro  # Config (read-only)
-  - redis_data:/data                                  # Persistence data
+  - ./redis.conf:/usr/local/etc/redis/redis.conf:ro # Config (read-only)
+  - redis_data:/data # Persistence data
 ```
 
 **Important**: The config is mounted read-only (`:ro`) to prevent accidental modification by the container.
@@ -89,12 +94,14 @@ volumes:
 ## Data Storage
 
 ### Production (`docker-compose.yml`)
+
 - Volume: `redis_data` (named Docker volume)
 - Location: Managed by Docker at `/var/lib/docker/volumes/`
 - Persists across container lifecycle
 - Backed up separately
 
 ### Development (`docker-compose.dev.yml`)
+
 - Volume: `redis_dev_data` (named Docker volume)
 - Location: Managed by Docker
 - Used during local development
@@ -181,16 +188,19 @@ docker-compose up -d
 ## Performance Considerations
 
 ### Memory Usage
+
 - AOF file grows with every write operation
 - Auto-rewrite triggered at 100% growth or 64MB
 - Hybrid format reduces file size significantly
 
 ### Disk I/O
+
 - `fsync everysec`: Write updates every second (good balance)
 - No real-time write blocking
 - Acceptable data loss: up to 1 second of writes
 
 ### Startup Time
+
 - Hybrid RDB-AOF format provides faster startup
 - Only affected by AOF rewrite frequency
 - Typically negligible for development workloads
@@ -221,17 +231,20 @@ docker exec -it mobilemoney_redis redis-cli CONFIG GET appendonly
 ## Migration from Previous Setup
 
 ### Before (No Persistence)
+
 - Every container restart lost all data
 - Problematic for long-running dev tasks
 - Queue data, sessions, etc. would be lost
 
 ### After (With AOF)
+
 - Data persists across container restarts
 - Queue items preserved
 - Session data maintained
 - Simulates production behavior
 
 ### No Action Required
+
 - Upgrade is transparent
 - First startup creates new `/data` volume
 - Existing work unaffected (new persistence starts fresh)
@@ -252,12 +265,14 @@ docker exec -it mobilemoney_redis redis-cli CONFIG GET appendonly
 ## Summary
 
 ✅ **AOF Persistence Enabled**
+
 - Data survives container restarts
 - Consistent configuration across environments
 - Optimized for development workloads
 - No breaking changes to existing setup
 
 **Key Benefits:**
+
 - Data preservation across restarts
 - Production-like behavior during development
 - Minimal performance impact
