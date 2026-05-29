@@ -49,9 +49,15 @@ services:
   redis:
     image: redis:7-alpine
     container_name: mobilemoney_redis
+    command: redis-server /usr/local/etc/redis/redis.conf
+    volumes:
+      - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
+      - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
+      timeout: 3s
+      retries: 5
     networks:
       - mobilemoney_net
 
@@ -96,3 +102,4 @@ networks:
 
 volumes:
   grafana_data:
+  redis_data:
