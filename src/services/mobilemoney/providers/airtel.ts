@@ -1,4 +1,5 @@
 import axios, { AxiosInstance, AxiosError } from "axios";
+import { formatPhoneForProvider } from "../../../utils/phoneUtils";
 import logger from "../../../utils/logger";
 
 // This interface is now used in the methods below
@@ -259,6 +260,7 @@ export class AirtelService {
    */
   async sendPayout(phoneNumber: string, amount: string, requestId?: string) {
     const log = requestId ? logger.child({ requestId }) : logger;
+    const formattedPhoneNumber = formatPhoneForProvider(phoneNumber, "airtel");
     log.info({ phoneNumber, amount }, "Airtel: Sending payout");
     const startTime = Date.now();
 
@@ -273,7 +275,7 @@ export class AirtelService {
           {
             reference,
             payee: {
-              msisdn: phoneNumber,
+              msisdn: formattedPhoneNumber,
             },
             transaction: {
               amount: parseFloat(amount),
