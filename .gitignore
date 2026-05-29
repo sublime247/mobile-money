@@ -44,6 +44,7 @@ update-all-issues.sh
 update-issues-batch*.sh
 run-all-updates.sh
 create-next-100-issues.sh
+scratch/create-backlog.ts
 
 # Load test output
 tests/load/results/*.json
