@@ -345,12 +345,16 @@ export class TransactionModel {
   async getBalanceStatistics(userId: string) {
     const res = await queryRead(
       `SELECT 
-        COALESCE(SUM(amount) FILTER (WHERE type='deposit'),0)::text as total_deposited,
-        COALESCE(SUM(amount) FILTER (WHERE type='withdraw'),0)::text as total_withdrawn,
-        (COALESCE(SUM(amount) FILTER (WHERE type='deposit'),0) -
-         COALESCE(SUM(amount) FILTER (WHERE type='withdraw'),0))::text as current_balance
-       FROM transactions
-       WHERE user_id=$1 AND status='completed'`,
+        COALESCE(SUM(t.amount) FILTER (WHERE t.type='deposit' AND t.status='completed'),0)::text as total_deposited,
+        COALESCE(SUM(t.amount) FILTER (WHERE t.type='withdraw' AND t.status IN ('completed', 'pending')),0)::text as total_withdrawn,
+        (COALESCE(SUM(t.amount) FILTER (WHERE t.type='deposit' AND t.status='completed'),0) -
+         COALESCE(SUM(t.amount) FILTER (WHERE t.type='withdraw' AND t.status IN ('completed', 'pending')),0))::text as current_balance,
+        (COALESCE(SUM(t.amount) FILTER (WHERE t.type='deposit' AND t.status='completed' AND t.created_at + (u.settlement_delay_days || ' days')::interval <= CURRENT_TIMESTAMP),0) -
+         COALESCE(SUM(t.amount) FILTER (WHERE t.type='withdraw' AND t.status IN ('completed', 'pending')),0))::text as available_balance,
+        COALESCE(SUM(t.amount) FILTER (WHERE t.type='deposit' AND t.status='completed' AND t.created_at + (u.settlement_delay_days || ' days')::interval > CURRENT_TIMESTAMP),0)::text as pending_balance
+       FROM transactions t
+       JOIN users u ON t.user_id = u.id
+       WHERE t.user_id=$1`,
       [userId]
     );
 

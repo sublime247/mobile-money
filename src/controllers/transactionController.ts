@@ -489,6 +489,19 @@ async function processTransactionRequest(
       }
     }
 
+    // Check available balance for withdrawals before creating transaction
+    if (type === "withdraw") {
+      const stats = await transactionModel.getBalanceStatistics(userId);
+      const availableBalance = parseFloat(stats.available_balance || "0");
+      if (requestAmount > availableBalance) {
+        return res.status(400).json({
+          error: "Insufficient available balance",
+          code: "INSUFFICIENT_BALANCE",
+          message: "You do not have enough available settled funds to withdraw this amount."
+        });
+      }
+    }
+
     // Verify destination Stellar account has a trustline for the payment asset
     // before creating the transaction record, to avoid on-chain failures.
     if (type === "withdraw") {
