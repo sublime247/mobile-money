@@ -10,7 +10,7 @@ import {
   type TransactionUpdatedPayload,
 } from "../graphql/subscriptions";
 
-export type AssetType = 'native' | 'credit_alphanum4' | 'credit_alphanum12';
+export type AssetType = "native" | "credit_alphanum4" | "credit_alphanum12";
 
 export enum TransactionStatus {
   Pending = "pending",
@@ -84,7 +84,8 @@ const TRANSACTION_SELECT_COLUMNS = `
 `;
 
 function validateTags(tags: string[]): void {
-  if (tags.length > MAX_TAGS) throw new Error(`Maximum ${MAX_TAGS} tags allowed`);
+  if (tags.length > MAX_TAGS)
+    throw new Error(`Maximum ${MAX_TAGS} tags allowed`);
   for (const tag of tags) {
     if (!TAG_REGEX.test(tag)) throw new Error(`Invalid tag format: "${tag}"`);
   }
@@ -218,13 +219,23 @@ export class TransactionModel {
 
     // Invalidate caches before creating transaction to ensure fresh data on next query
     if (data.userId) {
-      await CachedTransactionInvalidation.invalidateUserCaches(data.userId).catch(err => {
-        console.warn("[cache] Failed to invalidate user caches on transaction create", err);
+      await CachedTransactionInvalidation.invalidateUserCaches(
+        data.userId,
+      ).catch((err) => {
+        console.warn(
+          "[cache] Failed to invalidate user caches on transaction create",
+          err,
+        );
       });
     }
     if (data.provider) {
-      await CachedTransactionInvalidation.invalidateProviderStats(data.provider).catch(err => {
-        console.warn("[cache] Failed to invalidate provider stats on transaction create", err);
+      await CachedTransactionInvalidation.invalidateProviderStats(
+        data.provider,
+      ).catch((err) => {
+        console.warn(
+          "[cache] Failed to invalidate provider stats on transaction create",
+          err,
+        );
       });
     }
 
@@ -255,10 +266,8 @@ export class TransactionModel {
         data.idempotencyKey ?? null,
         data.idempotencyExpiresAt ?? null,
         JSON.stringify(metadata),
-        data.locationMetadata
-          ? JSON.stringify(data.locationMetadata)
-          : null,
-      ]
+        data.locationMetadata ? JSON.stringify(data.locationMetadata) : null,
+      ],
     );
 
     return mapTransactionRow(result.rows[0]);
@@ -295,13 +304,23 @@ export class TransactionModel {
 
     // ── Invalidate caches on transaction status update ────────────────────
     if (row.user_id) {
-      await CachedTransactionInvalidation.invalidateUserCaches(row.user_id).catch(err => {
-        console.warn("[cache] Failed to invalidate user caches on transaction status update", err);
+      await CachedTransactionInvalidation.invalidateUserCaches(
+        row.user_id,
+      ).catch((err) => {
+        console.warn(
+          "[cache] Failed to invalidate user caches on transaction status update",
+          err,
+        );
       });
     }
-    await CachedTransactionInvalidation.invalidateGeneralStats().catch(err => {
-      console.warn("[cache] Failed to invalidate general stats on transaction update", err);
-    });
+    await CachedTransactionInvalidation.invalidateGeneralStats().catch(
+      (err) => {
+        console.warn(
+          "[cache] Failed to invalidate general stats on transaction update",
+          err,
+        );
+      },
+    );
 
     // ── Publish GraphQL subscription event ──────────────────────────────
     // Publish to both the per-transaction channel (targeted) and the
@@ -336,7 +355,7 @@ export class TransactionModel {
          to_tsvector('english', COALESCE(notes,'') || ' ' || COALESCE(admin_notes,'')),
          plainto_tsquery('english',$1)
        ) DESC, created_at DESC`,
-      [query]
+      [query],
     );
 
     return res.rows.map(mapTransactionRow);
@@ -361,7 +380,10 @@ export class TransactionModel {
     return res.rows[0];
   }
 
-  async findCompletedByUserSince(userId: string, since: Date): Promise<Transaction[]> {
+  async findCompletedByUserSince(
+    userId: string,
+    since: Date,
+  ): Promise<Transaction[]> {
     const query = `
       SELECT ${TRANSACTION_SELECT_COLUMNS}
       FROM transactions
