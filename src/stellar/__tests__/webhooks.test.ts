@@ -4,6 +4,7 @@ import { createHmac } from "crypto";
 import { TransactionStatus } from "../../models/transaction";
 
 const mockFindByMetadata = jest.fn();
+const mockFindByReferenceNumber = jest.fn();
 const mockUpdateStatus = jest.fn();
 const mockPatchMetadata = jest.fn();
 
@@ -12,6 +13,7 @@ jest.mock("../../models/transaction", () => {
     TransactionModel: jest.fn().mockImplementation(() => {
       return {
         findByMetadata: mockFindByMetadata,
+        findByReferenceNumber: mockFindByReferenceNumber,
         updateStatus: mockUpdateStatus,
         patchMetadata: mockPatchMetadata,
       };
@@ -467,6 +469,167 @@ describe("Stellar Webhooks", () => {
 
       expect(response.status).toBe(500);
       expect(response.body.error).toBe("Internal server error");
+    });
+
+    it("should match transaction by text memo mapped to reference number", async () => {
+      const mockTransaction = {
+        id: "tx-memo-text",
+        status: TransactionStatus.Pending,
+        referenceNumber: "REF-MEMO-001",
+        type: "deposit" as const,
+        amount: "100",
+        phoneNumber: "+237670000000",
+        provider: "mtn",
+        stellarAddress: "GDEF456",
+        tags: [],
+        createdAt: new Date(),
+      };
+
+      const payloadWithMemo = {
+        ...validPayload,
+        memo: { type: "text", value: "REF-MEMO-001" },
+      };
+
+      // No match by hash, match by reference number
+      mockFindByMetadata.mockResolvedValueOnce([]).mockResolvedValue([]);
+      mockFindByReferenceNumber.mockResolvedValue([mockTransaction]);
+      mockUpdateStatus.mockResolvedValue(undefined);
+      mockPatchMetadata.mockResolvedValue(undefined);
+      mockNotifyTransactionWebhook.mockResolvedValue(null);
+
+      const rawPayload = JSON.stringify(payloadWithMemo);
+      const signature = generateSignature(rawPayload, "test-secret");
+
+      const response = await request(app)
+        .post("/webhook")
+        .set("X-Stellar-Signature", signature)
+        .send(payloadWithMemo);
+
+      expect(response.status).toBe(200);
+      expect(response.body.updated).toBe(1);
+      expect(mockFindByReferenceNumber).toHaveBeenCalledWith("REF-MEMO-001");
+      expect(mockUpdateStatus).toHaveBeenCalledWith("tx-memo-text", TransactionStatus.Completed);
+    });
+
+    it("should match transaction by id memo via metadata fallback", async () => {
+      const mockTransaction = {
+        id: "tx-memo-id",
+        status: TransactionStatus.Pending,
+        referenceNumber: "OTHER-REF",
+        type: "deposit" as const,
+        amount: "200",
+        phoneNumber: "+237670000001",
+        provider: "airtel",
+        stellarAddress: "GDEF456",
+        tags: [],
+        createdAt: new Date(),
+      };
+
+      const payloadWithMemo = {
+        ...validPayload,
+        memo: { type: "id", value: "9876543210" },
+      };
+
+      // No match by hash, no match by reference number, match by metadata memo
+      mockFindByMetadata
+        .mockResolvedValueOnce([])   // stellar_hash lookup
+        .mockResolvedValueOnce([mockTransaction]); // memo metadata lookup
+      mockFindByReferenceNumber.mockResolvedValue([]);
+      mockUpdateStatus.mockResolvedValue(undefined);
+      mockPatchMetadata.mockResolvedValue(undefined);
+      mockNotifyTransactionWebhook.mockResolvedValue(null);
+
+      const rawPayload = JSON.stringify(payloadWithMemo);
+      const signature = generateSignature(rawPayload, "test-secret");
+
+      const response = await request(app)
+        .post("/webhook")
+        .set("X-Stellar-Signature", signature)
+        .send(payloadWithMemo);
+
+      expect(response.status).toBe(200);
+      expect(response.body.updated).toBe(1);
+      expect(mockFindByMetadata).toHaveBeenCalledWith({ memo: "9876543210" });
+      expect(mockUpdateStatus).toHaveBeenCalledWith("tx-memo-id", TransactionStatus.Completed);
+    });
+
+    it("should match transaction by hash memo via metadata fallback", async () => {
+      const mockTransaction = {
+        id: "tx-memo-hash",
+        status: TransactionStatus.Pending,
+        referenceNumber: "OTHER-REF-2",
+        type: "deposit" as const,
+        amount: "300",
+        phoneNumber: "+237670000002",
+        provider: "orange",
+        stellarAddress: "GDEF456",
+        tags: [],
+        createdAt: new Date(),
+      };
+
+      const payloadWithMemo = {
+        ...validPayload,
+        memo: { type: "hash", value: "abcdef1234567890" },
+      };
+
+      mockFindByMetadata
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([mockTransaction]);
+      mockFindByReferenceNumber.mockResolvedValue([]);
+      mockUpdateStatus.mockResolvedValue(undefined);
+      mockPatchMetadata.mockResolvedValue(undefined);
+      mockNotifyTransactionWebhook.mockResolvedValue(null);
+
+      const rawPayload = JSON.stringify(payloadWithMemo);
+      const signature = generateSignature(rawPayload, "test-secret");
+
+      const response = await request(app)
+        .post("/webhook")
+        .set("X-Stellar-Signature", signature)
+        .send(payloadWithMemo);
+
+      expect(response.status).toBe(200);
+      expect(response.body.updated).toBe(1);
+      expect(mockUpdateStatus).toHaveBeenCalledWith("tx-memo-hash", TransactionStatus.Completed);
+    });
+
+    it("should return 404 when neither hash nor memo matches any transaction", async () => {
+      const payloadWithMemo = {
+        ...validPayload,
+        memo: { type: "text", value: "UNKNOWN-REF" },
+      };
+
+      mockFindByMetadata.mockResolvedValue([]);
+      mockFindByReferenceNumber.mockResolvedValue([]);
+
+      const rawPayload = JSON.stringify(payloadWithMemo);
+      const signature = generateSignature(rawPayload, "test-secret");
+
+      const response = await request(app)
+        .post("/webhook")
+        .set("X-Stellar-Signature", signature)
+        .send(payloadWithMemo);
+
+      expect(response.status).toBe(404);
+      expect(response.body.error).toBe("Transaction not found");
+    });
+
+    it("should reject payload with invalid memo type", async () => {
+      const payloadWithBadMemo = {
+        ...validPayload,
+        memo: { type: "return", value: "something" },
+      };
+
+      const rawPayload = JSON.stringify(payloadWithBadMemo);
+      const signature = generateSignature(rawPayload, "test-secret");
+
+      const response = await request(app)
+        .post("/webhook")
+        .set("X-Stellar-Signature", signature)
+        .send(payloadWithBadMemo);
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toBe("Validation failed");
     });
   });
 });

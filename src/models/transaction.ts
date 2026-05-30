@@ -274,4 +274,33 @@ export class TransactionModel {
     const result = await queryRead(query, [userId, since]);
     return result.rows.map(mapTransactionRow);
   }
+
+  async findByMetadata(filter: Record<string, unknown>): Promise<Transaction[]> {
+    const keys = Object.keys(filter);
+    if (keys.length === 0) return [];
+
+    const conditions = keys.map((k, i) => `metadata->>'${k}' = $${i + 1}`).join(" AND ");
+    const values = keys.map((k) => String(filter[k]));
+
+    const res = await queryRead(
+      `SELECT ${TRANSACTION_SELECT_COLUMNS} FROM transactions WHERE ${conditions}`,
+      values,
+    );
+    return res.rows.map(mapTransactionRow);
+  }
+
+  async findByReferenceNumber(referenceNumber: string): Promise<Transaction[]> {
+    const res = await queryRead(
+      `SELECT ${TRANSACTION_SELECT_COLUMNS} FROM transactions WHERE reference_number = $1`,
+      [referenceNumber],
+    );
+    return res.rows.map(mapTransactionRow);
+  }
+
+  async patchMetadata(id: string, patch: Record<string, unknown>): Promise<void> {
+    await queryWrite(
+      `UPDATE transactions SET metadata = metadata || $1::jsonb, updated_at = NOW() WHERE id = $2`,
+      [JSON.stringify(patch), id],
+    );
+  }
 }
