@@ -14,6 +14,7 @@ import {
   deleteMetadataKeysHandler,
   searchByMetadataHandler,
 } from "../../controllers/transactionController";
+import { validateNetworkMiddleware } from "../../middleware/validateNetworkMiddleware";
 import { TimeoutPresets, haltOnTimedout } from "../../middleware/timeout";
 import { validateTransactionFilters } from "../../utils/transactionFilters";
 import { requireAuth } from "../../middleware/auth";
@@ -31,6 +32,7 @@ transactionRoutesV1.post(
   requireAuth,
   checkAccountStatusStrict,
   geoFencingMiddleware,
+  validateNetworkMiddleware,
   TimeoutPresets.long,
   haltOnTimedout,
   setApiVersion("v1"),
@@ -44,6 +46,7 @@ transactionRoutesV1.post(
   requireAuth,
   checkAccountStatusStrict,
   geoFencingMiddleware,
+  validateNetworkMiddleware,
   TimeoutPresets.long,
   haltOnTimedout,
   setApiVersion("v1"),

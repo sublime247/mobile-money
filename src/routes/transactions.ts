@@ -16,6 +16,7 @@ import {
 } from "../controllers/transactionController";
 import { validateTransaction } from "../middleware/validateTransaction";
 import { normalizeProvider } from "../middleware/normalizeProvider";
+import { validateNetworkMiddleware } from "../middleware/validateNetworkMiddleware";
 import { TimeoutPresets, haltOnTimedout } from "../middleware/timeout";
 import { authenticateToken } from "../middleware/auth";
 import { cancelTransactionRateLimiter } from "../middleware/rateLimit";
@@ -165,6 +166,7 @@ transactionRoutes.post(
   haltOnTimedout,
   normalizeProvider,
   validateTransaction,
+  validateNetworkMiddleware,
   geolocateMiddleware,
   depositHandler,
 );
@@ -178,6 +180,7 @@ transactionRoutes.post(
   haltOnTimedout,
   normalizeProvider,
   validateTransaction,
+  validateNetworkMiddleware,
   geolocateMiddleware,
   withdrawHandler,
 );
