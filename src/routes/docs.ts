@@ -47,7 +47,8 @@ if (isDev) {
   const spec = generateOpenAPIDocument();
 
   // Determine whether to serve Swagger UI assets via CDN or locally based on environment variable
-  const useCdn = process.env.SWAGGER_CDN === 'true';
+  // Use CDN for Swagger UI assets unless explicitly disabled via SWAGGER_CDN='false'
+  const useCdn = process.env.SWAGGER_CDN !== 'false';
 
   const swaggerOptions = {
     customSiteTitle: 'Mobile Money Bridge — API Docs',
