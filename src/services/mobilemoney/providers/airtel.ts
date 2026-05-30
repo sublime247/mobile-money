@@ -7,6 +7,7 @@ import axios, {
 import * as fs from "fs";
 import * as path from "path";
 import logger from "../../../utils/logger";
+import { maskPII } from "../../../utils/masking";
 
 // ============================================================================
 // TYPES & INTERFACES
@@ -246,7 +247,7 @@ export class AirtelService {
   ) {
     const log = requestId ? logger.child({ requestId }) : logger;
     log.info(
-      { phoneNumber, amount, mode: this.mode },
+      maskPII({ phoneNumber, amount, mode: this.mode }),
       "Airtel: Requesting payment",
     );
     const startTime = Date.now();
@@ -278,7 +279,7 @@ export class AirtelService {
 
       const duration = Date.now() - startTime;
       log.info(
-        { duration, success: response.success },
+        maskPII({ duration, success: response.success }),
         "Airtel: Payment request completed",
       );
 
@@ -290,7 +291,7 @@ export class AirtelService {
     } catch (error: any) {
       const duration = Date.now() - startTime;
       log.error(
-        { duration, error: error.message },
+        maskPII({ duration, error: error.message }),
         "Airtel: Payment request failed",
       );
       return {
@@ -304,7 +305,7 @@ export class AirtelService {
   async sendPayout(phoneNumber: string, amount: string, requestId?: string) {
     const log = requestId ? logger.child({ requestId }) : logger;
     log.info(
-      { phoneNumber, amount, mode: this.mode },
+      maskPII({ phoneNumber, amount, mode: this.mode }),
       "Airtel: Sending payout",
     );
     const startTime = Date.now();
@@ -331,7 +332,7 @@ export class AirtelService {
 
       const duration = Date.now() - startTime;
       log.info(
-        { duration, success: response.success },
+        maskPII({ duration, success: response.success }),
         "Airtel: Payout completed",
       );
 
@@ -342,7 +343,10 @@ export class AirtelService {
       };
     } catch (error: any) {
       const duration = Date.now() - startTime;
-      log.error({ duration, error: error.message }, "Airtel: Payout failed");
+      log.error(
+        maskPII({ duration, error: error.message }),
+        "Airtel: Payout failed",
+      );
       return {
         success: false,
         error,

@@ -2,6 +2,7 @@ import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from "axios";
 import * as fs from "fs";
 import * as path from "path";
 import logger from "../../../utils/logger";
+import { maskPII } from "../../../utils/masking";
 import { Browser, BrowserContext, Page, chromium } from "playwright";
 
 type OrangeOperation = "payment" | "payout";
@@ -357,7 +358,7 @@ export class OrangeProvider {
   ): Promise<OrangeResult> {
     const log = requestId ? logger.child({ requestId }) : logger;
     log.info(
-      { phoneNumber, amount, operation, mode: this.mode },
+      maskPII({ phoneNumber, amount, operation, mode: this.mode }),
       "Orange: Executing operation",
     );
     const startTime = Date.now();
@@ -394,7 +395,7 @@ export class OrangeProvider {
 
       const duration = Date.now() - startTime;
       log.info(
-        { duration, success: response.success !== false },
+        maskPII({ duration, success: response.success !== false }),
         "Orange: Operation completed",
       );
       return response;

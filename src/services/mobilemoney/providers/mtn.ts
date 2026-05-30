@@ -1,6 +1,7 @@
 import axios from "axios";
 import { randomUUID } from "crypto";
 import logger from "../../../utils/logger";
+import { maskPII } from "../../../utils/masking";
 
 interface MtnBalanceResponse {
   availableBalance?: string | number;
@@ -97,9 +98,13 @@ export class MTNProvider {
     }
   }
 
-  async requestPayment(phoneNumber: string, amount: string, requestId?: string) {
+  async requestPayment(
+    phoneNumber: string,
+    amount: string,
+    requestId?: string,
+  ) {
     const log = requestId ? logger.child({ requestId }) : logger;
-    log.info({ phoneNumber, amount }, "MTN: Requesting payment");
+    log.info(maskPII({ phoneNumber, amount }), "MTN: Requesting payment");
     const startTime = Date.now();
 
     try {
@@ -122,31 +127,37 @@ export class MTNProvider {
       );
 
       const duration = Date.now() - startTime;
-      log.info({ duration, status: response.status }, "MTN: Payment request successful");
+      log.info(
+        maskPII({ duration, status: response.status }),
+        "MTN: Payment request successful",
+      );
 
-      return { 
-        success: true, 
+      return {
+        success: true,
         data: response.data,
-        providerResponseTimeMs: duration
+        providerResponseTimeMs: duration,
       };
     } catch (error: any) {
       const duration = Date.now() - startTime;
-      log.error({ 
-        duration, 
-        error: error.message,
-        response: error.response?.data
-      }, "MTN: Payment request failed");
-      return { 
-        success: false, 
+      log.error(
+        maskPII({
+          duration,
+          error: error.message,
+          response: error.response?.data,
+        }),
+        "MTN: Payment request failed",
+      );
+      return {
+        success: false,
         error,
-        providerResponseTimeMs: duration
+        providerResponseTimeMs: duration,
       };
     }
   }
 
   async sendPayout(phoneNumber: string, amount: string, requestId?: string) {
     const log = requestId ? logger.child({ requestId }) : logger;
-    log.info({ phoneNumber, amount }, "MTN: Sending payout");
+    log.info(maskPII({ phoneNumber, amount }), "MTN: Sending payout");
     return { success: true };
   }
 
@@ -154,10 +165,17 @@ export class MTNProvider {
    * MTN B2B Batch Payout - Process up to 50 payouts in a single API call.
    * This provides significant performance gains for high-volume payout operations.
    */
-  async sendBatchPayout(items: BatchPayoutItem[], requestId?: string): Promise<{ success: boolean; results: BatchPayoutResult[]; error?: unknown }> {
+  async sendBatchPayout(
+    items: BatchPayoutItem[],
+    requestId?: string,
+  ): Promise<{
+    success: boolean;
+    results: BatchPayoutResult[];
+    error?: unknown;
+  }> {
     const log = requestId ? logger.child({ requestId }) : logger;
     const MAX_BATCH_SIZE = 50;
-    
+
     if (items.length === 0) {
       return { success: true, results: [] };
     }
@@ -165,28 +183,33 @@ export class MTNProvider {
     if (items.length > MAX_BATCH_SIZE) {
       return {
         success: false,
-        results: items.map(item => ({
+        results: items.map((item) => ({
           referenceId: item.referenceId,
           success: false,
           error: `Batch size exceeds maximum of ${MAX_BATCH_SIZE}`,
         })),
-        error: new Error(`Batch size ${items.length} exceeds maximum of ${MAX_BATCH_SIZE}`),
+        error: new Error(
+          `Batch size ${items.length} exceeds maximum of ${MAX_BATCH_SIZE}`,
+        ),
       };
     }
 
-    log.info({ itemCount: items.length }, "MTN: Starting batch payout");
+    log.info(
+      maskPII({ itemCount: items.length }),
+      "MTN: Starting batch payout",
+    );
     const startTime = Date.now();
 
     try {
       const token = await this.getAccessToken();
       const batchReference = `BATCH-${randomUUID()}`;
-      
+
       // MTN disbursement batch API endpoint
       const response = await axios.post(
         `${this.baseUrl}/disbursement/v2_0/batch-payout`,
         {
           batchReference,
-          items: items.map(item => ({
+          items: items.map((item) => ({
             referenceId: item.referenceId,
             amount: item.amount,
             currency: "XAF",
@@ -210,11 +233,11 @@ export class MTNProvider {
 
       // Process partial success response
       const responseItems = response.data?.items ?? [];
-      const results: BatchPayoutResult[] = items.map(item => {
+      const results: BatchPayoutResult[] = items.map((item) => {
         const responseItem = responseItems.find(
-          (r: { referenceId: string }) => r.referenceId === item.referenceId
+          (r: { referenceId: string }) => r.referenceId === item.referenceId,
         );
-        
+
         if (!responseItem) {
           return {
             referenceId: item.referenceId,
@@ -227,43 +250,54 @@ export class MTNProvider {
         return {
           referenceId: item.referenceId,
           success: status === "SUCCESSFUL" || status === "SUCCESS",
-          error: status !== "SUCCESSFUL" && status !== "SUCCESS" 
-            ? responseItem.errorReason || responseItem.message || `Status: ${status}`
-            : undefined,
-          providerReference: responseItem.financialTransactionId || responseItem.transactionId,
+          error:
+            status !== "SUCCESSFUL" && status !== "SUCCESS"
+              ? responseItem.errorReason ||
+                responseItem.message ||
+                `Status: ${status}`
+              : undefined,
+          providerReference:
+            responseItem.financialTransactionId || responseItem.transactionId,
         };
       });
 
-      const successCount = results.filter(r => r.success).length;
-      const failureCount = results.filter(r => !r.success).length;
+      const successCount = results.filter((r) => r.success).length;
+      const failureCount = results.filter((r) => !r.success).length;
 
-      log.info({ 
-        duration, 
-        successCount, 
-        failureCount,
-        batchReference 
-      }, "MTN: Batch payout completed");
+      log.info(
+        maskPII({
+          duration,
+          successCount,
+          failureCount,
+          batchReference,
+        }),
+        "MTN: Batch payout completed",
+      );
 
       return {
         success: successCount > 0 || failureCount === 0,
         results,
-        error: failureCount > 0 && successCount === 0 
-          ? new Error("All batch items failed") 
-          : undefined,
+        error:
+          failureCount > 0 && successCount === 0
+            ? new Error("All batch items failed")
+            : undefined,
       };
     } catch (error: any) {
       const duration = Date.now() - startTime;
       const errorMessage = error.message || "Batch payout request failed";
-      
-      log.error({ 
-        duration, 
-        error: errorMessage,
-        itemCount: items.length
-      }, "MTN: Batch payout failed");
+
+      log.error(
+        maskPII({
+          duration,
+          error: errorMessage,
+          itemCount: items.length,
+        }),
+        "MTN: Batch payout failed",
+      );
 
       return {
         success: false,
-        results: items.map(item => ({
+        results: items.map((item) => ({
           referenceId: item.referenceId,
           success: false,
           error: errorMessage,
@@ -288,9 +322,7 @@ export class MTNProvider {
           },
         },
       );
-      const providerStatus = String(
-        response.data?.status ?? "",
-      ).toUpperCase();
+      const providerStatus = String(response.data?.status ?? "").toUpperCase();
       if (providerStatus === "SUCCESSFUL") return { status: "completed" };
       if (providerStatus === "FAILED") return { status: "failed" };
       if (providerStatus === "PENDING") return { status: "pending" };
