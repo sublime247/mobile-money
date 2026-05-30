@@ -2,6 +2,13 @@ name               = "well-known-cache"
 main               = "workers/well-known-cache/src/index.ts"
 compatibility_date = "2024-09-23"
 
+# Esbuild size optimizations — minimize bundle for faster worker startup
+minify = true
+# Preserve names for stack traces in production debugging (set false for max minification)
+# keep_names = false
+# Source maps for debugging (disable in production for smaller output)
+# source_maps = false
+
 # Replace "yourdomain.com" with your actual domain before deploying.
 routes = [
   { pattern = "*yourdomain.com/.well-known/*", zone_name = "yourdomain.com" }
