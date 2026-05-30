@@ -16,3 +16,7 @@ DEFAULT_MAX_AGE = "300"
 DEFAULT_STALE_WHILE_REVALIDATE = "3600"
 # Comma-separated list of allowed CORS origins (exact match)
 ALLOWED_ORIGINS = "https://yourdomain.com"
+
+# Bundle size optimizations — enable minification for smaller worker bundles
+# Deploy with: wrangler deploy --minify
+# Or set WRANGLER_MINIFY=true in environment
