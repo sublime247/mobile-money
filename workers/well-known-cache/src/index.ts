@@ -42,6 +42,27 @@ function cacheControlFor(pathname: string): string {
     : "public, max-age=300, stale-while-revalidate=3600";
 }
 
+interface RequestMetrics {
+  method: string;
+  pathname: string;
+  cacheStatus: "HIT" | "MISS" | "BYPASS";
+  statusCode: number;
+  latencyMs: number;
+  responseBytes: number;
+  timestamp: string;
+  userAgent: string;
+}
+
+function logMetrics(metrics: RequestMetrics): void {
+  console.log(
+    JSON.stringify({
+      level: "info",
+      type: "edge_request_metrics",
+      ...metrics,
+    })
+  );
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     if (request.method === "OPTIONS") {
