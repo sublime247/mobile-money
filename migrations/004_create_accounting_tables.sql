@@ -4,7 +4,8 @@ CREATE TABLE IF NOT EXISTS accounting_connections (
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     provider VARCHAR(20) NOT NULL CHECK (provider IN ('quickbooks', 'xero')),
     realm_id VARCHAR(100), -- QuickBooks company ID
-    tenant_id VARCHAR(100), -- Xero tenant ID
+    tenant_id VARCHAR(100), -- Xero tenant ID (active organization)
+    tenant_name VARCHAR(200), -- Xero organization name
     access_token TEXT NOT NULL,
     refresh_token TEXT NOT NULL,
     expires_at TIMESTAMP WITH TIME ZONE NOT NULL,

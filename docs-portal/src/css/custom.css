@@ -7,3 +7,22 @@
   --ifm-color-primary-lighter: #359962;
   --ifm-color-primary-lightest: #3cad6e;
 }
+
+/* Code block copy button styling */
+div.codeBlockContainer_node_modules-\@docusaurus-theme-classic-src-theme-CodeBlock-styles-module:hover .copyButton_node_modules-\@docusaurus-theme-classic-src-theme-CodeBlock-styles-module {
+  opacity: 1;
+}
+
+button.copyButton_node_modules-\@docusaurus-theme-classic-src-theme-CodeBlock-styles-module {
+  transition: opacity 0.2s ease-in-out;
+}
+
+/* Redoc code sample copy button */
+.redoc-wrap .copy-icon-svg {
+  fill: var(--ifm-color-primary);
+}
+
+/* Ensure code blocks have visible copy buttons */
+pre code {
+  position: relative;
+}

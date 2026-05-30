@@ -8,6 +8,8 @@
  *   peak         — ramp 0 → 1000 VUs    rated capacity target (DEFAULT)
  *   soak         — 100 VUs × 30 min     surface memory/connection leaks
  *   breakpoint   — ramp 0 → 10 000 VUs  linear climb; thresholds abort the run
+ *   ingestion_10k — ramp 0 → 10 000 VUs  high-volume transaction ingestion stress
+ *   spike_10k    — spike 0 → 10 000 VUs  sudden burst ingestion resilience
  *   transactions — ramp 0 → 1000 VUs    transaction creation writes only
  *
  * Usage:
@@ -59,6 +61,7 @@ const BASE_URL     = __ENV.BASE_URL     || 'http://localhost:3000';
 const API_KEY      = __ENV.API_KEY      || 'dev-admin-key';
 const TEST_USER_ID = __ENV.TEST_USER_ID || 'test-user-load';
 const SCENARIO     = __ENV.SCENARIO     || 'peak';
+const TX_RATIO     = Number(__ENV.TX_RATIO || 0.67); // deposit ratio for ingestion-focused scenarios
 
 const PROVIDERS = ['mtn', 'airtel', 'orange'];
 
@@ -141,6 +144,42 @@ const PROFILES = {
     gracefulRampDown: '5m',
   },
 
+  // High-volume ingestion stress: ramps to 10K concurrent VUs and holds long
+  // enough to exercise API admission, idempotency, queueing, DB writes, and
+  // downstream transaction-worker backpressure. Requires a k6 build and host
+  // sized for 10K+ VUs; use --vus-max if your local k6 defaults are lower.
+  ingestion_10k: {
+    executor: 'ramping-vus',
+    startVUs: 0,
+    stages: [
+      { duration: '5m',  target: 1000  },
+      { duration: '5m',  target: 3000  },
+      { duration: '10m', target: 6000  },
+      { duration: '10m', target: 10000 },
+      { duration: '10m', target: 10000 },
+      { duration: '5m',  target: 0     },
+    ],
+    gracefulRampDown: '2m',
+    exec: 'ingestTransactions',
+    tags: { profile: 'ingestion_10k' },
+  },
+
+  // Burst profile: validates the ingestion pipeline survives a rapid surge to
+  // 10K VUs, then drains cleanly without losing accepted transaction requests.
+  spike_10k: {
+    executor: 'ramping-vus',
+    startVUs: 0,
+    stages: [
+      { duration: '1m', target: 1000  },
+      { duration: '2m', target: 10000 },
+      { duration: '3m', target: 10000 },
+      { duration: '2m', target: 0     },
+    ],
+    gracefulRampDown: '1m',
+    exec: 'ingestTransactions',
+    tags: { profile: 'spike_10k' },
+  },
+
   // Pure write pressure: deposits and withdraws at 1000 VUs.
   transactions: {
     executor: 'ramping-vus',
@@ -158,45 +197,47 @@ const PROFILES = {
 
 const activeProfile = PROFILES[SCENARIO] || PROFILES.peak;
 const isBreakpoint  = SCENARIO === 'breakpoint';
+const isHighVolume  = SCENARIO === 'ingestion_10k' || SCENARIO === 'spike_10k';
+const profileExec   = activeProfile.exec || (SCENARIO === 'transactions' ? 'transactionFocus' : 'default');
 
 export const options = {
   scenarios: {
     main: {
       ...activeProfile,
-      exec: SCENARIO === 'transactions' ? 'transactionFocus' : 'default',
+      exec: profileExec,
     },
   },
 
   thresholds: {
     // Overall HTTP availability — abort breakpoint run if server collapses
     http_req_failed: [
-      { threshold: 'rate<0.05', abortOnFail: isBreakpoint, delayAbortEval: '30s' },
+      { threshold: isHighVolume ? 'rate<0.10' : 'rate<0.05', abortOnFail: isBreakpoint, delayAbortEval: '30s' },
     ],
 
     // Aggregate request latency (all operations combined)
     http_req_duration: [
       'p(50)<400',
-      { threshold: 'p(95)<2000', abortOnFail: isBreakpoint, delayAbortEval: '30s' },
+      { threshold: isHighVolume ? 'p(95)<5000' : 'p(95)<2000', abortOnFail: isBreakpoint, delayAbortEval: '30s' },
       'p(99)<6000',
     ],
 
     // Deposit path — the critical write latency that drives server sizing
     deposit_latency_ms: [
       'p(50)<500',
-      { threshold: 'p(95)<2000', abortOnFail: isBreakpoint, delayAbortEval: '30s' },
+      { threshold: isHighVolume ? 'p(95)<5000' : 'p(95)<2000', abortOnFail: isBreakpoint, delayAbortEval: '30s' },
       'p(99)<6000',
     ],
 
     // Withdraw path
     withdraw_latency_ms: [
       'p(50)<500',
-      'p(95)<2000',
+      isHighVolume ? 'p(95)<5000' : 'p(95)<2000',
       'p(99)<6000',
     ],
 
     // Transaction-level success independent of HTTP status (business logic check)
     tx_success_rate: [
-      { threshold: 'rate>0.90', abortOnFail: isBreakpoint, delayAbortEval: '30s' },
+      { threshold: isHighVolume ? 'rate>0.85' : 'rate>0.90', abortOnFail: isBreakpoint, delayAbortEval: '30s' },
     ],
     // RSS memory usage threshold (max 500 MB)
     rss_memory_kb: [{ threshold: 'max<512000', abortOnFail: isBreakpoint, delayAbortEval: '30s' }],
@@ -260,8 +301,9 @@ function amountFor(prov, seed) {
  * cached responses; that is intentional — idempotency cache lookups are part
  * of the production code path and their latency should be measured too.
  */
-function idempotencyKey(vuId, iter) {
-  return `lt-vu${vuId}-it${iter}`;
+function idempotencyKey(vuId, iter, operation) {
+  const op = operation || 'tx';
+  return `lt-${SCENARIO}-${op}-vu${vuId}-it${iter}`;
 }
 
 // Helper to record RSS memory usage using k6 exec extension
@@ -385,7 +427,7 @@ export default function () {
     const r = http.post(
       `${BASE_URL}/api/v1/transactions/deposit`,
       payload,
-      params('deposit', { 'Idempotency-Key': idempotencyKey(vuId, iter) }),
+      params('deposit', { 'Idempotency-Key': idempotencyKey(vuId, iter, 'deposit') }),
     );
     const dur = Date.now() - start;
 
@@ -452,7 +494,7 @@ export function transactionFocus() {
     const r = http.post(
       `${BASE_URL}/api/v1/transactions/deposit`,
       payload,
-      params('deposit', { 'Idempotency-Key': idempotencyKey(vuId, iter) }),
+      params('deposit', { 'Idempotency-Key': idempotencyKey(vuId, iter, 'deposit') }),
     );
     depositLatency.add(Date.now() - start);
 
@@ -480,7 +522,7 @@ export function transactionFocus() {
     const r = http.post(
       `${BASE_URL}/api/v1/transactions/withdraw`,
       payload,
-      params('withdraw', { 'Idempotency-Key': idempotencyKey(vuId, iter) }),
+      params('withdraw', { 'Idempotency-Key': idempotencyKey(vuId, iter, 'withdraw') }),
     );
     withdrawLatency.add(Date.now() - start);
 
@@ -497,6 +539,60 @@ export function transactionFocus() {
 
   // Minimal pause — just enough to yield the event loop; not simulating a human
   sleep(0.05 + Math.random() * 0.15);
+}
+
+
+// ---------------------------------------------------------------------------
+// ingestTransactions — 10K+ high-volume transaction ingestion
+//
+// This VU path is intentionally lean: it avoids health/read side traffic and
+// concentrates all concurrency on POST /api/v1/transactions/{deposit,withdraw}
+// so the ingestion pipeline, idempotency layer, queue broker, and persistence
+// path receive the full 10K+ concurrent-request pressure.
+// ---------------------------------------------------------------------------
+export function ingestTransactions() {
+  const vuId = __VU;
+  const iter = __ITER;
+  const seed = vuId * 1000000 + iter;
+  const prov = providerForVU(vuId + iter);
+  const isDeposit = Math.random() < Math.min(Math.max(TX_RATIO, 0), 1);
+  const operation = isDeposit ? 'deposit' : 'withdraw';
+
+  const payload = JSON.stringify({
+    amount: amountFor(prov, seed),
+    phoneNumber: phoneNumber(seed),
+    provider: prov,
+    stellarAddress: stellarAddress(seed),
+    userId: TEST_USER_ID,
+  });
+
+  const start = Date.now();
+  const r = http.post(
+    `${BASE_URL}/api/v1/transactions/${operation}`,
+    payload,
+    params(operation, { 'Idempotency-Key': idempotencyKey(vuId, iter, operation) }),
+  );
+  const dur = Date.now() - start;
+
+  if (isDeposit) {
+    depositLatency.add(dur);
+  } else {
+    withdrawLatency.add(dur);
+  }
+
+  const ok = check(r, {
+    [`${operation} accepted`]: (r) => r.status === 201 || r.status === 202,
+    [`${operation} has transactionId`]: (r) => {
+      try { return !!r.json('transactionId'); } catch (_) { return false; }
+    },
+  });
+
+  txSuccessRate.add(ok);
+  ok ? txCreated.add(1) : txFailed.add(1);
+
+  // Keep think time tiny so effective concurrency stays close to the configured
+  // VU target while still yielding between iterations.
+  sleep(Number(__ENV.INGEST_THINK_TIME || 0.01));
 }
 
 // ---------------------------------------------------------------------------
@@ -520,9 +616,12 @@ export function handleSummary(data) {
   const wdr = data.metrics.withdraw_latency_ms?.values || {};
   const all = data.metrics.http_req_duration?.values   || {};
 
-  const passErr  = errRate     < 0.05;
-  const passLat  = (dep['p(95)'] || Infinity) < 2000;
-  const passTxSR = txSuccRate  > 0.90;
+  const errorThreshold = isHighVolume ? 0.10 : 0.05;
+  const latencyThreshold = isHighVolume ? 5000 : 2000;
+  const successThreshold = isHighVolume ? 0.85 : 0.90;
+  const passErr  = errRate     < errorThreshold;
+  const passLat  = (dep['p(95)'] || Infinity) < latencyThreshold;
+  const passTxSR = txSuccRate  > successThreshold;
   const overallPass = passErr && passLat && passTxSR;
 
   const sizing = sizingRecommendation(tps, dep['p(95)'], errRate, maxVUs);
@@ -551,7 +650,7 @@ export function handleSummary(data) {
     `  Transactions created  : ${created}`,
     `  Transactions failed   : ${failed}`,
     `  Transaction TPS       : ${tps.toFixed(2)} tx/s`,
-    `  TX success rate       : ${(txSuccRate * 100).toFixed(2)}%  (threshold >90 % : ${passTxSR ? 'PASS ✓' : 'FAIL ✗'})`,
+    `  TX success rate       : ${(txSuccRate * 100).toFixed(2)}%  (threshold >${(successThreshold * 100).toFixed(0)} % : ${passTxSR ? 'PASS ✓' : 'FAIL ✗'})`,
     '',
     '  LATENCY — DEPOSIT PATH  (p50 / p75 / p90 / p95 / p99 / p99.9 / max)',
     '  ──────────────────────────────────────────────────────────────────',
@@ -564,7 +663,7 @@ export function handleSummary(data) {
       fmt(dep['p(99.9)']),
       fmt(dep.max),
     ].join('  /  ')}`,
-    `  P95 < 2 000ms         : ${passLat ? 'PASS ✓' : 'FAIL ✗'}`,
+    `  P95 < ${latencyThreshold.toLocaleString()}ms         : ${passLat ? 'PASS ✓' : 'FAIL ✗'}`,
     '',
     '  LATENCY — WITHDRAW PATH  (p50 / p95 / p99)',
     '  ──────────────────────────────────────────────────────────────────',
@@ -576,7 +675,7 @@ export function handleSummary(data) {
     '',
     '  RELIABILITY',
     '  ──────────────────────────────────────────────────────────────────',
-    `  HTTP error rate       : ${(errRate * 100).toFixed(2)}%  (threshold <5 % : ${passErr ? 'PASS ✓' : 'FAIL ✗'})`,
+    `  HTTP error rate       : ${(errRate * 100).toFixed(2)}%  (threshold <${(errorThreshold * 100).toFixed(0)} % : ${passErr ? 'PASS ✓' : 'FAIL ✗'})`,
     '',
     '  SERVER SIZING',
     '  ──────────────────────────────────────────────────────────────────',
@@ -667,10 +766,13 @@ function sizingRecommendation(tps, p95ms, errRate, peakVUs) {
   const safeTPS    = parseFloat((tps * 0.67).toFixed(1)); // 1.5× headroom
   const p95display = p95ms !== undefined ? `${Math.round(p95ms)}ms` : 'N/A';
 
-  if (errRate > 0.05) {
+  const errorCeiling = isHighVolume ? 0.10 : 0.05;
+  const latencyCeiling = isHighVolume ? 5000 : 2000;
+
+  if (errRate > errorCeiling) {
     return [
       `STATUS: OVER CAPACITY at ${peakVUs} VUs`,
-      `  HTTP error rate ${(errRate * 100).toFixed(1)}% exceeds 5 % ceiling.`,
+      `  HTTP error rate ${(errRate * 100).toFixed(1)}% exceeds ${(errorCeiling * 100).toFixed(0)} % ceiling.`,
       '  Actions:',
       '  • Add API server replicas (horizontal scale)',
       '  • Increase database connection pool (DB_POOL_MAX)',
@@ -679,9 +781,9 @@ function sizingRecommendation(tps, p95ms, errRate, peakVUs) {
     ];
   }
 
-  if (p95ms !== undefined && p95ms > 2000) {
+  if (p95ms !== undefined && p95ms > latencyCeiling) {
     return [
-      `STATUS: DEGRADED — P95 latency ${p95display} exceeds 2 000ms SLO`,
+      `STATUS: DEGRADED — P95 latency ${p95display} exceeds ${latencyCeiling.toLocaleString()}ms SLO`,
       `  Measured at ${peakVUs} VUs, ${tps.toFixed(2)} TPS.`,
       '  Actions:',
       '  • Enable slow-query logging and inspect top offenders',

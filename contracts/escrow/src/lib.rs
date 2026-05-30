@@ -60,6 +60,9 @@ impl EscrowContract {
                 released: false,
             },
         );
+
+        // Extend the TTL of the instance storage to set up state renewal rules
+        env.storage().instance().extend_ttl(1000, 10000);
     }
 
     /// Release funds to the beneficiary. Only the arbiter may call this.
@@ -74,6 +77,8 @@ impl EscrowContract {
 
         state.released = true;
         env.storage().instance().set(&ESCROW, &state);
+
+        env.storage().instance().extend_ttl(1000, 10000);
     }
 
     /// Refund funds to the depositor. Only the arbiter may call this.
@@ -88,6 +93,8 @@ impl EscrowContract {
 
         state.released = true;
         env.storage().instance().set(&ESCROW, &state);
+
+        env.storage().instance().extend_ttl(1000, 10000);
     }
 
     /// Emergency refund to the depositor after the unlock timestamp.
@@ -111,7 +118,9 @@ impl EscrowContract {
 
     /// Return current escrow state (read-only).
     pub fn get_state(env: Env) -> EscrowState {
-        env.storage().instance().get(&ESCROW).expect("not initialised")
+        let state = env.storage().instance().get(&ESCROW).expect("not initialised");
+        env.storage().instance().extend_ttl(1000, 10000);
+        state
     }
 }
 

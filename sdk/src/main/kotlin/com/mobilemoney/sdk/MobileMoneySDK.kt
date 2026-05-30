@@ -1,6 +1,7 @@
 package com.mobilemoney.sdk
 
 import com.mobilemoney.sdk.auth.AuthInterceptor
+import com.mobilemoney.sdk.cache.MemoryCacheInterceptor
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
@@ -18,6 +19,7 @@ class MobileMoneySDK(
 ) {
     private val okHttpClient = OkHttpClient.Builder()
         .addInterceptor(AuthInterceptor(authToken))
+        .addInterceptor(MemoryCacheInterceptor())
         .build()
 
     private val retrofit = Retrofit.Builder()

@@ -33,6 +33,10 @@ Endpoints:
    `mobile-money-logs-YYYY.MM.dd`.
 4. Kibana imports a starter dashboard automatically.
 
+In local development, the structured log mirror also rolls by size into dated
+shards and compresses archived shards as `.gz` files so the working log
+directory does not grow without bound.
+
 ## Useful Queries
 
 - `event.dataset : "http.request"`

@@ -12,6 +12,7 @@ export interface LedgerEntry {
   credit_amount?: number;
   description?: string;
   metadata?: Record<string, any>;
+  settlement_date?: string; // Format: YYYY-MM-DD
 }
 
 export interface PostedEntry {
@@ -213,6 +214,17 @@ export class LedgerService {
     transactionId: string,
     userId: string
   ): Promise<PostedEntry[]> {
+    // Determine settlement delay from user
+    const { UserModel } = await import('../models/users');
+    const userModel = new UserModel();
+    const user = await userModel.findById(userId);
+    const delayDays = user?.settlementDelayDays || 0;
+    
+    // Calculate settlement date
+    const settlementDate = new Date();
+    settlementDate.setDate(settlementDate.getDate() + delayDays);
+    const settlementDateStr = settlementDate.toISOString().split('T')[0];
+
     const entries: LedgerEntry[] = [
       {
         account_code: '1100', // Mobile Money Float
@@ -222,7 +234,8 @@ export class LedgerService {
       {
         account_code: '2000', // Customer Balances
         credit_amount: amount - fee,
-        description: 'Customer balance credited'
+        description: 'Customer balance credited',
+        settlement_date: settlementDateStr
       }
     ];
 

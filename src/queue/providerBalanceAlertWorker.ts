@@ -6,6 +6,7 @@ import {
   PROVIDER_BALANCE_ALERT_QUEUE_NAME,
   ProviderBalanceAlertJobData,
 } from "./providerBalanceAlertQueue";
+import { traceIdFromJob, childLoggerWithTrace } from "./trace";
 
 let providerBalanceAlertWorker: Worker<ProviderBalanceAlertJobData> | null = null;
 
@@ -17,7 +18,8 @@ export function startProviderBalanceAlertWorker(): void {
   providerBalanceAlertWorker = new Worker<ProviderBalanceAlertJobData>(
     PROVIDER_BALANCE_ALERT_QUEUE_NAME,
     async (job: Job<ProviderBalanceAlertJobData>) => {
-      console.log(`[${PROVIDER_BALANCE_ALERT_JOB_NAME}] Running job ${job.id}`);
+      const log = childLoggerWithTrace(job.data);
+      (log ?? console).log?.(`[${PROVIDER_BALANCE_ALERT_JOB_NAME}] Running job ${job.id}`);
       await runProviderBalanceAlertJob();
     },
     {

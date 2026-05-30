@@ -13,6 +13,7 @@ export interface TransactionJobData {
   provider: string;
   stellarAddress: string;
   requestId?: string;
+  _traceId?: string;
 }
 
 export interface TransactionJobResult {

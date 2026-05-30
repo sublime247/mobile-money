@@ -3,6 +3,7 @@ import os from "os";
 import path from "path";
 import util from "util";
 import { randomUUID } from "crypto";
+import zlib from "zlib";
 import { redact } from "../utils/redact";
 
 type LogLevel = "debug" | "info" | "warn" | "error";
@@ -48,11 +49,28 @@ const SERVICE_NAME = process.env.SERVICE_NAME || "mobile-money-api";
 const SERVICE_ENVIRONMENT = process.env.NODE_ENV || "development";
 const DEFAULT_LOG_FILE_PATH =
   process.env.LOG_FILE_PATH || path.join(process.cwd(), "logs", "app.log");
+const ROLLING_LOG_MAX_BYTES = Math.max(
+  1024,
+  Number(process.env.LOG_SHARD_MAX_BYTES || 5 * 1024 * 1024),
+);
+const ROLLING_LOG_RETENTION_DAYS = Math.max(
+  1,
+  Number(process.env.LOG_SHARD_RETENTION_DAYS || 7),
+);
+const ROLLING_LOG_COMPRESS =
+  process.env.LOG_SHARD_COMPRESS !== "false" &&
+  process.env.LOG_SHARD_COMPRESS !== "0";
 /** Stable per-process identifier used in every log line for distributed tracing */
 const INSTANCE_ID = `${os.hostname()}:${process.pid}`;
 
 let installed = false;
 let fileStream: fs.WriteStream | null = null;
+let rollingState: {
+  initialized: boolean;
+  currentDateKey: string;
+  shardIndex: number;
+  currentBytes: number;
+} | null = null;
 
 function isRecord(value: unknown): value is JsonRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -175,6 +193,148 @@ function buildContext(args: unknown[]): unknown {
   }
 
   return args.map((arg) => serializeUnknown(arg));
+}
+
+function isRollingLogMirrorEnabled(): boolean {
+  return SERVICE_ENVIRONMENT !== "production" && DEFAULT_LOG_FILE_PATH !== "/dev/null";
+}
+
+function getLogDateKey(date = new Date()): string {
+  return date.toISOString().slice(0, 10);
+}
+
+function getLogShardPath(dateKey: string, shardIndex: number): string {
+  const parsed = path.parse(DEFAULT_LOG_FILE_PATH);
+  const shardName = `${parsed.name}-${dateKey}-shard-${String(shardIndex).padStart(4, "0")}${parsed.ext}`;
+  return path.join(parsed.dir, shardName);
+}
+
+function ensureMirrorDirectory(): void {
+  fs.mkdirSync(path.dirname(DEFAULT_LOG_FILE_PATH), { recursive: true });
+}
+
+function readCurrentLogSize(): number {
+  try {
+    return fs.statSync(DEFAULT_LOG_FILE_PATH).size;
+  } catch {
+    return 0;
+  }
+}
+
+function compressShardIfNeeded(filePath: string): void {
+  if (!ROLLING_LOG_COMPRESS || !fs.existsSync(filePath)) {
+    return;
+  }
+
+  const gzPath = `${filePath}.gz`;
+  const content = fs.readFileSync(filePath);
+  fs.writeFileSync(gzPath, zlib.gzipSync(content));
+  fs.unlinkSync(filePath);
+}
+
+function pruneOldCompressedShards(): void {
+  const dir = path.dirname(DEFAULT_LOG_FILE_PATH);
+  const parsed = path.parse(DEFAULT_LOG_FILE_PATH);
+  const prefix = `${parsed.name}-`;
+  const suffix = `${parsed.ext}.gz`;
+  const retentionMs = ROLLING_LOG_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+  const now = Date.now();
+
+  try {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (!entry.isFile() || !entry.name.startsWith(prefix) || !entry.name.endsWith(suffix)) {
+        continue;
+      }
+
+      const fullPath = path.join(dir, entry.name);
+      let fileDate: number | null = null;
+
+      const match = entry.name.match(/-(\d{4}-\d{2}-\d{2})-shard-/);
+      if (match?.[1]) {
+        const parsedDate = new Date(`${match[1]}T00:00:00.000Z`).getTime();
+        if (!Number.isNaN(parsedDate)) {
+          fileDate = parsedDate;
+        }
+      }
+
+      const ageMs =
+        fileDate !== null ? now - fileDate : now - fs.statSync(fullPath).mtimeMs;
+
+      if (ageMs > retentionMs) {
+        fs.unlinkSync(fullPath);
+      }
+    }
+  } catch {
+    // Best-effort cleanup only; never block logging.
+  }
+}
+
+function rotateRollingShard(nextDateKey: string): void {
+  if (!rollingState) {
+    rollingState = {
+      initialized: true,
+      currentDateKey: nextDateKey,
+      shardIndex: 1,
+      currentBytes: readCurrentLogSize(),
+    };
+    return;
+  }
+
+  if (!fs.existsSync(DEFAULT_LOG_FILE_PATH)) {
+    rollingState.currentBytes = 0;
+    rollingState.currentDateKey = nextDateKey;
+    rollingState.shardIndex = 1;
+    return;
+  }
+
+  const currentSize = readCurrentLogSize();
+  if (currentSize <= 0) {
+    rollingState.currentBytes = 0;
+    rollingState.currentDateKey = nextDateKey;
+    rollingState.shardIndex = 1;
+    return;
+  }
+
+  const previousDateKey = rollingState.currentDateKey;
+  const previousShardIndex = rollingState.shardIndex;
+  const shardPath = getLogShardPath(previousDateKey, previousShardIndex);
+  fs.renameSync(DEFAULT_LOG_FILE_PATH, shardPath);
+  compressShardIfNeeded(shardPath);
+  pruneOldCompressedShards();
+
+  rollingState.currentBytes = 0;
+  rollingState.currentDateKey = nextDateKey;
+  rollingState.shardIndex =
+    previousDateKey === nextDateKey ? previousShardIndex + 1 : 1;
+}
+
+function writeRollingMirror(output: string): void {
+  ensureMirrorDirectory();
+
+  const nextBytes = Buffer.byteLength(output);
+  const dateKey = getLogDateKey();
+  const currentBytes = readCurrentLogSize();
+
+  if (!rollingState) {
+    rollingState = {
+      initialized: true,
+      currentDateKey: dateKey,
+      shardIndex: 1,
+      currentBytes,
+    };
+  }
+
+  if (rollingState.currentDateKey !== dateKey) {
+    rotateRollingShard(dateKey);
+  } else if (
+    currentBytes > 0 &&
+    currentBytes + nextBytes > ROLLING_LOG_MAX_BYTES
+  ) {
+    rotateRollingShard(dateKey);
+  }
+
+  fs.appendFileSync(DEFAULT_LOG_FILE_PATH, output, "utf8");
+  rollingState.currentBytes = readCurrentLogSize();
 }
 
 function buildMergedEntry(args: unknown[]): JsonRecord {
@@ -301,6 +461,19 @@ function getLogStream(): fs.WriteStream {
   return fileStream;
 }
 
+function writeLogMirror(output: string): void {
+  if (isRollingLogMirrorEnabled()) {
+    writeRollingMirror(output);
+    return;
+  }
+
+  try {
+    getLogStream().write(output);
+  } catch {
+    // Keep stdout/stderr logging alive even if the mirror file is unavailable.
+  }
+}
+
 function writeEntry(level: LogLevel, args: unknown[]): void {
   const entry = buildStructuredLogEntry(level, args);
   // Redact sensitive fields before serialising — covers every log call site.
@@ -314,11 +487,7 @@ function writeEntry(level: LogLevel, args: unknown[]): void {
     process.stdout.write(output);
   }
 
-  try {
-    getLogStream().write(output);
-  } catch {
-    // Keep stdout/stderr logging alive even if the mirror file is unavailable.
-  }
+  writeLogMirror(output);
 }
 
 export function logStructured(level: LogLevel, entry: object): void {
@@ -340,11 +509,25 @@ export function installGlobalLogger(): void {
 }
 
 export function closeStructuredLogStream(): void {
+  rollingState = null;
+
   if (!fileStream) {
+    installed = false;
     return;
   }
 
   fileStream.end();
   fileStream = null;
   installed = false;
+}
+
+export function getStructuredLogMirrorMode(): "rolling" | "stream" {
+  return isRollingLogMirrorEnabled() ? "rolling" : "stream";
+}
+
+export function getStructuredLogShardPath(
+  dateKey: string,
+  shardIndex: number,
+): string {
+  return getLogShardPath(dateKey, shardIndex);
 }

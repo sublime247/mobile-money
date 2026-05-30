@@ -21,6 +21,9 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
+          # rustfmt  — needed for `cargo fmt --check`
+          # clippy   — needed for `cargo clippy`
+          components: rustfmt, clippy
 
       - name: Cache cargo registry
         uses: actions/cache@v5
@@ -29,8 +32,27 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             contracts/target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('contracts/Cargo.toml', 'contracts/escrow/Cargo.toml') }}
+          key: ${{ runner.os }}-cargo-${{ hashFiles('contracts/Cargo.toml', 'contracts/escrow/Cargo.toml', 'contracts/htlc/Cargo.toml') }}
           restore-keys: ${{ runner.os }}-cargo-
+
+      # -----------------------------------------------------------------------
+      # Formatting gate — reject any code that diverges from rustfmt.toml rules.
+      # -----------------------------------------------------------------------
+      - name: Check formatting (cargo fmt)
+        working-directory: contracts
+        run: cargo fmt --all -- --check
+
+      # -----------------------------------------------------------------------
+      # Lint gate — treat every clippy warning as an error (mirrors clippy.toml
+      # and the workspace [lints] table in Cargo.toml).
+      # -----------------------------------------------------------------------
+      - name: Lint (cargo clippy)
+        working-directory: contracts
+        run: >
+          cargo clippy
+          --all-targets
+          --all-features
+          -- -D warnings
 
       - name: Build contracts (wasm)
         working-directory: contracts

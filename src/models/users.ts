@@ -15,6 +15,7 @@ export interface User {
   updatedAt: Date;
   smsOptOut?: boolean;
   mandatory2FAWithdrawals?: boolean;
+  settlementDelayDays?: number;
   // TODO: The `User` type and database table needs to
   // be update with these fields:  is_active: boolean,   deactivated_at:Date`
   
@@ -175,6 +176,7 @@ export class UserModel {
         createdAt: row.created_at,
         updatedAt: row.updated_at,
         smsOptOut: row.sms_opt_out ?? false,
+        settlementDelayDays: row.settlement_delay_days ?? 0,
       };
     } catch (error) {
       await client.query('ROLLBACK');

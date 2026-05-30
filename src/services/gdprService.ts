@@ -1,5 +1,23 @@
 import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
+import { DeleteObjectCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
+import { getS3Client, s3Config } from "../config/s3";
+
+  async deleteUserS3Objects(userId: string) {
+    const s3 = getS3Client();
+    const prefix = `${userId}/`;
+    try {
+      const listResult = await s3.send(new ListObjectsV2Command({ Bucket: s3Config.bucket, Prefix: prefix }));
+      const objects = listResult.Contents || [];
+      for (const obj of objects) {
+        if (obj.Key) {
+          await s3.send(new DeleteObjectCommand({ Bucket: s3Config.bucket, Key: obj.Key }));
+        }
+      }
+    } catch (err) {
+      console.error("S3 deletion error for user", userId, err);
+    }
+  }
 import path from "node:path";
 import { v4 as uuid } from "uuid";
 import { Transaction, TransactionModel } from "../models/transaction";
@@ -7,6 +25,7 @@ import { createZipFile } from "../utils/create-zip-file";
 import { logAuditEvent } from "../utils/log-audit-event";
 import { AuditLog, auditService } from "./auditlogService";
 import { TransactionService } from "./transanctionService";
+
 import {
   deactivateUserAccount,
   getUserById,
@@ -130,7 +149,8 @@ export class GDPRService {
 
       // Log erasure event
       await logAuditEvent(userId, "RIGHT_TO_BE_FORGOTTEN_EXECUTED");
-
+await this.deleteUserS3Objects(userId);
+await this.deleteUserAttachments(userId);
       // Disable/deactivate user accout
       await this.deactivateUserAccount(userId);
     } catch (err) {
@@ -206,5 +226,27 @@ export class GDPRService {
 
   private async deactivateUserAccount(userId: string) {
     await deactivateUserAccount(userId);
+    }
+
+  private async deleteUserAttachments(userId: string) {
+    const s3 = getS3Client();
+    const prefix = "kyc-documents/";
+    let continuationToken: string | undefined = undefined;
+    do {
+      const listCmd = new ListObjectsV2Command({
+        Bucket: s3Config.bucket,
+        Prefix: prefix,
+        ContinuationToken: continuationToken,
+      });
+      const result = await s3.send(listCmd);
+      const objects = result.Contents?.filter((obj) => obj.Key?.includes(`/${userId}/`)) ?? [];
+      for (const obj of objects) {
+        if (obj.Key) {
+          const delCmd = new DeleteObjectCommand({ Bucket: s3Config.bucket, Key: obj.Key });
+          await s3.send(delCmd);
+        }
+      }
+      continuationToken = result.NextContinuationToken;
+    } while (continuationToken);
   }
 }

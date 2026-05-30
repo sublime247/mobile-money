@@ -5,12 +5,14 @@
   "bin": { "momo-cli": "./dist/index.js" },
   "scripts": {
     "build": "tsc",
-    "dev": "tsx src/index.ts"
+    "dev": "tsx src/index.ts",
+    "test": "tsx --test src/**/*.test.ts"
   },
   "dependencies": {
     "axios": "^1.6.2",
     "commander": "^12.0.0",
-    "dotenv": "^17.3.1"
+    "dotenv": "^17.3.1",
+    "inquirer": "^12.7.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

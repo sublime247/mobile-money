@@ -8,7 +8,9 @@
     "snyk:test:high": "snyk test --severity-threshold=high",
     "dev": "ts-node-dev --respawn --transpile-only src/app.ts",
     "build": "tsc",
-    "start": "node dist/app.js"
+    "start": "node dist/app.js",
+    "reconcile": "ts-node-dev --transpile-only src/scripts/reconcile.ts",
+    "reconcile:loop": "ts-node-dev --transpile-only src/scripts/reconcile.ts --loop"
   },
   "keywords": [],
   "author": "",

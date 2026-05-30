@@ -52,13 +52,16 @@ if (isDev) {
     swaggerUi.serve,
     swaggerUi.setup(spec, {
       customSiteTitle: 'Mobile Money Bridge — API Docs',
+      // Use CDN for Swagger UI assets to improve load performance
+      customCssUrl: 'https://cdn.jsdelivr.net/npm/swagger-ui-dist/swagger-ui.css',
+      customJs: 'https://cdn.jsdelivr.net/npm/swagger-ui-dist/swagger-ui-bundle.js',
       swaggerOptions: {
         persistAuthorization: true,
         displayRequestDuration: true,
         filter: true,
         tryItOutEnabled: true,
       },
-    }),
+    })
   );
 } else {
   // In non-dev environments the route still exists but devOnly will 404 it.

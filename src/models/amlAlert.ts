@@ -15,12 +15,15 @@ export interface AMLAlertFilter {
   endDate?: Date;
   limit?: number;
   offset?: number;
+  before?: string;
+  after?: string;
 }
 
 export interface AMLAlertListResult {
   alerts: AMLAlert[];
   total: number;
   pendingReview: number;
+  hasMore?: boolean;
 }
 
 export interface AMLReviewHistoryEntry {
@@ -140,38 +143,126 @@ export class AMLAlertModel {
     const pendingResult = await pool.query(pendingQuery, params);
     const pendingReview = parseInt(pendingResult.rows[0].count, 10);
 
-    // Get paginated alerts
+    // Keyset pagination processing
+    let cursorTime: Date | null = null;
+    let cursorId: string | null = null;
+    let isReversed = false;
+
+    if (filter.after) {
+      const decoded = Buffer.from(filter.after, "base64").toString("utf8");
+      const [timeStr, idStr] = decoded.split("|");
+      if (timeStr && idStr) {
+        const parsedTime = new Date(timeStr);
+        if (!isNaN(parsedTime.getTime())) {
+          cursorTime = parsedTime;
+          cursorId = idStr;
+        }
+      }
+    } else if (filter.before) {
+      const decoded = Buffer.from(filter.before, "base64").toString("utf8");
+      const [timeStr, idStr] = decoded.split("|");
+      if (timeStr && idStr) {
+        const parsedTime = new Date(timeStr);
+        if (!isNaN(parsedTime.getTime())) {
+          cursorTime = parsedTime;
+          cursorId = idStr;
+          isReversed = true;
+        }
+      }
+    }
+
+    // Build conditions including keyset cursor
+    const alertsConditions = [...conditions];
+    const alertsParams = [...params];
+    let alertsParamIndex = paramIndex;
+
+    if (cursorTime && cursorId) {
+      if (isReversed) {
+        alertsConditions.push(
+          `(created_at > $${alertsParamIndex} OR (created_at = $${alertsParamIndex} AND id > $${alertsParamIndex + 1}))`
+        );
+      } else {
+        alertsConditions.push(
+          `(created_at < $${alertsParamIndex} OR (created_at = $${alertsParamIndex} AND id < $${alertsParamIndex + 1}))`
+        );
+      }
+      alertsParams.push(cursorTime);
+      alertsParams.push(cursorId);
+      alertsParamIndex += 2;
+    }
+
+    const alertsWhereClause =
+      alertsConditions.length > 0 ? `WHERE ${alertsConditions.join(" AND ")}` : "";
+
     const limit = filter.limit ?? 50;
-    const offset = filter.offset ?? 0;
+    const isCursorPagination = !!(filter.before || filter.after);
+    const sortOrder = isReversed ? "ASC" : "DESC";
 
-    const alertsQuery = `
-      SELECT
-        id,
-        transaction_id AS "transactionId",
-        user_id AS "userId",
-        severity,
-        status,
-        rule_hits AS "ruleHits",
-        reasons,
-        created_at AS "createdAt",
-        updated_at AS "updatedAt",
-        reviewed_at AS "reviewedAt",
-        reviewed_by AS "reviewedBy",
-        review_notes AS "reviewNotes"
-      FROM aml_alerts
-      ${whereClause}
-      ORDER BY created_at DESC
-      LIMIT $${paramIndex++} OFFSET $${paramIndex++}
-    `;
+    let alertsQuery = "";
+    let alertsResult;
 
-    const alertsResult = await pool.query(alertsQuery, [
-      ...params,
-      limit,
-      offset,
-    ]);
-    const alerts = alertsResult.rows.map((row) => this.mapRow(row));
+    if (isCursorPagination) {
+      alertsQuery = `
+        SELECT
+          id,
+          transaction_id AS "transactionId",
+          user_id AS "userId",
+          severity,
+          status,
+          rule_hits AS "ruleHits",
+          reasons,
+          created_at AS "createdAt",
+          updated_at AS "updatedAt",
+          reviewed_at AS "reviewedAt",
+          reviewed_by AS "reviewedBy",
+          review_notes AS "reviewNotes"
+        FROM aml_alerts
+        ${alertsWhereClause}
+        ORDER BY created_at ${sortOrder}, id ${sortOrder}
+        LIMIT $${alertsParamIndex++}
+      `;
+      alertsResult = await pool.query(alertsQuery, [...alertsParams, limit + 1]);
+    } else {
+      const offset = filter.offset ?? 0;
+      alertsQuery = `
+        SELECT
+          id,
+          transaction_id AS "transactionId",
+          user_id AS "userId",
+          severity,
+          status,
+          rule_hits AS "ruleHits",
+          reasons,
+          created_at AS "createdAt",
+          updated_at AS "updatedAt",
+          reviewed_at AS "reviewedAt",
+          reviewed_by AS "reviewedBy",
+          review_notes AS "reviewNotes"
+        FROM aml_alerts
+        ${alertsWhereClause}
+        ORDER BY created_at DESC, id DESC
+        LIMIT $${alertsParamIndex++} OFFSET $${alertsParamIndex++}
+      `;
+      alertsResult = await pool.query(alertsQuery, [...alertsParams, limit, offset]);
+    }
 
-    return { alerts, total, pendingReview };
+    let alerts = alertsResult.rows.map((row) => this.mapRow(row));
+    let hasMore = false;
+
+    if (isCursorPagination) {
+      if (alerts.length > limit) {
+        hasMore = true;
+        alerts = alerts.slice(0, limit);
+      }
+      if (isReversed) {
+        alerts.reverse();
+      }
+    } else {
+      const offset = filter.offset ?? 0;
+      hasMore = offset + limit < total;
+    }
+
+    return { alerts, total, pendingReview, hasMore };
   }
 
   async review(

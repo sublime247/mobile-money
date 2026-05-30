@@ -79,6 +79,7 @@ function loadProvider(key) {
                         case "mtn": return [3 /*break*/, 1];
                         case "airtel": return [3 /*break*/, 3];
                         case "orange": return [3 /*break*/, 5];
+                        case "vodacom": return [3 /*break*/, 10];
                         case "mock": return [3 /*break*/, 8];
                     }
                     return [3 /*break*/, 7];
@@ -99,6 +100,10 @@ function loadProvider(key) {
                 case 9:
                     mod = _b.sent();
                     return [2 /*return*/, new mod.MockProvider()];
+                case 10: return [4 /*yield*/, Promise.resolve().then(function () { return require("./providers/vodacom"); })];
+                case 11:
+                    mod = _b.sent();
+                    return [2 /*return*/, new mod.VodacomProvider()];
             }
         });
     });
@@ -366,6 +371,7 @@ var MobileMoneyService = /** @class */ (function () {
                             results = [];
                             _i = 0, items_1 = items;
                             _a.label = 3;
+                        }
                     case 3:
                         if (!(_i < items_1.length)) return [3 /*break*/, 5];
                         item = items_1[_i];

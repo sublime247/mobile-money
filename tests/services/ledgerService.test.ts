@@ -1,4 +1,12 @@
+// Import the service under test
 import { LedgerService, LedgerEntry } from '../../src/services/ledgerService';
+// Mock the database pool to avoid real DB interactions
+jest.mock('../../src/config/database', () => ({
+  pool: {
+    query: jest.fn(),
+    end: jest.fn()
+  }
+}));
 import { pool } from '../../src/config/database';
 
 describe('LedgerService', () => {
@@ -8,29 +16,23 @@ describe('LedgerService', () => {
 
   beforeAll(async () => {
     ledgerService = new LedgerService();
-    
-    // Create test user
-    const userResult = await pool.query(
-      `INSERT INTO users (phone_number, kyc_level) 
-       VALUES ($1, $2) RETURNING id`,
-      ['+1234567890', 'basic']
-    );
-    testUserId = userResult.rows[0].id;
-
-    // Create test transaction
-    const txResult = await pool.query(
-      `INSERT INTO transactions (reference_number, type, amount, phone_number, provider, stellar_address, status, user_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
-      ['TEST-REF-001', 'deposit', 100, '+1234567890', 'test', 'GTEST...', 'completed', testUserId]
-    );
-    testTransactionId = txResult.rows[0].id;
+    // Mock pool query responses for user creation and transaction creation
+    const mockQuery = pool.query as jest.Mock;
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ id: 'mock-user-id' }] }) // userResult
+      .mockResolvedValueOnce({ rows: [{ id: 'mock-tx-id' }] }); // txResult
+    testUserId = 'mock-user-id';
+    testTransactionId = 'mock-tx-id';
   });
 
   afterAll(async () => {
-    // Cleanup - Note: ledger entries are immutable, so we clean up test data carefully
-    await pool.query('DELETE FROM transactions WHERE reference_number LIKE $1', ['TEST-REF-%']);
-    await pool.query('DELETE FROM users WHERE phone_number = $1', ['+1234567890']);
+    // End mock pool
     await pool.end();
+  });
+
+  afterEach(() => {
+    // Reset mock calls between tests
+    (pool.query as jest.Mock).mockReset();
   });
 
   describe('postTransaction', () => {

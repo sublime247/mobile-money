@@ -6,3 +6,11 @@ compatibility_date = "2024-09-23"
 routes = [
   { pattern = "*yourdomain.com/.well-known/*", zone_name = "yourdomain.com" }
 ]
+
+[vars]
+# Cache TTL for stellar.toml (seconds)
+STELLAR_TOML_MAX_AGE = "3600"
+STELLAR_TOML_STALE_WHILE_REVALIDATE = "86400"
+# Cache TTL for other .well-known paths (seconds)
+DEFAULT_MAX_AGE = "300"
+DEFAULT_STALE_WHILE_REVALIDATE = "3600"

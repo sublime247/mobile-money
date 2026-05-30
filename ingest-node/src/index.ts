@@ -21,6 +21,7 @@ import Fastify from "fastify";
 import { z } from "zod";
 import Redis from "ioredis";
 import { connect as natsConnect, StringCodec, type NatsConnection } from "nats";
+import { Registry, Counter, Histogram, collectDefaultMetrics } from "prom-client";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -33,6 +34,43 @@ const REDIS_ENABLED = process.env.REDIS_ENABLED          !== "false";
 const NATS_ENABLED  = process.env.NATS_ENABLED           === "true";
 const REDIS_STREAM  = process.env.REDIS_STREAM           || "callbacks";
 const NATS_SUBJECT  = process.env.NATS_SUBJECT           || "callbacks.ingest";
+
+// ---------------------------------------------------------------------------
+// Prometheus metrics
+// ---------------------------------------------------------------------------
+
+const register = new Registry();
+collectDefaultMetrics({ register });
+
+const ingestRequestsTotal = new Counter({
+  name: "ingest_requests_total",
+  help: "Total number of ingest requests",
+  labelNames: ["status_code"],
+  registers: [register],
+});
+
+const ingestRequestDurationSeconds = new Histogram({
+  name: "ingest_request_duration_seconds",
+  help: "End-to-end duration of /ingest requests in seconds",
+  labelNames: ["status_code"],
+  buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5],
+  registers: [register],
+});
+
+const ingestParseDurationSeconds = new Histogram({
+  name: "ingest_parse_duration_seconds",
+  help: "Duration of request body parsing + validation in seconds",
+  buckets: [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.025, 0.05, 0.1],
+  registers: [register],
+});
+
+const ingestPublishDurationSeconds = new Histogram({
+  name: "ingest_publish_duration_seconds",
+  help: "Duration of stream publish (Redis + NATS) in seconds",
+  labelNames: ["target"],
+  buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1],
+  registers: [register],
+});
 
 // ---------------------------------------------------------------------------
 // Payload schema
@@ -79,6 +117,7 @@ async function publish(payload: CallbackPayload): Promise<void> {
   const serialised = JSON.stringify(payload);
 
   if (REDIS_ENABLED && redis) {
+    const redisStart = process.hrtime.bigint();
     // Redis Streams — at-least-once, persistent, consumer groups supported
     await redis.xadd(
       REDIS_STREAM,
@@ -88,12 +127,17 @@ async function publish(payload: CallbackPayload): Promise<void> {
       "reference",  payload.reference,
       "data",       serialised,
     );
+    const redisNs = Number(process.hrtime.bigint() - redisStart);
+    ingestPublishDurationSeconds.observe({ target: "redis" }, redisNs / 1e9);
   }
 
   if (NATS_ENABLED && nats) {
+    const natsStart = process.hrtime.bigint();
     // NATS JetStream — at-least-once with ack
     const js = nats.jetstream();
     await js.publish(NATS_SUBJECT, sc.encode(serialised));
+    const natsNs = Number(process.hrtime.bigint() - natsStart);
+    ingestPublishDurationSeconds.observe({ target: "nats" }, natsNs / 1e9);
   }
 }
 
@@ -107,17 +151,41 @@ const app = Fastify({
 });
 
 app.post<{ Body: unknown }>("/ingest", async (req, reply) => {
+  const requestStart = process.hrtime.bigint();
+
+  // --- Parse + validate ---
+  const parseStart = process.hrtime.bigint();
   const parsed = CallbackSchema.safeParse(req.body);
+  const parseNs = Number(process.hrtime.bigint() - parseStart);
+  ingestParseDurationSeconds.observe(parseNs / 1e9);
+
   if (!parsed.success) {
+    ingestRequestsTotal.inc({ status_code: "400" });
+    const totalNs = Number(process.hrtime.bigint() - requestStart);
+    ingestRequestDurationSeconds.observe({ status_code: "400" }, totalNs / 1e9);
     return reply.status(400).send({ error: "Invalid payload", details: parsed.error.flatten() });
   }
 
+  // --- Publish to streams ---
+  const publishStart = process.hrtime.bigint();
   await publish(parsed.data);
+  const publishNs = Number(process.hrtime.bigint() - publishStart);
+  ingestPublishDurationSeconds.observe({ target: "all" }, publishNs / 1e9);
+
+  ingestRequestsTotal.inc({ status_code: "202" });
+  const totalNs = Number(process.hrtime.bigint() - requestStart);
+  ingestRequestDurationSeconds.observe({ status_code: "202" }, totalNs / 1e9);
+
   return reply.status(202).send({ status: "accepted", reference: parsed.data.reference });
 });
 
 app.get("/health", async (_req, reply) => {
   return reply.status(200).send({ status: "ok", runtime: "node" });
+});
+
+app.get("/metrics", async (_req, reply) => {
+  reply.header("Content-Type", register.contentType);
+  return reply.send(await register.metrics());
 });
 
 // ---------------------------------------------------------------------------

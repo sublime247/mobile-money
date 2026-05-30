@@ -25,6 +25,8 @@ export const listAmlAlertsForAudit = async (
       endDate,
       limit,
       offset,
+      before,
+      after,
     } = req.query;
 
     const validStatuses = ["pending_review", "reviewed", "dismissed"] as const;
@@ -100,15 +102,38 @@ export const listAmlAlertsForAudit = async (
       filter.offset = parsedOffset;
     }
 
+    if (before && typeof before === "string") {
+      filter.before = before;
+    }
+
+    if (after && typeof after === "string") {
+      filter.after = after;
+    }
+
     const result = await amlAlertModel.list(filter);
+
+    const limitVal = filter.limit ?? 50;
+    const pagination: any = {
+      total: result.total,
+      limit: limitVal,
+    };
+
+    if (before || after || filter.before || filter.after) {
+      pagination.before = result.alerts.length
+        ? Buffer.from(`${result.alerts[0].createdAt}|${result.alerts[0].id}`).toString("base64")
+        : null;
+      pagination.after = result.alerts.length
+        ? Buffer.from(`${result.alerts[result.alerts.length - 1].createdAt}|${result.alerts[result.alerts.length - 1].id}`).toString("base64")
+        : null;
+      pagination.hasMore = result.hasMore ?? false;
+    } else {
+      pagination.offset = filter.offset ?? 0;
+      pagination.hasMore = result.hasMore ?? false;
+    }
 
     res.json({
       data: result.alerts,
-      pagination: {
-        total: result.total,
-        limit: filter.limit ?? 50,
-        offset: filter.offset ?? 0,
-      },
+      pagination,
       summary: {
         pendingReview: result.pendingReview,
       },
@@ -248,7 +273,7 @@ export const searchAmlAlertsByUser = async (
   res: Response,
 ): Promise<void> => {
   try {
-    const { userId, intensity } = req.query;
+    const { userId, intensity, limit, offset, before, after } = req.query;
 
     if (!userId || typeof userId !== "string") {
       res.status(400).json({
@@ -272,11 +297,62 @@ export const searchAmlAlertsByUser = async (
       filter.severity = intensity as "medium" | "high";
     }
 
+    if (limit && typeof limit === "string") {
+      const parsedLimit = parseInt(limit, 10);
+      if (isNaN(parsedLimit) || parsedLimit < 1 || parsedLimit > 100) {
+        res.status(400).json({
+          error: "Invalid limit",
+          message: "Limit must be between 1 and 100",
+        });
+        return;
+      }
+      filter.limit = parsedLimit;
+    }
+
+    if (offset && typeof offset === "string") {
+      const parsedOffset = parseInt(offset, 10);
+      if (isNaN(parsedOffset) || parsedOffset < 0) {
+        res.status(400).json({
+          error: "Invalid offset",
+          message: "Offset must be >= 0",
+        });
+        return;
+      }
+      filter.offset = parsedOffset;
+    }
+
+    if (before && typeof before === "string") {
+      filter.before = before;
+    }
+
+    if (after && typeof after === "string") {
+      filter.after = after;
+    }
+
     const result = await amlAlertModel.list(filter);
+
+    const limitVal = filter.limit ?? 50;
+    const pagination: any = {
+      total: result.total,
+      limit: limitVal,
+    };
+
+    if (before || after || filter.before || filter.after) {
+      pagination.before = result.alerts.length
+        ? Buffer.from(`${result.alerts[0].createdAt}|${result.alerts[0].id}`).toString("base64")
+        : null;
+      pagination.after = result.alerts.length
+        ? Buffer.from(`${result.alerts[result.alerts.length - 1].createdAt}|${result.alerts[result.alerts.length - 1].id}`).toString("base64")
+        : null;
+      pagination.hasMore = result.hasMore ?? false;
+    } else {
+      pagination.offset = filter.offset ?? 0;
+      pagination.hasMore = result.hasMore ?? false;
+    }
 
     res.json({
       data: result.alerts,
-      total: result.total,
+      pagination,
       pendingReview: result.pendingReview,
     });
   } catch (error) {

@@ -14,6 +14,7 @@ import {
 import { TransactionModel, TransactionStatus } from "../models/transaction";
 import { MobileMoneyService } from "../services/mobilemoney/mobileMoneyService";
 import { StellarService } from "../services/stellar/stellarService";
+import * as highThroughputService from "../services/stellar/highThroughputService";
 import { UserModel } from "../models/users";
 import { EmailService } from "../services/email";
 import { withRetry } from "../services/retry";
@@ -210,9 +211,13 @@ async function processTransaction(data: TransactionJobData): Promise<Transaction
     provider,
     stellarAddress,
     requestId,
+    _traceId,
   } = data;
 
-  const log = requestId ? logger.child({ requestId, transactionId }) : logger.child({ transactionId });
+  const logFields: Record<string, string> = { transactionId };
+  if (requestId) logFields.requestId = requestId;
+  if (_traceId) logFields.traceId = _traceId;
+  const log = logger.child(logFields);
   log.info({ type, provider }, `[RabbitMQ] Processing transaction`);
 
   const maxAttempts = Math.max(
@@ -279,7 +284,21 @@ async function processTransaction(data: TransactionJobData): Promise<Transaction
   };
 
         const stellarResult = await withRetry(
-          () => stellarService.sendPayment(stellarAddress, amount, senderName, receiverName),
+          () => {
+            // Use high-throughput pool service when available; falls back to single-account mode
+            const issuerSecret = process.env.STELLAR_ISSUER_SECRET?.trim();
+            if (highThroughputService.isServiceInitialized() && issuerSecret) {
+              const issuerKp = require("stellar-sdk").Keypair.fromSecret(issuerSecret);
+              return highThroughputService.submitPayment({
+                sourceAccount: issuerKp.publicKey(),
+                sourceSecret: issuerSecret,
+                destination: stellarAddress,
+                asset: "native",
+                amount: String(amount),
+              }).then(r => ({ hash: r.hash, submittedAt: new Date() }));
+            }
+            return stellarService.sendPayment(stellarAddress, amount, senderName, receiverName);
+          },
           retryConfig,
         );
 
@@ -333,7 +352,21 @@ async function processTransaction(data: TransactionJobData): Promise<Transaction
       await updateProgress(transactionId, 70);
 
       await withRetry(
-        () => stellarService.sendPayment(stellarAddress, amount, senderName, receiverName),
+        () => {
+          // Use high-throughput pool service when available; falls back to single-account mode
+          const issuerSecret = process.env.STELLAR_ISSUER_SECRET?.trim();
+          if (highThroughputService.isServiceInitialized() && issuerSecret) {
+            const issuerKp = require("stellar-sdk").Keypair.fromSecret(issuerSecret);
+            return highThroughputService.submitPayment({
+              sourceAccount: issuerKp.publicKey(),
+              sourceSecret: issuerSecret,
+              destination: stellarAddress,
+              asset: "native",
+              amount: String(amount),
+            });
+          }
+          return stellarService.sendPayment(stellarAddress, amount, senderName, receiverName);
+        },
         retryConfig,
       );
 

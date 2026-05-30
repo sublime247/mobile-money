@@ -60,6 +60,9 @@ impl HtlcContract {
                 refunded: false,
             },
         );
+
+        // Extend the TTL of the instance storage to set up state renewal rules
+        env.storage().instance().extend_ttl(1000, 10000);
     }
 
     /// Claim funds by providing the preimage.
@@ -79,6 +82,8 @@ impl HtlcContract {
 
         state.claimed = true;
         env.storage().instance().set(&HTLC, &state);
+
+        env.storage().instance().extend_ttl(1000, 10000);
     }
 
     /// Refund funds to the sender after the timelock has expired.
@@ -97,11 +102,15 @@ impl HtlcContract {
 
         state.refunded = true;
         env.storage().instance().set(&HTLC, &state);
+
+        env.storage().instance().extend_ttl(1000, 10000);
     }
 
     /// Return current HTLC state (read-only).
     pub fn get_state(env: Env) -> HtlcState {
-        env.storage().instance().get(&HTLC).expect("not initialised")
+        let state = env.storage().instance().get(&HTLC).expect("not initialised");
+        env.storage().instance().extend_ttl(1000, 10000);
+        state
     }
 }
 

@@ -73,3 +73,6 @@ export {
   accountMergeWorker,
   closeAccountMergeWorker,
 } from "./accountMergeWorker";
+
+// Trace-ID propagation utilities
+export { withTraceId, traceIdFromJob, childLoggerWithTrace, TRACE_ID_KEY } from "./trace";

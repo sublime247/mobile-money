@@ -56,7 +56,7 @@ export async function startApolloServer(
     validationRules: [
       depthLimit(5),
       createComplexityRule({
-        maximumComplexity: 1000,
+        maximumComplexity: 500,
         estimators: [
           fieldExtensionsEstimator(),
           simpleEstimator({ defaultComplexity: 1 }),

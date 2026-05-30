@@ -18,6 +18,7 @@ import {
 } from "../config/providers";
 import type { TransactionJobData } from "../queue/transactionQueue";
 import { amlService } from "../services/aml";
+import { generateFlaggedTransactionComplianceReport } from "../services/complianceReportService";
 import { twoFactorWithdrawalService } from "../services/twoFactorWithdrawalService";
 import {
   CancelTransactionResponse,
@@ -326,6 +327,25 @@ async function monitorTransactionForAML(
         ),
       ),
     ]);
+
+    try {
+      const { pdfUrl } = await generateFlaggedTransactionComplianceReport(
+        transaction,
+        result.alert,
+      );
+
+      await transactionModel.patchMetadata(transaction.id, {
+        complianceReport: {
+          pdfUrl,
+          generatedAt: new Date().toISOString(),
+        },
+      });
+    } catch (error) {
+      console.error(
+        `Failed to generate flagged transaction compliance PDF for transaction ${transaction.id}:`,
+        error,
+      );
+    }
   } catch (error) {
     console.error(
       `AML monitoring failed for transaction ${transaction.id}:`,
@@ -486,6 +506,19 @@ async function processTransactionRequest(
             message: verificationResult.error || "Invalid 2FA token or backup code"
           });
         }
+      }
+    }
+
+    // Check available balance for withdrawals before creating transaction
+    if (type === "withdraw") {
+      const stats = await transactionModel.getBalanceStatistics(userId);
+      const availableBalance = parseFloat(stats.available_balance || "0");
+      if (requestAmount > availableBalance) {
+        return res.status(400).json({
+          error: "Insufficient available balance",
+          code: "INSUFFICIENT_BALANCE",
+          message: "You do not have enough available settled funds to withdraw this amount."
+        });
       }
     }
 

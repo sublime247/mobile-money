@@ -1,11 +1,11 @@
 import * as StellarSdk from 'stellar-sdk';
 import { pool } from '../../config/database';
-import { getStellarServer, getNetworkPassphrase } from '../../config/stellar';
+import { getStellarServer } from '../../config/stellar';
 import { KeyVault, EncryptedPayload } from './keyVault';
 import { transactionTotal, transactionErrorsTotal } from '../../utils/metrics';
 import crypto from 'crypto';
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface ManagedKey {
   id: string;
@@ -41,23 +41,60 @@ export interface RecoveryToken {
   usedAt: Date | null;
 }
 
+/** All possible states in the multi-sig recovery state machine */
+export type RecoverySessionState =
+  | 'pending'
+  | 'collecting_approvals'
+  | 'awaiting_completion'
+  | 'completed'
+  | 'rejected';
+
+export interface RecoverySession {
+  id: string;
+  managedKeyId: string;
+  requiredApprovals: number;
+  state: RecoverySessionState;
+  approvedBy: string[];
+  requestedNewAddress: string | null;
+  initiatedByIp: string | null;
+  initiatedAt: Date;
+  expiresAt: Date;
+  completedAt: Date | null;
+  rejectedReason: string | null;
+  newPublicKey: string | null;
+  oldPublicKey: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface KeyRotationResult {
   newPublicKey: string;
   oldPublicKey: string;
   rotatedAt: Date;
 }
 
+// ─── Session TTL ──────────────────────────────────────────────────────────────
+
+const SESSION_TTL_MINUTES = parseInt(process.env.RECOVERY_SESSION_TTL_MINUTES || '30', 10);
+
 // ─── SEP-30 Managed Key Service ──────────────────────────────────────────────
 
 /**
- * SEP-30 implementation for managing Stellar keys on behalf of users.
+ * SEP-30 implementation for managing Stellar keys on behalf of users,
+ * extended with a multi-sig key recovery state machine.
+ *
+ * Recovery state machine:
+ *   pending  → collecting_approvals  (first signer calls initiateRecovery)
+ *   collecting_approvals → awaiting_completion  (M-of-N threshold reached)
+ *   awaiting_completion  → completed            (POST /complete)
+ *   *                    → rejected             (TTL expired or cancelled)
  *
  * Security guarantees:
  * - Secret keys are encrypted with AES-256-GCM before DB storage
  * - Plain text secrets exist only in-memory during signing operations
- * - Recovery requires M-of-N signer approvals (multi-sig backup)
- * - Key rotation creates a new keypair — old key is deactivated, not deleted
- * - All sensitive operations are logged for audit (without exposing secrets)
+ * - Recovery requires M-of-N cryptographic signer approvals
+ * - Key rotation creates a new keypair — old key deactivated, not deleted
+ * - All state transitions are audit-logged (without exposing secrets)
  */
 export class Sep30Service {
   private readonly vault: KeyVault;
@@ -68,24 +105,20 @@ export class Sep30Service {
     this.server = getStellarServer();
   }
 
-  // ─── Key Generation ────────────────────────────────────────────────────────
+  // ─── Key Generation ──────────────────────────────────────────────────────
 
   /**
    * Generate a new Stellar keypair for a user and store it encrypted.
-   *
    * The secret key is encrypted immediately after generation.
-   * It is never written to any log or stored in plaintext.
    */
   async createManagedKey(
     userId: string,
     recoveryThreshold: number = 1
   ): Promise<{ publicKey: string; keyId: string }> {
-    // Generate fresh Stellar keypair
     const keypair = StellarSdk.Keypair.random();
     const publicKey = keypair.publicKey();
     const secretKey = keypair.secret();
 
-    // Encrypt immediately — secret leaves this scope only as ciphertext
     const encryptedSecret = this.vault.encrypt(secretKey);
 
     const result = await pool.query(
@@ -97,25 +130,14 @@ export class Sep30Service {
     );
 
     const row = result.rows[0];
-
-    console.info('Managed key created', {
-      keyId: row.id,
-      userId,
-      publicKey, // Public key is safe to log
-      // secretKey is intentionally NOT logged
-    });
-
+    console.info('Managed key created', { keyId: row.id, userId, publicKey });
     return { publicKey, keyId: row.id };
   }
 
-  // ─── Signing ────────────────────────────────────────────────────────────────
+  // ─── Signing ─────────────────────────────────────────────────────────────
 
   /**
    * Sign and submit a Stellar transaction using a managed key.
-   *
-   * The secret key is decrypted in memory, used to sign, then the reference
-   * is discarded. JavaScript GC will eventually clear it — for maximum
-   * security in production, consider running signing in an isolated worker.
    */
   async signAndSubmit(
     keyId: string,
@@ -125,8 +147,6 @@ export class Sep30Service {
     ) => StellarSdk.Transaction
   ): Promise<string> {
     const managedKey = await this.getManagedKey(keyId, userId);
-
-    // Decrypt secret — exists in memory only during this function call
     const secretKey = this.vault.decrypt(managedKey.encryptedSecret);
 
     try {
@@ -137,7 +157,6 @@ export class Sep30Service {
       tx.sign(keypair);
 
       const result = await this.server.submitTransaction(tx);
-
       transactionTotal.inc({ type: 'sep30_sign', provider: 'stellar', status: 'success' });
       return result.hash;
     } catch (error) {
@@ -146,25 +165,17 @@ export class Sep30Service {
     }
   }
 
-  // ─── Recovery Signers ──────────────────────────────────────────────────────
+  // ─── Recovery Signers ────────────────────────────────────────────────────
 
-  /**
-   * Register a recovery signer for a managed key.
-   *
-   * SEP-30 allows multiple recovery signers (e.g. user's device key,
-   * a trusted guardian, a phone-number-based signer). Recovery requires
-   * signatures from `recoveryThreshold` of these signers.
-   */
+  /** Register a new recovery signer for a managed key. */
   async addRecoverySigner(
     keyId: string,
     userId: string,
     signerPublicKey: string,
     signerLabel: string
   ): Promise<RecoverySigner> {
-    // Verify the key belongs to this user
     await this.getManagedKey(keyId, userId);
 
-    // Validate the signer public key is a valid Stellar key
     try {
       StellarSdk.Keypair.fromPublicKey(signerPublicKey);
     } catch {
@@ -178,12 +189,10 @@ export class Sep30Service {
       [keyId, signerPublicKey, signerLabel]
     );
 
-    return result.rows[0];
+    return this.mapRecoverySigner(result.rows[0]);
   }
 
-  /**
-   * List all recovery signers for a managed key.
-   */
+  /** List all recovery signers for a managed key. */
   async listRecoverySigners(keyId: string, userId: string): Promise<RecoverySigner[]> {
     await this.getManagedKey(keyId, userId);
 
@@ -192,12 +201,12 @@ export class Sep30Service {
       [keyId]
     );
 
-    return result.rows;
+    return result.rows.map(this.mapRecoverySigner);
   }
 
   /**
    * Remove a recovery signer.
-   * Validates that removing it would not drop below the recovery threshold.
+   * Validates that removing it would not drop below the threshold.
    */
   async removeRecoverySigner(
     keyId: string,
@@ -221,20 +230,91 @@ export class Sep30Service {
     );
   }
 
-  // ─── Recovery Flow ─────────────────────────────────────────────────────────
+  // ─── Multi-Sig Recovery Session Flow ────────────────────────────────────
 
   /**
-   * Step 1 of recovery: Initiate — generates a short-lived recovery token.
+   * Step 0: Open a new recovery session (FSM: pending).
    *
-   * Each registered signer must call this independently. The raw token
-   * is returned once and never stored — only its hash is persisted.
-   * The signer must sign the token with their Stellar key to prove ownership.
+   * Called once per recovery attempt — not per signer.
+   * Returns a session ID that signers reference in subsequent calls.
+   */
+  async openRecoverySession(
+    keyId: string,
+    requestedNewAddress?: string,
+    initiatedByIp?: string
+  ): Promise<RecoverySession> {
+    const key = await this.getActiveManagedKeyById(keyId);
+
+    // Validate the optional custom address
+    if (requestedNewAddress) {
+      try {
+        StellarSdk.Keypair.fromPublicKey(requestedNewAddress);
+      } catch {
+        throw new Error(`Invalid Stellar public key for requested_new_address: ${requestedNewAddress}`);
+      }
+    }
+
+    // Reject if there is already an active (non-terminal) session
+    const existingActive = await pool.query(
+      `SELECT id FROM key_recovery_sessions
+       WHERE managed_key_id = $1
+         AND state NOT IN ('completed', 'rejected')
+         AND expires_at > NOW()`,
+      [keyId]
+    );
+
+    if (existingActive.rows.length > 0) {
+      throw new Error(
+        `An active recovery session already exists for this key: ${existingActive.rows[0].id}. ` +
+        `Cancel it first or wait for it to expire.`
+      );
+    }
+
+    const expiresAt = new Date(Date.now() + SESSION_TTL_MINUTES * 60 * 1000);
+
+    const result = await pool.query(
+      `INSERT INTO key_recovery_sessions
+         (managed_key_id, required_approvals, state, requested_new_address,
+          initiated_by_ip, expires_at, old_public_key)
+       VALUES ($1, $2, 'pending', $3, $4::inet, $5, $6)
+       RETURNING *`,
+      [keyId, key.recovery_threshold, requestedNewAddress ?? null, initiatedByIp ?? null, expiresAt, key.public_key]
+    );
+
+    const session = this.mapSession(result.rows[0]);
+
+    await this.writeAuditLog({
+      sessionId: session.id,
+      eventType: 'session_opened',
+      fromState: null,
+      toState: 'pending',
+      metadata: { requiredApprovals: session.requiredApprovals },
+      ip: initiatedByIp,
+    });
+
+    console.info('Recovery session opened', {
+      sessionId: session.id,
+      keyId,
+      requiredApprovals: session.requiredApprovals,
+    });
+
+    return session;
+  }
+
+  /**
+   * Step 1: Initiate — a registered signer requests a challenge token.
+   *
+   * The raw token is returned once; only its hash is persisted.
+   * The signer must sign the token bytes with their Stellar private key.
+   *
+   * FSM: pending|collecting_approvals → (unchanged, token issued)
    */
   async initiateRecovery(
     keyId: string,
-    signerPublicKey: string
-  ): Promise<{ token: string; expiresAt: Date }> {
-    // Verify this public key is a registered signer for this key
+    signerPublicKey: string,
+    sessionId?: string
+  ): Promise<{ token: string; expiresAt: Date; sessionId: string }> {
+    // Verify signer is registered
     const signerResult = await pool.query(
       'SELECT * FROM recovery_signers WHERE managed_key_id = $1 AND signer_public_key = $2',
       [keyId, signerPublicKey]
@@ -244,12 +324,20 @@ export class Sep30Service {
       throw new Error('Public key is not a registered recovery signer for this managed key');
     }
 
-    // Generate a cryptographically random token
-    const rawToken = crypto.randomBytes(32).toString('hex');
-    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
-    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+    // Resolve or create session
+    let session: RecoverySession;
+    if (sessionId) {
+      session = await this.getRecoverySession(sessionId);
+      if (session.managedKeyId !== keyId) {
+        throw new Error('Session does not belong to this managed key');
+      }
+      this.assertSessionActive(session);
+    } else {
+      // Open a new session automatically (single-signer convenience)
+      session = await this.openRecoverySession(keyId);
+    }
 
-    // Invalidate any existing unused tokens for this signer
+    // Invalidate any existing unused tokens for this signer on this session
     await pool.query(
       `UPDATE recovery_tokens
        SET used_at = NOW()
@@ -259,6 +347,10 @@ export class Sep30Service {
       [keyId, signerPublicKey]
     );
 
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15-minute window
+
     await pool.query(
       `INSERT INTO recovery_tokens
          (managed_key_id, token_hash, signer_public_key, expires_at)
@@ -266,31 +358,64 @@ export class Sep30Service {
       [keyId, tokenHash, signerPublicKey, expiresAt]
     );
 
-    console.info('Recovery initiated', { keyId, signerPublicKey, expiresAt });
+    await this.writeAuditLog({
+      sessionId: session.id,
+      eventType: 'token_issued',
+      signerPublicKey,
+      fromState: session.state,
+      toState: session.state,
+      ip: undefined,
+    });
 
-    // Raw token returned ONCE — signer must sign this with their Stellar key
-    return { token: rawToken, expiresAt };
+    console.info('Recovery token issued', { keyId, signerPublicKey, expiresAt, sessionId: session.id });
+    return { token: rawToken, expiresAt, sessionId: session.id };
   }
 
   /**
-   * Step 2 of recovery: Verify a signed recovery token from one signer.
+   * Step 2: Approve — a signer submits a cryptographic proof (signed token).
    *
-   * The signer proves ownership by signing the recovery token with their
-   * Stellar private key. This function verifies the signature.
+   * Verifies the Stellar signature, marks the token used, adds the signer
+   * to the session's approved_by list, and advances the FSM state:
    *
-   * @param token - raw token from initiateRecovery
-   * @param signature - base64 signature of the token bytes, made with signerPublicKey
-   * @param signerPublicKey - the recovery signer's public key
+   * FSM transitions:
+   *   pending              → collecting_approvals  (first approval)
+   *   collecting_approvals → collecting_approvals  (not yet at threshold)
+   *   collecting_approvals → awaiting_completion   (threshold reached)
+   *
+   * @param token      Raw challenge token from initiateRecovery
+   * @param signature  Base64 Stellar signature of the token bytes
    */
-  async verifyRecoverySignature(
+  async approveRecovery(
     keyId: string,
+    sessionId: string,
     token: string,
     signature: string,
-    signerPublicKey: string
-  ): Promise<boolean> {
-    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    signerPublicKey: string,
+    ip?: string
+  ): Promise<{ approved: boolean; session: RecoverySession }> {
+    const session = await this.getRecoverySession(sessionId);
 
-    // Find the token record
+    if (session.managedKeyId !== keyId) {
+      throw new Error('Session does not belong to this managed key');
+    }
+    this.assertSessionActive(session);
+
+    // Guard: this signer has not already approved this session
+    if (session.approvedBy.includes(signerPublicKey)) {
+      throw new Error(`Signer ${signerPublicKey} has already approved this recovery session`);
+    }
+
+    // Verify signer is registered
+    const signerResult = await pool.query(
+      'SELECT * FROM recovery_signers WHERE managed_key_id = $1 AND signer_public_key = $2',
+      [keyId, signerPublicKey]
+    );
+    if (signerResult.rows.length === 0) {
+      throw new Error('Public key is not a registered recovery signer for this managed key');
+    }
+
+    // Verify the challenge token exists, is unused, and not expired
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
     const tokenResult = await pool.query(
       `SELECT * FROM recovery_tokens
        WHERE managed_key_id = $1
@@ -305,15 +430,254 @@ export class Sep30Service {
       throw new Error('Recovery token not found, already used, or expired');
     }
 
-    // Verify Stellar signature — signer proves they own the private key
+    // Cryptographically verify the Stellar signature
     const keypair = StellarSdk.Keypair.fromPublicKey(signerPublicKey);
     const tokenBytes = Buffer.from(token, 'utf8');
     const signatureBytes = Buffer.from(signature, 'base64');
+    const isValid = keypair.verify(tokenBytes, signatureBytes);
 
+    if (!isValid) {
+      throw new Error('Invalid Stellar signature — signer verification failed');
+    }
+
+    // Mark token as consumed
+    await pool.query(
+      'UPDATE recovery_tokens SET used_at = NOW() WHERE managed_key_id = $1 AND token_hash = $2',
+      [keyId, tokenHash]
+    );
+
+    // Append signer to approved_by and compute next state
+    const newApprovedBy = [...session.approvedBy, signerPublicKey];
+    const thresholdReached = newApprovedBy.length >= session.requiredApprovals;
+
+    const fromState = session.state;
+    const toState: RecoverySessionState = thresholdReached
+      ? 'awaiting_completion'
+      : 'collecting_approvals';
+
+    await pool.query(
+      `UPDATE key_recovery_sessions
+       SET approved_by = $1, state = $2, updated_at = NOW()
+       WHERE id = $3`,
+      [newApprovedBy, toState, sessionId]
+    );
+
+    await this.writeAuditLog({
+      sessionId,
+      eventType: thresholdReached ? 'threshold_reached' : 'signer_approved',
+      signerPublicKey,
+      fromState,
+      toState,
+      metadata: { approvedCount: newApprovedBy.length, required: session.requiredApprovals },
+      ip,
+    });
+
+    console.info('Recovery approval recorded', {
+      sessionId,
+      signerPublicKey,
+      approvedCount: newApprovedBy.length,
+      required: session.requiredApprovals,
+      thresholdReached,
+    });
+
+    const updatedSession = await this.getRecoverySession(sessionId);
+    return { approved: true, session: updatedSession };
+  }
+
+  /**
+   * Step 3: Complete — finalise recovery and rotate the key.
+   *
+   * Can only be called when session.state === 'awaiting_completion'.
+   * Rotates the key and transitions FSM → completed.
+   */
+  async completeRecovery(
+    keyId: string,
+    sessionId: string,
+    ip?: string
+  ): Promise<KeyRotationResult & { sessionId: string }> {
+    const session = await this.getRecoverySession(sessionId);
+
+    if (session.managedKeyId !== keyId) {
+      throw new Error('Session does not belong to this managed key');
+    }
+
+    if (session.state !== 'awaiting_completion') {
+      throw new Error(
+        `Cannot complete recovery: session is in state '${session.state}'. ` +
+        `Need state 'awaiting_completion' (i.e. M-of-N approvals must be collected first).`
+      );
+    }
+
+    if (new Date() > session.expiresAt) {
+      await this.rejectSession(sessionId, 'Session expired before completion', ip);
+      throw new Error('Recovery session has expired');
+    }
+
+    // Perform key rotation inside a transaction
+    const key = await this.getActiveManagedKeyById(keyId);
+    const oldPublicKey = key.public_key;
+
+    const newKeypair = StellarSdk.Keypair.random();
+    const newPublicKey = session.requestedNewAddress ?? newKeypair.publicKey();
+    const newSecret = newKeypair.secret();
+    const newEncryptedSecret = this.vault.encrypt(newSecret);
+    const rotatedAt = new Date();
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Deactivate old key
+      await client.query(
+        'UPDATE managed_keys SET is_active = false, updated_at = NOW() WHERE id = $1',
+        [keyId]
+      );
+
+      // Insert new key with the same threshold and signers carried over
+      await client.query(
+        `INSERT INTO managed_keys
+           (user_id, public_key, encrypted_secret, recovery_threshold, is_active)
+         VALUES ($1, $2, $3, $4, true)`,
+        [key.user_id, newPublicKey, JSON.stringify(newEncryptedSecret), key.recovery_threshold]
+      );
+
+      // Mark session completed
+      await client.query(
+        `UPDATE key_recovery_sessions
+         SET state = 'completed',
+             completed_at = NOW(),
+             new_public_key = $1,
+             updated_at = NOW()
+         WHERE id = $2`,
+        [newPublicKey, sessionId]
+      );
+
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+
+    await this.writeAuditLog({
+      sessionId,
+      eventType: 'recovery_completed',
+      fromState: 'awaiting_completion',
+      toState: 'completed',
+      metadata: { oldPublicKey, newPublicKey },
+      ip,
+    });
+
+    console.info('Recovery completed — key rotated', {
+      sessionId,
+      oldPublicKey,
+      newPublicKey,
+      rotatedAt,
+    });
+
+    transactionTotal.inc({ type: 'sep30_recovery_complete', provider: 'stellar', status: 'success' });
+
+    return { newPublicKey, oldPublicKey, rotatedAt, sessionId };
+  }
+
+  /**
+   * Cancel / reject an active recovery session.
+   * Only callable while the session is in a non-terminal state.
+   */
+  async cancelRecoverySession(
+    keyId: string,
+    sessionId: string,
+    reason: string = 'Cancelled by user',
+    ip?: string
+  ): Promise<void> {
+    const session = await this.getRecoverySession(sessionId);
+
+    if (session.managedKeyId !== keyId) {
+      throw new Error('Session does not belong to this managed key');
+    }
+
+    if (session.state === 'completed' || session.state === 'rejected') {
+      throw new Error(`Session is already in terminal state '${session.state}'`);
+    }
+
+    await this.rejectSession(sessionId, reason, ip);
+  }
+
+  /** Retrieve a recovery session by ID (public). */
+  async getRecoverySession(sessionId: string): Promise<RecoverySession> {
+    const result = await pool.query(
+      'SELECT * FROM key_recovery_sessions WHERE id = $1',
+      [sessionId]
+    );
+
+    if (result.rows.length === 0) {
+      throw new Error(`Recovery session not found: ${sessionId}`);
+    }
+
+    return this.mapSession(result.rows[0]);
+  }
+
+  /** List all recovery sessions for a managed key (most recent first). */
+  async listRecoverySessions(
+    keyId: string,
+    userId: string,
+    stateFilter?: RecoverySessionState
+  ): Promise<RecoverySession[]> {
+    await this.getManagedKey(keyId, userId);
+
+    const query = stateFilter
+      ? 'SELECT * FROM key_recovery_sessions WHERE managed_key_id = $1 AND state = $2 ORDER BY created_at DESC'
+      : 'SELECT * FROM key_recovery_sessions WHERE managed_key_id = $1 ORDER BY created_at DESC';
+
+    const params = stateFilter ? [keyId, stateFilter] : [keyId];
+    const result = await pool.query(query, params);
+    return result.rows.map(this.mapSession);
+  }
+
+  /** Get the audit log for a recovery session. */
+  async getRecoveryAuditLog(sessionId: string): Promise<any[]> {
+    const result = await pool.query(
+      'SELECT * FROM key_recovery_audit_log WHERE session_id = $1 ORDER BY occurred_at',
+      [sessionId]
+    );
+    return result.rows;
+  }
+
+  // ─── Legacy compatibility: direct verify + complete without sessions ──────
+
+  /**
+   * Verify a signed recovery token (legacy one-shot flow without sessions).
+   * @deprecated Use the session-based flow (openRecoverySession → initiateRecovery → approveRecovery → completeRecovery)
+   */
+  async verifyRecoverySignature(
+    keyId: string,
+    token: string,
+    signature: string,
+    signerPublicKey: string
+  ): Promise<boolean> {
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+
+    const tokenResult = await pool.query(
+      `SELECT * FROM recovery_tokens
+       WHERE managed_key_id = $1
+         AND token_hash = $2
+         AND signer_public_key = $3
+         AND used_at IS NULL
+         AND expires_at > NOW()`,
+      [keyId, tokenHash, signerPublicKey]
+    );
+
+    if (tokenResult.rows.length === 0) {
+      throw new Error('Recovery token not found, already used, or expired');
+    }
+
+    const keypair = StellarSdk.Keypair.fromPublicKey(signerPublicKey);
+    const tokenBytes = Buffer.from(token, 'utf8');
+    const signatureBytes = Buffer.from(signature, 'base64');
     const isValid = keypair.verify(tokenBytes, signatureBytes);
 
     if (isValid) {
-      // Mark token as used — cannot be reused
       await pool.query(
         'UPDATE recovery_tokens SET used_at = NOW() WHERE managed_key_id = $1 AND token_hash = $2',
         [keyId, tokenHash]
@@ -323,59 +687,11 @@ export class Sep30Service {
     return isValid;
   }
 
-  /**
-   * Step 3 of recovery: Complete — if enough signers have verified,
-   * rotate the key to a new address provided by the user.
-   *
-   * This implements the M-of-N multi-sig recovery model.
-   * Requires `recoveryThreshold` verified signatures within the time window.
-   */
-  async completeRecovery(
-    keyId: string,
-    verifiedSignerPublicKeys: string[],
-    newStellarAddress?: string
-  ): Promise<KeyRotationResult> {
-    const managedKey = await pool.query(
-      'SELECT * FROM managed_keys WHERE id = $1 AND is_active = true',
-      [keyId]
-    );
-
-    if (managedKey.rows.length === 0) {
-      throw new Error('Managed key not found or inactive');
-    }
-
-    const key = managedKey.rows[0];
-
-    if (verifiedSignerPublicKeys.length < key.recovery_threshold) {
-      throw new Error(
-        `Recovery requires ${key.recovery_threshold} verified signers, ` +
-        `but only ${verifiedSignerPublicKeys.length} provided`
-      );
-    }
-
-    // All provided signers must be registered
-    for (const signerKey of verifiedSignerPublicKeys) {
-      const check = await pool.query(
-        'SELECT id FROM recovery_signers WHERE managed_key_id = $1 AND signer_public_key = $2',
-        [keyId, signerKey]
-      );
-      if (check.rows.length === 0) {
-        throw new Error(`Signer ${signerKey} is not registered for this managed key`);
-      }
-    }
-
-    // Rotate to a new keypair or a user-provided address
-    return this.rotateKey(keyId, key.user_id, newStellarAddress);
-  }
-
-  // ─── Key Rotation ──────────────────────────────────────────────────────────
+  // ─── Key Rotation ─────────────────────────────────────────────────────────
 
   /**
-   * Rotate a managed key — generates a new keypair, encrypts it,
-   * and deactivates the old key. Old key is soft-deleted for audit trail.
-   *
-   * Can be called directly by the user (planned rotation)
-   * or via completeRecovery (emergency rotation after multi-sig approval).
+   * Planned key rotation (not recovery-triggered).
+   * Can be called directly by the key owner.
    */
   async rotateKey(
     keyId: string,
@@ -385,61 +701,41 @@ export class Sep30Service {
     const existing = await this.getManagedKey(keyId, userId);
     const oldPublicKey = existing.publicKey;
 
-    // Generate new keypair
     const newKeypair = StellarSdk.Keypair.random();
     const newPublicKey = newStellarAddress ?? newKeypair.publicKey();
     const newSecret = newKeypair.secret();
-
-    // Encrypt new secret immediately
     const newEncryptedSecret = this.vault.encrypt(newSecret);
-
     const rotatedAt = new Date();
 
-    // Deactivate old key and insert new one atomically
-    await pool.query('BEGIN');
+    const client = await pool.connect();
     try {
-      await pool.query(
+      await client.query('BEGIN');
+      await client.query(
         'UPDATE managed_keys SET is_active = false, updated_at = NOW() WHERE id = $1',
         [keyId]
       );
-
-      await pool.query(
+      await client.query(
         `INSERT INTO managed_keys
            (user_id, public_key, encrypted_secret, recovery_threshold, is_active)
          VALUES ($1, $2, $3, $4, true)`,
-        [
-          userId,
-          newPublicKey,
-          JSON.stringify(newEncryptedSecret),
-          existing.recoveryThreshold,
-        ]
+        [userId, newPublicKey, JSON.stringify(newEncryptedSecret), existing.recoveryThreshold]
       );
-
-      await pool.query('COMMIT');
+      await client.query('COMMIT');
     } catch (error) {
-      await pool.query('ROLLBACK');
+      await client.query('ROLLBACK');
       throw error;
+    } finally {
+      client.release();
     }
 
-    console.info('Key rotated', {
-      userId,
-      oldPublicKey,
-      newPublicKey,
-      rotatedAt,
-      // Neither old nor new secret is logged
-    });
-
+    console.info('Key rotated (planned)', { userId, oldPublicKey, newPublicKey, rotatedAt });
     transactionTotal.inc({ type: 'sep30_rotate', provider: 'stellar', status: 'success' });
 
     return { newPublicKey, oldPublicKey, rotatedAt };
   }
 
-  // ─── Threshold Management ──────────────────────────────────────────────────
+  // ─── Threshold Management ─────────────────────────────────────────────────
 
-  /**
-   * Update the recovery threshold for a managed key.
-   * New threshold must not exceed the number of registered signers.
-   */
   async updateRecoveryThreshold(
     keyId: string,
     userId: string,
@@ -463,7 +759,7 @@ export class Sep30Service {
     );
   }
 
-  // ─── Queries ───────────────────────────────────────────────────────────────
+  // ─── Queries ──────────────────────────────────────────────────────────────
 
   async listManagedKeys(userId: string): Promise<Omit<ManagedKey, 'encryptedSecret'>[]> {
     const result = await pool.query(
@@ -476,7 +772,7 @@ export class Sep30Service {
     return result.rows;
   }
 
-  // ─── Internal ──────────────────────────────────────────────────────────────
+  // ─── Internal helpers ─────────────────────────────────────────────────────
 
   private async getManagedKey(keyId: string, userId: string): Promise<ManagedKey> {
     const result = await pool.query(
@@ -493,8 +789,112 @@ export class Sep30Service {
 
     const row = result.rows[0];
     return {
-      ...row,
+      id: row.id,
+      userId: row.user_id,
+      publicKey: row.public_key,
       encryptedSecret: JSON.parse(row.encrypted_secret),
+      recoveryThreshold: row.recovery_threshold,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      isActive: row.is_active,
+    };
+  }
+
+  /** Fetch an active managed key without user ownership check (used internally during recovery). */
+  private async getActiveManagedKeyById(keyId: string): Promise<any> {
+    const result = await pool.query(
+      'SELECT * FROM managed_keys WHERE id = $1 AND is_active = true',
+      [keyId]
+    );
+
+    if (result.rows.length === 0) {
+      throw new Error('Managed key not found or is inactive');
+    }
+
+    return result.rows[0];
+  }
+
+  private assertSessionActive(session: RecoverySession): void {
+    if (session.state === 'completed' || session.state === 'rejected') {
+      throw new Error(`Recovery session is already in terminal state '${session.state}'`);
+    }
+    if (new Date() > session.expiresAt) {
+      throw new Error('Recovery session has expired');
+    }
+  }
+
+  private async rejectSession(sessionId: string, reason: string, ip?: string): Promise<void> {
+    const session = await this.getRecoverySession(sessionId);
+
+    await pool.query(
+      `UPDATE key_recovery_sessions
+       SET state = 'rejected', rejected_reason = $1, completed_at = NOW(), updated_at = NOW()
+       WHERE id = $2`,
+      [reason, sessionId]
+    );
+
+    await this.writeAuditLog({
+      sessionId,
+      eventType: 'session_rejected',
+      fromState: session.state,
+      toState: 'rejected',
+      metadata: { reason },
+      ip,
+    });
+  }
+
+  private async writeAuditLog(params: {
+    sessionId: string;
+    eventType: string;
+    signerPublicKey?: string;
+    fromState: RecoverySessionState | null;
+    toState: RecoverySessionState;
+    metadata?: Record<string, unknown>;
+    ip?: string;
+  }): Promise<void> {
+    await pool.query(
+      `INSERT INTO key_recovery_audit_log
+         (session_id, event_type, signer_public_key, from_state, to_state, metadata, ip_address)
+       VALUES ($1, $2, $3, $4, $5, $6, $7::inet)`,
+      [
+        params.sessionId,
+        params.eventType,
+        params.signerPublicKey ?? null,
+        params.fromState,
+        params.toState,
+        params.metadata ? JSON.stringify(params.metadata) : null,
+        params.ip ?? null,
+      ]
+    );
+  }
+
+  private mapSession(row: any): RecoverySession {
+    return {
+      id: row.id,
+      managedKeyId: row.managed_key_id,
+      requiredApprovals: row.required_approvals,
+      state: row.state as RecoverySessionState,
+      approvedBy: row.approved_by ?? [],
+      requestedNewAddress: row.requested_new_address ?? null,
+      initiatedByIp: row.initiated_by_ip ?? null,
+      initiatedAt: row.initiated_at,
+      expiresAt: row.expires_at,
+      completedAt: row.completed_at ?? null,
+      rejectedReason: row.rejected_reason ?? null,
+      newPublicKey: row.new_public_key ?? null,
+      oldPublicKey: row.old_public_key ?? null,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+  }
+
+  private mapRecoverySigner(row: any): RecoverySigner {
+    return {
+      id: row.id,
+      managedKeyId: row.managed_key_id,
+      signerPublicKey: row.signer_public_key,
+      signerLabel: row.signer_label,
+      createdAt: row.created_at,
     };
   }
 }

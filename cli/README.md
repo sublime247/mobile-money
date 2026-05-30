@@ -8,7 +8,13 @@ Admin maintenance CLI for the mobile-money service.
 cd cli && npm install
 ```
 
-Create `cli/.momorc`:
+Run the interactive setup wizard to create `cli/.momorc`:
+
+```bash
+npm run dev -- setup
+```
+
+If you prefer to create it manually, use:
 
 ```
 MOMO_API_URL=https://your-production-url

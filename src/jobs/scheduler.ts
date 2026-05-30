@@ -18,12 +18,15 @@ import { runLiquidityRebalanceJob } from "./liquidityRebalanceJob";
 import { runCrossChainMonitorJob } from "./crossChainMonitorJob";
 import { runDailyProviderReconciliation } from "./providerReconciliationJob";
 import { runReconciliationJob } from "./reconciliationJob";
+import { runDatabaseBackupJob } from "./databaseBackupJob";
+import { runDatabaseBackupVerifyJob } from "./databaseBackupVerifyJob";
 import {
   INDEX_REINDEX_CRON,
   INDEX_REINDEX_JOB_ENABLED,
 } from "../config/env";
 import { runIndexReindexJob } from "./indexReindexJob";
-
+import { runSanctionSyncJob } from "./sanctionSyncJob";
+import { startNotificationWorker } from "../workers/notificationWorker";
 
 interface JobConfig {
   name: string;
@@ -134,6 +137,18 @@ const JOBS: JobConfig[] = [
     // Daily at 5:00 AM
     schedule: process.env.RECONCILIATION_CRON || "0 5 * * *",
     handler: runReconciliationJob,
+  },
+  {
+    name: "database-backup",
+    // Daily at 2:00 AM
+    schedule: process.env.DATABASE_BACKUP_CRON || "0 2 * * *",
+    handler: runDatabaseBackupJob,
+  },
+  {
+    name: "database-backup-verify",
+    // Daily at 3:00 AM
+    schedule: process.env.DATABASE_BACKUP_VERIFY_CRON || "0 3 * * *",
+    handler: runDatabaseBackupVerifyJob,
   },
 ];
 

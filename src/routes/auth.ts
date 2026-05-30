@@ -309,7 +309,7 @@ authRoutes.get('/me', authenticateToken, async (req: Request, res: Response) => 
     const permissions = await getUserPermissions(payload.userId);
 
     const cacheKey = `user:balance:stats:${payload.userId}`;
-    let balanceStats = { total_deposited: "0", total_withdrawn: "0", current_balance: "0" };
+    let balanceStats = { total_deposited: "0", total_withdrawn: "0", current_balance: "0", available_balance: "0", pending_balance: "0" };
 
     if (redisClient.isOpen) {
       const cachedStats = await redisClient.get(cacheKey);
@@ -327,6 +327,8 @@ authRoutes.get('/me', authenticateToken, async (req: Request, res: Response) => 
             total_deposited: dbStats.total_deposited || "0",
             total_withdrawn: dbStats.total_withdrawn || "0",
             current_balance: dbStats.current_balance || "0",
+            available_balance: dbStats.available_balance || "0",
+            pending_balance: dbStats.pending_balance || "0",
           };
           await redisClient.set(cacheKey, JSON.stringify(balanceStats), { EX: 3600 });
         }
@@ -339,6 +341,8 @@ authRoutes.get('/me', authenticateToken, async (req: Request, res: Response) => 
           total_deposited: dbStats.total_deposited || "0",
           total_withdrawn: dbStats.total_withdrawn || "0",
           current_balance: dbStats.current_balance || "0",
+          available_balance: dbStats.available_balance || "0",
+          pending_balance: dbStats.pending_balance || "0",
         };
       }
     }
@@ -352,6 +356,8 @@ authRoutes.get('/me', authenticateToken, async (req: Request, res: Response) => 
         total_deposited: balanceStats.total_deposited,
         total_withdrawn: balanceStats.total_withdrawn,
         current_balance: balanceStats.current_balance,
+        available_balance: balanceStats.available_balance,
+        pending_balance: balanceStats.pending_balance,
       },
       tokenInfo: {
         issuedAt: payload.iat,

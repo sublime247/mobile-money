@@ -5,7 +5,14 @@ import logger from "./logger";
 
 const app = express();
 
-app.use(express.json());
+// Preserve raw request body buffer for signature verification middleware.
+app.use(
+  express.json({
+    verify: (req: any, _res, buf: Buffer) => {
+      req.rawBody = buf;
+    },
+  }),
+);
 
 // ── HTTP request / response logging ─────────────────────────────────────────
 // Logs every inbound request and its outcome as a structured JSON line.

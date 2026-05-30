@@ -1,0 +1,15 @@
+# Clippy configuration for Soroban smart contracts workspace.
+# Applied to all crates under contracts/ via `cargo clippy`.
+
+# Reject wildcard imports — forces explicit use declarations.
+warn-on-all-wildcard-imports = true
+
+# Enforce a maximum cognitive complexity to keep contract logic readable.
+cognitive-complexity-threshold = 25
+
+# Disallow types that exceed this size (bytes) from being copied without
+# explicit awareness — encourages passing by reference in hot paths.
+too-large-for-stack = 512
+
+# Require every public API item to carry a doc-comment.
+missing-docs-in-crate-items = false

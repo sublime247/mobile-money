@@ -136,17 +136,12 @@ class SlowQueryPool extends Pool {
  * (INSERT, UPDATE, DELETE) and read operations when no replica is available.
  */
 export const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  max: 50,
-  idleTimeoutMillis: 15000,
-  connectionTimeoutMillis: 5000,
+  connectionString: IS_SANDBOX ? (SANDBOX_DATABASE_URL || DATABASE_URL) : DATABASE_URL,
+  max: 1000,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 500,
+  ssl: productionSsl,
 });
-    connectionString: IS_SANDBOX ? (SANDBOX_DATABASE_URL || DATABASE_URL) : DATABASE_URL,
-    max: 1000,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 500,
-    ssl: productionSsl,
-  });
 
 // Wrap query for slow-query logging while preserving Pool typings.
 const originalPoolQuery = pool.query.bind(pool);
@@ -220,21 +215,12 @@ const replicaPools: Pool[] = replicaUrls.map(
   (url) =>
     new Pool({
       connectionString: url,
-      max: 30,
-      idleTimeoutMillis: 15000,
-      connectionTimeoutMillis: 5000,
+      max: 50,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 500,
+      ssl: productionSsl,
     }),
 );
-  const replicaPools: Pool[] = replicaUrls.map(
-    (url) =>
-      new Pool({
-        connectionString: url,
-        max: 50,
-        idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 500,
-        ssl: productionSsl,
-      }),
-  );
 
 // Track which replica to use next for round-robin load balancing
 let replicaIndex = 0;

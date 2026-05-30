@@ -1,5 +1,5 @@
 // Initialize centralized configuration first
-import './config/init';
+import "./config/init";
 
 import "./tracer";
 import path from "path";
@@ -23,6 +23,7 @@ import {
   validateVersionMiddleware,
   VersionedRequest,
 } from "./middleware/apiVersion";
+import { getConfigValue } from "./config";
 import {
   bulkRoutesV1,
   disputeRoutesV1,
@@ -77,12 +78,14 @@ import sep24Router from "./stellar/sep24";
 import sep38Router from "./stellar/sep38";
 import { createSep12Router } from "./stellar/sep12";
 import { createSep10Router } from "./stellar/sep10";
+import { sep30Routes } from "./routes/sep30";
 import { createAdminSep10Router } from "./stellar/adminSep10";
 import tomlRouter from "./routes/toml";
 import feesRouter from "./routes/fees";
 import feeStrategiesRouter from "./routes/feeStrategies";
 import crossChainRouter from "./routes/crossChain";
 import reconciliationRoutes from "./routes/reconciliation";
+import accountingReconciliationRoutes from "./routes/accountingReconciliation";
 import exchangeRateBufferRoutes from "./routes/exchangeRateBuffers";
 import adminAssetRoutes from "./routes/admin/assets";
 import settingsRoutes from "./routes/settings";
@@ -126,16 +129,39 @@ app.use(sentryBreadcrumbMiddleware);
 app.use(metricsMiddleware);
 applySecurityMiddleware(app);
 
-if (process.env.COMPRESSION_ENABLED !== "false") {
+const compressionEnabled = getConfigValue("compression.enabled");
+if (compressionEnabled !== false) {
+  /**
+   * Compression middleware options
+   *
+   * - `threshold`: Minimum response size in bytes before compression is applied.
+   * - `level`: zlib compression level (0-9); higher = better compression but more CPU.
+   * - `filter`: Custom predicate deciding whether to compress a response. Returns
+   *     `true` for JSON/GraphQL responses to ensure they are compressed, explicitly
+   *     returns `false` for large binary/media types, and falls back to the
+   *     default `compression.filter` for other content-types.
+   */
   app.use(
     compression({
-      threshold: parseInt(process.env.COMPRESSION_THRESHOLD || "1024"),
-      level: parseInt(process.env.COMPRESSION_LEVEL || "6"),
+      threshold: getConfigValue("compression.threshold"),
+      level: getConfigValue("compression.level"),
       filter: (req, res) => {
         if (req.headers["x-no-compression"]) {
           return false;
         }
-        const contentType = res.getHeader("content-type") as string;
+
+        const contentType = String(res.getHeader("content-type") || "");
+
+        // Explicitly compress JSON and GraphQL responses
+        if (
+          contentType.includes("application/json") ||
+          contentType.includes("application/graphql") ||
+          contentType.includes("application/graphql-response+json")
+        ) {
+          return true;
+        }
+
+        // Avoid compressing images, video, audio and already-archived content
         if (
           contentType &&
           (contentType.includes("image/") ||
@@ -146,6 +172,8 @@ if (process.env.COMPRESSION_ENABLED !== "false") {
         ) {
           return false;
         }
+
+        // Defer to the package's default filter for all other content-types
         return compression.filter(req, res);
       },
     }),
@@ -373,6 +401,7 @@ app.use("/api/fees", feesRouter);
 app.use("/api/fee-strategies", feeStrategiesRouter);
 app.use("/api/cross-chain", crossChainRouter);
 app.use("/api/reconciliation", reconciliationRoutes);
+app.use("/api/accounting-reconciliation", accountingReconciliationRoutes);
 app.use("/api/exchange-rate-buffers", exchangeRateBufferRoutes);
 app.use("/api/admin/assets", adminAssetRoutes);
 app.use("/api/settings", settingsRoutes);
@@ -391,6 +420,7 @@ app.use("/api/admin/providers/status", requireAuth, providerStatusRouter);
 app.use("/api/admin/kyc-upgrades", requireAuth, kycTierUpgradeRoutes);
 app.use("/api/admin/auth", createAdminSep10Router());
 app.use("/sep10", createSep10Router());
+app.use("/sep30", sep30Routes);
 app.use("/sep31", sep31Router);
 app.use("/sep24", sep24Router);
 app.use("/sep38", sep38Router);

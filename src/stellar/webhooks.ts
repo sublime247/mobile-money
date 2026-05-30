@@ -15,6 +15,12 @@ interface RawBodyRequest extends Request {
   rawBody?: Buffer;
 }
 
+const memoSchema = z.union([
+  z.object({ type: z.literal("text"), value: z.string() }),
+  z.object({ type: z.literal("id"), value: z.string() }),
+  z.object({ type: z.literal("hash"), value: z.string() }),
+]);
+
 const stellarWebhookSchema = z.object({
   transaction_hash: z.string().min(1),
   status: z.enum(["success", "failed"]),
@@ -23,9 +29,15 @@ const stellarWebhookSchema = z.object({
   source_account: z.string().optional(),
   destination_account: z.string().optional(),
   amount: z.string().optional(),
+  memo: memoSchema.optional(),
 });
 
 export type StellarWebhookPayload = z.infer<typeof stellarWebhookSchema>;
+
+/** Extract a plain string reference from any memo type. */
+function parseMemoValue(memo: z.infer<typeof memoSchema>): string {
+  return memo.value;
+}
 
 function verifyWebhookSignature(
   payload: string,
@@ -84,9 +96,21 @@ router.post("/webhook", async (req: RawBodyRequest, res: Response) => {
       : TransactionStatus.Failed;
 
   try {
-    const transactions = await transactionModel.findByMetadata({
+    let transactions = await transactionModel.findByMetadata({
       stellar_hash: payload.transaction_hash,
     });
+
+    // Fall back to memo-based lookup if no match by hash
+    if (transactions.length === 0 && payload.memo) {
+      const memoValue = parseMemoValue(payload.memo);
+      transactions = await transactionModel.findByReferenceNumber(memoValue);
+
+      if (transactions.length === 0) {
+        transactions = await transactionModel.findByMetadata({
+          memo: memoValue,
+        });
+      }
+    }
 
     if (transactions.length === 0) {
       console.warn(
@@ -115,6 +139,7 @@ router.post("/webhook", async (req: RawBodyRequest, res: Response) => {
 
       await transactionModel.patchMetadata(transaction.id, {
         stellar_ledger: payload.ledger,
+        stellar_hash: payload.transaction_hash,
         webhook_processed_at: new Date().toISOString(),
       });
 

@@ -1,5 +1,12 @@
 /// <reference types="@cloudflare/workers-types" />
 
+interface Env {
+  STELLAR_TOML_MAX_AGE: string;
+  STELLAR_TOML_STALE_WHILE_REVALIDATE: string;
+  DEFAULT_MAX_AGE: string;
+  DEFAULT_STALE_WHILE_REVALIDATE: string;
+}
+
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
@@ -35,8 +42,29 @@ function cacheControlFor(pathname: string): string {
     : "public, max-age=300, stale-while-revalidate=3600";
 }
 
+interface RequestMetrics {
+  method: string;
+  pathname: string;
+  cacheStatus: "HIT" | "MISS" | "BYPASS";
+  statusCode: number;
+  latencyMs: number;
+  responseBytes: number;
+  timestamp: string;
+  userAgent: string;
+}
+
+function logMetrics(metrics: RequestMetrics): void {
+  console.log(
+    JSON.stringify({
+      level: "info",
+      type: "edge_request_metrics",
+      ...metrics,
+    })
+  );
+}
+
 export default {
-  async fetch(request: Request): Promise<Response> {
+  async fetch(request: Request, env: Env): Promise<Response> {
     if (request.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: CORS_HEADERS });
     }
@@ -88,4 +116,4 @@ export default {
       return errorResponse(502, "Bad Gateway", `Failed to fetch origin: ${message}`);
     }
   },
-} satisfies ExportedHandler;
+} satisfies ExportedHandler<Env>;
