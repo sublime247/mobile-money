@@ -2,6 +2,8 @@ import { Pool, QueryConfig, QueryResult, QueryResultRow, PoolClient } from "pg";
 import { isReadOnlyQuery } from "../utils/readOnlyDetector";
 import { IS_SANDBOX, SANDBOX_DATABASE_URL, DATABASE_URL } from "./env";
 
+const productionSsl =
+  process.env.NODE_ENV === "production" ? { rejectUnauthorized: true } : undefined;
 
 // Configuration for slow query logging
 const SLOW_QUERY_THRESHOLD_MS = parseInt(
@@ -137,6 +139,7 @@ export const pool = new Pool({
     max: 1000,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 500,
+    ssl: productionSsl,
   });
 
 // Wrap query for slow-query logging while preserving Pool typings.
@@ -191,6 +194,7 @@ const replicaUrls: string[] = process.env.READ_REPLICA_URL
         max: 50,
         idleTimeoutMillis: 30000,
         connectionTimeoutMillis: 500,
+        ssl: productionSsl,
       }),
   );
 
