@@ -13,7 +13,7 @@ jest.mock("axios", () => {
   const originalAxios = jest.requireActual("axios") as any;
   return {
     ...originalAxios,
-    get: jest.fn((url: string) => {
+    get: jest.fn((url: string, config?: any) => {
       if (url === "https://scsanctions.un.org/resources/xml/en/consolidated.xml") {
         return Promise.resolve({
           data: `
@@ -45,10 +45,10 @@ jest.mock("axios", () => {
         });
       }
       // Fallback to original or error for unhandled external URLs in tests
-      if (url.startsWith("http")) {
+      if (url.startsWith("http") && !url.includes("127.0.0.1") && !url.includes("localhost")) {
         return Promise.reject(new Error(`Unmocked external request to ${url}`));
       }
-      return originalAxios.get(url);
+      return originalAxios.get(url, config);
     }),
   };
 });

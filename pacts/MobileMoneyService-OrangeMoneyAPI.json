@@ -1,0 +1,551 @@
+{
+  "consumer": {
+    "name": "MobileMoneyService"
+  },
+  "interactions": [
+    {
+      "description": "a client credentials token request",
+      "providerStates": [
+        {
+          "name": "valid Orange API credentials"
+        }
+      ],
+      "request": {
+        "body": "grant_type=client_credentials",
+        "headers": {
+          "Authorization": "Basic dGVzdC1rZXk6dGVzdC1zZWNyZXQ=",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "matchingRules": {
+          "header": {
+            "Authorization": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^Basic [A-Za-z0-9+/=]+$"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/oauth/token"
+      },
+      "response": {
+        "body": {
+          "access_token": "eyJhbGciOiJSUzI1NiJ9.orange",
+          "expires_in": 3600,
+          "token_type": "Bearer"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.access_token": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.expires_in": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.token_type": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a collection request with an invalid bearer token",
+      "providerStates": [
+        {
+          "name": "Orange API rejects invalid token"
+        }
+      ],
+      "request": {
+        "body": {
+          "reference": "ORANGE-PAYMENT-1700000000000",
+          "subscriber": {
+            "msisdn": "+237600000000"
+          },
+          "transaction": {
+            "amount": 1000,
+            "currency": "XAF",
+            "id": "ORANGE-PAYMENT-1700000000000"
+          }
+        },
+        "headers": {
+          "Authorization": "Bearer invalid-token",
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/v1/payments/collect"
+      },
+      "response": {
+        "body": {
+          "message": "Unauthorized"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.message": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 401
+      }
+    },
+    {
+      "description": "a request to check a completed transaction status",
+      "providerStates": [
+        {
+          "name": "Orange transaction is completed"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Authorization": "Bearer test-orange-bearer-token"
+        },
+        "matchingRules": {
+          "header": {
+            "Authorization": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^Bearer .+$"
+                }
+              ]
+            }
+          }
+        },
+        "method": "GET",
+        "path": "/v1/payments/ORANGE-PAYMENT-1700000000000"
+      },
+      "response": {
+        "body": {
+          "amount": 1000,
+          "currency": "XAF",
+          "id": "ORANGE-PAYMENT-1700000000000",
+          "status": "COMPLETED"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.amount": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.currency": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a request to check a failed transaction status",
+      "providerStates": [
+        {
+          "name": "Orange transaction has failed"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Authorization": "Bearer test-orange-bearer-token"
+        },
+        "matchingRules": {
+          "header": {
+            "Authorization": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^Bearer .+$"
+                }
+              ]
+            }
+          }
+        },
+        "method": "GET",
+        "path": "/v1/payments/ORANGE-PAYMENT-1700000000000"
+      },
+      "response": {
+        "body": {
+          "id": "ORANGE-PAYMENT-1700000000000",
+          "reason": "INSUFFICIENT_FUNDS",
+          "status": "FAILED"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.reason": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a request to check a non-existent transaction",
+      "providerStates": [
+        {
+          "name": "Orange transaction does not exist"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Authorization": "Bearer test-orange-bearer-token"
+        },
+        "matchingRules": {
+          "header": {
+            "Authorization": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^Bearer .+$"
+                }
+              ]
+            }
+          }
+        },
+        "method": "GET",
+        "path": "/v1/payments/ORANGE-PAYMENT-UNKNOWN"
+      },
+      "response": {
+        "body": {
+          "message": "Transaction not found"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.message": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 404
+      }
+    },
+    {
+      "description": "a request to collect payment from a subscriber",
+      "providerStates": [
+        {
+          "name": "Orange collection service is available"
+        }
+      ],
+      "request": {
+        "body": {
+          "reference": "ORANGE-PAYMENT-1700000000000",
+          "subscriber": {
+            "msisdn": "+237600000000"
+          },
+          "transaction": {
+            "amount": 1000,
+            "currency": "XAF",
+            "id": "ORANGE-PAYMENT-1700000000000"
+          }
+        },
+        "headers": {
+          "Authorization": "Bearer test-orange-bearer-token",
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.reference": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.subscriber.msisdn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.transaction.amount": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.transaction.currency": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.transaction.id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Authorization": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^Bearer .+$"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/v1/payments/collect"
+      },
+      "response": {
+        "body": {
+          "id": "ORANGE-PAYMENT-1700000000000",
+          "status": "PENDING"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.status": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a request to disburse funds to a subscriber",
+      "providerStates": [
+        {
+          "name": "Orange disbursement service is available"
+        }
+      ],
+      "request": {
+        "body": {
+          "payee": {
+            "msisdn": "+237600000001"
+          },
+          "reference": "ORANGE-PAYOUT-1700000000000",
+          "transaction": {
+            "amount": 500,
+            "currency": "XAF",
+            "id": "ORANGE-PAYOUT-1700000000000"
+          }
+        },
+        "headers": {
+          "Authorization": "Bearer test-orange-bearer-token",
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.payee.msisdn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.reference": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.transaction.amount": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.transaction.currency": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.transaction.id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Authorization": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^Bearer .+$"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/v1/payments/disburse"
+      },
+      "response": {
+        "body": {
+          "id": "ORANGE-PAYOUT-1700000000000",
+          "status": "SUCCESS"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.status": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    }
+  ],
+  "metadata": {
+    "pact-js": {
+      "version": "16.3.0"
+    },
+    "pactRust": {
+      "ffi": "0.5.3",
+      "models": "1.3.9"
+    },
+    "pactSpecification": {
+      "version": "3.0.0"
+    }
+  },
+  "provider": {
+    "name": "OrangeMoneyAPI"
+  }
+}
