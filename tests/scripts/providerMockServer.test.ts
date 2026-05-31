@@ -1,5 +1,8 @@
 import { createProviderMockApp } from "../../scripts/provider-mock-server";
-import request = require("supertest");
+import mockServerConfig from "../../src/config/mockServer";
+import request from "supertest";
+
+mockServerConfig.webhookLatencyEnabled = false;
 
 describe("provider mock server", () => {
   const app = createProviderMockApp();
@@ -10,7 +13,7 @@ describe("provider mock server", () => {
     expect(response.status).toBe(200);
     expect(response.body).toEqual({
       status: "ok",
-      providers: ["mtn", "airtel"],
+      providers: ["mtn", "airtel", "tigo", "vodacom"],
     });
   });
 
@@ -74,6 +77,90 @@ describe("provider mock server", () => {
     expect(response.body.status).toEqual({
       success: false,
       code: "BALANCE_UNAVAILABLE",
+    });
+  });
+
+  it("supports Tigo collection, status, payout, and balance mock routes", async () => {
+    const collectionResponse = await request(app)
+      .post("/tigo/payments/collect?scenario=pending")
+      .send({ externalId: "tigo-ref-123" });
+
+    expect(collectionResponse.status).toBe(202);
+    expect(collectionResponse.body).toMatchObject({
+      referenceId: "tigo-ref-123",
+      status: "PENDING",
+    });
+
+    const statusResponse = await request(app).get(
+      "/tigo/payments/status/tigo-ref-123",
+    );
+
+    expect(statusResponse.status).toBe(200);
+    expect(statusResponse.body).toMatchObject({
+      referenceId: "tigo-ref-123",
+      status: "PENDING",
+    });
+
+    const payoutResponse = await request(app)
+      .post("/tigo/payments/disburse")
+      .send({ reference: "tigo-payout-123" });
+
+    expect(payoutResponse.status).toBe(202);
+    expect(payoutResponse.body).toMatchObject({
+      referenceId: "tigo-payout-123",
+      status: "SUCCESSFUL",
+    });
+
+    const balanceResponse = await request(app).get("/tigo/account/balance");
+
+    expect(balanceResponse.status).toBe(200);
+    expect(balanceResponse.body).toMatchObject({
+      availableBalance: "100000",
+      currency: "TZS",
+    });
+  });
+
+  it("supports Vodacom session, c2b, b2c, and status mock routes", async () => {
+    const sessionResponse = await request(app).get(
+      "/vodacom/vodacomTZN/getSession/",
+    );
+
+    expect(sessionResponse.status).toBe(200);
+    expect(sessionResponse.body).toMatchObject({
+      output_ResponseCode: "INS-0",
+      output_SessionID: "mock-vodacomTZN-session-token",
+    });
+
+    const c2bResponse = await request(app)
+      .post("/vodacom/vodacomTZN/c2bPayment/singleStage/?scenario=pending")
+      .send({ reference: "vodacom-c2b-123" });
+
+    expect(c2bResponse.status).toBe(200);
+    expect(c2bResponse.body).toMatchObject({
+      output_ResponseCode: "INS-0",
+      output_TransactionID: "vodacom-c2b-123",
+      output_TransactionStatus: "PENDING",
+    });
+
+    const statusResponse = await request(app)
+      .get("/vodacom/vodacomTZN/queryTransactionStatus/")
+      .query({ input_QueryReference: "vodacom-c2b-123" });
+
+    expect(statusResponse.status).toBe(200);
+    expect(statusResponse.body).toMatchObject({
+      output_TransactionID: "vodacom-c2b-123",
+      output_TransactionStatus: "PENDING",
+    });
+
+    const b2cResponse = await request(app)
+      .post("/vodacom/vodacomTZN/b2cPayment/singleStage/")
+      .send({ reference: "vodacom-b2c-123" });
+
+    expect(b2cResponse.status).toBe(200);
+    expect(b2cResponse.body).toMatchObject({
+      output_ResponseCode: "INS-0",
+      output_TransactionID: "vodacom-b2c-123",
+      output_TransactionStatus: "COMPLETED",
     });
   });
 });
