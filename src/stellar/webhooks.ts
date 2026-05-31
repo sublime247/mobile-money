@@ -65,7 +65,10 @@ router.post("/webhook", async (req: RawBodyRequest, res: Response) => {
 
   const parseResult = stellarWebhookSchema.safeParse(req.body);
   if (!parseResult.success) {
-    console.warn("[stellar-webhook] Validation failed", parseResult.error.issues);
+    console.warn(
+      "[stellar-webhook] Validation failed",
+      parseResult.error.issues,
+    );
     return res.status(400).json({
       error: "Validation failed",
       details: parseResult.error.issues,

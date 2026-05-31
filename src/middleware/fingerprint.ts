@@ -17,7 +17,11 @@ export function extractFingerprint(req: Request): string {
 }
 
 // Middleware to collect and compare device fingerprints
-export async function fingerprintMiddleware(req: Request, res: Response, next: NextFunction) {
+export async function fingerprintMiddleware(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
   const userId = req.body.userId || req.user?.id; // Adjust as per your auth
   if (!userId) return next();
   const fingerprint = extractFingerprint(req);
@@ -25,14 +29,14 @@ export async function fingerprintMiddleware(req: Request, res: Response, next: N
   // Check fingerprint history
   const result = await pool.query(
     "SELECT * FROM device_fingerprints WHERE user_id = $1 AND fingerprint = $2",
-    [userId, fingerprint]
+    [userId, fingerprint],
   );
 
   if (result.rows.length === 0) {
     // New device detected
     await pool.query(
       "INSERT INTO device_fingerprints (user_id, fingerprint) VALUES ($1, $2)",
-      [userId, fingerprint]
+      [userId, fingerprint],
     );
     // TODO: Trigger email alert to user
     req.isNewDevice = true;

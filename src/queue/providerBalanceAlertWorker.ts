@@ -7,7 +7,8 @@ import {
   ProviderBalanceAlertJobData,
 } from "./providerBalanceAlertQueue";
 
-let providerBalanceAlertWorker: Worker<ProviderBalanceAlertJobData> | null = null;
+let providerBalanceAlertWorker: Worker<ProviderBalanceAlertJobData> | null =
+  null;
 
 export function startProviderBalanceAlertWorker(): void {
   if (providerBalanceAlertWorker) {

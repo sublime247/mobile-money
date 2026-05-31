@@ -1,6 +1,8 @@
 import axios from "axios";
-import { exchangeRateBufferService, BufferedRate } from "./exchangeRateBufferService";
-
+import {
+  exchangeRateBufferService,
+  BufferedRate,
+} from "./exchangeRateBufferService";
 
 // ---------------------------------------------------------------------------
 // Supported currencies
@@ -206,9 +208,14 @@ export class CurrencyService {
     provider: string,
     direction: "sell" | "buy" = "sell",
   ): Promise<ConversionResult & { buffer: BufferedRate }> {
-    return this.convertWithBuffer(amount, currency, BASE_CURRENCY, provider, direction);
+    return this.convertWithBuffer(
+      amount,
+      currency,
+      BASE_CURRENCY,
+      provider,
+      direction,
+    );
   }
-
 
   /** Return snapshot of cache state for health checks. */
   getStatus(): CurrencyServiceStatus {

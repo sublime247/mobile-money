@@ -237,7 +237,7 @@ curl -i https://api.example.com/api/transactions
 ### Example Monitoring Query
 
 ```sql
-SELECT 
+SELECT
   api_version,
   COUNT(*) as requests,
   DATE(timestamp) as date
@@ -249,18 +249,21 @@ ORDER BY date DESC;
 ## Deprecation Policy
 
 ### Announcement Phase
+
 - Announce deprecation 180 days before sunset
 - Add `Deprecation: true` header
 - Add `Sunset` header with removal date
 - Add `Link` header with migration URL
 
 ### Migration Phase
+
 - Keep all endpoints functional
 - Provide migration tools/docs
 - Adjust rate limits if needed
 - Support technical questions
 
 ### Sunset Phase
+
 - Remove deprecated endpoints
 - Redirect to newer versions (if possible)
 - Log migration metrics
@@ -286,6 +289,7 @@ A: v1 will be supported until at least v2 goes GA + 180 days. We'll announce dat
 ## Support
 
 For versioning questions or issues:
+
 1. Check this documentation
 2. Review test cases in `tests/api-versioning.test.ts`
 3. File an issue on GitHub

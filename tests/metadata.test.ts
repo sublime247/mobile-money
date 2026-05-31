@@ -48,7 +48,9 @@ describe("Transaction Metadata – JSONB field", () => {
   describe("PATCH /api/transactions/:id/metadata", () => {
     it("should return 400 when metadata is missing from body", async () => {
       const res = await request(app)
-        .patch("/api/transactions/00000000-0000-0000-0000-000000000001/metadata")
+        .patch(
+          "/api/transactions/00000000-0000-0000-0000-000000000001/metadata",
+        )
         .send({});
       expect(res.status).toBe(400);
       expect(res.body.error).toContain("metadata");
@@ -56,7 +58,9 @@ describe("Transaction Metadata – JSONB field", () => {
 
     it("should return 400 when metadata is not an object", async () => {
       const res = await request(app)
-        .patch("/api/transactions/00000000-0000-0000-0000-000000000001/metadata")
+        .patch(
+          "/api/transactions/00000000-0000-0000-0000-000000000001/metadata",
+        )
         .send({ metadata: 42 });
       expect(res.status).toBe(400);
       expect(res.body.error).toContain("JSON object");
@@ -68,7 +72,9 @@ describe("Transaction Metadata – JSONB field", () => {
   describe("DELETE /api/transactions/:id/metadata", () => {
     it("should return 400 when keys is not an array", async () => {
       const res = await request(app)
-        .delete("/api/transactions/00000000-0000-0000-0000-000000000001/metadata")
+        .delete(
+          "/api/transactions/00000000-0000-0000-0000-000000000001/metadata",
+        )
         .send({ keys: "not-an-array" });
       expect(res.status).toBe(400);
       expect(res.body.error).toContain("array of strings");
@@ -76,7 +82,9 @@ describe("Transaction Metadata – JSONB field", () => {
 
     it("should return 400 when keys contains non-string values", async () => {
       const res = await request(app)
-        .delete("/api/transactions/00000000-0000-0000-0000-000000000001/metadata")
+        .delete(
+          "/api/transactions/00000000-0000-0000-0000-000000000001/metadata",
+        )
         .send({ keys: [1, 2] });
       expect(res.status).toBe(400);
       expect(res.body.error).toContain("array of strings");
@@ -116,7 +124,9 @@ describe("Transaction Metadata – JSONB field", () => {
   describe("V1 routes – /api/v1/transactions", () => {
     it("PUT /:id/metadata should return 400 for invalid input", async () => {
       const res = await request(app)
-        .put("/api/v1/transactions/00000000-0000-0000-0000-000000000001/metadata")
+        .put(
+          "/api/v1/transactions/00000000-0000-0000-0000-000000000001/metadata",
+        )
         .send({ metadata: null });
       expect(res.status).toBe(400);
     });

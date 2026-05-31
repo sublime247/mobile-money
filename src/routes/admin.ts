@@ -1373,11 +1373,9 @@ router.post(
       if (!admin)
         return res.status(401).json({ message: "Authentication required" });
       if (!fromProvider || !toProvider || !amount) {
-        return res
-          .status(400)
-          .json({
-            message: "fromProvider, toProvider, and amount are required",
-          });
+        return res.status(400).json({
+          message: "fromProvider, toProvider, and amount are required",
+        });
       }
       if (fromProvider === toProvider) {
         return res
@@ -1496,7 +1494,10 @@ router.get(
       const provider = req.query.provider as string | undefined;
 
       const offset = (page - 1) * limit;
-      const runs = await providerReconciliationService.getReconciliationHistory(provider, limit);
+      const runs = await providerReconciliationService.getReconciliationHistory(
+        provider,
+        limit,
+      );
 
       // Apply pagination
       const paginatedRuns = runs.slice(offset, offset + limit);
@@ -1535,10 +1536,14 @@ router.get(
       // Apply filters
       let filteredAlerts = alerts;
       if (status) {
-        filteredAlerts = filteredAlerts.filter(alert => alert.status === status);
+        filteredAlerts = filteredAlerts.filter(
+          (alert) => alert.status === status,
+        );
       }
       if (severity) {
-        filteredAlerts = filteredAlerts.filter(alert => alert.severity === severity);
+        filteredAlerts = filteredAlerts.filter(
+          (alert) => alert.severity === severity,
+        );
       }
 
       // Apply pagination
@@ -1556,7 +1561,9 @@ router.get(
       });
     } catch (error) {
       console.error("Error fetching reconciliation alerts:", error);
-      res.status(500).json({ message: "Failed to fetch reconciliation alerts" });
+      res
+        .status(500)
+        .json({ message: "Failed to fetch reconciliation alerts" });
     }
   },
 );
@@ -1576,14 +1583,18 @@ router.patch(
         return res.status(401).json({ message: "Authentication required" });
       }
 
-      const allowedStatuses = ['reviewed', 'dismissed', 'resolved'];
+      const allowedStatuses = ["reviewed", "dismissed", "resolved"];
       if (!allowedStatuses.includes(status)) {
         return res.status(400).json({
-          message: `Status must be one of: ${allowedStatuses.join(', ')}`,
+          message: `Status must be one of: ${allowedStatuses.join(", ")}`,
         });
       }
 
-      if (!review_notes || typeof review_notes !== 'string' || review_notes.trim().length === 0) {
+      if (
+        !review_notes ||
+        typeof review_notes !== "string" ||
+        review_notes.trim().length === 0
+      ) {
         return res.status(400).json({
           message: "Review notes are required",
         });
@@ -1593,7 +1604,7 @@ router.patch(
         id,
         status,
         review_notes.trim(),
-        adminUser.id
+        adminUser.id,
       );
 
       res.json({ message: "Alert reviewed successfully" });
@@ -1626,8 +1637,12 @@ router.post(
         });
       }
 
-      const { runManualProviderReconciliation } = await import("../jobs/providerReconciliationJob");
-      const result = await runManualProviderReconciliation(provider, reportDate);
+      const { runManualProviderReconciliation } =
+        await import("../jobs/providerReconciliationJob");
+      const result = await runManualProviderReconciliation(
+        provider,
+        reportDate,
+      );
 
       res.json({
         message: "Manual reconciliation completed",
@@ -1654,7 +1669,9 @@ router.get(
       res.json({ data: configs });
     } catch (error) {
       console.error("Error fetching reconciliation configs:", error);
-      res.status(500).json({ message: "Failed to fetch reconciliation configs" });
+      res
+        .status(500)
+        .json({ message: "Failed to fetch reconciliation configs" });
     }
   },
 );
@@ -2530,9 +2547,8 @@ router.post(
         throw new Error("STELLAR_ISSUER_SECRET not configured");
       }
 
-      const issuerPublicKey = StellarSdk.Keypair.fromSecret(
-        stellarIssuerSecret,
-      ).publicKey();
+      const issuerPublicKey =
+        StellarSdk.Keypair.fromSecret(stellarIssuerSecret).publicKey();
 
       // 1. Create transactions in DB
       const transactionIds: string[] = [];
@@ -2569,7 +2585,10 @@ router.post(
         const txId = transactionIds[i];
 
         if (result.success) {
-          await transactionModel.updateStatus(txId, TransactionStatus.Completed);
+          await transactionModel.updateStatus(
+            txId,
+            TransactionStatus.Completed,
+          );
           await transactionModel.updateMetadata(txId, {
             ...payments[i].metadata,
             stellar: { transactionHash: result.hash },

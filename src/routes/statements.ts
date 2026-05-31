@@ -75,10 +75,16 @@ statementsRoutes.get(
       }
 
       // Generate statement data
-      const statement = await generateMonthlyStatement(userId, yearNum, monthNum);
+      const statement = await generateMonthlyStatement(
+        userId,
+        yearNum,
+        monthNum,
+      );
 
       if (!statement) {
-        return res.status(404).json({ error: "No data found for the specified period" });
+        return res
+          .status(404)
+          .json({ error: "No data found for the specified period" });
       }
 
       // Generate PDF
@@ -87,7 +93,10 @@ statementsRoutes.get(
       // Set response headers for PDF download
       const filename = `statement-${year}-${month.padStart(2, "0")}.pdf`;
       res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${filename}"`,
+      );
       res.setHeader("Content-Length", pdfBuffer.length);
 
       // Stream PDF to client
@@ -96,7 +105,7 @@ statementsRoutes.get(
       console.error("Error generating monthly statement:", error);
       res.status(500).json({ error: "Failed to generate statement" });
     }
-  }
+  },
 );
 
 /**
@@ -105,10 +114,10 @@ statementsRoutes.get(
 async function generateMonthlyStatement(
   userId: string,
   year: number,
-  month: number
+  month: number,
 ): Promise<MonthlyStatement | null> {
   const client = await pool.connect();
-  
+
   try {
     // Calculate date range for the month
     const startDate = new Date(year, month - 1, 1);
@@ -117,7 +126,7 @@ async function generateMonthlyStatement(
     // Get user information
     const userResult = await client.query(
       "SELECT id, phone_number, kyc_level FROM users WHERE id = $1",
-      [userId]
+      [userId],
     );
 
     if (userResult.rows.length === 0) {
@@ -127,7 +136,8 @@ async function generateMonthlyStatement(
     const user = userResult.rows[0];
 
     // Get transactions for the month, ordered chronologically
-    const transactionsResult = await client.query(`
+    const transactionsResult = await client.query(
+      `
       SELECT 
         id,
         reference_number as "referenceNumber",
@@ -144,10 +154,13 @@ async function generateMonthlyStatement(
         AND created_at <= $3
         AND status = 'completed'
       ORDER BY created_at ASC
-    `, [userId, startDate, endDate]);
+    `,
+      [userId, startDate, endDate],
+    );
 
     // Calculate opening balance (sum of all completed transactions before this month)
-    const openingBalanceResult = await client.query(`
+    const openingBalanceResult = await client.query(
+      `
       SELECT 
         COALESCE(
           SUM(CASE WHEN type = 'deposit' THEN amount::numeric ELSE -amount::numeric END), 
@@ -157,35 +170,41 @@ async function generateMonthlyStatement(
       WHERE user_id = $1 
         AND created_at < $2
         AND status = 'completed'
-    `, [userId, startDate]);
+    `,
+      [userId, startDate],
+    );
 
-    const openingBalance = parseFloat(openingBalanceResult.rows[0]?.opening_balance || "0");
+    const openingBalance = parseFloat(
+      openingBalanceResult.rows[0]?.opening_balance || "0",
+    );
 
     // Calculate monthly totals
     let totalDeposits = 0;
     let totalWithdrawals = 0;
 
-    const transactions: StatementTransaction[] = transactionsResult.rows.map((row) => {
-      const amount = parseFloat(row.amount);
-      
-      if (row.type === "deposit") {
-        totalDeposits += amount;
-      } else {
-        totalWithdrawals += amount;
-      }
+    const transactions: StatementTransaction[] = transactionsResult.rows.map(
+      (row) => {
+        const amount = parseFloat(row.amount);
 
-      return {
-        id: row.id,
-        referenceNumber: row.referenceNumber,
-        type: row.type,
-        amount: row.amount,
-        currency: row.currency,
-        provider: row.provider,
-        status: row.status,
-        createdAt: row.createdAt,
-        notes: row.notes ? decrypt(row.notes) : undefined,
-      };
-    });
+        if (row.type === "deposit") {
+          totalDeposits += amount;
+        } else {
+          totalWithdrawals += amount;
+        }
+
+        return {
+          id: row.id,
+          referenceNumber: row.referenceNumber,
+          type: row.type,
+          amount: row.amount,
+          currency: row.currency,
+          provider: row.provider,
+          status: row.status,
+          createdAt: row.createdAt,
+          notes: row.notes ? decrypt(row.notes) : undefined,
+        };
+      },
+    );
 
     const closingBalance = openingBalance + totalDeposits - totalWithdrawals;
 
@@ -218,65 +237,77 @@ async function generateMonthlyStatement(
 /**
  * Generate professional PDF statement with standard accounting header/footer
  */
-async function generateStatementPDF(statement: MonthlyStatement): Promise<Buffer> {
+async function generateStatementPDF(
+  statement: MonthlyStatement,
+): Promise<Buffer> {
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.width;
   const pageHeight = doc.internal.pageSize.height;
-  
+
   // Company header
   doc.setFontSize(20);
   doc.setFont("helvetica", "bold");
   doc.text("Mobile Money Services", pageWidth / 2, 20, { align: "center" });
-  
+
   doc.setFontSize(16);
   doc.text("Monthly Account Statement", pageWidth / 2, 30, { align: "center" });
-  
+
   // Statement period and account info
   doc.setFontSize(10);
   doc.setFont("helvetica", "normal");
-  
+
   const monthNames = [
-    "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December"
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
   ];
-  
+
   const periodText = `${monthNames[statement.period.month - 1]} ${statement.period.year}`;
   doc.text(`Statement Period: ${periodText}`, 20, 45);
   doc.text(`Account: ${statement.user.phoneNumber}`, 20, 52);
   doc.text(`KYC Level: ${statement.user.kycLevel.toUpperCase()}`, 20, 59);
   doc.text(`Generated: ${new Date().toLocaleDateString()}`, 20, 66);
-  
+
   // Account summary box
   doc.setDrawColor(0, 0, 0);
   doc.rect(20, 75, pageWidth - 40, 35);
-  
+
   doc.setFontSize(12);
   doc.setFont("helvetica", "bold");
   doc.text("Account Summary", 25, 85);
-  
+
   doc.setFontSize(10);
   doc.setFont("helvetica", "normal");
-  
-  const formatCurrency = (amount: number) => 
+
+  const formatCurrency = (amount: number) =>
     new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: "USD",
       minimumFractionDigits: 2,
     }).format(amount);
-  
+
   doc.text(`Opening Balance:`, 25, 95);
   doc.text(formatCurrency(statement.summary.openingBalance), 120, 95);
-  
+
   doc.text(`Total Deposits:`, 25, 102);
   doc.text(formatCurrency(statement.summary.totalDeposits), 120, 102);
-  
+
   doc.text(`Total Withdrawals:`, 25, 109);
   doc.text(`(${formatCurrency(statement.summary.totalWithdrawals)})`, 120, 109);
-  
+
   doc.setFont("helvetica", "bold");
   doc.text(`Closing Balance:`, 25, 116);
   doc.text(formatCurrency(statement.summary.closingBalance), 120, 116);
-  
+
   // Transaction details table
   if (statement.transactions.length > 0) {
     const tableData = statement.transactions.map((tx) => [
@@ -291,7 +322,17 @@ async function generateStatementPDF(statement: MonthlyStatement): Promise<Buffer
 
     autoTable(doc, {
       startY: 125,
-      head: [["Date", "Reference", "Type", "Provider", "Deposits", "Withdrawals", "Notes"]],
+      head: [
+        [
+          "Date",
+          "Reference",
+          "Type",
+          "Provider",
+          "Deposits",
+          "Withdrawals",
+          "Notes",
+        ],
+      ],
       body: tableData,
       styles: {
         fontSize: 8,
@@ -317,16 +358,26 @@ async function generateStatementPDF(statement: MonthlyStatement): Promise<Buffer
     doc.setFontSize(10);
     doc.text("No transactions found for this period.", 20, 135);
   }
-  
+
   // Footer with legal disclaimer
   const footerY = pageHeight - 30;
   doc.setFontSize(8);
   doc.setFont("helvetica", "normal");
-  doc.text("This statement is generated electronically and is valid without signature.", pageWidth / 2, footerY, { align: "center" });
-  doc.text("For inquiries, please contact customer support.", pageWidth / 2, footerY + 7, { align: "center" });
-  
+  doc.text(
+    "This statement is generated electronically and is valid without signature.",
+    pageWidth / 2,
+    footerY,
+    { align: "center" },
+  );
+  doc.text(
+    "For inquiries, please contact customer support.",
+    pageWidth / 2,
+    footerY + 7,
+    { align: "center" },
+  );
+
   // Page number
   doc.text(`Page 1`, pageWidth - 30, footerY + 14);
-  
+
   return Buffer.from(doc.output("arraybuffer"));
 }

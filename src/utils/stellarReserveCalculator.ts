@@ -28,7 +28,7 @@ const SUBENTRY_RESERVE_STROOPS = 5_000_000; // 0.5 XLM per trustline/offer/data
  */
 export async function calculateStellarReserve(
   publicKey: string,
-  minimumThreshold: number = 5
+  minimumThreshold: number = 5,
 ): Promise<ReserveInfo> {
   // Stellar minimum balance check
   const server = getStellarServer();
@@ -39,7 +39,7 @@ export async function calculateStellarReserve(
 
   // Count trustlines (non-native balance entries)
   const trustlineCount = account.balances.filter(
-    (b) => b.asset_type !== "native"
+    (b) => b.asset_type !== "native",
   ).length;
 
   // Count other subentries (offers, data entries, etc)

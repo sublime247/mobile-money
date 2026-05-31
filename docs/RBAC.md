@@ -9,18 +9,21 @@ This document describes the Role-Based Access Control (RBAC) system implemented 
 The system defines three primary roles:
 
 ### 1. Admin
+
 - **Description**: Full access to all system resources
 - **Permissions**: All available permissions
 - **Use Case**: System administrators, superusers
 - **Access Level**: Complete system control
 
-### 2. User  
+### 2. User
+
 - **Description**: Read/write access to own data
 - **Permissions**: `read:own`, `write:own`, `delete:own`
 - **Use Case**: Regular mobile money users
 - **Access Level**: Personal data management
 
 ### 3. Viewer
+
 - **Description**: Read-only access to public data
 - **Permissions**: `read:all`
 - **Use Case**: Auditors, read-only stakeholders
@@ -32,26 +35,27 @@ Permissions define specific actions that users can perform:
 
 ### Data Access Permissions
 
-| Permission | Description | Typical Roles |
-|------------|-------------|---------------|
-| `read:own` | Read user's own data | user, admin |
-| `write:own` | Create/update user's own data | user, admin |
-| `delete:own` | Delete user's own data | user, admin |
-| `read:all` | Read all system data | viewer, admin |
-| `write:all` | Write/update all system data | admin |
-| `delete:all` | Delete any system data | admin |
+| Permission   | Description                   | Typical Roles |
+| ------------ | ----------------------------- | ------------- |
+| `read:own`   | Read user's own data          | user, admin   |
+| `write:own`  | Create/update user's own data | user, admin   |
+| `delete:own` | Delete user's own data        | user, admin   |
+| `read:all`   | Read all system data          | viewer, admin |
+| `write:all`  | Write/update all system data  | admin         |
+| `delete:all` | Delete any system data        | admin         |
 
 ### System Permissions
 
-| Permission | Description | Typical Roles |
-|------------|-------------|---------------|
-| `admin:system` | Full system administration | admin |
+| Permission     | Description                | Typical Roles |
+| -------------- | -------------------------- | ------------- |
+| `admin:system` | Full system administration | admin         |
 
 ## Database Schema
 
 ### Tables
 
 #### `roles`
+
 ```sql
 CREATE TABLE roles (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -63,6 +67,7 @@ CREATE TABLE roles (
 ```
 
 #### `permissions`
+
 ```sql
 CREATE TABLE permissions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -74,6 +79,7 @@ CREATE TABLE permissions (
 ```
 
 #### `role_permissions` (Junction Table)
+
 ```sql
 CREATE TABLE role_permissions (
   role_id UUID REFERENCES roles(id) ON DELETE CASCADE,
@@ -84,9 +90,10 @@ CREATE TABLE role_permissions (
 ```
 
 #### `users` (Updated)
+
 ```sql
 -- Added role_id foreign key
-ALTER TABLE users 
+ALTER TABLE users
 ADD COLUMN role_id UUID REFERENCES roles(id);
 ```
 
@@ -111,38 +118,38 @@ JWT tokens now include role information:
 #### 1. Permission-based Access Control
 
 ```typescript
-import { requirePermission } from '../middleware/rbac';
+import { requirePermission } from "../middleware/rbac";
 
 // Require specific permission
-router.get('/transactions', requirePermission('read:own'), getTransactions);
-router.post('/transactions', requirePermission('write:own'), createTransaction);
+router.get("/transactions", requirePermission("read:own"), getTransactions);
+router.post("/transactions", requirePermission("write:own"), createTransaction);
 ```
 
 #### 2. Role-based Access Control
 
 ```typescript
-import { requireRole } from '../middleware/rbac';
+import { requireRole } from "../middleware/rbac";
 
 // Require specific role
-router.get('/admin/users', requireRole('admin'), getAllUsers);
+router.get("/admin/users", requireRole("admin"), getAllUsers);
 ```
 
 #### 3. Multiple Permission Check
 
 ```typescript
-import { requireAnyPermission } from '../middleware/rbac';
+import { requireAnyPermission } from "../middleware/rbac";
 
 // Require any of the specified permissions
-router.get('/data', requireAnyPermission(['read:own', 'read:all']), getData);
+router.get("/data", requireAnyPermission(["read:own", "read:all"]), getData);
 ```
 
 #### 4. User Context Attachment
 
 ```typescript
-import { attachUserContext } from '../middleware/rbac';
+import { attachUserContext } from "../middleware/rbac";
 
 // Attach role and permissions without blocking
-router.get('/profile', authenticateToken, attachUserContext, getProfile);
+router.get("/profile", authenticateToken, attachUserContext, getProfile);
 ```
 
 ### Helper Middleware
@@ -159,6 +166,7 @@ The system provides several pre-configured middleware functions:
 ### Authentication
 
 #### Login
+
 ```bash
 POST /api/auth/login
 Content-Type: application/json
@@ -169,6 +177,7 @@ Content-Type: application/json
 ```
 
 Response:
+
 ```json
 {
   "message": "Login successful",
@@ -183,12 +192,14 @@ Response:
 ```
 
 #### Get User Info
+
 ```bash
 GET /api/auth/me
 Authorization: Bearer <token>
 ```
 
 Response:
+
 ```json
 {
   "user": {
@@ -208,12 +219,14 @@ Response:
 ### Protected Endpoints
 
 #### Admin-only Endpoint
+
 ```bash
 GET /api/admin/users
 Authorization: Bearer <admin-token>
 ```
 
 #### User Data Access
+
 ```bash
 GET /api/transactions
 Authorization: Bearer <user-token>
@@ -222,6 +235,7 @@ Authorization: Bearer <user-token>
 ## Error Responses
 
 ### 401 Unauthorized
+
 ```json
 {
   "error": "Unauthorized",
@@ -230,6 +244,7 @@ Authorization: Bearer <user-token>
 ```
 
 ### 403 Forbidden
+
 ```json
 {
   "error": "Forbidden",
@@ -252,6 +267,7 @@ Authorization: Bearer <user-token>
 To set up RBAC in your database:
 
 1. Run the main schema:
+
    ```bash
    psql -d your_database -f database/schema.sql
    ```

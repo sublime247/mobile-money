@@ -2,7 +2,6 @@ import { Pool, QueryConfig, QueryResult, QueryResultRow, PoolClient } from "pg";
 import { isReadOnlyQuery } from "../utils/readOnlyDetector";
 import { IS_SANDBOX, SANDBOX_DATABASE_URL, DATABASE_URL } from "./env";
 
-
 // Configuration for slow query logging
 const SLOW_QUERY_THRESHOLD_MS = parseInt(
   process.env.SLOW_QUERY_THRESHOLD_MS || "1000",
@@ -133,11 +132,13 @@ class SlowQueryPool extends Pool {
  * (INSERT, UPDATE, DELETE) and read operations when no replica is available.
  */
 export const pool = new Pool({
-    connectionString: IS_SANDBOX ? (SANDBOX_DATABASE_URL || DATABASE_URL) : DATABASE_URL,
-    max: 1000,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 500,
-  });
+  connectionString: IS_SANDBOX
+    ? SANDBOX_DATABASE_URL || DATABASE_URL
+    : DATABASE_URL,
+  max: 1000,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 500,
+});
 
 // Wrap query for slow-query logging while preserving Pool typings.
 const originalPoolQuery = pool.query.bind(pool);
@@ -148,14 +149,14 @@ const originalPoolQuery = pool.query.bind(pool);
   const values = args[1];
   const startTime = process.hrtime.bigint();
   const queryString =
-    typeof queryConfig === "string" ? queryConfig : queryConfig?.text ?? "";
+    typeof queryConfig === "string" ? queryConfig : (queryConfig?.text ?? "");
   const queryParams =
     typeof queryConfig === "string" ? values : queryConfig?.values;
 
   try {
-    const result = await (originalPoolQuery as (...callArgs: any[]) => Promise<any>)(
-      ...args,
-    );
+    const result = await (
+      originalPoolQuery as (...callArgs: any[]) => Promise<any>
+    )(...args);
     const endTime = process.hrtime.bigint();
     const durationMs = Number(endTime - startTime) / 1e6;
     if (durationMs > SLOW_QUERY_THRESHOLD_MS) {
@@ -184,15 +185,15 @@ const replicaUrls: string[] = process.env.READ_REPLICA_URL
   : [];
 
 // Build an individual Pool for each replica URL
-  const replicaPools: Pool[] = replicaUrls.map(
-    (url) =>
-      new Pool({
-        connectionString: url,
-        max: 50,
-        idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 500,
-      }),
-  );
+const replicaPools: Pool[] = replicaUrls.map(
+  (url) =>
+    new Pool({
+      connectionString: url,
+      max: 50,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 500,
+    }),
+);
 
 // Track which replica to use next for round-robin load balancing
 let replicaIndex = 0;
@@ -310,7 +311,9 @@ export async function getPgBouncerStats(): Promise<{
   try {
     // Query PgBouncer stats database (special admin database)
     const pgbouncerPool = new Pool({
-      connectionString: process.env.PGBOUNCER_ADMIN_URL || "postgresql://user:password@localhost:6432/pgbouncer",
+      connectionString:
+        process.env.PGBOUNCER_ADMIN_URL ||
+        "postgresql://user:password@localhost:6432/pgbouncer",
     });
 
     const result = await pgbouncerPool.query(
@@ -323,8 +326,10 @@ export async function getPgBouncerStats(): Promise<{
     return {
       activeConnections: parseInt(row.sv_active || 0),
       idleConnections: parseInt(row.sv_idle || 0),
-      totalConnections: (parseInt(row.sv_active || 0) + parseInt(row.sv_idle || 0)),
-      clientConnections: (parseInt(row.cl_active || 0) + parseInt(row.cl_idle || 0)),
+      totalConnections:
+        parseInt(row.sv_active || 0) + parseInt(row.sv_idle || 0),
+      clientConnections:
+        parseInt(row.cl_active || 0) + parseInt(row.cl_idle || 0),
     };
   } catch (err) {
     console.warn("Failed to get PgBouncer stats:", err);
@@ -339,15 +344,15 @@ export async function getPgBouncerStats(): Promise<{
 
 /**
  * Context-aware query function that respects HTTP method-based routing decisions.
- * 
+ *
  * This function is designed to work with the readReplicaRoutingMiddleware.
  * It routes queries based on:
  * 1. HTTP method context (if provided) - GET requests go to replica
  * 2. SQL query type (fallback) - SELECT queries go to replica
- * 
+ *
  * Usage in route handlers:
  *   const result = await queryWithContext(req, "SELECT * FROM users", []);
- * 
+ *
  * @param req - Express Request object (with dbRouting context from middleware)
  * @param text - SQL query string
  * @param params - Query parameters
@@ -372,9 +377,9 @@ export async function queryWithContext<
 /**
  * Batch query execution with request context.
  * Executes multiple queries with proper pool routing based on HTTP method.
- * 
+ *
  * All read operations (GET) use replica, all writes use primary.
- * 
+ *
  * @param req - Express Request object
  * @param queries - Array of { text, params } query configurations
  * @returns Array of query results

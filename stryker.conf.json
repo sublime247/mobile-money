@@ -8,10 +8,7 @@
   },
   "checkers": [],
   "disableTypeChecks": true,
-  "mutate": [
-    "src/services/retry.ts",
-    "src/services/fraud.ts"
-  ],
+  "mutate": ["src/services/retry.ts", "src/services/fraud.ts"],
   "ignorePatterns": [
     "dist",
     "coverage",

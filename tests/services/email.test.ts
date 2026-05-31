@@ -52,7 +52,7 @@ describe("EmailService", () => {
     await emailService.sendTransactionReceipt(
       "user@example.com",
       mockTransaction,
-      "fr"
+      "fr",
     );
 
     expect(mockSendMail).toHaveBeenCalledWith(
@@ -64,7 +64,7 @@ describe("EmailService", () => {
           referenceNumber: "REF-123",
           locale: "fr",
         }),
-      })
+      }),
     );
   });
 
@@ -86,7 +86,7 @@ describe("EmailService", () => {
       "user@example.com",
       mockTransaction,
       "Insufficient funds",
-      "sw"
+      "sw",
     );
 
     expect(mockSendMail).toHaveBeenCalledWith(
@@ -98,7 +98,7 @@ describe("EmailService", () => {
           reason: "Insufficient funds",
           locale: "sw",
         }),
-      })
+      }),
     );
   });
 

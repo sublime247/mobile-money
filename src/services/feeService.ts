@@ -47,9 +47,9 @@ export class FeeService {
    */
   async calculateFee(amount: number): Promise<FeeResult> {
     const config = await this.getActiveConfiguration();
-    
+
     let fee = amount * (config.feePercentage / 100);
-    
+
     if (fee < config.feeMinimum) fee = config.feeMinimum;
     if (fee > config.feeMaximum) fee = config.feeMaximum;
 
@@ -96,10 +96,10 @@ export class FeeService {
     }
 
     const config = result.rows[0];
-    
+
     // Cache the result
     await layeredCache.set(ACTIVE_CONFIG_KEY, config, CACHE_TTL);
-    
+
     return config;
   }
 
@@ -162,10 +162,10 @@ export class FeeService {
     }
 
     const config = result.rows[0];
-    
+
     // Cache the result
     await layeredCache.set(cacheKey, config, CACHE_TTL);
-    
+
     return config;
   }
 
@@ -173,8 +173,8 @@ export class FeeService {
    * Create new fee configuration
    */
   async createConfiguration(
-    data: CreateFeeConfigRequest, 
-    createdBy: string
+    data: CreateFeeConfigRequest,
+    createdBy: string,
   ): Promise<FeeConfiguration> {
     const query = `
       INSERT INTO fee_configurations (
@@ -204,10 +204,10 @@ export class FeeService {
     ]);
 
     const config = result.rows[0];
-    
+
     // Log audit entry
-    await this.logAuditEntry(config.id, 'CREATE', null, config, createdBy);
-    
+    await this.logAuditEntry(config.id, "CREATE", null, config, createdBy);
+
     return config;
   }
   /**
@@ -218,7 +218,7 @@ export class FeeService {
     data: UpdateFeeConfigRequest,
     updatedBy: string,
     ipAddress?: string,
-    userAgent?: string
+    userAgent?: string,
   ): Promise<FeeConfiguration | null> {
     // Get current config for audit
     const oldConfig = await this.getConfigurationById(id);
@@ -261,7 +261,7 @@ export class FeeService {
 
     const query = `
       UPDATE fee_configurations 
-      SET ${updateFields.join(', ')}
+      SET ${updateFields.join(", ")}
       WHERE id = $${paramIndex}
       RETURNING 
         id,
@@ -282,9 +282,17 @@ export class FeeService {
 
     // Invalidate caches
     await this.invalidateCache(id);
-    
+
     // Log audit entry
-    await this.logAuditEntry(id, 'UPDATE', oldConfig, newConfig, updatedBy, ipAddress, userAgent);
+    await this.logAuditEntry(
+      id,
+      "UPDATE",
+      oldConfig,
+      newConfig,
+      updatedBy,
+      ipAddress,
+      userAgent,
+    );
 
     return newConfig;
   }
@@ -292,10 +300,10 @@ export class FeeService {
    * Delete fee configuration
    */
   async deleteConfiguration(
-    id: string, 
+    id: string,
     deletedBy: string,
     ipAddress?: string,
-    userAgent?: string
+    userAgent?: string,
   ): Promise<boolean> {
     // Get current config for audit
     const oldConfig = await this.getConfigurationById(id);
@@ -317,9 +325,17 @@ export class FeeService {
 
     // Invalidate cache
     await this.invalidateCache(id);
-    
+
     // Log audit entry
-    await this.logAuditEntry(id, 'DELETE', oldConfig, null, deletedBy, ipAddress, userAgent);
+    await this.logAuditEntry(
+      id,
+      "DELETE",
+      oldConfig,
+      null,
+      deletedBy,
+      ipAddress,
+      userAgent,
+    );
 
     return true;
   }
@@ -331,15 +347,15 @@ export class FeeService {
     id: string,
     activatedBy: string,
     ipAddress?: string,
-    userAgent?: string
+    userAgent?: string,
   ): Promise<FeeConfiguration | null> {
     const client = await pool.connect();
-    
+
     try {
-      await client.query('BEGIN');
+      await client.query("BEGIN");
 
       // Deactivate all configurations
-      await client.query('UPDATE fee_configurations SET is_active = false');
+      await client.query("UPDATE fee_configurations SET is_active = false");
 
       // Activate the specified one
       const query = `
@@ -361,25 +377,33 @@ export class FeeService {
       `;
 
       const result = await client.query(query, [id, activatedBy]);
-      
+
       if (result.rows.length === 0) {
-        await client.query('ROLLBACK');
+        await client.query("ROLLBACK");
         return null;
       }
 
-      await client.query('COMMIT');
-      
+      await client.query("COMMIT");
+
       const config = result.rows[0];
-      
+
       // Invalidate all caches
       await this.invalidateAllCaches();
-      
+
       // Log audit entry
-      await this.logAuditEntry(id, 'ACTIVATE', null, config, activatedBy, ipAddress, userAgent);
+      await this.logAuditEntry(
+        id,
+        "ACTIVATE",
+        null,
+        config,
+        activatedBy,
+        ipAddress,
+        userAgent,
+      );
 
       return config;
     } catch (error) {
-      await client.query('ROLLBACK');
+      await client.query("ROLLBACK");
       throw error;
     } finally {
       client.release();
@@ -419,7 +443,7 @@ export class FeeService {
     newValues: any,
     changedBy: string,
     ipAddress?: string,
-    userAgent?: string
+    userAgent?: string,
   ): Promise<void> {
     const query = `
       INSERT INTO fee_configuration_audit (

@@ -36,7 +36,9 @@ export interface VulnerabilityReport {
 
 export class EmailService {
   private resolveTemplateId(
-    baseEnvName: "SENDGRID_RECEIPT_TEMPLATE_ID" | "SENDGRID_FAILURE_TEMPLATE_ID",
+    baseEnvName:
+      | "SENDGRID_RECEIPT_TEMPLATE_ID"
+      | "SENDGRID_FAILURE_TEMPLATE_ID",
     locale: string,
   ): string {
     const resolvedLocale = resolveLocale(locale).toUpperCase();
@@ -53,7 +55,8 @@ export class EmailService {
 
     try {
       await sgMail.send({
-        from: process.env.EMAIL_FROM || '"Mobile Money" <no-reply@mobilemoney.com>',
+        from:
+          process.env.EMAIL_FROM || '"Mobile Money" <no-reply@mobilemoney.com>',
         to: options.to,
         templateId: options.templateId,
         dynamicTemplateData: options.dynamicTemplateData,
@@ -91,7 +94,9 @@ export class EmailService {
         stellarAddress: transaction.stellarAddress,
         transactionHash: txHash,
         stellarExpertUrl,
-        createdAt: new Date(transaction.createdAt).toLocaleString(resolvedLocale),
+        createdAt: new Date(transaction.createdAt).toLocaleString(
+          resolvedLocale,
+        ),
         locale: resolvedLocale,
         year: new Date().getFullYear(),
       },
@@ -202,7 +207,8 @@ export class EmailService {
     growth: GrowthMetrics,
   ): Promise<void> {
     const templateId = process.env.SENDGRID_MANAGEMENT_SUMMARY_TEMPLATE_ID;
-    const from = process.env.EMAIL_FROM || '"Mobile Money" <no-reply@mobilemoney.com>';
+    const from =
+      process.env.EMAIL_FROM || '"Mobile Money" <no-reply@mobilemoney.com>';
 
     if (templateId) {
       await this.sendEmail({
@@ -264,7 +270,8 @@ export class EmailService {
     report: VulnerabilityReport,
   ): Promise<void> {
     const templateId = process.env.SENDGRID_VULNERABILITY_REPORT_TEMPLATE_ID;
-    const from = process.env.EMAIL_FROM || '"Mobile Money" <no-reply@mobilemoney.com>';
+    const from =
+      process.env.EMAIL_FROM || '"Mobile Money" <no-reply@mobilemoney.com>';
 
     if (templateId) {
       await this.sendEmail({

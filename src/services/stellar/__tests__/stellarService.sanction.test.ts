@@ -11,7 +11,9 @@ jest.mock("../../sanctionService", () => ({
       public score: number,
       public source: string,
     ) {
-      super(`Sanction screening blocked: ${party} "${screenedName}" matched "${matchedEntity}"`);
+      super(
+        `Sanction screening blocked: ${party} "${screenedName}" matched "${matchedEntity}"`,
+      );
       this.name = "SanctionScreeningError";
     }
   },
@@ -35,12 +37,19 @@ describe("StellarService.sendPayment — sanction gate", () => {
   it("calls checkParties with sender and receiver names before submitting", async () => {
     (sanctionService.checkParties as jest.Mock).mockResolvedValue(undefined);
     await service.sendPayment("GDEST...", "100", "Alice Clean", "Bob Safe");
-    expect(sanctionService.checkParties).toHaveBeenCalledWith("Alice Clean", "Bob Safe");
+    expect(sanctionService.checkParties).toHaveBeenCalledWith(
+      "Alice Clean",
+      "Bob Safe",
+    );
   });
 
   it("throws SanctionScreeningError and does NOT submit when sender is sanctioned", async () => {
     const err = new (SanctionScreeningError as any)(
-      "sender", "Osama bin Laden", "Osama bin Laden", 1.0, "UN",
+      "sender",
+      "Osama bin Laden",
+      "Osama bin Laden",
+      1.0,
+      "UN",
     );
     (sanctionService.checkParties as jest.Mock).mockRejectedValue(err);
 
@@ -51,7 +60,11 @@ describe("StellarService.sendPayment — sanction gate", () => {
 
   it("throws SanctionScreeningError and does NOT submit when receiver is sanctioned", async () => {
     const err = new (SanctionScreeningError as any)(
-      "receiver", "Global Arms Ltd", "Global Arms Ltd", 0.95, "OFAC",
+      "receiver",
+      "Global Arms Ltd",
+      "Global Arms Ltd",
+      0.95,
+      "OFAC",
     );
     (sanctionService.checkParties as jest.Mock).mockRejectedValue(err);
 

@@ -24,10 +24,12 @@ function makeMockRedis(overrides: Partial<Record<string, jest.Mock>> = {}) {
 
   const client = Object.assign(emitter, {
     get: jest.fn(async (key: string) => store.get(key)?.value ?? null),
-    set: jest.fn(async (key: string, value: string, _ex: string, ttl: number) => {
-      store.set(key, { value, ttl });
-      return "OK";
-    }),
+    set: jest.fn(
+      async (key: string, value: string, _ex: string, ttl: number) => {
+        store.set(key, { value, ttl });
+        return "OK";
+      },
+    ),
     del: jest.fn(async (key: string) => {
       const existed = store.has(key);
       store.delete(key);
@@ -181,7 +183,9 @@ describe("RedisAPQCache", () => {
       redis.emit("error", new Error("ECONNREFUSED"));
 
       // Should not throw
-      await expect(cache.set(SAMPLE_HASH, SAMPLE_QUERY)).resolves.toBeUndefined();
+      await expect(
+        cache.set(SAMPLE_HASH, SAMPLE_QUERY),
+      ).resolves.toBeUndefined();
     });
 
     it("recovers when Redis reconnects", async () => {

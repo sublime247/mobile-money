@@ -13,7 +13,7 @@ Mobile Money provides flat, robust webhook payloads optimized for no-code platfo
 1. Log in to your Make.com account
 2. Create a new Scenario
 3. Add the "Webhooks" module as the trigger
-4. Select "Custom Webhook" 
+4. Select "Custom Webhook"
 5. Click "Add" to create a new webhook
 6. Copy the webhook URL provided by Make.com
 7. Keep the webhook configuration open - Make.com will wait for the first payload
@@ -75,7 +75,7 @@ All webhook payloads use a flat structure for easy mapping:
   "event_id": "evt_1234567890",
   "event_type": "transaction.completed",
   "timestamp": "2026-03-27T11:46:00.000Z",
-  
+
   "transaction_id": "txn_abc123def456",
   "reference_number": "REF-20260327-001",
   "transaction_type": "deposit",
@@ -85,17 +85,17 @@ All webhook payloads use a flat structure for easy mapping:
   "provider": "mpesa",
   "stellar_address": "GD5DJQDQKEZBDQZBH4ENLN5JTQAVLHKUL2QHYK3LTJY2J5N2Z5Q5K7",
   "status": "completed",
-  
+
   "user_id": "user_789",
   "notes": "Test transaction",
   "tags": "test,deposit",
-  
+
   "created_at": "2026-03-27T11:45:00.000Z",
   "updated_at": "2026-03-27T11:46:00.000Z",
-  
+
   "metadata_key": "stellar_hash",
   "metadata_value": "abc123def456789...",
-  
+
   "webhook_delivery_status": "delivered",
   "webhook_delivered_at": "2026-03-27T11:46:05.000Z"
 }
@@ -103,29 +103,29 @@ All webhook payloads use a flat structure for easy mapping:
 
 ### Field Descriptions
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `event_id` | string | Unique identifier for this webhook event |
-| `event_type` | string | Type of event that occurred |
-| `timestamp` | string | When the webhook was sent (ISO 8601) |
-| `transaction_id` | string | Unique transaction identifier |
-| `reference_number` | string | Human-readable transaction reference |
-| `transaction_type` | string | "deposit" or "withdraw" |
-| `amount` | string | Transaction amount |
-| `currency` | string | Currency code (default: USD) |
-| `phone_number` | string | Customer phone number |
-| `provider` | string | Payment provider (mpesa, airtel, etc.) |
-| `stellar_address` | string | Stellar wallet address |
-| `status` | string | Transaction status |
-| `user_id` | string | Optional user identifier |
-| `notes` | string | Optional transaction notes |
-| `tags` | string | Comma-separated transaction tags |
-| `created_at` | string | When transaction was created |
-| `updated_at` | string | When transaction was last updated |
-| `metadata_key` | string | First metadata key (for easy access) |
-| `metadata_value` | string | First metadata value (for easy access) |
-| `webhook_delivery_status` | string | Delivery status of this webhook |
-| `webhook_delivered_at` | string | When webhook was delivered |
+| Field                     | Type   | Description                              |
+| ------------------------- | ------ | ---------------------------------------- |
+| `event_id`                | string | Unique identifier for this webhook event |
+| `event_type`              | string | Type of event that occurred              |
+| `timestamp`               | string | When the webhook was sent (ISO 8601)     |
+| `transaction_id`          | string | Unique transaction identifier            |
+| `reference_number`        | string | Human-readable transaction reference     |
+| `transaction_type`        | string | "deposit" or "withdraw"                  |
+| `amount`                  | string | Transaction amount                       |
+| `currency`                | string | Currency code (default: USD)             |
+| `phone_number`            | string | Customer phone number                    |
+| `provider`                | string | Payment provider (mpesa, airtel, etc.)   |
+| `stellar_address`         | string | Stellar wallet address                   |
+| `status`                  | string | Transaction status                       |
+| `user_id`                 | string | Optional user identifier                 |
+| `notes`                   | string | Optional transaction notes               |
+| `tags`                    | string | Comma-separated transaction tags         |
+| `created_at`              | string | When transaction was created             |
+| `updated_at`              | string | When transaction was last updated        |
+| `metadata_key`            | string | First metadata key (for easy access)     |
+| `metadata_value`          | string | First metadata value (for easy access)   |
+| `webhook_delivery_status` | string | Delivery status of this webhook          |
+| `webhook_delivered_at`    | string | When webhook was delivered               |
 
 ## Schema Discovery Endpoints
 
@@ -153,6 +153,7 @@ Returns a sample webhook payload that you can use for testing in Make.com.
 **Action**: Twilio - Send SMS
 
 Mapping:
+
 - `phone_number` → To
 - `amount` → Body (use text formatter: "Transaction of {{amount}} {{currency}} completed")
 - `reference_number` → Body (add to message)
@@ -163,6 +164,7 @@ Mapping:
 **Action**: Google Sheets - Add a Row
 
 Mapping:
+
 - `transaction_id` → Column A (Transaction ID)
 - `reference_number` → Column B (Reference)
 - `amount` → Column C (Amount)
@@ -176,6 +178,7 @@ Mapping:
 **Action**: Gmail - Send an Email
 
 Mapping:
+
 - `user_id` → To (you may need to look up email from user ID)
 - `reference_number` → Subject ("Transaction {{reference_number}} Update")
 - `amount` + `status` → Body (format transaction details)
@@ -186,6 +189,7 @@ Mapping:
 **Action**: Slack - Post a Message
 
 Mapping:
+
 - `#transactions` → Channel
 - `transaction_type` → Channel (use router to send to different channels)
 - `amount` + `currency` → Text ("{{transaction_type}}: {{amount}} {{currency}}")
@@ -197,6 +201,7 @@ Mapping:
 **Action**: HubSpot - Create a Contact
 
 Mapping:
+
 - `phone_number` → Phone
 - Create email from phone number if needed
 - `transaction_type` → Lifecycle stage (based on transaction type)
@@ -207,6 +212,7 @@ Mapping:
 **Action**: Airtable - Update Record
 
 Mapping:
+
 - `transaction_id` → Find record by Transaction ID
 - `status` → Status field
 - `updated_at` → Last Updated field
@@ -219,7 +225,7 @@ Use the "Router" module to handle different event types:
 
 ```
 Webhook → Router → [transaction.completed] → SMS Module
-                    → [transaction.failed] → Email Module  
+                    → [transaction.failed] → Email Module
                     → [transaction.pending] → Slack Module
 ```
 
@@ -257,22 +263,25 @@ To verify the signature in Make.com:
 
 1. Add a "Code" module after the webhook
 2. Use JavaScript to verify the signature:
+
    ```javascript
-   const crypto = require('crypto');
-   const webhookSecret = 'your-webhook-secret';
+   const crypto = require("crypto");
+   const webhookSecret = "your-webhook-secret";
    const payload = JSON.stringify(body);
-   const signature = crypto.createHmac('sha256', webhookSecret)
+   const signature = crypto
+     .createHmac("sha256", webhookSecret)
      .update(payload)
-     .digest('hex');
+     .digest("hex");
    const expectedSignature = `sha256=${signature}`;
-   
+
    // Compare signatures
-   if (headers['x-webhook-signature'] === expectedSignature) {
+   if (headers["x-webhook-signature"] === expectedSignature) {
      return { valid: true };
    } else {
      return { valid: false };
    }
    ```
+
 3. Add a filter to only process valid webhooks
 
 ### Recommended Security Practices
@@ -370,12 +379,12 @@ Then update your `WEBHOOK_URL` to use the ngrok URL and forward to your local Ma
 
 ## Environment Variables Reference
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `WEBHOOK_URL` | Yes | URL to send webhook payloads to |
-| `WEBHOOK_SECRET` | Yes | Secret key for signing webhooks |
-| `WEBHOOK_MAX_ATTEMPTS` | No | Maximum delivery attempts (default: 3) |
-| `WEBHOOK_BASE_DELAY_MS` | No | Base delay between retries (default: 500) |
+| Variable                | Required | Description                               |
+| ----------------------- | -------- | ----------------------------------------- |
+| `WEBHOOK_URL`           | Yes      | URL to send webhook payloads to           |
+| `WEBHOOK_SECRET`        | Yes      | Secret key for signing webhooks           |
+| `WEBHOOK_MAX_ATTEMPTS`  | No       | Maximum delivery attempts (default: 3)    |
+| `WEBHOOK_BASE_DELAY_MS` | No       | Base delay between retries (default: 500) |
 
 ## Support
 

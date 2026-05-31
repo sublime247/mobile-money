@@ -1,5 +1,8 @@
 import { pool } from "../config/database";
-import { calculateStellarReserve, ReserveInfo } from "../utils/stellarReserveCalculator";
+import {
+  calculateStellarReserve,
+  ReserveInfo,
+} from "../utils/stellarReserveCalculator";
 
 export interface GeneralStats {
   totalTransactions: number;
@@ -170,8 +173,8 @@ export class StatsService {
             availableBalance: 0,
             isBelowThreshold: true,
           };
-        })
-      )
+        }),
+      ),
     );
 
     return { stellarReserves };

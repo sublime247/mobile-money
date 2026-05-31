@@ -158,7 +158,8 @@ export const accountMergeWorker = new Worker<
 >(
   ACCOUNT_MERGE_QUEUE_NAME,
   async (job: Job<AccountMergeJobData, AccountMergeJobResult>) => {
-    const { sourceSecret, destinationPublicKey, inactivityDays, dryRun } = job.data;
+    const { sourceSecret, destinationPublicKey, inactivityDays, dryRun } =
+      job.data;
     const server = getStellarServer();
 
     await job.updateProgress(10);
@@ -275,7 +276,8 @@ export const accountMergeWorker = new Worker<
         };
       }
 
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
       console.error(
         `${ACCOUNT_MERGE_PREFIX} Failed to merge ${sourcePublicKey}:`,
         error,

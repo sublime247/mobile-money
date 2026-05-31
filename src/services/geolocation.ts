@@ -70,14 +70,17 @@ export function isRoutableIp(ip: string): boolean {
 }
 
 // In-memory fallback cache when Redis is unavailable
-const memoryCache = new Map<string, { data: LocationMetadata; expiresAt: number }>();
+const memoryCache = new Map<
+  string,
+  { data: LocationMetadata; expiresAt: number }
+>();
 
 async function cacheGet(key: string): Promise<LocationMetadata | null> {
   try {
     if (redisClient.isOpen) {
       const raw = await redisClient.get(key);
       if (!raw) return null;
-      const rawStr = typeof raw === 'string' ? raw : raw.toString();
+      const rawStr = typeof raw === "string" ? raw : raw.toString();
       return JSON.parse(rawStr) as LocationMetadata;
     }
   } catch {
@@ -92,13 +95,18 @@ async function cacheGet(key: string): Promise<LocationMetadata | null> {
 async function cacheSet(key: string, value: LocationMetadata): Promise<void> {
   try {
     if (redisClient.isOpen) {
-      await redisClient.set(key, JSON.stringify(value), { EX: CACHE_TTL_SECONDS });
+      await redisClient.set(key, JSON.stringify(value), {
+        EX: CACHE_TTL_SECONDS,
+      });
       return;
     }
   } catch {
     // fall through to memory cache
   }
-  memoryCache.set(key, { data: value, expiresAt: Date.now() + CACHE_TTL_SECONDS * 1000 });
+  memoryCache.set(key, {
+    data: value,
+    expiresAt: Date.now() + CACHE_TTL_SECONDS * 1000,
+  });
 }
 
 export class GeolocationService {
@@ -157,7 +165,10 @@ export class GeolocationService {
       return result;
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      console.error("[GeolocationService] lookup failed", { ip: anonIp, error: message });
+      console.error("[GeolocationService] lookup failed", {
+        ip: anonIp,
+        error: message,
+      });
       return { ...UNKNOWN_LOCATION };
     }
   }

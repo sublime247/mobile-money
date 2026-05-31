@@ -1,5 +1,9 @@
 import { queryRead, queryWrite } from "../config/database";
-import { parseCSV, reconcileTransactions, ProviderCSVRow } from "./csvReconciliation";
+import {
+  parseCSV,
+  reconcileTransactions,
+  ProviderCSVRow,
+} from "./csvReconciliation";
 import logger from "../utils/logger";
 import axios from "axios";
 
@@ -7,7 +11,7 @@ export interface ProviderReportConfig {
   id: string;
   provider: string;
   is_enabled: boolean;
-  download_method: 'api' | 'manual'; // Simplified for now
+  download_method: "api" | "manual"; // Simplified for now
   api_endpoint?: string;
   api_key?: string;
   api_secret?: string;
@@ -19,7 +23,7 @@ export interface ReconciliationRun {
   id: string;
   provider: string;
   report_date: string;
-  status: 'running' | 'completed' | 'failed';
+  status: "running" | "completed" | "failed";
   total_provider_rows: number;
   total_db_records: number;
   matched_count: number;
@@ -37,9 +41,13 @@ export interface ReconciliationAlert {
   id: string;
   reconciliation_run_id: string;
   transaction_id?: string;
-  alert_type: 'amount_mismatch' | 'status_mismatch' | 'orphaned_provider' | 'orphaned_db';
-  severity: 'low' | 'medium' | 'high' | 'critical';
-  status: 'pending_review' | 'reviewed' | 'dismissed' | 'resolved';
+  alert_type:
+    | "amount_mismatch"
+    | "status_mismatch"
+    | "orphaned_provider"
+    | "orphaned_db";
+  severity: "low" | "medium" | "high" | "critical";
+  status: "pending_review" | "reviewed" | "dismissed" | "resolved";
   reference_number?: string;
   expected_amount?: number;
   actual_amount?: number;
@@ -71,35 +79,45 @@ export class ProviderReconciliationService {
   /**
    * Download provider report based on configuration
    */
-  async downloadProviderReport(config: ProviderReportConfig, reportDate: Date): Promise<Buffer> {
+  async downloadProviderReport(
+    config: ProviderReportConfig,
+    reportDate: Date,
+  ): Promise<Buffer> {
     switch (config.download_method) {
-      case 'api':
+      case "api":
         return this.downloadViaAPI(config, reportDate);
-      case 'manual':
-        throw new Error(`Manual download not supported for automated reconciliation: ${config.provider}`);
+      case "manual":
+        throw new Error(
+          `Manual download not supported for automated reconciliation: ${config.provider}`,
+        );
       default:
-        throw new Error(`Unsupported download method: ${config.download_method}`);
+        throw new Error(
+          `Unsupported download method: ${config.download_method}`,
+        );
     }
   }
 
   /**
    * Download report via API
    */
-  private async downloadViaAPI(config: ProviderReportConfig, reportDate: Date): Promise<Buffer> {
+  private async downloadViaAPI(
+    config: ProviderReportConfig,
+    reportDate: Date,
+  ): Promise<Buffer> {
     if (!config.api_endpoint) {
       throw new Error(`API endpoint not configured for ${config.provider}`);
     }
 
-    const dateStr = reportDate.toISOString().split('T')[0];
-    const url = config.api_endpoint.replace('{date}', dateStr);
+    const dateStr = reportDate.toISOString().split("T")[0];
+    const url = config.api_endpoint.replace("{date}", dateStr);
 
     const response = await axios.get(url, {
       headers: {
-        'Authorization': `Bearer ${config.api_key}`,
-        'X-API-Key': config.api_key,
-        'X-API-Secret': config.api_secret,
+        Authorization: `Bearer ${config.api_key}`,
+        "X-API-Key": config.api_key,
+        "X-API-Secret": config.api_secret,
       },
-      responseType: 'arraybuffer',
+      responseType: "arraybuffer",
       timeout: 30000,
     });
 
@@ -109,26 +127,39 @@ export class ProviderReconciliationService {
   /**
    * Run reconciliation for a specific provider and date
    */
-  async runProviderReconciliation(provider: string, reportDate: Date): Promise<ReconciliationRun> {
-    logger.info(`Starting reconciliation for ${provider} on ${reportDate.toISOString().split('T')[0]}`);
+  async runProviderReconciliation(
+    provider: string,
+    reportDate: Date,
+  ): Promise<ReconciliationRun> {
+    logger.info(
+      `Starting reconciliation for ${provider} on ${reportDate.toISOString().split("T")[0]}`,
+    );
 
     // Create reconciliation run record
-    const runResult = await queryWrite(`
+    const runResult = await queryWrite(
+      `
       INSERT INTO provider_reconciliation_runs (provider, report_date, status)
       VALUES ($1, $2, 'running')
       RETURNING *
-    `, [provider, reportDate.toISOString().split('T')[0]]);
+    `,
+      [provider, reportDate.toISOString().split("T")[0]],
+    );
 
     const reconciliationRun = runResult.rows[0];
 
     try {
       // Get provider config
-      const configResult = await queryRead(`
+      const configResult = await queryRead(
+        `
         SELECT * FROM provider_report_configs WHERE provider = $1 AND is_enabled = true
-      `, [provider]);
+      `,
+        [provider],
+      );
 
       if (configResult.rows.length === 0) {
-        throw new Error(`No enabled configuration found for provider: ${provider}`);
+        throw new Error(
+          `No enabled configuration found for provider: ${provider}`,
+        );
       }
 
       const config = configResult.rows[0];
@@ -141,14 +172,15 @@ export class ProviderReconciliationService {
 
       // Run reconciliation
       const dateRange = {
-        start: reportDate.toISOString().split('T')[0],
-        end: reportDate.toISOString().split('T')[0],
+        start: reportDate.toISOString().split("T")[0],
+        end: reportDate.toISOString().split("T")[0],
       };
 
       const result = await reconcileTransactions(providerRows, dateRange);
 
       // Update reconciliation run with results
-      await queryWrite(`
+      await queryWrite(
+        `
         UPDATE provider_reconciliation_runs
         SET
           status = 'completed',
@@ -161,39 +193,51 @@ export class ProviderReconciliationService {
           match_rate = $7,
           completed_at = CURRENT_TIMESTAMP
         WHERE id = $8
-      `, [
-        result.total_provider_rows,
-        result.total_db_records,
-        result.summary.total_matched,
-        result.summary.total_discrepancies,
-        result.summary.total_orphaned_provider,
-        result.summary.total_orphaned_db,
-        parseFloat(result.summary.match_rate),
-        reconciliationRun.id
-      ]);
+      `,
+        [
+          result.total_provider_rows,
+          result.total_db_records,
+          result.summary.total_matched,
+          result.summary.total_discrepancies,
+          result.summary.total_orphaned_provider,
+          result.summary.total_orphaned_db,
+          parseFloat(result.summary.match_rate),
+          reconciliationRun.id,
+        ],
+      );
 
       // Create alerts for discrepancies
       await this.createReconciliationAlerts(reconciliationRun.id, result);
 
-      logger.info(`Reconciliation completed for ${provider}: ${result.summary.match_rate} match rate`);
+      logger.info(
+        `Reconciliation completed for ${provider}: ${result.summary.match_rate} match rate`,
+      );
 
       // Return updated run
-      const updatedResult = await queryRead(`
+      const updatedResult = await queryRead(
+        `
         SELECT * FROM provider_reconciliation_runs WHERE id = $1
-      `, [reconciliationRun.id]);
+      `,
+        [reconciliationRun.id],
+      );
 
       return updatedResult.rows[0];
-
     } catch (error) {
       // Update run with error
-      await queryWrite(`
+      await queryWrite(
+        `
         UPDATE provider_reconciliation_runs
         SET
           status = 'failed',
           error_message = $1,
           completed_at = CURRENT_TIMESTAMP
         WHERE id = $2
-      `, [error instanceof Error ? error.message : 'Unknown error', reconciliationRun.id]);
+      `,
+        [
+          error instanceof Error ? error.message : "Unknown error",
+          reconciliationRun.id,
+        ],
+      );
 
       logger.error(`Reconciliation failed for ${provider}:`, error);
       throw error;
@@ -203,13 +247,19 @@ export class ProviderReconciliationService {
   /**
    * Create alerts for reconciliation discrepancies
    */
-  private async createReconciliationAlerts(runId: string, result: any): Promise<void> {
+  private async createReconciliationAlerts(
+    runId: string,
+    result: any,
+  ): Promise<void> {
     const alerts: any[] = [];
 
     // Create alerts for amount/status mismatches
     for (const discrepancy of result.discrepancies) {
-      const alertType = discrepancy.amount ? 'amount_mismatch' : 'status_mismatch';
-      const severity = Math.abs(discrepancy.amount || 0) > 100 ? 'high' : 'medium';
+      const alertType = discrepancy.amount
+        ? "amount_mismatch"
+        : "status_mismatch";
+      const severity =
+        Math.abs(discrepancy.amount || 0) > 100 ? "high" : "medium";
 
       alerts.push({
         reconciliation_run_id: runId,
@@ -230,8 +280,8 @@ export class ProviderReconciliationService {
     for (const orphaned of result.orphaned_provider) {
       alerts.push({
         reconciliation_run_id: runId,
-        alert_type: 'orphaned_provider',
-        severity: 'high',
+        alert_type: "orphaned_provider",
+        severity: "high",
         reference_number: orphaned.reference_number || orphaned.reference_id,
         provider_data: orphaned,
       });
@@ -242,8 +292,8 @@ export class ProviderReconciliationService {
       alerts.push({
         reconciliation_run_id: runId,
         transaction_id: orphaned.id,
-        alert_type: 'orphaned_db',
-        severity: 'medium',
+        alert_type: "orphaned_db",
+        severity: "medium",
         reference_number: orphaned.reference_number,
         db_data: orphaned,
       });
@@ -251,11 +301,14 @@ export class ProviderReconciliationService {
 
     // Insert alerts in batches
     if (alerts.length > 0) {
-      const values = alerts.map((_, i) =>
-        `($${i * 12 + 1}, $${i * 12 + 2}, $${i * 12 + 3}, $${i * 12 + 4}, $${i * 12 + 5}, $${i * 12 + 6}, $${i * 12 + 7}, $${i * 12 + 8}, $${i * 12 + 9}, $${i * 12 + 10}, $${i * 12 + 11}, $${i * 12 + 12})`
-      ).join(', ');
+      const values = alerts
+        .map(
+          (_, i) =>
+            `($${i * 12 + 1}, $${i * 12 + 2}, $${i * 12 + 3}, $${i * 12 + 4}, $${i * 12 + 5}, $${i * 12 + 6}, $${i * 12 + 7}, $${i * 12 + 8}, $${i * 12 + 9}, $${i * 12 + 10}, $${i * 12 + 11}, $${i * 12 + 12})`,
+        )
+        .join(", ");
 
-      const params = alerts.flatMap(alert => [
+      const params = alerts.flatMap((alert) => [
         alert.reconciliation_run_id,
         alert.transaction_id,
         alert.alert_type,
@@ -270,15 +323,20 @@ export class ProviderReconciliationService {
         alert.review_notes,
       ]);
 
-      await queryWrite(`
+      await queryWrite(
+        `
         INSERT INTO provider_reconciliation_alerts (
           reconciliation_run_id, transaction_id, alert_type, severity,
           reference_number, expected_amount, actual_amount, expected_status, actual_status,
           provider_data, db_data, review_notes
         ) VALUES ${values}
-      `, params);
+      `,
+        params,
+      );
 
-      logger.info(`Created ${alerts.length} reconciliation alerts for run ${runId}`);
+      logger.info(
+        `Created ${alerts.length} reconciliation alerts for run ${runId}`,
+      );
     }
   }
 
@@ -286,7 +344,8 @@ export class ProviderReconciliationService {
    * Get reconciliation alerts that need review
    */
   async getPendingAlerts(limit: number = 50): Promise<ReconciliationAlert[]> {
-    const result = await queryRead(`
+    const result = await queryRead(
+      `
       SELECT * FROM provider_reconciliation_alerts
       WHERE status = 'pending_review'
       ORDER BY
@@ -298,7 +357,9 @@ export class ProviderReconciliationService {
         END,
         created_at DESC
       LIMIT $1
-    `, [limit]);
+    `,
+      [limit],
+    );
 
     return result.rows;
   }
@@ -306,8 +367,14 @@ export class ProviderReconciliationService {
   /**
    * Update alert status after review
    */
-  async reviewAlert(alertId: string, status: 'reviewed' | 'dismissed' | 'resolved', reviewNotes: string, reviewedBy: string): Promise<void> {
-    await queryWrite(`
+  async reviewAlert(
+    alertId: string,
+    status: "reviewed" | "dismissed" | "resolved",
+    reviewNotes: string,
+    reviewedBy: string,
+  ): Promise<void> {
+    await queryWrite(
+      `
       UPDATE provider_reconciliation_alerts
       SET
         status = $1,
@@ -316,13 +383,18 @@ export class ProviderReconciliationService {
         reviewed_at = CURRENT_TIMESTAMP,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = $4
-    `, [status, reviewNotes, reviewedBy, alertId]);
+    `,
+      [status, reviewNotes, reviewedBy, alertId],
+    );
   }
 
   /**
    * Get reconciliation run history
    */
-  async getReconciliationHistory(provider?: string, limit: number = 100): Promise<ReconciliationRun[]> {
+  async getReconciliationHistory(
+    provider?: string,
+    limit: number = 100,
+  ): Promise<ReconciliationRun[]> {
     let query = `
       SELECT * FROM provider_reconciliation_runs
       WHERE 1=1

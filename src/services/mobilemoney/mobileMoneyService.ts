@@ -37,7 +37,11 @@ export interface MobileMoneyProvider {
   ): Promise<{ success: boolean; data?: unknown; error?: unknown }>;
   sendBatchPayout?(
     items: BatchPayoutItem[],
-  ): Promise<{ success: boolean; results: BatchPayoutResult[]; error?: unknown }>;
+  ): Promise<{
+    success: boolean;
+    results: BatchPayoutResult[];
+    error?: unknown;
+  }>;
   getTransactionStatus(
     referenceId: string,
   ): Promise<{ status: ProviderTransactionStatus }>;

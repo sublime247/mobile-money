@@ -2,7 +2,7 @@
   "event_type": "payment.callback",
   "provider": "mtn",
   "reference": "REF-BENCH-0000001",
-  "amount": 5000.00,
+  "amount": 5000.0,
   "currency": "XAF",
   "status": "success",
   "timestamp": "2026-04-23T12:00:00Z",

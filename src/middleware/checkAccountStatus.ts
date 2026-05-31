@@ -21,12 +21,12 @@ export class FrozenAccountError extends Error {
 export async function checkAccountStatus(
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> {
   try {
     // Get user ID from JWT token (set by authenticateToken middleware)
     const userId = req.jwtUser?.userId;
-    
+
     if (!userId) {
       // No user ID in token, skip this check
       // (authentication middleware will handle this)
@@ -36,7 +36,7 @@ export async function checkAccountStatus(
 
     // Fetch user from database to check current status
     const user = await userModel.findById(userId);
-    
+
     if (!user) {
       res.status(401).json({
         error: "User not found",
@@ -47,16 +47,19 @@ export async function checkAccountStatus(
 
     // Check if account is frozen or suspended
     if (user.status === "frozen") {
-      console.log(`[ACCOUNT STATUS] Blocked request from frozen user: ${userId}`, {
-        userId,
-        status: user.status,
-        method: req.method,
-        path: req.originalUrl,
-        ip: req.ip,
-        userAgent: req.get("user-agent"),
-        timestamp: new Date().toISOString(),
-      });
-      
+      console.log(
+        `[ACCOUNT STATUS] Blocked request from frozen user: ${userId}`,
+        {
+          userId,
+          status: user.status,
+          method: req.method,
+          path: req.originalUrl,
+          ip: req.ip,
+          userAgent: req.get("user-agent"),
+          timestamp: new Date().toISOString(),
+        },
+      );
+
       res.status(403).json({
         error: "Account frozen",
         message: "Your account has been frozen. Please contact support.",
@@ -66,16 +69,19 @@ export async function checkAccountStatus(
     }
 
     if (user.status === "suspended") {
-      console.log(`[ACCOUNT STATUS] Blocked request from suspended user: ${userId}`, {
-        userId,
-        status: user.status,
-        method: req.method,
-        path: req.originalUrl,
-        ip: req.ip,
-        userAgent: req.get("user-agent"),
-        timestamp: new Date().toISOString(),
-      });
-      
+      console.log(
+        `[ACCOUNT STATUS] Blocked request from suspended user: ${userId}`,
+        {
+          userId,
+          status: user.status,
+          method: req.method,
+          path: req.originalUrl,
+          ip: req.ip,
+          userAgent: req.get("user-agent"),
+          timestamp: new Date().toISOString(),
+        },
+      );
+
       res.status(403).json({
         error: "Account suspended",
         message: "Your account has been suspended. Please contact support.",
@@ -102,11 +108,11 @@ export async function checkAccountStatus(
 export async function checkAccountStatusStrict(
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> {
   try {
     const userId = req.jwtUser?.userId;
-    
+
     if (!userId) {
       res.status(401).json({
         error: "Authentication required",
@@ -116,7 +122,7 @@ export async function checkAccountStatusStrict(
     }
 
     const user = await userModel.findById(userId);
-    
+
     if (!user) {
       res.status(401).json({
         error: "User not found",
@@ -126,20 +132,24 @@ export async function checkAccountStatusStrict(
     }
 
     if (user.status !== "active") {
-      console.log(`[ACCOUNT STATUS] Blocked transaction from ${user.status} user: ${userId}`, {
-        userId,
-        status: user.status,
-        method: req.method,
-        path: req.originalUrl,
-        ip: req.ip,
-        userAgent: req.get("user-agent"),
-        timestamp: new Date().toISOString(),
-      });
-      
-      const errorMessage = user.status === "frozen" 
-        ? "Your account has been frozen. All deposits and withdrawals are blocked."
-        : "Your account has been suspended. All deposits and withdrawals are blocked.";
-      
+      console.log(
+        `[ACCOUNT STATUS] Blocked transaction from ${user.status} user: ${userId}`,
+        {
+          userId,
+          status: user.status,
+          method: req.method,
+          path: req.originalUrl,
+          ip: req.ip,
+          userAgent: req.get("user-agent"),
+          timestamp: new Date().toISOString(),
+        },
+      );
+
+      const errorMessage =
+        user.status === "frozen"
+          ? "Your account has been frozen. All deposits and withdrawals are blocked."
+          : "Your account has been suspended. All deposits and withdrawals are blocked.";
+
       res.status(403).json({
         error: `Account ${user.status}`,
         message: errorMessage,

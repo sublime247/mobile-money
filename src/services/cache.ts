@@ -140,7 +140,11 @@ export function Cache(opts?: CacheOptions) {
           // Serve cached response directly
           res.setHeader("X-Cache", "HIT");
           // If cached contains statusCode and body we try to restore; otherwise send JSON
-          if (cached && typeof cached === "object" && (cached as any).__rawResponse) {
+          if (
+            cached &&
+            typeof cached === "object" &&
+            (cached as any).__rawResponse
+          ) {
             const { statusCode, body } = (cached as any).__rawResponse;
             res.status(statusCode).json(body);
             return;

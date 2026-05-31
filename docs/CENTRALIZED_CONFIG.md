@@ -20,6 +20,7 @@ The application uses **Convict** for centralized configuration management. This 
 The main schema is defined in `src/config/appConfig.ts`. It includes:
 
 ### Provider Limits
+
 ```
 providers:
   - mtn: { minAmount, maxAmount }
@@ -28,6 +29,7 @@ providers:
 ```
 
 ### Transaction Limits (by KYC Level)
+
 ```
 transactionLimits:
   - unverified: daily limit
@@ -36,6 +38,7 @@ transactionLimits:
 ```
 
 ### General Transaction Settings
+
 ```
 transactions:
   - minAmount: global minimum
@@ -48,6 +51,7 @@ transactions:
 ```
 
 ### Authentication Settings
+
 ```
 auth:
   - maxLoginAttempts: failed login limit
@@ -56,6 +60,7 @@ auth:
 ```
 
 ### Cache Settings
+
 ```
 cache:
   - geolocationTtlSeconds
@@ -82,16 +87,20 @@ Configuration files are stored in `src/config/configurations/`:
 ### Import the config module
 
 ```typescript
-import { getConfigValue, getConfig } from 'src/config';
+import { getConfigValue, getConfig } from "src/config";
 
 // Get a single value
-const maxAmount = getConfigValue('providers.mtn.maxAmount');
+const maxAmount = getConfigValue("providers.mtn.maxAmount");
 
 // Get all configuration
 const config = getConfig();
 
 // Use helper functions
-import { getTransactionConfig, getCacheConfig, getAuthConfig } from 'src/config';
+import {
+  getTransactionConfig,
+  getCacheConfig,
+  getAuthConfig,
+} from "src/config";
 
 const txConfig = getTransactionConfig();
 console.log(txConfig.timeoutMinutes);
@@ -100,7 +109,7 @@ console.log(txConfig.timeoutMinutes);
 ### In Service Classes
 
 ```typescript
-import { getConfigValue } from 'src/config';
+import { getConfigValue } from "src/config";
 
 class TransactionService {
   validateAmount(provider: string, amount: number) {
@@ -144,6 +153,7 @@ export SLOW_QUERY_THRESHOLD_MS=2000
 ### For Existing Code
 
 Old approach (hardcoded):
+
 ```typescript
 const MIN_AMOUNT = 100;
 const MAX_AMOUNT = 500000;
@@ -154,11 +164,12 @@ if (amount < MIN_AMOUNT) {
 ```
 
 New approach (config):
-```typescript
-import { getConfigValue } from 'src/config';
 
-const minAmount = getConfigValue('transactions.minAmount');
-const maxAmount = getConfigValue('transactions.maxAmount');
+```typescript
+import { getConfigValue } from "src/config";
+
+const minAmount = getConfigValue("transactions.minAmount");
+const maxAmount = getConfigValue("transactions.maxAmount");
 
 if (amount < minAmount) {
   // error
@@ -168,20 +179,22 @@ if (amount < minAmount) {
 ### Fetching Provider Limits
 
 Old approach:
+
 ```typescript
-import { PROVIDER_LIMITS } from 'src/config/providers';
-const limits = PROVIDER_LIMITS['mtn'];
+import { PROVIDER_LIMITS } from "src/config/providers";
+const limits = PROVIDER_LIMITS["mtn"];
 ```
 
 New approach (still works!):
+
 ```typescript
 // Direct import still works due to migration
-import { PROVIDER_LIMITS } from 'src/config/providers';
-const limits = PROVIDER_LIMITS['mtn'];
+import { PROVIDER_LIMITS } from "src/config/providers";
+const limits = PROVIDER_LIMITS["mtn"];
 
 // Or use helper
-import { getProviderLimit } from 'src/config';
-const limits = getProviderLimit('mtn');
+import { getProviderLimit } from "src/config";
+const limits = getProviderLimit("mtn");
 ```
 
 ## Configuration Precedence
@@ -194,7 +207,7 @@ const limits = getProviderLimit('mtn');
    - Development-only overrides
    - Gitignored for security
 
-3. **Environment-Specific Configuration** 
+3. **Environment-Specific Configuration**
    - `development.json`, `staging.json`, `production.json`
    - Based on `NODE_ENV` value
 
@@ -204,18 +217,20 @@ const limits = getProviderLimit('mtn');
 ## Adding New Configuration
 
 1. **Add to Schema** in `src/config/appConfig.ts`:
+
 ```typescript
 export const configSchema = convict({
   myNewSetting: {
-    doc: 'Description of the setting',
-    format: String,  // or 'nat', Number, Boolean, etc.
-    default: 'default-value',
-    env: 'MY_NEW_SETTING',  // optional env var name
+    doc: "Description of the setting",
+    format: String, // or 'nat', Number, Boolean, etc.
+    default: "default-value",
+    env: "MY_NEW_SETTING", // optional env var name
   },
 });
 ```
 
 2. **Add to Environment Files**:
+
 ```json
 // src/config/configurations/development.json
 {
@@ -224,14 +239,16 @@ export const configSchema = convict({
 ```
 
 3. **Use in Code**:
+
 ```typescript
-import { getConfigValue } from 'src/config';
-const setting = getConfigValue('myNewSetting');
+import { getConfigValue } from "src/config";
+const setting = getConfigValue("myNewSetting");
 ```
 
 ## Best Practices
 
 ✅ **DO:**
+
 - Use config for all limits, TTLs, and thresholds
 - Document all configuration options
 - Use environment variables in production
@@ -239,6 +256,7 @@ const setting = getConfigValue('myNewSetting');
 - Use typed helper functions
 
 ❌ **DON'T:**
+
 - Hardcode magic numbers
 - Use `process.env.MY_VAR` directly (use `getConfigValue` instead)
 - Store sensitive data in JSON files (use env vars instead)
@@ -247,11 +265,13 @@ const setting = getConfigValue('myNewSetting');
 ## Testing
 
 Run configuration tests:
+
 ```bash
 npm test -- src/config/__tests__/appConfig.test.ts
 ```
 
 Validate configuration at startup:
+
 ```bash
 npm run build && npm start
 ```
@@ -259,16 +279,19 @@ npm run build && npm start
 ## Troubleshooting
 
 ### Configuration not loading
+
 - Check that `NODE_ENV` is set correctly
 - Verify JSON files are in `src/config/configurations/`
 - Check for JSON syntax errors
 
 ### Environment variable not working
+
 - Ensure variable name matches the schema
 - Check that convict's env property is set
 - Note: Changes require app restart
 
 ### Circular dependency issues
+
 - Import config init early: `import 'src/config/init'`
 - Use lazy imports if needed: `const { getConfigValue } = require('src/config')`
 

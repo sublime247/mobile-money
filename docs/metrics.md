@@ -22,7 +22,6 @@ The following Prometheus metrics are exported by the application at `/metrics`.
 
 Standard Node.js metrics (CPU, Memory, Event Loop, etc.) are also exported via `prom-client`'s `collectDefaultMetrics`.
 
-
 # Transaction and Dispute Resolution Time Metrics
 
 ## Overview
@@ -48,6 +47,7 @@ PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY resolution_time_ms)
 ```
 
 Resolution time is calculated as:
+
 ```sql
 EXTRACT(EPOCH FROM (updated_at - created_at)) * 1000  -- milliseconds
 ```
@@ -61,6 +61,7 @@ GET /api/admin/metrics/transactions/resolution?days=30
 ```
 
 **Response:**
+
 ```json
 {
   "metrics": {
@@ -114,6 +115,7 @@ All percentile calculations are cached in Redis with a 5-minute TTL:
 - `metrics:disputes:trend`
 
 To invalidate cache (e.g., after data corrections):
+
 ```typescript
 import { invalidateMetricsCache } from "../services/metrics";
 await invalidateMetricsCache();
@@ -122,6 +124,7 @@ await invalidateMetricsCache();
 ## Millisecond Precision
 
 All timestamps and calculations maintain millisecond precision:
+
 - Database: `EXTRACT(EPOCH FROM ...) * 1000`
 - Redis: `Date.now()` for real-time tracking
 - API Response: Integer milliseconds (no floating point)
@@ -129,6 +132,7 @@ All timestamps and calculations maintain millisecond precision:
 ## Integration with Read Replicas
 
 The metrics service leverages the read replica system for heavy report queries:
+
 - Uses `queryRead()` instead of `pool.query()` for all SELECT queries
 - Automatically routes to replica pool with fallback to primary
 - Reduces load on primary database for analytics

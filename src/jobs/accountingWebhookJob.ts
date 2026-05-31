@@ -35,14 +35,16 @@ export async function runAccountingWebhookJob(): Promise<void> {
          WHERE q.transaction_id = t.id AND q.status = 'synced'
        )
      ORDER BY t.created_at ASC
-     LIMIT 50`
+     LIMIT 50`,
   );
 
   if (result.rows.length === 0) {
     return;
   }
 
-  console.log(`[accounting-webhook] Syncing ${result.rows.length} transaction(s)`);
+  console.log(
+    `[accounting-webhook] Syncing ${result.rows.length} transaction(s)`,
+  );
 
   for (const row of result.rows) {
     try {
@@ -58,7 +60,10 @@ export async function runAccountingWebhookJob(): Promise<void> {
         createdAt: row.created_at,
       });
     } catch (err) {
-      console.error(`[accounting-webhook] Failed to sync transaction ${row.id}:`, err);
+      console.error(
+        `[accounting-webhook] Failed to sync transaction ${row.id}:`,
+        err,
+      );
     }
   }
 }

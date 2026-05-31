@@ -20,19 +20,16 @@ const client = axios.create({
 });
 
 export const createPayment = async (
-  payload: CreatePaymentPayload
+  payload: CreatePaymentPayload,
 ): Promise<CreatePaymentResponse> => {
   try {
     const response = await client.post<CreatePaymentResponse>(
       "/payments",
-      payload
+      payload,
     );
     return response.data;
   } catch (error: any) {
-    console.error(
-      "Bridge API Error:",
-      error.response?.data || error.message
-    );
+    console.error("Bridge API Error:", error.response?.data || error.message);
     throw error;
   }
 };

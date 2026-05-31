@@ -1,5 +1,5 @@
-import pino, { Logger, TransportTargetOptions } from 'pino';
-import os from 'os';
+import pino, { Logger, TransportTargetOptions } from "pino";
+import os from "os";
 
 /**
  * Centralized Pino Logger — feature/centralized-logging
@@ -23,9 +23,9 @@ import os from 'os';
  * transport sees them.
  */
 
-const SERVICE_NAME = process.env.SERVICE_NAME ?? 'mobile-money-api';
+const SERVICE_NAME = process.env.SERVICE_NAME ?? "mobile-money-api";
 const INSTANCE_ID = `${os.hostname()}:${process.pid}`;
-const LOG_LEVEL = process.env.LOG_LEVEL ?? 'info';
+const LOG_LEVEL = process.env.LOG_LEVEL ?? "info";
 
 // ---------------------------------------------------------------------------
 // Transport configuration
@@ -43,13 +43,13 @@ function buildTransports(): pino.TransportMultiOptions | undefined {
 
   // In test environments skip all transports — tests use the raw pino
   // instance and should not attempt network connections.
-  if (process.env.NODE_ENV === 'test') {
+  if (process.env.NODE_ENV === "test") {
     return undefined;
   }
 
   const targets: TransportTargetOptions[] = [
     {
-      target: 'pino/file',
+      target: "pino/file",
       level: LOG_LEVEL,
       options: { destination: 1 }, // fd 1 = stdout
     },
@@ -58,7 +58,7 @@ function buildTransports(): pino.TransportMultiOptions | undefined {
   if (lokiHost) {
     targets.push({
       // pino-loki runs in a worker thread — fully async, non-blocking
-      target: 'pino-loki',
+      target: "pino-loki",
       level: LOG_LEVEL,
       options: {
         host: lokiHost,
@@ -66,7 +66,7 @@ function buildTransports(): pino.TransportMultiOptions | undefined {
         silenceErrors: true,
         labels: {
           service: SERVICE_NAME,
-          env: process.env.NODE_ENV ?? 'development',
+          env: process.env.NODE_ENV ?? "development",
         },
         // Batch up to 10 log lines or flush every 5 s, whichever comes first
         batching: true,
@@ -116,19 +116,19 @@ const logger: Logger = pino(
     // Redact sensitive fields before any transport sees them
     redact: {
       paths: [
-        'password',
-        'token',
-        'accountNumber',
-        'secret',
-        'authorization',
-        'req.headers.authorization',
-        '*.password',
-        '*.token',
-        '*.accountNumber',
-        '*.secret',
+        "password",
+        "token",
+        "accountNumber",
+        "secret",
+        "authorization",
+        "req.headers.authorization",
+        "*.password",
+        "*.token",
+        "*.accountNumber",
+        "*.secret",
       ],
-      placeholder: '[REDACTED]',
-      censor: '[REDACTED]',
+      placeholder: "[REDACTED]",
+      censor: "[REDACTED]",
     },
 
     // ISO-8601 timestamps
@@ -146,6 +146,9 @@ export default logger;
  *   const reqLogger = childLogger(req.headers['x-trace-id'] as string);
  *   reqLogger.info({ path: req.path }, 'incoming request');
  */
-export function childLogger(traceId: string, extra?: Record<string, unknown>): Logger {
+export function childLogger(
+  traceId: string,
+  extra?: Record<string, unknown>,
+): Logger {
   return logger.child({ trace_id: traceId, ...extra });
 }

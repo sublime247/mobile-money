@@ -1,530 +1,544 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>CurrencyFormatter Browser Demo</title>
     <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-        
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            background-color: #f5f5f5;
-            padding: 20px;
-        }
-        
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu,
+          sans-serif;
+        line-height: 1.6;
+        color: #333;
+        background-color: #f5f5f5;
+        padding: 20px;
+      }
+
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+      }
+
+      header {
+        text-align: center;
+        margin-bottom: 40px;
+        padding: 20px;
+        background: white;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+
+      h1 {
+        color: #2c3e50;
+        margin-bottom: 10px;
+      }
+
+      .subtitle {
+        color: #7f8c8d;
+        font-size: 1.1em;
+      }
+
+      .demo-section {
+        background: white;
+        border-radius: 10px;
+        padding: 25px;
+        margin-bottom: 30px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+
+      h2 {
+        color: #3498db;
+        margin-bottom: 20px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #eee;
+      }
+
+      h3 {
+        color: #2c3e50;
+        margin-bottom: 15px;
+      }
+
+      .form-group {
+        margin-bottom: 20px;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 600;
+        color: #555;
+      }
+
+      input,
+      select {
+        width: 100%;
+        padding: 12px;
+        border: 2px solid #ddd;
+        border-radius: 6px;
+        font-size: 16px;
+        transition: border-color 0.3s;
+      }
+
+      input:focus,
+      select:focus {
+        outline: none;
+        border-color: #3498db;
+      }
+
+      button {
+        background: #3498db;
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 6px;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.3s;
+      }
+
+      button:hover {
+        background: #2980b9;
+      }
+
+      .result {
+        margin-top: 20px;
+        padding: 20px;
+        background: #f8f9fa;
+        border-radius: 6px;
+        border-left: 4px solid #3498db;
+      }
+
+      .formatted-amount {
+        font-size: 24px;
+        font-weight: bold;
+        color: #2c3e50;
+        margin: 10px 0;
+      }
+
+      .error {
+        color: #e74c3c;
+        background: #fdf0f0;
+        padding: 15px;
+        border-radius: 6px;
+        border-left: 4px solid #e74c3c;
+        margin-top: 20px;
+      }
+
+      .success {
+        color: #27ae60;
+        background: #f0f9f0;
+        padding: 15px;
+        border-radius: 6px;
+        border-left: 4px solid #27ae60;
+        margin-top: 20px;
+      }
+
+      .transaction-list {
+        list-style: none;
+      }
+
+      .transaction-item {
+        padding: 15px;
+        border-bottom: 1px solid #eee;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .transaction-item:last-child {
+        border-bottom: none;
+      }
+
+      .transaction-description {
+        font-weight: 500;
+      }
+
+      .transaction-amount {
+        font-weight: bold;
+        color: #2c3e50;
+      }
+
+      .code-block {
+        background: #2c3e50;
+        color: #ecf0f1;
+        padding: 20px;
+        border-radius: 6px;
+        font-family: "Courier New", monospace;
+        overflow-x: auto;
+        margin: 20px 0;
+      }
+
+      .example-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 20px;
+        margin-top: 20px;
+      }
+
+      .example-card {
+        background: #f8f9fa;
+        padding: 20px;
+        border-radius: 6px;
+        border: 1px solid #ddd;
+      }
+
+      footer {
+        text-align: center;
+        margin-top: 40px;
+        padding: 20px;
+        color: #7f8c8d;
+        font-size: 0.9em;
+      }
+
+      @media (max-width: 768px) {
         .container {
-            max-width: 1200px;
-            margin: 0 auto;
+          padding: 10px;
         }
-        
-        header {
-            text-align: center;
-            margin-bottom: 40px;
-            padding: 20px;
-            background: white;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        
-        h1 {
-            color: #2c3e50;
-            margin-bottom: 10px;
-        }
-        
-        .subtitle {
-            color: #7f8c8d;
-            font-size: 1.1em;
-        }
-        
+
         .demo-section {
-            background: white;
-            border-radius: 10px;
-            padding: 25px;
-            margin-bottom: 30px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+          padding: 15px;
         }
-        
-        h2 {
-            color: #3498db;
-            margin-bottom: 20px;
-            padding-bottom: 10px;
-            border-bottom: 2px solid #eee;
-        }
-        
-        h3 {
-            color: #2c3e50;
-            margin-bottom: 15px;
-        }
-        
-        .form-group {
-            margin-bottom: 20px;
-        }
-        
-        label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 600;
-            color: #555;
-        }
-        
-        input, select {
-            width: 100%;
-            padding: 12px;
-            border: 2px solid #ddd;
-            border-radius: 6px;
-            font-size: 16px;
-            transition: border-color 0.3s;
-        }
-        
-        input:focus, select:focus {
-            outline: none;
-            border-color: #3498db;
-        }
-        
-        button {
-            background: #3498db;
-            color: white;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 6px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background 0.3s;
-        }
-        
-        button:hover {
-            background: #2980b9;
-        }
-        
-        .result {
-            margin-top: 20px;
-            padding: 20px;
-            background: #f8f9fa;
-            border-radius: 6px;
-            border-left: 4px solid #3498db;
-        }
-        
-        .formatted-amount {
-            font-size: 24px;
-            font-weight: bold;
-            color: #2c3e50;
-            margin: 10px 0;
-        }
-        
-        .error {
-            color: #e74c3c;
-            background: #fdf0f0;
-            padding: 15px;
-            border-radius: 6px;
-            border-left: 4px solid #e74c3c;
-            margin-top: 20px;
-        }
-        
-        .success {
-            color: #27ae60;
-            background: #f0f9f0;
-            padding: 15px;
-            border-radius: 6px;
-            border-left: 4px solid #27ae60;
-            margin-top: 20px;
-        }
-        
-        .transaction-list {
-            list-style: none;
-        }
-        
-        .transaction-item {
-            padding: 15px;
-            border-bottom: 1px solid #eee;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        
-        .transaction-item:last-child {
-            border-bottom: none;
-        }
-        
-        .transaction-description {
-            font-weight: 500;
-        }
-        
-        .transaction-amount {
-            font-weight: bold;
-            color: #2c3e50;
-        }
-        
-        .code-block {
-            background: #2c3e50;
-            color: #ecf0f1;
-            padding: 20px;
-            border-radius: 6px;
-            font-family: 'Courier New', monospace;
-            overflow-x: auto;
-            margin: 20px 0;
-        }
-        
+
         .example-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 20px;
-            margin-top: 20px;
+          grid-template-columns: 1fr;
         }
-        
-        .example-card {
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 6px;
-            border: 1px solid #ddd;
-        }
-        
-        footer {
-            text-align: center;
-            margin-top: 40px;
-            padding: 20px;
-            color: #7f8c8d;
-            font-size: 0.9em;
-        }
-        
-        @media (max-width: 768px) {
-            .container {
-                padding: 10px;
-            }
-            
-            .demo-section {
-                padding: 15px;
-            }
-            
-            .example-grid {
-                grid-template-columns: 1fr;
-            }
-        }
+      }
     </style>
-</head>
-<body>
+  </head>
+  <body>
     <div class="container">
-        <header>
-            <h1>CurrencyFormatter Browser Demo</h1>
-            <p class="subtitle">ISO 4217 compliant currency formatting for XAF, GHS, NGN, and USD</p>
-        </header>
-        
-        <div class="demo-section">
-            <h2>Live Formatting Demo</h2>
-            
-            <div class="form-group">
-                <label for="amount">Amount:</label>
-                <input type="number" id="amount" value="1234.56" step="0.01" min="0">
-            </div>
-            
-            <div class="form-group">
-                <label for="currency">Currency:</label>
-                <select id="currency">
-                    <option value="USD">USD - US Dollar</option>
-                    <option value="XAF">XAF - Central African CFA Franc</option>
-                    <option value="GHS">GHS - Ghanaian Cedi</option>
-                    <option value="NGN">NGN - Nigerian Naira</option>
-                </select>
-            </div>
-            
-            <div class="form-group">
-                <label for="locale">Locale:</label>
-                <select id="locale">
-                    <option value="en-US">English (US)</option>
-                    <option value="en-GB">English (UK)</option>
-                    <option value="fr-FR">French (France)</option>
-                    <option value="de-DE">German (Germany)</option>
-                    <option value="es-ES">Spanish (Spain)</option>
-                </select>
-            </div>
-            
-            <button id="formatBtn">Format Currency</button>
-            
-            <div id="result" class="result" style="display: none;">
-                <h3>Formatted Result:</h3>
-                <div id="formattedAmount" class="formatted-amount"></div>
-                <div id="errorMessage" class="error" style="display: none;"></div>
-            </div>
+      <header>
+        <h1>CurrencyFormatter Browser Demo</h1>
+        <p class="subtitle">
+          ISO 4217 compliant currency formatting for XAF, GHS, NGN, and USD
+        </p>
+      </header>
+
+      <div class="demo-section">
+        <h2>Live Formatting Demo</h2>
+
+        <div class="form-group">
+          <label for="amount">Amount:</label>
+          <input
+            type="number"
+            id="amount"
+            value="1234.56"
+            step="0.01"
+            min="0"
+          />
         </div>
-        
-        <div class="demo-section">
-            <h2>Batch Formatting Example</h2>
-            <p>Format multiple amounts efficiently using batch processing:</p>
-            
-            <button id="batchBtn">Format Batch Example</button>
-            
-            <div id="batchResult" style="margin-top: 20px;">
-                <h3>Transactions:</h3>
-                <ul id="transactionList" class="transaction-list"></ul>
-            </div>
+
+        <div class="form-group">
+          <label for="currency">Currency:</label>
+          <select id="currency">
+            <option value="USD">USD - US Dollar</option>
+            <option value="XAF">XAF - Central African CFA Franc</option>
+            <option value="GHS">GHS - Ghanaian Cedi</option>
+            <option value="NGN">NGN - Nigerian Naira</option>
+          </select>
         </div>
-        
-        <div class="demo-section">
-            <h2>Custom Formatting Options</h2>
-            <p>Try different formatting options:</p>
-            
-            <div class="example-grid">
-                <div class="example-card">
-                    <h3>No Thousands Grouping</h3>
-                    <div id="noGroupingExample" class="formatted-amount">$1,234.56</div>
-                    <button onclick="formatNoGrouping()">Update</button>
-                </div>
-                
-                <div class="example-card">
-                    <h3>German Locale</h3>
-                    <div id="germanExample" class="formatted-amount">$1,234.56</div>
-                    <button onclick="formatGerman()">Update</button>
-                </div>
-                
-                <div class="example-card">
-                    <h3>4 Decimal Places</h3>
-                    <div id="fourDecimalsExample" class="formatted-amount">$100.00</div>
-                    <button onclick="formatFourDecimals()">Update</button>
-                </div>
-                
-                <div class="example-card">
-                    <h3>Floor Rounding</h3>
-                    <div id="floorExample" class="formatted-amount">$1.999</div>
-                    <button onclick="formatFloor()">Update</button>
-                </div>
-            </div>
+
+        <div class="form-group">
+          <label for="locale">Locale:</label>
+          <select id="locale">
+            <option value="en-US">English (US)</option>
+            <option value="en-GB">English (UK)</option>
+            <option value="fr-FR">French (France)</option>
+            <option value="de-DE">German (Germany)</option>
+            <option value="es-ES">Spanish (Spain)</option>
+          </select>
         </div>
-        
-        <div class="demo-section">
-            <h2>Code Examples</h2>
-            
-            <h3>Basic Usage:</h3>
-            <div class="code-block">
-// Import CurrencyFormatter
-import { CurrencyFormatter } from './currency-formatter';
 
-// Format USD amount
-const formatted = CurrencyFormatter.format(1234.56, 'USD');
-console.log(formatted); // "$1,234.56"
+        <button id="formatBtn">Format Currency</button>
 
-// Format XAF amount (0 decimal places)
-const xafFormatted = CurrencyFormatter.format(5000, 'XAF');
-console.log(xafFormatted); // "5 000 FCFA"
-            </div>
-            
-            <h3>Batch Formatting:</h3>
-            <div class="code-block">
-const amounts = [
-    { amount: 100, currency: 'USD' },
-    { amount: 5000, currency: 'XAF' },
-    { amount: 50.75, currency: 'GHS' },
-    { amount: 2500.25, currency: 'NGN' }
-];
-
-const formatted = CurrencyFormatter.formatBatch(amounts);
-// Returns: ["$100.00", "5 000 FCFA", "GH₵50.75", "₦2,500.25"]
-            </div>
-            
-            <h3>Custom Options:</h3>
-            <div class="code-block">
-// Different locale
-CurrencyFormatter.format(1234.56, 'USD', { locale: 'de-DE' });
-// Returns: "1.234,56 $"
-
-// No thousands grouping
-CurrencyFormatter.format(1000000, 'USD', { useGrouping: false });
-// Returns: "$1000000.00"
-
-// Custom decimal places
-CurrencyFormatter.format(100, 'USD', { minimumFractionDigits: 4 });
-// Returns: "$100.0000"
-
-// Different rounding mode
-CurrencyFormatter.format(1.999, 'USD', { roundingMode: 'floor' });
-// Returns: "$1.99"
-            </div>
+        <div id="result" class="result" style="display: none">
+          <h3>Formatted Result:</h3>
+          <div id="formattedAmount" class="formatted-amount"></div>
+          <div id="errorMessage" class="error" style="display: none"></div>
         </div>
-        
-        <footer>
-            <p>CurrencyFormatter Utility - ISO 4217 Compliant Currency Formatting</p>
-            <p>Supports: XAF (0 decimals), GHS (2 decimals), NGN (2 decimals), USD (2 decimals)</p>
-        </footer>
+      </div>
+
+      <div class="demo-section">
+        <h2>Batch Formatting Example</h2>
+        <p>Format multiple amounts efficiently using batch processing:</p>
+
+        <button id="batchBtn">Format Batch Example</button>
+
+        <div id="batchResult" style="margin-top: 20px">
+          <h3>Transactions:</h3>
+          <ul id="transactionList" class="transaction-list"></ul>
+        </div>
+      </div>
+
+      <div class="demo-section">
+        <h2>Custom Formatting Options</h2>
+        <p>Try different formatting options:</p>
+
+        <div class="example-grid">
+          <div class="example-card">
+            <h3>No Thousands Grouping</h3>
+            <div id="noGroupingExample" class="formatted-amount">$1,234.56</div>
+            <button onclick="formatNoGrouping()">Update</button>
+          </div>
+
+          <div class="example-card">
+            <h3>German Locale</h3>
+            <div id="germanExample" class="formatted-amount">$1,234.56</div>
+            <button onclick="formatGerman()">Update</button>
+          </div>
+
+          <div class="example-card">
+            <h3>4 Decimal Places</h3>
+            <div id="fourDecimalsExample" class="formatted-amount">$100.00</div>
+            <button onclick="formatFourDecimals()">Update</button>
+          </div>
+
+          <div class="example-card">
+            <h3>Floor Rounding</h3>
+            <div id="floorExample" class="formatted-amount">$1.999</div>
+            <button onclick="formatFloor()">Update</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="demo-section">
+        <h2>Code Examples</h2>
+
+        <h3>Basic Usage:</h3>
+        <div class="code-block">
+          // Import CurrencyFormatter import { CurrencyFormatter } from
+          './currency-formatter'; // Format USD amount const formatted =
+          CurrencyFormatter.format(1234.56, 'USD'); console.log(formatted); //
+          "$1,234.56" // Format XAF amount (0 decimal places) const xafFormatted
+          = CurrencyFormatter.format(5000, 'XAF'); console.log(xafFormatted); //
+          "5 000 FCFA"
+        </div>
+
+        <h3>Batch Formatting:</h3>
+        <div class="code-block">
+          const amounts = [ { amount: 100, currency: 'USD' }, { amount: 5000,
+          currency: 'XAF' }, { amount: 50.75, currency: 'GHS' }, { amount:
+          2500.25, currency: 'NGN' } ]; const formatted =
+          CurrencyFormatter.formatBatch(amounts); // Returns: ["$100.00",
+          "5 000 FCFA", "GH₵50.75", "₦2,500.25"]
+        </div>
+
+        <h3>Custom Options:</h3>
+        <div class="code-block">
+          // Different locale CurrencyFormatter.format(1234.56, 'USD', { locale:
+          'de-DE' }); // Returns: "1.234,56 $" // No thousands grouping
+          CurrencyFormatter.format(1000000, 'USD', { useGrouping: false }); //
+          Returns: "$1000000.00" // Custom decimal places
+          CurrencyFormatter.format(100, 'USD', { minimumFractionDigits: 4 }); //
+          Returns: "$100.0000" // Different rounding mode
+          CurrencyFormatter.format(1.999, 'USD', { roundingMode: 'floor' }); //
+          Returns: "$1.99"
+        </div>
+      </div>
+
+      <footer>
+        <p>
+          CurrencyFormatter Utility - ISO 4217 Compliant Currency Formatting
+        </p>
+        <p>
+          Supports: XAF (0 decimals), GHS (2 decimals), NGN (2 decimals), USD (2
+          decimals)
+        </p>
+      </footer>
     </div>
 
     <script type="module">
-        // Note: In a real browser environment, you would import the module like this:
-        // import { CurrencyFormatter } from './path/to/currency-formatter.js';
-        
-        // For this demo, we'll simulate the CurrencyFormatter functionality
-        // In a real implementation, you would bundle the TypeScript code for browser use
-        
-        class MockCurrencyFormatter {
-            static format(amount, currency, options = {}) {
-                // Mock implementation for demo purposes
-                const currencySymbols = {
-                    'USD': '$',
-                    'XAF': 'FCFA',
-                    'GHS': 'GH₵',
-                    'NGN': '₦'
-                };
-                
-                const symbol = currencySymbols[currency] || currency;
-                let formattedNumber;
-                
-                // Handle locale-specific formatting
-                const locale = options.locale || 'en-US';
-                const useGrouping = options.useGrouping !== false;
-                
-                if (currency === 'XAF') {
-                    // XAF has 0 decimal places
-                    formattedNumber = Math.round(amount).toLocaleString(locale, {
-                        minimumFractionDigits: 0,
-                        maximumFractionDigits: 0,
-                        useGrouping: useGrouping
-                    });
-                } else {
-                    // Other currencies have 2 decimal places
-                    formattedNumber = amount.toLocaleString(locale, {
-                        minimumFractionDigits: options.minimumFractionDigits || 2,
-                        maximumFractionDigits: options.maximumFractionDigits || 2,
-                        useGrouping: useGrouping
-                    });
-                }
-                
-                // Handle rounding mode
-                if (options.roundingMode === 'floor') {
-                    const decimals = currency === 'XAF' ? 0 : 2;
-                    const factor = Math.pow(10, decimals);
-                    const rounded = Math.floor(amount * factor) / factor;
-                    formattedNumber = rounded.toLocaleString(locale, {
-                        minimumFractionDigits: decimals,
-                        maximumFractionDigits: decimals,
-                        useGrouping: useGrouping
-                    });
-                } else if (options.roundingMode === 'ceil') {
-                    const decimals = currency === 'XAF' ? 0 : 2;
-                    const factor = Math.pow(10, decimals);
-                    const rounded = Math.ceil(amount * factor) / factor;
-                    formattedNumber = rounded.toLocaleString(locale, {
-                        minimumFractionDigits: decimals,
-                        maximumFractionDigits: decimals,
-                        useGrouping: useGrouping
-                    });
-                }
-                
-                return `${symbol}${formattedNumber}`;
-            }
-            
-            static formatBatch(amounts, options = {}) {
-                return amounts.map(item => this.format(item.amount, item.currency, options));
-            }
+      // Note: In a real browser environment, you would import the module like this:
+      // import { CurrencyFormatter } from './path/to/currency-formatter.js';
+
+      // For this demo, we'll simulate the CurrencyFormatter functionality
+      // In a real implementation, you would bundle the TypeScript code for browser use
+
+      class MockCurrencyFormatter {
+        static format(amount, currency, options = {}) {
+          // Mock implementation for demo purposes
+          const currencySymbols = {
+            USD: "$",
+            XAF: "FCFA",
+            GHS: "GH₵",
+            NGN: "₦",
+          };
+
+          const symbol = currencySymbols[currency] || currency;
+          let formattedNumber;
+
+          // Handle locale-specific formatting
+          const locale = options.locale || "en-US";
+          const useGrouping = options.useGrouping !== false;
+
+          if (currency === "XAF") {
+            // XAF has 0 decimal places
+            formattedNumber = Math.round(amount).toLocaleString(locale, {
+              minimumFractionDigits: 0,
+              maximumFractionDigits: 0,
+              useGrouping: useGrouping,
+            });
+          } else {
+            // Other currencies have 2 decimal places
+            formattedNumber = amount.toLocaleString(locale, {
+              minimumFractionDigits: options.minimumFractionDigits || 2,
+              maximumFractionDigits: options.maximumFractionDigits || 2,
+              useGrouping: useGrouping,
+            });
+          }
+
+          // Handle rounding mode
+          if (options.roundingMode === "floor") {
+            const decimals = currency === "XAF" ? 0 : 2;
+            const factor = Math.pow(10, decimals);
+            const rounded = Math.floor(amount * factor) / factor;
+            formattedNumber = rounded.toLocaleString(locale, {
+              minimumFractionDigits: decimals,
+              maximumFractionDigits: decimals,
+              useGrouping: useGrouping,
+            });
+          } else if (options.roundingMode === "ceil") {
+            const decimals = currency === "XAF" ? 0 : 2;
+            const factor = Math.pow(10, decimals);
+            const rounded = Math.ceil(amount * factor) / factor;
+            formattedNumber = rounded.toLocaleString(locale, {
+              minimumFractionDigits: decimals,
+              maximumFractionDigits: decimals,
+              useGrouping: useGrouping,
+            });
+          }
+
+          return `${symbol}${formattedNumber}`;
         }
-        
-        // Use the mock formatter for the demo
-        const CurrencyFormatter = MockCurrencyFormatter;
-        
-        // DOM Elements
-        const amountInput = document.getElementById('amount');
-        const currencySelect = document.getElementById('currency');
-        const localeSelect = document.getElementById('locale');
-        const formatBtn = document.getElementById('formatBtn');
-        const resultDiv = document.getElementById('result');
-        const formattedAmountDiv = document.getElementById('formattedAmount');
-        const errorMessageDiv = document.getElementById('errorMessage');
-        const batchBtn = document.getElementById('batchBtn');
-        const transactionList = document.getElementById('transactionList');
-        
-        // Format button click handler
-        formatBtn.addEventListener('click', () => {
-            const amount = parseFloat(amountInput.value);
-            const currency = currencySelect.value;
-            const locale = localeSelect.value;
-            
-            // Hide previous results
-            errorMessageDiv.style.display = 'none';
-            
-            try {
-                if (isNaN(amount) || amount < 0) {
-                    throw new Error('Please enter a valid positive number');
-                }
-                
-                const formatted = CurrencyFormatter.format(amount, currency, { locale });
-                
-                formattedAmountDiv.textContent = formatted;
-                resultDiv.style.display = 'block';
-                
-                // Show success message
-                errorMessageDiv.style.display = 'none';
-            } catch (error) {
-                errorMessageDiv.textContent = `Error: ${error.message}`;
-                errorMessageDiv.style.display = 'block';
-                resultDiv.style.display = 'block';
-                formattedAmountDiv.textContent = '';
-            }
-        });
-        
-        // Batch formatting example
-        batchBtn.addEventListener('click', () => {
-            const exampleTransactions = [
-                { amount: 100, currency: 'USD', description: 'Coffee' },
-                { amount: 5000, currency: 'XAF', description: 'Lunch' },
-                { amount: 50.75, currency: 'GHS', description: 'Transport' },
-                { amount: 2500.25, currency: 'NGN', description: 'Shopping' }
-            ];
-            
-            const formatted = CurrencyFormatter.formatBatch(exampleTransactions);
-            
-            // Clear previous list
-            transactionList.innerHTML = '';
-            
-            // Add transactions to list
-            exampleTransactions.forEach((tx, index) => {
-                const li = document.createElement('li');
-                li.className = 'transaction-item';
-                li.innerHTML = `
+
+        static formatBatch(amounts, options = {}) {
+          return amounts.map((item) =>
+            this.format(item.amount, item.currency, options),
+          );
+        }
+      }
+
+      // Use the mock formatter for the demo
+      const CurrencyFormatter = MockCurrencyFormatter;
+
+      // DOM Elements
+      const amountInput = document.getElementById("amount");
+      const currencySelect = document.getElementById("currency");
+      const localeSelect = document.getElementById("locale");
+      const formatBtn = document.getElementById("formatBtn");
+      const resultDiv = document.getElementById("result");
+      const formattedAmountDiv = document.getElementById("formattedAmount");
+      const errorMessageDiv = document.getElementById("errorMessage");
+      const batchBtn = document.getElementById("batchBtn");
+      const transactionList = document.getElementById("transactionList");
+
+      // Format button click handler
+      formatBtn.addEventListener("click", () => {
+        const amount = parseFloat(amountInput.value);
+        const currency = currencySelect.value;
+        const locale = localeSelect.value;
+
+        // Hide previous results
+        errorMessageDiv.style.display = "none";
+
+        try {
+          if (isNaN(amount) || amount < 0) {
+            throw new Error("Please enter a valid positive number");
+          }
+
+          const formatted = CurrencyFormatter.format(amount, currency, {
+            locale,
+          });
+
+          formattedAmountDiv.textContent = formatted;
+          resultDiv.style.display = "block";
+
+          // Show success message
+          errorMessageDiv.style.display = "none";
+        } catch (error) {
+          errorMessageDiv.textContent = `Error: ${error.message}`;
+          errorMessageDiv.style.display = "block";
+          resultDiv.style.display = "block";
+          formattedAmountDiv.textContent = "";
+        }
+      });
+
+      // Batch formatting example
+      batchBtn.addEventListener("click", () => {
+        const exampleTransactions = [
+          { amount: 100, currency: "USD", description: "Coffee" },
+          { amount: 5000, currency: "XAF", description: "Lunch" },
+          { amount: 50.75, currency: "GHS", description: "Transport" },
+          { amount: 2500.25, currency: "NGN", description: "Shopping" },
+        ];
+
+        const formatted = CurrencyFormatter.formatBatch(exampleTransactions);
+
+        // Clear previous list
+        transactionList.innerHTML = "";
+
+        // Add transactions to list
+        exampleTransactions.forEach((tx, index) => {
+          const li = document.createElement("li");
+          li.className = "transaction-item";
+          li.innerHTML = `
                     <span class="transaction-description">${tx.description}</span>
                     <span class="transaction-amount">${formatted[index]}</span>
                 `;
-                transactionList.appendChild(li);
-            });
+          transactionList.appendChild(li);
         });
-        
-        // Custom formatting examples
-        window.formatNoGrouping = () => {
-            const element = document.getElementById('noGroupingExample');
-            const formatted = CurrencyFormatter.format(1234567.89, 'USD', { useGrouping: false });
-            element.textContent = formatted;
-        };
-        
-        window.formatGerman = () => {
-            const element = document.getElementById('germanExample');
-            const formatted = CurrencyFormatter.format(1234.56, 'USD', { locale: 'de-DE' });
-            element.textContent = formatted;
-        };
-        
-        window.formatFourDecimals = () => {
-            const element = document.getElementById('fourDecimalsExample');
-            const formatted = CurrencyFormatter.format(100, 'USD', { minimumFractionDigits: 4 });
-            element.textContent = formatted;
-        };
-        
-        window.formatFloor = () => {
-            const element = document.getElementById('floorExample');
-            const formatted = CurrencyFormatter.format(1.999, 'USD', { roundingMode: 'floor' });
-            element.textContent = formatted;
-        };
-        
-        // Initialize examples
-        formatNoGrouping();
-        formatGerman();
-        formatFourDecimals();
-        formatFloor();
-        
-        // Format initial example
-        formatBtn.click();
-        batchBtn.click();
+      });
+
+      // Custom formatting examples
+      window.formatNoGrouping = () => {
+        const element = document.getElementById("noGroupingExample");
+        const formatted = CurrencyFormatter.format(1234567.89, "USD", {
+          useGrouping: false,
+        });
+        element.textContent = formatted;
+      };
+
+      window.formatGerman = () => {
+        const element = document.getElementById("germanExample");
+        const formatted = CurrencyFormatter.format(1234.56, "USD", {
+          locale: "de-DE",
+        });
+        element.textContent = formatted;
+      };
+
+      window.formatFourDecimals = () => {
+        const element = document.getElementById("fourDecimalsExample");
+        const formatted = CurrencyFormatter.format(100, "USD", {
+          minimumFractionDigits: 4,
+        });
+        element.textContent = formatted;
+      };
+
+      window.formatFloor = () => {
+        const element = document.getElementById("floorExample");
+        const formatted = CurrencyFormatter.format(1.999, "USD", {
+          roundingMode: "floor",
+        });
+        element.textContent = formatted;
+      };
+
+      // Initialize examples
+      formatNoGrouping();
+      formatGerman();
+      formatFourDecimals();
+      formatFloor();
+
+      // Format initial example
+      formatBtn.click();
+      batchBtn.click();
     </script>
-</body>
+  </body>
 </html>

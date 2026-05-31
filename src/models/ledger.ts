@@ -1,5 +1,5 @@
-import { Pool, QueryResult } from 'pg';
-import { pool } from '../config/database';
+import { Pool, QueryResult } from "pg";
+import { pool } from "../config/database";
 
 /**
  * Ledger Model
@@ -10,8 +10,8 @@ export interface Account {
   id: string;
   code: string;
   name: string;
-  type: 'asset' | 'liability' | 'equity' | 'revenue' | 'expense';
-  normal_balance: 'debit' | 'credit';
+  type: "asset" | "liability" | "equity" | "revenue" | "expense";
+  normal_balance: "debit" | "credit";
   parent_id: string | null;
   is_active: boolean;
   description: string | null;
@@ -46,8 +46,8 @@ export class LedgerModel {
    */
   async getAccountByCode(code: string): Promise<Account | null> {
     const result = await this.pool.query(
-      'SELECT * FROM accounts WHERE code = $1 AND is_active = true',
-      [code]
+      "SELECT * FROM accounts WHERE code = $1 AND is_active = true",
+      [code],
     );
     return result.rows[0] || null;
   }
@@ -57,8 +57,8 @@ export class LedgerModel {
    */
   async getAccountById(id: string): Promise<Account | null> {
     const result = await this.pool.query(
-      'SELECT * FROM accounts WHERE id = $1',
-      [id]
+      "SELECT * FROM accounts WHERE id = $1",
+      [id],
     );
     return result.rows[0] || null;
   }
@@ -68,7 +68,7 @@ export class LedgerModel {
    */
   async getAllAccounts(): Promise<Account[]> {
     const result = await this.pool.query(
-      'SELECT * FROM accounts WHERE is_active = true ORDER BY code'
+      "SELECT * FROM accounts WHERE is_active = true ORDER BY code",
     );
     return result.rows;
   }
@@ -77,11 +77,11 @@ export class LedgerModel {
    * Get accounts by type
    */
   async getAccountsByType(
-    type: 'asset' | 'liability' | 'equity' | 'revenue' | 'expense'
+    type: "asset" | "liability" | "equity" | "revenue" | "expense",
   ): Promise<Account[]> {
     const result = await this.pool.query(
-      'SELECT * FROM accounts WHERE type = $1 AND is_active = true ORDER BY code',
-      [type]
+      "SELECT * FROM accounts WHERE type = $1 AND is_active = true ORDER BY code",
+      [type],
     );
     return result.rows;
   }
@@ -92,8 +92,8 @@ export class LedgerModel {
   async createAccount(account: {
     code: string;
     name: string;
-    type: 'asset' | 'liability' | 'equity' | 'revenue' | 'expense';
-    normal_balance: 'debit' | 'credit';
+    type: "asset" | "liability" | "equity" | "revenue" | "expense";
+    normal_balance: "debit" | "credit";
     parent_id?: string;
     description?: string;
     metadata?: Record<string, any>;
@@ -109,8 +109,8 @@ export class LedgerModel {
         account.normal_balance,
         account.parent_id || null,
         account.description || null,
-        account.metadata || {}
-      ]
+        account.metadata || {},
+      ],
     );
     return result.rows[0];
   }
@@ -120,22 +120,24 @@ export class LedgerModel {
    */
   async deactivateAccount(code: string): Promise<void> {
     await this.pool.query(
-      'UPDATE accounts SET is_active = false WHERE code = $1',
-      [code]
+      "UPDATE accounts SET is_active = false WHERE code = $1",
+      [code],
     );
   }
 
   /**
    * Get ledger entries by transaction ID
    */
-  async getEntriesByTransactionId(transactionId: string): Promise<LedgerEntryRecord[]> {
+  async getEntriesByTransactionId(
+    transactionId: string,
+  ): Promise<LedgerEntryRecord[]> {
     const result = await this.pool.query(
       `SELECT le.*, a.code as account_code, a.name as account_name
        FROM ledger_entries le
        JOIN accounts a ON le.account_id = a.id
        WHERE le.transaction_id = $1
        ORDER BY le.created_at`,
-      [transactionId]
+      [transactionId],
     );
     return result.rows;
   }
@@ -148,7 +150,7 @@ export class LedgerModel {
     startDate?: Date,
     endDate?: Date,
     limit: number = 100,
-    offset: number = 0
+    offset: number = 0,
   ): Promise<LedgerEntryRecord[]> {
     const result = await this.pool.query(
       `SELECT le.*, a.code as account_code, a.name as account_name
@@ -159,7 +161,7 @@ export class LedgerModel {
          AND ($3::DATE IS NULL OR le.entry_date <= $3)
        ORDER BY le.entry_date DESC, le.created_at DESC
        LIMIT $4 OFFSET $5`,
-      [accountCode, startDate || null, endDate || null, limit, offset]
+      [accountCode, startDate || null, endDate || null, limit, offset],
     );
     return result.rows;
   }
@@ -167,14 +169,16 @@ export class LedgerModel {
   /**
    * Get ledger entries by reference number
    */
-  async getEntriesByReferenceNumber(referenceNumber: string): Promise<LedgerEntryRecord[]> {
+  async getEntriesByReferenceNumber(
+    referenceNumber: string,
+  ): Promise<LedgerEntryRecord[]> {
     const result = await this.pool.query(
       `SELECT le.*, a.code as account_code, a.name as account_name
        FROM ledger_entries le
        JOIN accounts a ON le.account_id = a.id
        WHERE le.reference_number = $1
        ORDER BY le.created_at`,
-      [referenceNumber]
+      [referenceNumber],
     );
     return result.rows;
   }
@@ -186,7 +190,7 @@ export class LedgerModel {
     startDate: Date,
     endDate: Date,
     limit: number = 1000,
-    offset: number = 0
+    offset: number = 0,
   ): Promise<LedgerEntryRecord[]> {
     const result = await this.pool.query(
       `SELECT le.*, a.code as account_code, a.name as account_name
@@ -195,7 +199,7 @@ export class LedgerModel {
        WHERE le.entry_date BETWEEN $1 AND $2
        ORDER BY le.entry_date DESC, le.created_at DESC
        LIMIT $3 OFFSET $4`,
-      [startDate, endDate, limit, offset]
+      [startDate, endDate, limit, offset],
     );
     return result.rows;
   }
@@ -205,8 +209,8 @@ export class LedgerModel {
    */
   async getAccountBalanceFromView(accountCode: string): Promise<number> {
     const result = await this.pool.query(
-      'SELECT balance FROM account_balances WHERE code = $1',
-      [accountCode]
+      "SELECT balance FROM account_balances WHERE code = $1",
+      [accountCode],
     );
     return result.rows[0]?.balance || 0;
   }
@@ -216,7 +220,7 @@ export class LedgerModel {
    */
   async getAllAccountBalancesFromView(): Promise<any[]> {
     const result = await this.pool.query(
-      'SELECT * FROM account_balances ORDER BY code'
+      "SELECT * FROM account_balances ORDER BY code",
     );
     return result.rows;
   }
@@ -225,13 +229,18 @@ export class LedgerModel {
    * Refresh account balances materialized view
    */
   async refreshAccountBalances(): Promise<void> {
-    await this.pool.query('REFRESH MATERIALIZED VIEW CONCURRENTLY account_balances');
+    await this.pool.query(
+      "REFRESH MATERIALIZED VIEW CONCURRENTLY account_balances",
+    );
   }
 
   /**
    * Get ledger statistics
    */
-  async getLedgerStatistics(startDate?: Date, endDate?: Date): Promise<{
+  async getLedgerStatistics(
+    startDate?: Date,
+    endDate?: Date,
+  ): Promise<{
     total_entries: number;
     total_debits: number;
     total_credits: number;
@@ -248,16 +257,16 @@ export class LedgerModel {
        FROM ledger_entries
        WHERE ($1::DATE IS NULL OR entry_date >= $1)
          AND ($2::DATE IS NULL OR entry_date <= $2)`,
-      [startDate || null, endDate || null]
+      [startDate || null, endDate || null],
     );
-    
+
     const row = result.rows[0];
     return {
       total_entries: parseInt(row.total_entries),
       total_debits: parseFloat(row.total_debits || 0),
       total_credits: parseFloat(row.total_credits || 0),
       unique_transactions: parseInt(row.unique_transactions),
-      unique_accounts: parseInt(row.unique_accounts)
+      unique_accounts: parseInt(row.unique_accounts),
     };
   }
 
@@ -266,7 +275,7 @@ export class LedgerModel {
    */
   async searchEntries(
     searchTerm: string,
-    limit: number = 50
+    limit: number = 50,
   ): Promise<LedgerEntryRecord[]> {
     const result = await this.pool.query(
       `SELECT le.*, a.code as account_code, a.name as account_name
@@ -278,7 +287,7 @@ export class LedgerModel {
           OR a.code ILIKE $1
        ORDER BY le.created_at DESC
        LIMIT $2`,
-      [`%${searchTerm}%`, limit]
+      [`%${searchTerm}%`, limit],
     );
     return result.rows;
   }
@@ -289,7 +298,7 @@ export class LedgerModel {
   async getEntriesWithMetadata(
     metadataKey: string,
     metadataValue: any,
-    limit: number = 100
+    limit: number = 100,
   ): Promise<LedgerEntryRecord[]> {
     const result = await this.pool.query(
       `SELECT le.*, a.code as account_code, a.name as account_name
@@ -298,7 +307,7 @@ export class LedgerModel {
        WHERE le.metadata->$1 = $2
        ORDER BY le.created_at DESC
        LIMIT $3`,
-      [metadataKey, JSON.stringify(metadataValue), limit]
+      [metadataKey, JSON.stringify(metadataValue), limit],
     );
     return result.rows;
   }
@@ -312,7 +321,7 @@ export class LedgerModel {
        FROM ledger_entries le
        JOIN accounts a ON le.account_id = a.id
        WHERE a.code = $1`,
-      [accountCode]
+      [accountCode],
     );
     return parseInt(result.rows[0].count);
   }
@@ -331,7 +340,7 @@ export class LedgerModel {
        WHERE entry_date >= CURRENT_DATE - $1
        GROUP BY entry_date
        ORDER BY entry_date DESC`,
-      [days]
+      [days],
     );
     return result.rows;
   }

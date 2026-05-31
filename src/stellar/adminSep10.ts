@@ -1,5 +1,10 @@
 import { Router, Request, Response } from "express";
-import { Sep10Service, getSep10Config, Sep10ChallengeResponse, Sep10TokenResponse } from "./sep10";
+import {
+  Sep10Service,
+  getSep10Config,
+  Sep10ChallengeResponse,
+  Sep10TokenResponse,
+} from "./sep10";
 import { adminStellarKeyModel } from "../models/adminStellarKey";
 
 /**
@@ -28,7 +33,7 @@ export class AdminSep10Service extends Sep10Service {
    */
   async verifyAdminChallenge(
     transactionXDR: string,
-    clientAccountID?: string
+    clientAccountID?: string,
   ): Promise<AdminSep10TokenResponse> {
     // First verify the standard SEP-10 challenge
     const baseToken = this.verifyChallenge(transactionXDR, clientAccountID);
@@ -36,14 +41,17 @@ export class AdminSep10Service extends Sep10Service {
     // Extract the client public key from the transaction
     const transaction = require("stellar-sdk").TransactionBuilder.fromXDR(
       transactionXDR,
-      this.config.networkPassphrase
+      this.config.networkPassphrase,
     ) as any;
 
-    const clientPublicKey = transaction.operations[0].source || transaction.source;
+    const clientPublicKey =
+      transaction.operations[0].source || transaction.source;
 
     // Check if this public key is authorized for admin access
     const isAdmin = await adminStellarKeyModel.isAdminKey(clientPublicKey);
-    const adminKey = isAdmin ? await adminStellarKeyModel.findByPublicKey(clientPublicKey) : null;
+    const adminKey = isAdmin
+      ? await adminStellarKeyModel.findByPublicKey(clientPublicKey)
+      : null;
 
     return {
       ...baseToken,
@@ -88,7 +96,8 @@ export function createAdminSep10Router(): Router {
       }
 
       // Generate the challenge transaction
-      const challenge: Sep10ChallengeResponse = service.generateChallenge(account);
+      const challenge: Sep10ChallengeResponse =
+        service.generateChallenge(account);
 
       return res.json(challenge);
     } catch (error) {
@@ -127,7 +136,8 @@ export function createAdminSep10Router(): Router {
       if (!tokenResponse.isAdmin) {
         return res.status(403).json({
           error: "Unauthorized",
-          message: "The provided Stellar public key is not authorized for admin access",
+          message:
+            "The provided Stellar public key is not authorized for admin access",
         });
       }
 

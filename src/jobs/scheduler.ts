@@ -18,7 +18,6 @@ import { runCrossChainMonitorJob } from "./crossChainMonitorJob";
 import { runDailyProviderReconciliation } from "./providerReconciliationJob";
 import { runReconciliationJob } from "./reconciliationJob";
 
-
 interface JobConfig {
   name: string;
   schedule: string;

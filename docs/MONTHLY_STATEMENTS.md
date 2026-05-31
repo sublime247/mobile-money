@@ -5,6 +5,7 @@ This feature allows users to download professionally formatted PDF statements of
 ## Overview
 
 The Monthly Account Statements feature provides:
+
 - Chronologically ordered transaction history
 - Standard accounting header and footer
 - Professional PDF formatting
@@ -22,15 +23,18 @@ GET /api/statements/monthly/:year/:month
 **Authentication**: Required (JWT Bearer token)
 
 **Parameters**:
+
 - `year` (path): 4-digit year (e.g., 2024)
 - `month` (path): Month number 1-12 (e.g., 1 for January)
 
 **Response**:
+
 - Content-Type: `application/pdf`
 - Content-Disposition: `attachment; filename="statement-YYYY-MM.pdf"`
 - Binary PDF data
 
 **Status Codes**:
+
 - `200`: Success - PDF generated and returned
 - `400`: Invalid year or month parameters
 - `401`: User not authenticated
@@ -40,12 +44,14 @@ GET /api/statements/monthly/:year/:month
 ## Statement Contents
 
 ### Header Section
+
 - Company name and branding
 - Statement period (Month Year)
 - Account information (phone number, KYC level)
 - Generation timestamp
 
 ### Account Summary
+
 - Opening balance (from previous periods)
 - Total deposits for the month
 - Total withdrawals for the month
@@ -53,6 +59,7 @@ GET /api/statements/monthly/:year/:month
 - Transaction count
 
 ### Transaction Details Table
+
 - Date of transaction
 - Reference number
 - Transaction type (Deposit/Withdrawal)
@@ -61,6 +68,7 @@ GET /api/statements/monthly/:year/:month
 - Notes (if available)
 
 ### Footer Section
+
 - Legal disclaimer
 - Contact information
 - Page numbering
@@ -70,18 +78,18 @@ GET /api/statements/monthly/:year/:month
 ### JavaScript/Node.js
 
 ```javascript
-import axios from 'axios';
-import fs from 'fs';
+import axios from "axios";
+import fs from "fs";
 
 async function downloadStatement(authToken, year, month) {
   const response = await axios.get(
     `http://localhost:3000/api/statements/monthly/${year}/${month}`,
     {
       headers: { Authorization: `Bearer ${authToken}` },
-      responseType: 'arraybuffer'
-    }
+      responseType: "arraybuffer",
+    },
   );
-  
+
   fs.writeFileSync(`statement-${year}-${month}.pdf`, response.data);
 }
 ```
@@ -98,19 +106,16 @@ curl -H "Authorization: Bearer YOUR_JWT_TOKEN" \
 
 ```javascript
 async function downloadStatement(year, month) {
-  const token = localStorage.getItem('authToken');
-  
-  const response = await fetch(
-    `/api/statements/monthly/${year}/${month}`,
-    {
-      headers: { Authorization: `Bearer ${token}` }
-    }
-  );
-  
+  const token = localStorage.getItem("authToken");
+
+  const response = await fetch(`/api/statements/monthly/${year}/${month}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
   if (response.ok) {
     const blob = await response.blob();
     const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
     a.download = `statement-${year}-${month}.pdf`;
     a.click();
@@ -164,6 +169,7 @@ The API provides detailed error responses:
 ## Installation
 
 1. Install required dependencies:
+
 ```bash
 npm install jspdf jspdf-autotable
 npm install --save-dev @types/jspdf
@@ -174,11 +180,13 @@ npm install --save-dev @types/jspdf
 ## Testing
 
 Run the test suite:
+
 ```bash
 npm test -- statements.test.ts
 ```
 
 The tests cover:
+
 - Authentication requirements
 - Parameter validation
 - PDF generation with mock data
@@ -194,6 +202,7 @@ The tests cover:
 ## Future Enhancements
 
 Potential improvements:
+
 - Multi-currency support in statements
 - Custom date range selection
 - Email delivery of statements

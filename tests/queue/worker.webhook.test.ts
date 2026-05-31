@@ -16,20 +16,22 @@ jest.mock("bullmq", () => ({
     resume: jest.fn(),
     drain: jest.fn(),
   })),
-  Worker: jest.fn().mockImplementation(
-    (_name: string, processor: (job: any) => Promise<any>) => {
-      const instance = {
-        processor,
-        events: {} as Record<string, Function>,
-        on(event: string, handler: Function) {
-          instance.events[event] = handler;
-        },
-        close: jest.fn(async () => undefined),
-      };
-      workerInstances.push(instance);
-      return instance;
-    },
-  ),
+  Worker: jest
+    .fn()
+    .mockImplementation(
+      (_name: string, processor: (job: any) => Promise<any>) => {
+        const instance = {
+          processor,
+          events: {} as Record<string, Function>,
+          on(event: string, handler: Function) {
+            instance.events[event] = handler;
+          },
+          close: jest.fn(async () => undefined),
+        };
+        workerInstances.push(instance);
+        return instance;
+      },
+    ),
 }));
 
 jest.mock("../../src/queue/config", () => ({
@@ -66,7 +68,9 @@ jest.mock("../../src/models/transaction", () => {
 });
 
 jest.mock("../../src/services/mobilemoney/mobileMoneyService", () => ({
-  MobileMoneyService: jest.fn().mockImplementation(() => mockMobileMoneyService),
+  MobileMoneyService: jest
+    .fn()
+    .mockImplementation(() => mockMobileMoneyService),
 }));
 
 jest.mock("../../src/services/stellar/stellarService", () => ({

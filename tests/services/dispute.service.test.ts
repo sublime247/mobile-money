@@ -1,5 +1,8 @@
 import { DisputeService } from "../../src/services/dispute";
-import { TransactionModel, TransactionStatus } from "../../src/models/transaction";
+import {
+  TransactionModel,
+  TransactionStatus,
+} from "../../src/models/transaction";
 import { DisputeModel } from "../../src/models/dispute";
 
 describe("DisputeService", () => {
@@ -23,7 +26,9 @@ describe("DisputeService", () => {
       createdAt: new Date(),
     });
 
-    jest.spyOn(DisputeModel.prototype, "findActiveByTransactionId").mockResolvedValue(null);
+    jest
+      .spyOn(DisputeModel.prototype, "findActiveByTransactionId")
+      .mockResolvedValue(null);
 
     const svc = new DisputeService();
     await expect(svc.openDispute(txId, "wrong amount")).rejects.toThrow(
@@ -45,7 +50,9 @@ describe("DisputeService", () => {
       createdAt: new Date(),
     });
 
-    jest.spyOn(DisputeModel.prototype, "findActiveByTransactionId").mockResolvedValue(null);
+    jest
+      .spyOn(DisputeModel.prototype, "findActiveByTransactionId")
+      .mockResolvedValue(null);
     jest.spyOn(DisputeModel.prototype, "create").mockResolvedValue({
       id: "d1",
       transactionId: txId,

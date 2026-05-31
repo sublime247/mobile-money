@@ -1,4 +1,7 @@
-import { MobileMoneyProvider, ProviderTransactionStatus } from "../mobileMoneyService";
+import {
+  MobileMoneyProvider,
+  ProviderTransactionStatus,
+} from "../mobileMoneyService";
 import logger from "../../../utils/logger";
 
 export interface ChaosConfig {
@@ -23,9 +26,12 @@ export class ChaosMiddleware implements MobileMoneyProvider {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  private async applyChaos<T>(operation: () => Promise<T>, requestId?: string): Promise<T> {
+  private async applyChaos<T>(
+    operation: () => Promise<T>,
+    requestId?: string,
+  ): Promise<T> {
     const log = requestId ? logger.child({ requestId }) : logger;
-    
+
     if (!this.config.enabled) {
       return operation();
     }
@@ -60,17 +66,31 @@ export class ChaosMiddleware implements MobileMoneyProvider {
     return operation();
   }
 
-  async requestPayment(phoneNumber: string, amount: string, requestId?: string) {
-    return this.applyChaos(() => this.inner.requestPayment(phoneNumber, amount, requestId), requestId);
+  async requestPayment(
+    phoneNumber: string,
+    amount: string,
+    requestId?: string,
+  ) {
+    return this.applyChaos(
+      () => this.inner.requestPayment(phoneNumber, amount, requestId),
+      requestId,
+    );
   }
 
   async sendPayout(phoneNumber: string, amount: string, requestId?: string) {
-    return this.applyChaos(() => this.inner.sendPayout(phoneNumber, amount, requestId), requestId);
+    return this.applyChaos(
+      () => this.inner.sendPayout(phoneNumber, amount, requestId),
+      requestId,
+    );
   }
 
-  async getTransactionStatus(referenceId: string): Promise<{ status: ProviderTransactionStatus }> {
+  async getTransactionStatus(
+    referenceId: string,
+  ): Promise<{ status: ProviderTransactionStatus }> {
     if (this.inner.getTransactionStatus) {
-      return this.applyChaos(() => this.inner.getTransactionStatus!(referenceId));
+      return this.applyChaos(() =>
+        this.inner.getTransactionStatus!(referenceId),
+      );
     }
     return { status: "unknown" };
   }

@@ -1,27 +1,46 @@
 import { Request, Response } from "express";
 import { z } from "zod";
-import { VaultModel, CreateVaultInput, VaultTransferInput } from "../models/vault";
+import {
+  VaultModel,
+  CreateVaultInput,
+  VaultTransferInput,
+} from "../models/vault";
 import { lockManager, LockKeys } from "../utils/lock";
 
 const vaultModel = new VaultModel();
 
 // Validation schemas
 const createVaultSchema = z.object({
-  name: z.string().min(1, "Vault name is required").max(100, "Vault name too long"),
+  name: z
+    .string()
+    .min(1, "Vault name is required")
+    .max(100, "Vault name too long"),
   description: z.string().max(1000, "Description too long").optional(),
-  targetAmount: z.string().regex(/^\d+(\.\d{1,7})?$/, "Invalid target amount").optional(),
+  targetAmount: z
+    .string()
+    .regex(/^\d+(\.\d{1,7})?$/, "Invalid target amount")
+    .optional(),
 });
 
 const transferFundsSchema = z.object({
   amount: z.string().regex(/^\d+(\.\d{1,7})?$/, "Invalid amount format"),
-  type: z.enum(["deposit", "withdraw"], { message: "Type must be deposit or withdraw" }),
+  type: z.enum(["deposit", "withdraw"], {
+    message: "Type must be deposit or withdraw",
+  }),
   description: z.string().max(500, "Description too long").optional(),
 });
 
 const updateVaultSchema = z.object({
-  name: z.string().min(1, "Vault name is required").max(100, "Vault name too long").optional(),
+  name: z
+    .string()
+    .min(1, "Vault name is required")
+    .max(100, "Vault name too long")
+    .optional(),
   description: z.string().max(1000, "Description too long").optional(),
-  targetAmount: z.string().regex(/^\d+(\.\d{1,7})?$/, "Invalid target amount").optional(),
+  targetAmount: z
+    .string()
+    .regex(/^\d+(\.\d{1,7})?$/, "Invalid target amount")
+    .optional(),
   isActive: z.boolean().optional(),
 });
 
@@ -35,11 +54,14 @@ export const createVault = async (req: Request, res: Response) => {
     const validatedData = createVaultSchema.parse(req.body);
 
     // Check for duplicate vault name
-    const existing = await vaultModel.findByUserAndName(userId, validatedData.name);
+    const existing = await vaultModel.findByUserAndName(
+      userId,
+      validatedData.name,
+    );
     if (existing) {
-      return res.status(409).json({ 
+      return res.status(409).json({
         error: "Vault name already exists",
-        message: "You already have a vault with this name" 
+        message: "You already have a vault with this name",
       });
     }
 
@@ -148,11 +170,14 @@ export const updateVault = async (req: Request, res: Response) => {
 
     // Check for name conflicts if name is being updated
     if (validatedData.name && validatedData.name !== vault.name) {
-      const existing = await vaultModel.findByUserAndName(userId, validatedData.name);
+      const existing = await vaultModel.findByUserAndName(
+        userId,
+        validatedData.name,
+      );
       if (existing) {
-        return res.status(409).json({ 
+        return res.status(409).json({
           error: "Vault name already exists",
-          message: "You already have a vault with this name" 
+          message: "You already have a vault with this name",
         });
       }
     }
@@ -199,9 +224,9 @@ export const deleteVault = async (req: Request, res: Response) => {
 
     const deleted = await vaultModel.delete(vaultId);
     if (!deleted) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: "Cannot delete vault",
-        message: "Vault may have a non-zero balance" 
+        message: "Vault may have a non-zero balance",
       });
     }
 
@@ -231,9 +256,9 @@ export const transferFunds = async (req: Request, res: Response) => {
     // Validate amount
     const amount = parseFloat(validatedData.amount);
     if (amount <= 0) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: "Invalid amount",
-        message: "Amount must be greater than 0" 
+        message: "Amount must be greater than 0",
       });
     }
 
@@ -248,16 +273,20 @@ export const transferFunds = async (req: Request, res: Response) => {
 
     // Use distributed lock to prevent race conditions
     const lockKey = `vault-transfer:${userId}:${vaultId}`;
-    
-    const result = await lockManager.withLock(lockKey, async () => {
-      return await vaultModel.transferFunds(
-        userId,
-        vaultId,
-        validatedData.amount,
-        validatedData.type,
-        validatedData.description,
-      );
-    }, 10000); // 10 second lock
+
+    const result = await lockManager.withLock(
+      lockKey,
+      async () => {
+        return await vaultModel.transferFunds(
+          userId,
+          vaultId,
+          validatedData.amount,
+          validatedData.type,
+          validatedData.description,
+        );
+      },
+      10000,
+    ); // 10 second lock
 
     res.json({
       success: true,
@@ -275,7 +304,7 @@ export const transferFunds = async (req: Request, res: Response) => {
     }
 
     console.error("Transfer funds error:", error);
-    
+
     if (error.message.includes("Insufficient")) {
       return res.status(400).json({
         error: "Insufficient funds",
@@ -310,7 +339,11 @@ export const getVaultTransactions = async (req: Request, res: Response) => {
       return res.status(403).json({ error: "Access denied" });
     }
 
-    const transactions = await vaultModel.getVaultTransactions(vaultId, limit, offset);
+    const transactions = await vaultModel.getVaultTransactions(
+      vaultId,
+      limit,
+      offset,
+    );
 
     res.json({
       success: true,

@@ -106,9 +106,7 @@ function sha256(...chunks: Buffer[]): Buffer {
  * order matters and is part of the protocol spec.
  */
 function challengeFrom(...points: (Point | Buffer)[]): BN {
-  const buffers = points.map((p) =>
-    Buffer.isBuffer(p) ? p : pointToBytes(p),
-  );
+  const buffers = points.map((p) => (Buffer.isBuffer(p) ? p : pointToBytes(p)));
   const digest = sha256(...buffers);
   return new BN(digest).umod(ORDER);
 }
@@ -368,8 +366,7 @@ export function proveBit(
   const zSim = randomScalar();
   const cSim = randomScalar();
 
-  const Psim: Point =
-    simIndex === 0 ? C : C.add(params.G.neg()); // P1 = C - G
+  const Psim: Point = simIndex === 0 ? C : C.add(params.G.neg()); // P1 = C - G
   const Tsim: Point = params.H.mul(zSim).add(Psim.mul(cSim).neg());
 
   // Real branch: Schnorr commit phase.

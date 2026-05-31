@@ -362,7 +362,8 @@ export class StellarService {
       })
         .addOperation(
           StellarSdk.Operation.setOptions({
-            setFlags: StellarSdk.xdr.AccountFlags.authClawbackEnabledFlag().value,
+            setFlags:
+              StellarSdk.xdr.AccountFlags.authClawbackEnabledFlag().value,
           }),
         )
         .setTimeout(30)

@@ -212,13 +212,13 @@ export class KmsAsymmetricSigner implements TransactionSigner {
     const pubKeyBuffer = Buffer.from(response.PublicKey);
     if (pubKeyBuffer.length < 32) {
       throw new HsmConfigurationError(
-        `KMS GetPublicKey returned invalid buffer length: ${pubKeyBuffer.length}. Expected at least 32 bytes for Ed25519.`
+        `KMS GetPublicKey returned invalid buffer length: ${pubKeyBuffer.length}. Expected at least 32 bytes for Ed25519.`,
       );
     }
 
     const rawPublicKey = pubKeyBuffer.subarray(pubKeyBuffer.length - 32);
 
-    this._kp = Keypair.fromPublicKey(rawPublicKey.toString('hex'));
+    this._kp = Keypair.fromPublicKey(rawPublicKey.toString("hex"));
     this._publicKey = this._kp.publicKey();
 
     return this._publicKey;
@@ -503,7 +503,7 @@ export class Pkcs11Signer implements TransactionSigner {
   async sign(txHash: Buffer): Promise<SignResult> {
     throw new HsmSigningError(
       "Pkcs11Signer.sign() is not implemented. To use physical HSMs, you must integrate a native PKCS#11 binding (e.g., pkcs11js or a custom NAPI-RS module). " +
-      `Module: ${this.config.modulePath}, slot: ${this.config.slotId}, key: ${this.config.keyId}`,
+        `Module: ${this.config.modulePath}, slot: ${this.config.slotId}, key: ${this.config.keyId}`,
     );
   }
 

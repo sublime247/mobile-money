@@ -14,12 +14,10 @@ export async function runLpRebalanceJob(): Promise<void> {
       console.log(`[lp-rebalance] ${r.assetCode}: OK (${r.reason})`);
     } else if (r.txHash) {
       console.log(
-        `[lp-rebalance] ${r.assetCode}: swapped ${r.amountSwapped} — tx ${r.txHash}`
+        `[lp-rebalance] ${r.assetCode}: swapped ${r.amountSwapped} — tx ${r.txHash}`,
       );
     } else {
-      console.error(
-        `[lp-rebalance] ${r.assetCode}: FAILED — ${r.reason}`
-      );
+      console.error(`[lp-rebalance] ${r.assetCode}: FAILED — ${r.reason}`);
     }
   }
 }

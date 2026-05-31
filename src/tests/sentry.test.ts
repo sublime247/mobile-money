@@ -24,11 +24,11 @@ describe("Sentry Middleware - PII Scrubbing", () => {
       query: { debug: "true" },
       body: {
         amount: "500",
-        phoneNumber: "+237600000000", 
-        stellarSeed: "SABC123456789", 
+        phoneNumber: "+237600000000",
+        stellarSeed: "SABC123456789",
         metadata: {
-          token: "secret-token-123" 
-        }
+          token: "secret-token-123",
+        },
       },
     };
     mockResponse = {};
@@ -37,11 +37,11 @@ describe("Sentry Middleware - PII Scrubbing", () => {
 
   it("should redact sensitive information in request context", () => {
     const scope = Sentry.getCurrentScope();
-    
+
     sentryBreadcrumbMiddleware(
       mockRequest as Request,
       mockResponse as Response,
-      nextFunction
+      nextFunction,
     );
 
     // Verify setContext was called with redacted data
@@ -50,7 +50,7 @@ describe("Sentry Middleware - PII Scrubbing", () => {
       expect.objectContaining({
         params: { id: "123" },
         // Add checks for query or body if you decide to add body to context
-      })
+      }),
     );
 
     expect(nextFunction).toHaveBeenCalled();
@@ -62,14 +62,14 @@ describe("Sentry Middleware - PII Scrubbing", () => {
     sentryBreadcrumbMiddleware(
       mockRequest as Request,
       mockResponse as Response,
-      nextFunction
+      nextFunction,
     );
 
     expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(
       expect.objectContaining({
         category: "auth",
         data: { userId: "user-99" },
-      })
+      }),
     );
   });
 });

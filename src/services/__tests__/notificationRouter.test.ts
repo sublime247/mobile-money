@@ -1,4 +1,7 @@
-import { NotificationRouter, NotificationSeverity } from "../notificationRouter";
+import {
+  NotificationRouter,
+  NotificationSeverity,
+} from "../notificationRouter";
 import { UserModel } from "../../models/users";
 import { Transaction } from "../../models/transaction";
 

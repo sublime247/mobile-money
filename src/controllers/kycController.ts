@@ -1,7 +1,7 @@
-import { Request, Response } from 'express';
-import { Pool } from 'pg';
-import KYCService, { KYCLevel, DocumentType } from '../services/kyc';
-import { z } from 'zod';
+import { Request, Response } from "express";
+import { Pool } from "pg";
+import KYCService, { KYCLevel, DocumentType } from "../services/kyc";
+import { z } from "zod";
 
 // Validation schemas
 const CreateApplicantSchema = z.object({
@@ -107,7 +107,7 @@ export class KYCController {
     try {
       const { applicantId } = req.params;
       const userId = req.jwtUser?.userId;
-      
+
       if (!userId) {
         return res.status(401).json({ error: "User not authenticated" });
       }
@@ -292,7 +292,7 @@ export class KYCController {
     try {
       const { applicantId } = req.params;
       const userId = req.jwtUser?.userId;
-      
+
       if (!userId) {
         return res.status(401).json({ error: "User not authenticated" });
       }
@@ -380,7 +380,7 @@ export class KYCController {
       const webhookSecret = process.env.KYC_WEBHOOK_SECRET;
 
       // Verify webhook signature if secret is configured
-      if (webhookSecret && req.headers['x-onfido-signature']) {
+      if (webhookSecret && req.headers["x-onfido-signature"]) {
         // TODO: Implement signature verification using webhookSecret
         // This is a security measure to ensure webhook is from Entrust
       }

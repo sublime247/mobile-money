@@ -82,7 +82,10 @@ export class WebSocketManager {
       }
 
       try {
-        const decoded = verifyToken(token) as unknown as Record<string, unknown>;
+        const decoded = verifyToken(token) as unknown as Record<
+          string,
+          unknown
+        >;
         const candidateUserId =
           typeof decoded.userId === "string"
             ? decoded.userId

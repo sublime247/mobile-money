@@ -33,9 +33,7 @@ function getStellarAddresses(): string[] {
 }
 
 function getDropThreshold(): number {
-  const val = parseFloat(
-    process.env.CROSS_CHAIN_DROP_THRESHOLD_PCT || "20",
-  );
+  const val = parseFloat(process.env.CROSS_CHAIN_DROP_THRESHOLD_PCT || "20");
   return isNaN(val) ? 20 : val;
 }
 
@@ -90,8 +88,16 @@ export class CrossChainMonitorService {
       currency: string;
     }> = [
       { provider: MobileMoneyProvider.MTN, chain: "mtn", currency: "XAF" },
-      { provider: MobileMoneyProvider.AIRTEL, chain: "airtel", currency: "XAF" },
-      { provider: MobileMoneyProvider.ORANGE, chain: "orange", currency: "XAF" },
+      {
+        provider: MobileMoneyProvider.AIRTEL,
+        chain: "airtel",
+        currency: "XAF",
+      },
+      {
+        provider: MobileMoneyProvider.ORANGE,
+        chain: "orange",
+        currency: "XAF",
+      },
     ];
 
     for (const { provider, chain, currency } of providerCurrencyMap) {

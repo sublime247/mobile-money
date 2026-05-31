@@ -6,7 +6,7 @@ import { pool } from "../config/database";
 import {
   getWithdrawal2FASettings,
   updateMandatory2FAWithdrawals,
-  verifyWithdrawal2FA
+  verifyWithdrawal2FA,
 } from "../controllers/twoFactorWithdrawalController";
 
 const router = Router();

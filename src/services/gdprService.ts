@@ -70,9 +70,15 @@ export class GDPRService {
   anonymizeTransaction(tx: Transaction) {
     return {
       ...tx,
-      phoneNumber: tx.phoneNumber ? this.hashString(tx.phoneNumber) : tx.phoneNumber,
-      idempotencyKey: tx.idempotencyKey ? this.hashString(String(tx.idempotencyKey)) : tx.idempotencyKey,
-      stellarAddress: tx.stellarAddress ? this.hashString(tx.stellarAddress) : tx.stellarAddress,
+      phoneNumber: tx.phoneNumber
+        ? this.hashString(tx.phoneNumber)
+        : tx.phoneNumber,
+      idempotencyKey: tx.idempotencyKey
+        ? this.hashString(String(tx.idempotencyKey))
+        : tx.idempotencyKey,
+      stellarAddress: tx.stellarAddress
+        ? this.hashString(tx.stellarAddress)
+        : tx.stellarAddress,
     };
   }
 
@@ -100,7 +106,12 @@ export class GDPRService {
         const anonymizedTx = this.anonymizeTransaction(tx);
         await pool.query(
           `UPDATE transactions SET phone_number = $1, idempotency_key = $2, stellar_address = $3 WHERE id = $4`,
-          [anonymizedTx.phoneNumber, anonymizedTx.idempotencyKey, anonymizedTx.stellarAddress, tx.id]
+          [
+            anonymizedTx.phoneNumber,
+            anonymizedTx.idempotencyKey,
+            anonymizedTx.stellarAddress,
+            tx.id,
+          ],
         );
       }
 
@@ -144,7 +155,9 @@ export class GDPRService {
    * Runs on a schedule (e.g., cron job) to ensure GDPR compliance.
    * @param retentionYears The legally required retention period (default 7 years)
    */
-  async enforceDataRetentionPolicy(retentionYears: number = 7): Promise<{ usersPurged: number, transactionsAnonymized: number }> {
+  async enforceDataRetentionPolicy(
+    retentionYears: number = 7,
+  ): Promise<{ usersPurged: number; transactionsAnonymized: number }> {
     const cutoffDate = new Date();
     cutoffDate.setFullYear(cutoffDate.getFullYear() - retentionYears);
 
@@ -154,13 +167,13 @@ export class GDPRService {
     // 1. Identify and purge deactivated users older than retention period
     const deactivatedUsers = await pool.query(
       `SELECT id, phone_number FROM users WHERE is_active = false AND deactivated_at < $1`,
-      [cutoffDate]
+      [cutoffDate],
     );
 
     for (const row of deactivatedUsers.rows) {
-      const phone = row.phone_number ? String(row.phone_number) : '';
-      if (phone.length === 16 && !phone.includes('+')) continue; // Already anonymized
-      
+      const phone = row.phone_number ? String(row.phone_number) : "";
+      if (phone.length === 16 && !phone.includes("+")) continue; // Already anonymized
+
       try {
         await this.purgeUserData(row.id);
         usersPurged++;
@@ -172,32 +185,35 @@ export class GDPRService {
     // 2. Identify and anonymize old standalone transactions
     const oldTransactions = await pool.query(
       `SELECT id, phone_number FROM transactions WHERE created_at < $1`,
-      [cutoffDate]
+      [cutoffDate],
     );
 
     for (const row of oldTransactions.rows) {
-      const phone = row.phone_number ? String(row.phone_number) : '';
-      if (phone.length === 16 && !phone.includes('+')) continue; // Already anonymized
+      const phone = row.phone_number ? String(row.phone_number) : "";
+      if (phone.length === 16 && !phone.includes("+")) continue; // Already anonymized
 
       try {
         const hashedPhone = phone ? this.anonymizePhoneNumber(phone) : null;
         const hashedIdempotency = this.hashString(row.id);
-        const hashedStellar = this.hashString('purged_stellar_address');
+        const hashedStellar = this.hashString("purged_stellar_address");
 
         await pool.query(
           `UPDATE transactions SET phone_number = $1, stellar_address = $2, idempotency_key = $3 WHERE id = $4`,
-          [hashedPhone, hashedStellar, hashedIdempotency, row.id]
+          [hashedPhone, hashedStellar, hashedIdempotency, row.id],
         );
         transactionsAnonymized++;
       } catch (err) {
-        console.error(`[GDPR] Failed to anonymize expired transaction ${row.id}:`, err);
+        console.error(
+          `[GDPR] Failed to anonymize expired transaction ${row.id}:`,
+          err,
+        );
       }
     }
 
     if (usersPurged > 0 || transactionsAnonymized > 0) {
       await logAuditEvent(
-        'SYSTEM',
-        `DATA_RETENTION_POLICY_EXECUTED: Purged ${usersPurged} users and ${transactionsAnonymized} transactions older than ${retentionYears} years.`
+        "SYSTEM",
+        `DATA_RETENTION_POLICY_EXECUTED: Purged ${usersPurged} users and ${transactionsAnonymized} transactions older than ${retentionYears} years.`,
       );
     }
 

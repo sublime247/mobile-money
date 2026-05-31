@@ -19,11 +19,11 @@ After evaluating multiple KYC providers, we selected **Entrust Identity Verifica
 
 The system implements three KYC levels with corresponding transaction limits:
 
-| KYC Level | Daily Limit (XAF) | Description |
-|-----------|------------------|-------------|
-| **None** | 0 | No verification - can only receive funds |
-| **Basic** | 100,000 | ID document verification required |
-| **Full** | 10,000,000 | ID + address + biometric verification required |
+| KYC Level | Daily Limit (XAF) | Description                                    |
+| --------- | ----------------- | ---------------------------------------------- |
+| **None**  | 0                 | No verification - can only receive funds       |
+| **Basic** | 100,000           | ID document verification required              |
+| **Full**  | 10,000,000        | ID + address + biometric verification required |
 
 ## Architecture
 
@@ -68,6 +68,7 @@ CREATE TABLE kyc_applicants (
 ### Applicant Management
 
 #### Create Applicant
+
 ```
 POST /api/kyc/applicants
 Authorization: Bearer <token>
@@ -88,12 +89,14 @@ Content-Type: application/json
 ```
 
 #### Get Applicant
+
 ```
 GET /api/kyc/applicants/{applicantId}
 Authorization: Bearer <token>
 ```
 
 #### Get Verification Status
+
 ```
 GET /api/kyc/applicants/{applicantId}/status
 Authorization: Bearer <token>
@@ -102,6 +105,7 @@ Authorization: Bearer <token>
 ### Document Upload
 
 #### Upload Document
+
 ```
 POST /api/kyc/documents
 Authorization: Bearer <token>
@@ -118,6 +122,7 @@ Content-Type: application/json
 ### Workflow Management
 
 #### Create Workflow Run
+
 ```
 POST /api/kyc/workflow-runs
 Authorization: Bearer <token>
@@ -130,6 +135,7 @@ Content-Type: application/json
 ```
 
 #### Generate SDK Token
+
 ```
 POST /api/kyc/sdk-token
 Authorization: Bearer <token>
@@ -144,12 +150,14 @@ Content-Type: application/json
 ### User Status
 
 #### Get User KYC Status
+
 ```
 GET /api/kyc/status
 Authorization: Bearer <token>
 ```
 
 Response:
+
 ```json
 {
   "success": true,
@@ -175,6 +183,7 @@ Response:
 ### Webhooks
 
 #### Handle Webhook Events
+
 ```
 POST /api/kyc/webhooks
 X-Onfido-Signature: <signature>
@@ -238,16 +247,19 @@ LIMIT_FULL=10000000
 ### Basic KYC Flow
 
 1. **Create Applicant**
+
    ```http
    POST /api/kyc/applicants
    ```
 
 2. **Upload Document**
+
    ```http
    POST /api/kyc/documents
    ```
 
 3. **Create Workflow Run**
+
    ```http
    POST /api/kyc/workflow-runs
    ```
@@ -262,6 +274,7 @@ LIMIT_FULL=10000000
 For better user experience, use the Entrust Web SDK:
 
 1. **Generate SDK Token**
+
    ```http
    POST /api/kyc/sdk-token
    ```
@@ -270,9 +283,9 @@ For better user experience, use the Entrust Web SDK:
    ```javascript
    OnfidoSDK.init({
      token: sdk_token,
-     onComplete: function(data) {
+     onComplete: function (data) {
        // Handle completion
-     }
+     },
    });
    ```
 
@@ -293,14 +306,14 @@ const limits = kycService.getTransactionLimits(userKycLevel);
 
 ### Common Error Codes
 
-| Status Code | Description | Resolution |
-|-------------|-------------|------------|
-| 400 | Validation Error | Check request format |
-| 401 | Unauthorized | Provide valid JWT token |
-| 403 | Access Denied | User doesn't own the applicant |
-| 404 | Not Found | Applicant doesn't exist |
-| 429 | Rate Limited | Too many requests to KYC API |
-| 500 | Server Error | Internal service error |
+| Status Code | Description      | Resolution                     |
+| ----------- | ---------------- | ------------------------------ |
+| 400         | Validation Error | Check request format           |
+| 401         | Unauthorized     | Provide valid JWT token        |
+| 403         | Access Denied    | User doesn't own the applicant |
+| 404         | Not Found        | Applicant doesn't exist        |
+| 429         | Rate Limited     | Too many requests to KYC API   |
+| 500         | Server Error     | Internal service error         |
 
 ### KYC Provider Errors
 
@@ -327,6 +340,7 @@ KYC_API_KEY=api_sandbox_xxxxxxxxx
 ### Test Documents
 
 Entrust provides sample documents for sandbox testing:
+
 - Passports
 - Driving licenses
 - National ID cards
@@ -451,6 +465,7 @@ DEBUG=kyc:*
 ## Changelog
 
 ### v1.0.0 (2024-01-15)
+
 - Initial KYC integration
 - Entrust Identity Verification provider
 - Three-tier KYC levels with transaction limits

@@ -33,12 +33,14 @@ The Low Liquidity Alert System monitors Stellar hot wallet balances and sends al
 ## Alert Format
 
 Alerts are sent to Slack with the following information:
+
 - Wallet public key
 - Asset type and current balance
 - Threshold value
 - Timestamp
 
 Example alert:
+
 ```
 Low balance alert: GABC123 has 50 XLM (threshold: 100)
 ```
@@ -53,6 +55,7 @@ Low balance alert: GABC123 has 50 XLM (threshold: 100)
 ## Testing
 
 Run the balance monitor job manually:
+
 ```bash
 npm run test -- --testPathPattern=balanceMonitorJob
 ```

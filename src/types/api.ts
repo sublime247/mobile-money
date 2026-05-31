@@ -54,11 +54,11 @@ export interface MetadataSearchResponse {
 
 /**
  * Standardized error response format for all API endpoints.
- * 
+ *
  * All errors returned by the API follow this consistent structure, enabling
  * clients to handle errors programmatically while providing users with
  * messages in their preferred language.
- * 
+ *
  * **Fields:**
  * - `code`: Standard error code for programmatic error handling
  *   - Examples: INVALID_INPUT, UNAUTHORIZED, NOT_FOUND, LIMIT_EXCEEDED
@@ -78,16 +78,16 @@ export interface MetadataSearchResponse {
  *   - Additional information specific to the error type
  *   - Examples: { field: "phoneNumber" }, { balance: 100, requested: 500 }
  *   - Never included in production for security/privacy reasons
- * 
+ *
  * **Client Usage:**
- * 
+ *
  * ```typescript
  * // Programmatic error handling by code
  * try {
  *   const response = await fetch('/api/transfer', options);
  * } catch (error) {
  *   const errorResponse: ErrorResponse = error.response.data;
- *   
+ *
  *   switch (errorResponse.code) {
  *     case 'LIMIT_EXCEEDED':
  *       showLimitDialog(errorResponse.details);
@@ -100,9 +100,9 @@ export interface MetadataSearchResponse {
  *   }
  * }
  * ```
- * 
+ *
  * **Examples:**
- * 
+ *
  * Validation error (French client):
  * ```json
  * {
@@ -114,7 +114,7 @@ export interface MetadataSearchResponse {
  *   "details": { "received": "+invalid" }
  * }
  * ```
- * 
+ *
  * Authentication error (English client):
  * ```json
  * {
@@ -125,7 +125,7 @@ export interface MetadataSearchResponse {
  *   "requestId": "req-456-def"
  * }
  * ```
- * 
+ *
  * Business logic error (Portuguese client):
  * ```json
  * {
@@ -137,7 +137,7 @@ export interface MetadataSearchResponse {
  *   "details": { "dailyLimit": 5000, "currentTotal": 5000 }
  * }
  * ```
- * 
+ *
  * @interface ErrorResponse
  * @property {string} code - Standard error code for programmatic handling
  * @property {string} message - Localized error message (based on Accept-Language header)

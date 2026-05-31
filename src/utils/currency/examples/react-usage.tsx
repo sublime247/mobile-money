@@ -1,11 +1,11 @@
 /**
  * React Component Example using CurrencyFormatter
- * 
+ *
  * This example shows how to use CurrencyFormatter in a React component
  */
 
-import React, { useState, useEffect } from 'react';
-import { CurrencyFormatter, CurrencyConfig } from '../index';
+import React, { useState, useEffect } from "react";
+import { CurrencyFormatter, CurrencyConfig } from "../index";
 
 interface CurrencyDisplayProps {
   amount: number;
@@ -18,9 +18,9 @@ const CurrencyDisplay: React.FC<CurrencyDisplayProps> = ({
   amount,
   currency,
   locale,
-  showSymbol = true
+  showSymbol = true,
 }) => {
-  const [formattedAmount, setFormattedAmount] = useState<string>('');
+  const [formattedAmount, setFormattedAmount] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -28,13 +28,13 @@ const CurrencyDisplay: React.FC<CurrencyDisplayProps> = ({
       // Format the amount using CurrencyFormatter
       const formatted = CurrencyFormatter.format(amount, currency, {
         locale,
-        useGrouping: true
+        useGrouping: true,
       });
       setFormattedAmount(formatted);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Formatting error');
-      setFormattedAmount('');
+      setError(err instanceof Error ? err.message : "Formatting error");
+      setFormattedAmount("");
     }
   }, [amount, currency, locale]);
 
@@ -44,7 +44,11 @@ const CurrencyDisplay: React.FC<CurrencyDisplayProps> = ({
 
   return (
     <div className="currency-display">
-      {showSymbol && <span className="currency-symbol">{CurrencyConfig.getCurrencySymbol(currency)}</span>}
+      {showSymbol && (
+        <span className="currency-symbol">
+          {CurrencyConfig.getCurrencySymbol(currency)}
+        </span>
+      )}
       <span className="currency-amount">{formattedAmount}</span>
       <span className="currency-code">({currency})</span>
     </div>
@@ -62,7 +66,7 @@ const CurrencyConverter: React.FC<CurrencyConverterProps> = ({
   baseAmount,
   baseCurrency,
   targetCurrency,
-  exchangeRate
+  exchangeRate,
 }) => {
   const [convertedAmount, setConvertedAmount] = useState<number>(0);
 
@@ -97,17 +101,24 @@ interface BatchCurrencyFormatterProps {
   }>;
 }
 
-const BatchCurrencyFormatter: React.FC<BatchCurrencyFormatterProps> = ({ transactions }) => {
-  const [formattedTransactions, setFormattedTransactions] = useState<string[]>([]);
+const BatchCurrencyFormatter: React.FC<BatchCurrencyFormatterProps> = ({
+  transactions,
+}) => {
+  const [formattedTransactions, setFormattedTransactions] = useState<string[]>(
+    [],
+  );
 
   useEffect(() => {
     try {
       // Use batch formatting for better performance
-      const amounts = transactions.map(t => ({ amount: t.amount, currency: t.currency }));
+      const amounts = transactions.map((t) => ({
+        amount: t.amount,
+        currency: t.currency,
+      }));
       const formatted = CurrencyFormatter.formatBatch(amounts);
       setFormattedTransactions(formatted);
     } catch (err) {
-      console.error('Batch formatting failed:', err);
+      console.error("Batch formatting failed:", err);
     }
   }, [transactions]);
 
@@ -117,9 +128,11 @@ const BatchCurrencyFormatter: React.FC<BatchCurrencyFormatterProps> = ({ transac
       <ul>
         {transactions.map((transaction, index) => (
           <li key={transaction.id} className="transaction-item">
-            <span className="transaction-description">{transaction.description}:</span>
+            <span className="transaction-description">
+              {transaction.description}:
+            </span>
             <span className="transaction-amount">
-              {formattedTransactions[index] || 'Formatting...'}
+              {formattedTransactions[index] || "Formatting..."}
             </span>
           </li>
         ))}
@@ -135,11 +148,11 @@ interface CurrencySettingsProps {
 
 const CurrencySettings: React.FC<CurrencySettingsProps> = ({
   onCurrencyChange,
-  onLocaleChange
+  onLocaleChange,
 }) => {
   const supportedCurrencies = CurrencyConfig.getSupportedCurrencies();
-  const [selectedCurrency, setSelectedCurrency] = useState<string>('USD');
-  const [selectedLocale, setSelectedLocale] = useState<string>('en-US');
+  const [selectedCurrency, setSelectedCurrency] = useState<string>("USD");
+  const [selectedLocale, setSelectedLocale] = useState<string>("en-US");
 
   const handleCurrencyChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const currency = e.target.value;
@@ -162,7 +175,7 @@ const CurrencySettings: React.FC<CurrencySettingsProps> = ({
           value={selectedCurrency}
           onChange={handleCurrencyChange}
         >
-          {supportedCurrencies.map(currency => (
+          {supportedCurrencies.map((currency) => (
             <option key={currency} value={currency}>
               {currency} - {CurrencyConfig.getCurrencyName(currency)}
             </option>
@@ -190,25 +203,25 @@ const CurrencySettings: React.FC<CurrencySettingsProps> = ({
 // Example usage component
 const CurrencyFormatterDemo: React.FC = () => {
   const [amount, setAmount] = useState<number>(1234.56);
-  const [currency, setCurrency] = useState<string>('USD');
-  const [locale, setLocale] = useState<string>('en-US');
+  const [currency, setCurrency] = useState<string>("USD");
+  const [locale, setLocale] = useState<string>("en-US");
 
   const exampleTransactions = [
-    { id: '1', amount: 100, currency: 'USD', description: 'Coffee' },
-    { id: '2', amount: 5000, currency: 'XAF', description: 'Lunch' },
-    { id: '3', amount: 50.75, currency: 'GHS', description: 'Transport' },
-    { id: '4', amount: 2500.25, currency: 'NGN', description: 'Shopping' }
+    { id: "1", amount: 100, currency: "USD", description: "Coffee" },
+    { id: "2", amount: 5000, currency: "XAF", description: "Lunch" },
+    { id: "3", amount: 50.75, currency: "GHS", description: "Transport" },
+    { id: "4", amount: 2500.25, currency: "NGN", description: "Shopping" },
   ];
 
   return (
     <div className="currency-formatter-demo">
       <h2>Currency Formatter Demo</h2>
-      
+
       <CurrencySettings
         onCurrencyChange={setCurrency}
         onLocaleChange={setLocale}
       />
-      
+
       <div className="demo-section">
         <h3>Single Amount Display</h3>
         <div className="amount-input">
@@ -220,13 +233,9 @@ const CurrencyFormatterDemo: React.FC = () => {
             step="0.01"
           />
         </div>
-        <CurrencyDisplay
-          amount={amount}
-          currency={currency}
-          locale={locale}
-        />
+        <CurrencyDisplay amount={amount} currency={currency} locale={locale} />
       </div>
-      
+
       <div className="demo-section">
         <h3>Currency Converter</h3>
         <CurrencyConverter
@@ -236,30 +245,32 @@ const CurrencyFormatterDemo: React.FC = () => {
           exchangeRate={600} // Example rate: 1 USD = 600 XAF
         />
       </div>
-      
+
       <div className="demo-section">
         <h3>Batch Transactions</h3>
         <BatchCurrencyFormatter transactions={exampleTransactions} />
       </div>
-      
+
       <div className="demo-section">
         <h3>Custom Formatting Examples</h3>
         <div className="custom-examples">
           <div>
-            <strong>No thousands grouping:</strong>{' '}
-            {CurrencyFormatter.format(1234567.89, 'USD', { useGrouping: false })}
+            <strong>No thousands grouping:</strong>{" "}
+            {CurrencyFormatter.format(1234567.89, "USD", {
+              useGrouping: false,
+            })}
           </div>
           <div>
-            <strong>German locale:</strong>{' '}
-            {CurrencyFormatter.format(1234.56, 'USD', { locale: 'de-DE' })}
+            <strong>German locale:</strong>{" "}
+            {CurrencyFormatter.format(1234.56, "USD", { locale: "de-DE" })}
           </div>
           <div>
-            <strong>4 decimal places:</strong>{' '}
-            {CurrencyFormatter.format(100, 'USD', { minimumFractionDigits: 4 })}
+            <strong>4 decimal places:</strong>{" "}
+            {CurrencyFormatter.format(100, "USD", { minimumFractionDigits: 4 })}
           </div>
           <div>
-            <strong>Floor rounding:</strong>{' '}
-            {CurrencyFormatter.format(1.999, 'USD', { roundingMode: 'floor' })}
+            <strong>Floor rounding:</strong>{" "}
+            {CurrencyFormatter.format(1.999, "USD", { roundingMode: "floor" })}
           </div>
         </div>
       </div>

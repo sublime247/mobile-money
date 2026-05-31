@@ -170,5 +170,6 @@ export const LockKeys = {
     `provider:${provider}:${phone}`,
   vault: (vaultId: string) => `vault:${vaultId}`,
   userVaults: (userId: string) => `user-vaults:${userId}`,
-  vaultTransfer: (userId: string, vaultId: string) => `vault-transfer:${userId}:${vaultId}`,
+  vaultTransfer: (userId: string, vaultId: string) =>
+    `vault-transfer:${userId}:${vaultId}`,
 };

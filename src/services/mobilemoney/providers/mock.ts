@@ -1,8 +1,15 @@
-import { MobileMoneyProvider, ProviderTransactionStatus } from "../mobileMoneyService";
+import {
+  MobileMoneyProvider,
+  ProviderTransactionStatus,
+} from "../mobileMoneyService";
 import logger from "../../../utils/logger";
 
 export class MockProvider implements MobileMoneyProvider {
-  async requestPayment(phoneNumber: string, amount: string, requestId?: string) {
+  async requestPayment(
+    phoneNumber: string,
+    amount: string,
+    requestId?: string,
+  ) {
     const log = requestId ? logger.child({ requestId }) : logger;
     log.info({ phoneNumber, amount }, "MockProvider: Requesting payment");
     return {
@@ -26,7 +33,9 @@ export class MockProvider implements MobileMoneyProvider {
     };
   }
 
-  async getTransactionStatus(referenceId: string): Promise<{ status: ProviderTransactionStatus }> {
+  async getTransactionStatus(
+    referenceId: string,
+  ): Promise<{ status: ProviderTransactionStatus }> {
     logger.info({ referenceId }, "MockProvider: Checking status");
     return { status: "completed" };
   }

@@ -179,7 +179,10 @@ export class AMLService {
       LIMIT 1
     `;
     try {
-      const result = await pool.query<{ firstName: string; lastName: string }>(query, [userId]);
+      const result = await pool.query<{ firstName: string; lastName: string }>(
+        query,
+        [userId],
+      );
       if (result.rows.length === 0) return null;
       const { firstName, lastName } = result.rows[0];
       return `${firstName || ""} ${lastName || ""}`.trim();
@@ -220,7 +223,9 @@ export class AMLService {
     }
 
     const rapidWindowStart = this.getRapidWindowStart(current.createdAt);
-    const rapidWindowTxs = windowTxs.filter((tx) => tx.createdAt >= rapidWindowStart);
+    const rapidWindowTxs = windowTxs.filter(
+      (tx) => tx.createdAt >= rapidWindowStart,
+    );
     const rapidSet = [...rapidWindowTxs, current];
     const rapidCount = rapidSet.length;
     const hasDeposit = rapidSet.some((tx) => tx.type === "deposit");
@@ -281,11 +286,7 @@ export class AMLService {
   ): Promise<AMLMonitoringResult> {
     const since = this.getLookbackWindowStart(transaction.createdAt);
     const [recent, userName] = await Promise.all([
-      this.fetchRecentTransactions(
-        transaction.userId,
-        since,
-        transaction.id,
-      ),
+      this.fetchRecentTransactions(transaction.userId, since, transaction.id),
       this.fetchUserName(transaction.userId),
     ]);
 
@@ -424,14 +425,22 @@ export class AMLService {
 
       // AUTOMATION: If severity is high, automatically prepare SAR draft
       if (alert.severity === "high") {
-        console.log(`[SAR AUTO-PREPARE] High severity alert ${alert.id} detected. Preparing SAR...`);
+        console.log(
+          `[SAR AUTO-PREPARE] High severity alert ${alert.id} detected. Preparing SAR...`,
+        );
         try {
           const { generateSAR } = require("../compliance/sar");
           generateSAR(alert.userId, alert.id).catch((err: any) => {
-            console.error(`[SAR AUTO-PREPARE ERROR] Failed for alert ${alert.id}:`, err);
+            console.error(
+              `[SAR AUTO-PREPARE ERROR] Failed for alert ${alert.id}:`,
+              err,
+            );
           });
         } catch (err) {
-          console.error(`[SAR AUTO-PREPARE ERROR] Failed to load sar service:`, err);
+          console.error(
+            `[SAR AUTO-PREPARE ERROR] Failed to load sar service:`,
+            err,
+          );
         }
       }
     } catch (error) {

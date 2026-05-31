@@ -43,19 +43,21 @@ describe("runProviderHealthCheckJob", () => {
       },
     };
 
-    jest.spyOn(healthCheckModule, "checkMobileMoneyHealth").mockResolvedValue(mockHealthResult);
+    jest
+      .spyOn(healthCheckModule, "checkMobileMoneyHealth")
+      .mockResolvedValue(mockHealthResult);
 
     await runProviderHealthCheckJob();
 
     expect(healthCheckModule.checkMobileMoneyHealth).toHaveBeenCalledTimes(1);
     expect(consoleLogSpy).toHaveBeenCalledWith(
-      "[provider-health] Starting provider health check"
+      "[provider-health] Starting provider health check",
     );
     expect(consoleLogSpy).toHaveBeenCalledWith(
-      "[provider-health] Health check completed - 0 provider(s) down"
+      "[provider-health] Health check completed - 0 provider(s) down",
     );
     expect(consoleLogSpy).toHaveBeenCalledWith(
-      "[provider-health] All providers are operational"
+      "[provider-health] All providers are operational",
     );
     expect(global.fetch).not.toHaveBeenCalled();
   });
@@ -69,9 +71,12 @@ describe("runProviderHealthCheckJob", () => {
       },
     };
 
-    jest.spyOn(healthCheckModule, "checkMobileMoneyHealth").mockResolvedValue(mockHealthResult);
+    jest
+      .spyOn(healthCheckModule, "checkMobileMoneyHealth")
+      .mockResolvedValue(mockHealthResult);
 
-    process.env.PROVIDER_HEALTH_WEBHOOK_URL = "https://webhook.example.com/alert";
+    process.env.PROVIDER_HEALTH_WEBHOOK_URL =
+      "https://webhook.example.com/alert";
 
     (global.fetch as jest.Mock).mockResolvedValue({
       ok: true,
@@ -87,7 +92,7 @@ describe("runProviderHealthCheckJob", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: expect.stringContaining('"alertType":"provider_health_status"'),
-      })
+      }),
     );
 
     const callArgs = (global.fetch as jest.Mock).mock.calls[0];
@@ -109,7 +114,9 @@ describe("runProviderHealthCheckJob", () => {
       },
     };
 
-    jest.spyOn(healthCheckModule, "checkMobileMoneyHealth").mockResolvedValue(mockHealthResult);
+    jest
+      .spyOn(healthCheckModule, "checkMobileMoneyHealth")
+      .mockResolvedValue(mockHealthResult);
 
     process.env.SLACK_ALERTS_WEBHOOK_URL = "https://slack.example.com/webhook";
 
@@ -138,7 +145,9 @@ describe("runProviderHealthCheckJob", () => {
       },
     };
 
-    jest.spyOn(healthCheckModule, "checkMobileMoneyHealth").mockResolvedValue(mockHealthResult);
+    jest
+      .spyOn(healthCheckModule, "checkMobileMoneyHealth")
+      .mockResolvedValue(mockHealthResult);
 
     process.env.PROVIDER_HEALTH_WEBHOOK_URL = "https://webhook1.example.com";
     process.env.SLACK_ALERTS_WEBHOOK_URL = "https://webhook2.example.com";
@@ -154,15 +163,15 @@ describe("runProviderHealthCheckJob", () => {
     expect(global.fetch).toHaveBeenCalledTimes(3);
     expect(global.fetch).toHaveBeenCalledWith(
       "https://webhook1.example.com",
-      expect.any(Object)
+      expect.any(Object),
     );
     expect(global.fetch).toHaveBeenCalledWith(
       "https://webhook2.example.com",
-      expect.any(Object)
+      expect.any(Object),
     );
     expect(global.fetch).toHaveBeenCalledWith(
       "https://webhook3.example.com",
-      expect.any(Object)
+      expect.any(Object),
     );
   });
 
@@ -175,12 +184,14 @@ describe("runProviderHealthCheckJob", () => {
       },
     };
 
-    jest.spyOn(healthCheckModule, "checkMobileMoneyHealth").mockResolvedValue(mockHealthResult);
+    jest
+      .spyOn(healthCheckModule, "checkMobileMoneyHealth")
+      .mockResolvedValue(mockHealthResult);
 
     await runProviderHealthCheckJob();
 
     expect(consoleWarnSpy).toHaveBeenCalledWith(
-      "[provider-health] Provider outage detected but no alert webhook URL is configured"
+      "[provider-health] Provider outage detected but no alert webhook URL is configured",
     );
     expect(global.fetch).not.toHaveBeenCalled();
   });
@@ -194,9 +205,12 @@ describe("runProviderHealthCheckJob", () => {
       },
     };
 
-    jest.spyOn(healthCheckModule, "checkMobileMoneyHealth").mockResolvedValue(mockHealthResult);
+    jest
+      .spyOn(healthCheckModule, "checkMobileMoneyHealth")
+      .mockResolvedValue(mockHealthResult);
 
-    process.env.PROVIDER_HEALTH_WEBHOOK_URL = "https://webhook.example.com/alert";
+    process.env.PROVIDER_HEALTH_WEBHOOK_URL =
+      "https://webhook.example.com/alert";
 
     (global.fetch as jest.Mock).mockResolvedValue({
       ok: false,
@@ -207,7 +221,7 @@ describe("runProviderHealthCheckJob", () => {
 
     expect(global.fetch).toHaveBeenCalledTimes(1);
     expect(consoleErrorSpy).toHaveBeenCalledWith(
-      expect.stringContaining("[provider-health] Failed to send alert")
+      expect.stringContaining("[provider-health] Failed to send alert"),
     );
   });
 
@@ -216,10 +230,12 @@ describe("runProviderHealthCheckJob", () => {
       .spyOn(healthCheckModule, "checkMobileMoneyHealth")
       .mockRejectedValue(new Error("Network timeout"));
 
-    await expect(runProviderHealthCheckJob()).rejects.toThrow("Network timeout");
+    await expect(runProviderHealthCheckJob()).rejects.toThrow(
+      "Network timeout",
+    );
 
     expect(consoleErrorSpy).toHaveBeenCalledWith(
-      "[provider-health] Job failed: Network timeout"
+      "[provider-health] Job failed: Network timeout",
     );
   });
 
@@ -232,7 +248,9 @@ describe("runProviderHealthCheckJob", () => {
       },
     };
 
-    jest.spyOn(healthCheckModule, "checkMobileMoneyHealth").mockResolvedValue(mockHealthResult);
+    jest
+      .spyOn(healthCheckModule, "checkMobileMoneyHealth")
+      .mockResolvedValue(mockHealthResult);
 
     // Set same URL for multiple env vars
     process.env.PROVIDER_HEALTH_WEBHOOK_URL = "https://webhook.example.com";
@@ -258,9 +276,12 @@ describe("runProviderHealthCheckJob", () => {
       },
     };
 
-    jest.spyOn(healthCheckModule, "checkMobileMoneyHealth").mockResolvedValue(mockHealthResult);
+    jest
+      .spyOn(healthCheckModule, "checkMobileMoneyHealth")
+      .mockResolvedValue(mockHealthResult);
 
-    process.env.PROVIDER_HEALTH_WEBHOOK_URL = "https://webhook.example.com/alert";
+    process.env.PROVIDER_HEALTH_WEBHOOK_URL =
+      "https://webhook.example.com/alert";
 
     (global.fetch as jest.Mock).mockResolvedValue({
       ok: true,

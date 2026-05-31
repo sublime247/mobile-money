@@ -1,6 +1,9 @@
 import express, { Request, Response, NextFunction } from "express";
 import request from "supertest";
-import { CrossChainMonitorService, ChainAssetSnapshot } from "../../src/services/crossChainMonitorService";
+import {
+  CrossChainMonitorService,
+  ChainAssetSnapshot,
+} from "../../src/services/crossChainMonitorService";
 
 jest.mock("../../src/services/crossChainMonitorService");
 jest.mock("../../src/config/stellar");
@@ -108,10 +111,34 @@ describe("GET /api/cross-chain/balances", () => {
 
   it("returns all four chains when all are present in snapshot", async () => {
     const snapshots: ChainAssetSnapshot[] = [
-      { chain: "stellar", asset: "XLM", address: "GABC", balance: "10", capturedAt: new Date() },
-      { chain: "mtn", asset: "XAF", address: "mtn", balance: "0", capturedAt: new Date() },
-      { chain: "airtel", asset: "XAF", address: "airtel", balance: "0", capturedAt: new Date() },
-      { chain: "orange", asset: "XAF", address: "orange", balance: "0", capturedAt: new Date() },
+      {
+        chain: "stellar",
+        asset: "XLM",
+        address: "GABC",
+        balance: "10",
+        capturedAt: new Date(),
+      },
+      {
+        chain: "mtn",
+        asset: "XAF",
+        address: "mtn",
+        balance: "0",
+        capturedAt: new Date(),
+      },
+      {
+        chain: "airtel",
+        asset: "XAF",
+        address: "airtel",
+        balance: "0",
+        capturedAt: new Date(),
+      },
+      {
+        chain: "orange",
+        asset: "XAF",
+        address: "orange",
+        balance: "0",
+        capturedAt: new Date(),
+      },
     ];
     mockGetLastSnapshot.mockReturnValue(snapshots);
     const app = buildApp(true);

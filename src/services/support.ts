@@ -17,7 +17,6 @@ import { Dispute } from "../models/dispute";
 import { Transaction } from "../models/transaction";
 import { maskSensitiveData } from "../utils/masking";
 
-
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
@@ -45,7 +44,8 @@ const DEFAULT_RETRY_ATTEMPTS = 3;
 const DEFAULT_RETRY_DELAY_MS = 1000;
 
 function getConfig(): SupportConfig {
-  const provider = (process.env.SUPPORT_PROVIDER || "zendesk") as SupportConfig["provider"];
+  const provider = (process.env.SUPPORT_PROVIDER ||
+    "zendesk") as SupportConfig["provider"];
 
   return {
     provider,
@@ -60,9 +60,18 @@ function getConfig(): SupportConfig {
       accessToken: process.env.INTERCOM_ACCESS_TOKEN || "",
       adminId: process.env.INTERCOM_ADMIN_ID,
     },
-    timeout: parseInt(process.env.SUPPORT_API_TIMEOUT_MS || String(DEFAULT_TIMEOUT_MS), 10),
-    retryAttempts: parseInt(process.env.SUPPORT_RETRY_ATTEMPTS || String(DEFAULT_RETRY_ATTEMPTS), 10),
-    retryDelayMs: parseInt(process.env.SUPPORT_RETRY_DELAY_MS || String(DEFAULT_RETRY_DELAY_MS), 10),
+    timeout: parseInt(
+      process.env.SUPPORT_API_TIMEOUT_MS || String(DEFAULT_TIMEOUT_MS),
+      10,
+    ),
+    retryAttempts: parseInt(
+      process.env.SUPPORT_RETRY_ATTEMPTS || String(DEFAULT_RETRY_ATTEMPTS),
+      10,
+    ),
+    retryDelayMs: parseInt(
+      process.env.SUPPORT_RETRY_DELAY_MS || String(DEFAULT_RETRY_DELAY_MS),
+      10,
+    ),
   };
 }
 
@@ -162,7 +171,9 @@ ${dispute.reportedBy ? `- Reported By: ${dispute.reportedBy}` : ""}
 `.trim();
 }
 
-function mapToZendeskPriority(priority: string): "low" | "normal" | "high" | "urgent" {
+function mapToZendeskPriority(
+  priority: string,
+): "low" | "normal" | "high" | "urgent" {
   const mapping: Record<string, "low" | "normal" | "high" | "urgent"> = {
     low: "low",
     medium: "normal",
@@ -232,7 +243,8 @@ async function createZendeskTicket(
   if (!zendesk.subdomain || !zendesk.apiToken || !zendesk.userEmail) {
     return {
       success: false,
-      error: "Zendesk configuration is incomplete. Missing subdomain, API token, or user email.",
+      error:
+        "Zendesk configuration is incomplete. Missing subdomain, API token, or user email.",
       provider: "zendesk",
     };
   }
@@ -272,15 +284,24 @@ ${formatTransactionDetails(transaction)}
         { id: "reference_number", value: transaction.referenceNumber },
       ],
       ...(requesterEmail && {
-        requester: { email: requesterEmail, name: dispute.reportedBy || "Customer" },
+        requester: {
+          email: requesterEmail,
+          name: dispute.reportedBy || "Customer",
+        },
       }),
-      ...(zendesk.defaultGroupId && { group_id: parseInt(zendesk.defaultGroupId, 10) }),
-      ...(zendesk.defaultAssigneeId && { assignee_id: parseInt(zendesk.defaultAssigneeId, 10) }),
+      ...(zendesk.defaultGroupId && {
+        group_id: parseInt(zendesk.defaultGroupId, 10),
+      }),
+      ...(zendesk.defaultAssigneeId && {
+        assignee_id: parseInt(zendesk.defaultAssigneeId, 10),
+      }),
     },
   };
 
   const url = `https://${zendesk.subdomain}.zendesk.com/api/v2/tickets.json`;
-  const credentials = Buffer.from(`${zendesk.userEmail}/token:${zendesk.apiToken}`).toString("base64");
+  const credentials = Buffer.from(
+    `${zendesk.userEmail}/token:${zendesk.apiToken}`,
+  ).toString("base64");
 
   try {
     const response = await withRetry(
@@ -324,7 +345,8 @@ ${formatTransactionDetails(transaction)}
       },
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown Zendesk error";
+    const message =
+      error instanceof Error ? error.message : "Unknown Zendesk error";
     console.error("[SupportService] Zendesk ticket creation failed:", message);
 
     return {
@@ -377,25 +399,25 @@ _Transaction ID: ${transaction.transactionId}_
 
   const conversationData = userExternalId
     ? {
-      from: {
-        type: "user",
-        user_id: userExternalId,
-      },
-      body: messageBody,
-    }
+        from: {
+          type: "user",
+          user_id: userExternalId,
+        },
+        body: messageBody,
+      }
     : {
-      from: {
-        type: "admin",
-        id: intercom.adminId || "admin",
-      },
-      to: {
-        type: "admin",
-        id: intercom.adminId || "admin",
-      },
-      message_type: "inapp",
-      body: messageBody,
-      subject: `[DISPUTE] ${transaction.referenceNumber}`,
-    };
+        from: {
+          type: "admin",
+          id: intercom.adminId || "admin",
+        },
+        to: {
+          type: "admin",
+          id: intercom.adminId || "admin",
+        },
+        message_type: "inapp",
+        body: messageBody,
+        subject: `[DISPUTE] ${transaction.referenceNumber}`,
+      };
 
   const url = "https://api.intercom.io/conversations";
 
@@ -442,8 +464,12 @@ _Transaction ID: ${transaction.transactionId}_
       },
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown Intercom error";
-    console.error("[SupportService] Intercom conversation creation failed:", message);
+    const message =
+      error instanceof Error ? error.message : "Unknown Intercom error";
+    console.error(
+      "[SupportService] Intercom conversation creation failed:",
+      message,
+    );
 
     return {
       success: false,
@@ -530,8 +556,18 @@ export class SupportService {
 
       case "both": {
         const [zendeskResult, intercomResult] = await Promise.allSettled([
-          createZendeskTicket(this.config, transactionMeta, disputeMeta, requesterEmail),
-          createIntercomConversation(this.config, transactionMeta, disputeMeta, userExternalId),
+          createZendeskTicket(
+            this.config,
+            transactionMeta,
+            disputeMeta,
+            requesterEmail,
+          ),
+          createIntercomConversation(
+            this.config,
+            transactionMeta,
+            disputeMeta,
+            userExternalId,
+          ),
         ]);
 
         if (zendeskResult.status === "fulfilled") {
@@ -549,7 +585,11 @@ export class SupportService {
 
         if (intercomResult.status === "fulfilled") {
           results.push(intercomResult.value);
-          if (!primaryTicketId && intercomResult.value.success && intercomResult.value.ticket) {
+          if (
+            !primaryTicketId &&
+            intercomResult.value.success &&
+            intercomResult.value.ticket
+          ) {
             primaryTicketId = intercomResult.value.ticket.id;
           }
         } else {
@@ -583,9 +623,9 @@ export class SupportService {
     }
 
     const url = `https://${zendesk.subdomain}.zendesk.com/api/v2/tickets/${ticketId}.json`;
-    const credentials = Buffer.from(`${zendesk.userEmail}/token:${zendesk.apiToken}`).toString(
-      "base64",
-    );
+    const credentials = Buffer.from(
+      `${zendesk.userEmail}/token:${zendesk.apiToken}`,
+    ).toString("base64");
 
     try {
       await withRetry(
@@ -691,7 +731,8 @@ export class SupportService {
         return !!intercom.accessToken;
       case "both":
         return (
-          !!(zendesk.subdomain && zendesk.apiToken && zendesk.userEmail) || !!intercom.accessToken
+          !!(zendesk.subdomain && zendesk.apiToken && zendesk.userEmail) ||
+          !!intercom.accessToken
         );
       default:
         return false;
@@ -708,7 +749,11 @@ export class SupportService {
     return {
       provider: this.config.provider,
       zendesk: {
-        configured: !!(zendesk.subdomain && zendesk.apiToken && zendesk.userEmail),
+        configured: !!(
+          zendesk.subdomain &&
+          zendesk.apiToken &&
+          zendesk.userEmail
+        ),
       },
       intercom: {
         configured: !!intercom.accessToken,

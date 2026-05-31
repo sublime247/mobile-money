@@ -22,8 +22,8 @@ export interface TransactionSmsContext {
 /** Normalize to E.164; uses SMS_DEFAULT_REGION (ISO 3166-1 alpha-2) when number has no country code */
 export function formatPhoneE164(
   raw: string,
-  defaultRegion: CountryCode =
-    (process.env.SMS_DEFAULT_REGION as CountryCode) || "CM",
+  defaultRegion: CountryCode = (process.env
+    .SMS_DEFAULT_REGION as CountryCode) || "CM",
 ): string {
   const trimmed = raw.trim();
   const parsed = parsePhoneNumberFromString(trimmed, defaultRegion);
@@ -127,14 +127,23 @@ export class SmsService {
 
   shouldSend(): boolean {
     if (process.env.NODE_ENV === "test") return false;
-    if (this.provider === "none" || this.provider === "off" || this.provider === "disabled")
+    if (
+      this.provider === "none" ||
+      this.provider === "off" ||
+      this.provider === "disabled"
+    )
       return false;
-    return (this.provider === "twilio" && this.twilioClient !== null) || (this.provider === "africastalking" && this.atClient !== null);
+    return (
+      (this.provider === "twilio" && this.twilioClient !== null) ||
+      (this.provider === "africastalking" && this.atClient !== null)
+    );
   }
 
   async sendToPhone(toRaw: string, body: string): Promise<SmsSendResult> {
     if (!this.shouldSend()) {
-      console.log("[sms] skipped (test env, SMS_PROVIDER=none, or missing Twilio config)");
+      console.log(
+        "[sms] skipped (test env, SMS_PROVIDER=none, or missing Twilio config)",
+      );
       return { sent: false, skippedReason: "disabled_or_test" };
     }
 
@@ -160,7 +169,7 @@ export class SmsService {
 
     try {
       let messageSidStr = "unknown";
-      
+
       if (this.provider === "twilio") {
         const message = await this.twilioClient!.messages.create({
           to,
@@ -177,7 +186,7 @@ export class SmsService {
         const result = await this.atClient.SMS.send({
           to: [to],
           message: body,
-          from: process.env.AFRICASTALKING_SENDER_ID
+          from: process.env.AFRICASTALKING_SENDER_ID,
         });
         const msgData = result?.SMSMessageData?.Recipients?.[0];
         if (msgData?.status === "Success") {

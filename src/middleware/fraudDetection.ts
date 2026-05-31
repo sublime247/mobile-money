@@ -1,11 +1,15 @@
-import { Request, Response, NextFunction } from 'express';
-import { fraudService, FraudTransactionInput, FraudResult } from '../services/fraud';
-import { Transaction, TransactionStatus } from '../models/transaction';
-import { TransactionModel } from '../models/transaction';
+import { Request, Response, NextFunction } from "express";
+import {
+  fraudService,
+  FraudTransactionInput,
+  FraudResult,
+} from "../services/fraud";
+import { Transaction, TransactionStatus } from "../models/transaction";
+import { TransactionModel } from "../models/transaction";
 
 /**
  * Fraud Detection Middleware
- * 
+ *
  * Automatically analyzes transactions for fraud using 10+ heuristics.
  * High-risk transactions are automatically set to 'Review' status.
  */
@@ -20,34 +24,39 @@ export class FraudDetectionMiddleware {
    * Express middleware for fraud detection
    * Analyzes incoming transactions and applies appropriate actions
    */
-  detectFraud = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  detectFraud = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
     try {
       // Extract transaction data from request
       const transactionData = this.extractTransactionData(req);
-      
+
       if (!transactionData) {
         // No transaction data to analyze, continue
         return next();
       }
 
       // Run fraud detection
-      const fraudResult = await fraudService.processTransaction(transactionData);
+      const fraudResult =
+        await fraudService.processTransaction(transactionData);
 
       // Store fraud result in request for later use
       (req as any).fraudResult = fraudResult;
 
       // Handle high-risk transactions
-      if (fraudResult.isFraud || fraudResult.recommendedAction === 'review') {
+      if (fraudResult.isFraud || fraudResult.recommendedAction === "review") {
         await this.handleSuspiciousTransaction(transactionData.id, fraudResult);
       }
 
       // Block critical risk transactions
-      if (fraudResult.recommendedAction === 'block') {
+      if (fraudResult.recommendedAction === "block") {
         res.status(403).json({
-          error: 'Transaction blocked due to fraud detection',
+          error: "Transaction blocked due to fraud detection",
           fraudScore: fraudResult.score,
           riskLevel: fraudResult.riskLevel,
-          reasons: fraudResult.reasons
+          reasons: fraudResult.reasons,
         });
         return;
       }
@@ -55,7 +64,7 @@ export class FraudDetectionMiddleware {
       // Continue with normal processing
       next();
     } catch (error) {
-      console.error('Fraud detection middleware error:', error);
+      console.error("Fraud detection middleware error:", error);
       // Continue processing even if fraud detection fails
       next();
     }
@@ -66,10 +75,10 @@ export class FraudDetectionMiddleware {
    */
   private extractTransactionData(req: Request): FraudTransactionInput | null {
     const body = req.body;
-    
+
     // Handle different request formats
     let transactionData: any;
-    
+
     if (body.transaction) {
       transactionData = body.transaction;
     } else if (body.amount && body.phoneNumber) {
@@ -80,73 +89,90 @@ export class FraudDetectionMiddleware {
 
     // Extract IP and user agent from request
     const ipAddress = req.ip || req.connection.remoteAddress || null;
-    const userAgent = req.get('User-Agent') || null;
+    const userAgent = req.get("User-Agent") || null;
 
     // Generate device fingerprint (simplified)
-    const deviceFingerprint = this.generateDeviceFingerprint(ipAddress, userAgent);
+    const deviceFingerprint = this.generateDeviceFingerprint(
+      ipAddress,
+      userAgent,
+    );
 
     return {
-      id: transactionData.id || transactionData.referenceNumber || `temp_${Date.now()}`,
+      id:
+        transactionData.id ||
+        transactionData.referenceNumber ||
+        `temp_${Date.now()}`,
       userId: transactionData.userId || req.user?.id || null,
-      amount: parseFloat(transactionData.amount || '0'),
-      phoneNumber: transactionData.phoneNumber || '',
+      amount: parseFloat(transactionData.amount || "0"),
+      phoneNumber: transactionData.phoneNumber || "",
       timestamp: new Date(),
       location: transactionData.location || null,
       status: this.mapTransactionStatus(transactionData.status),
       ipAddress,
       userAgent,
       deviceFingerprint,
-      type: transactionData.type || 'deposit',
-      provider: transactionData.provider || 'unknown',
-      metadata: transactionData.metadata || null
+      type: transactionData.type || "deposit",
+      provider: transactionData.provider || "unknown",
+      metadata: transactionData.metadata || null,
     };
   }
 
   /**
    * Map transaction status to fraud service format
    */
-  private mapTransactionStatus(status?: string): "SUCCESS" | "FAILED" | "PENDING" {
+  private mapTransactionStatus(
+    status?: string,
+  ): "SUCCESS" | "FAILED" | "PENDING" {
     if (!status) return "PENDING";
-    
+
     const statusLower = status.toLowerCase();
-    if (statusLower === 'completed' || statusLower === 'success') return "SUCCESS";
-    if (statusLower === 'failed' || statusLower === 'error') return "FAILED";
+    if (statusLower === "completed" || statusLower === "success")
+      return "SUCCESS";
+    if (statusLower === "failed" || statusLower === "error") return "FAILED";
     return "PENDING";
   }
 
   /**
    * Generate simple device fingerprint
    */
-  private generateDeviceFingerprint(ipAddress?: string | null, userAgent?: string | null): string {
+  private generateDeviceFingerprint(
+    ipAddress?: string | null,
+    userAgent?: string | null,
+  ): string {
     const components = [
-      ipAddress || 'unknown',
-      userAgent || 'unknown',
+      ipAddress || "unknown",
+      userAgent || "unknown",
       // Add more components in production for better fingerprinting
     ];
-    
+
     // Simple hash - in production use a proper fingerprinting library
-    return Buffer.from(components.join('|')).toString('base64').substring(0, 32);
+    return Buffer.from(components.join("|"))
+      .toString("base64")
+      .substring(0, 32);
   }
 
   /**
    * Handle suspicious transactions by setting them to Review status
    */
   private async handleSuspiciousTransaction(
-    transactionId: string, 
-    fraudResult: FraudResult
+    transactionId: string,
+    fraudResult: FraudResult,
   ): Promise<void> {
     try {
       // Set transaction to Review status
       await fraudService.setTransactionToReview(transactionId);
-      
+
       console.log(`Transaction ${transactionId} flagged for review:`, {
         score: fraudResult.score,
         riskLevel: fraudResult.riskLevel,
         reasons: fraudResult.reasons,
-        heuristicsTriggered: fraudResult.heuristicsTriggered
+        heuristicsTriggered: fraudResult.heuristicsTriggered,
       });
     } catch (error) {
-      console.error(`Failed to handle suspicious transaction ${transactionId}:`, error);
+      console.error(
+        `Failed to handle suspicious transaction ${transactionId}:`,
+        error,
+      );
     }
   }
 
@@ -156,7 +182,7 @@ export class FraudDetectionMiddleware {
    */
   analyzeCompletedTransaction = async (
     transaction: Transaction,
-    req: Request
+    req: Request,
   ): Promise<void> => {
     try {
       const transactionInput: FraudTransactionInput = {
@@ -165,20 +191,25 @@ export class FraudDetectionMiddleware {
         amount: parseFloat(transaction.amount),
         phoneNumber: transaction.phoneNumber,
         timestamp: transaction.createdAt,
-        location: this.extractLocationFromMetadata(transaction.locationMetadata),
+        location: this.extractLocationFromMetadata(
+          transaction.locationMetadata,
+        ),
         status: this.mapTransactionStatus(transaction.status),
         ipAddress: req.ip || null,
-        userAgent: req.get('User-Agent') || null,
-        deviceFingerprint: this.generateDeviceFingerprint(req.ip, req.get('User-Agent')),
+        userAgent: req.get("User-Agent") || null,
+        deviceFingerprint: this.generateDeviceFingerprint(
+          req.ip,
+          req.get("User-Agent"),
+        ),
         type: transaction.type,
         provider: transaction.provider,
-        metadata: transaction.metadata
+        metadata: transaction.metadata,
       };
 
       // Run fraud detection for learning purposes
       await fraudService.detectFraud(transactionInput);
     } catch (error) {
-      console.error('Failed to analyze completed transaction:', error);
+      console.error("Failed to analyze completed transaction:", error);
     }
   };
 
@@ -186,9 +217,9 @@ export class FraudDetectionMiddleware {
    * Extract location from transaction metadata
    */
   private extractLocationFromMetadata(
-    locationMetadata: Transaction['locationMetadata']
+    locationMetadata: Transaction["locationMetadata"],
   ): { lat: number; lng: number } | null {
-    if (!locationMetadata || locationMetadata.status !== 'resolved') {
+    if (!locationMetadata || locationMetadata.status !== "resolved") {
       return null;
     }
 

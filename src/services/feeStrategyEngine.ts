@@ -33,7 +33,11 @@ import { redisClient } from "../config/redis";
 // Types & Interfaces
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type FeeStrategyType = "flat" | "percentage" | "time_based" | "volume_based";
+export type FeeStrategyType =
+  | "flat"
+  | "percentage"
+  | "time_based"
+  | "volume_based";
 export type FeeStrategyScope = "user" | "provider" | "global";
 
 export interface VolumeTier {
@@ -67,9 +71,9 @@ export interface FeeStrategy {
   feeMaximum?: number;
 
   // Time-based
-  daysOfWeek?: number[];   // ISO weekday: 1=Mon … 7=Sun
-  timeStart?: string;      // 'HH:MM' UTC
-  timeEnd?: string;        // 'HH:MM' UTC
+  daysOfWeek?: number[]; // ISO weekday: 1=Mon … 7=Sun
+  timeStart?: string; // 'HH:MM' UTC
+  timeEnd?: string; // 'HH:MM' UTC
   overridePercentage?: number;
   overrideFlatAmount?: number;
 
@@ -184,10 +188,24 @@ function clampFee(
 function applyFlatFee(
   strategy: FeeStrategy,
   amount: number,
-): { rawFee: number; clampedFee: number; appliedMinimum?: number; appliedMaximum?: number } {
+): {
+  rawFee: number;
+  clampedFee: number;
+  appliedMinimum?: number;
+  appliedMaximum?: number;
+} {
   const rawFee = strategy.flatAmount ?? 0;
-  const { clamped, appliedMin, appliedMax } = clampFee(rawFee, strategy.feeMinimum, strategy.feeMaximum);
-  return { rawFee, clampedFee: clamped, appliedMinimum: appliedMin, appliedMaximum: appliedMax };
+  const { clamped, appliedMin, appliedMax } = clampFee(
+    rawFee,
+    strategy.feeMinimum,
+    strategy.feeMaximum,
+  );
+  return {
+    rawFee,
+    clampedFee: clamped,
+    appliedMinimum: appliedMin,
+    appliedMaximum: appliedMax,
+  };
 }
 
 /**
@@ -196,10 +214,24 @@ function applyFlatFee(
 function applyPercentageFee(
   strategy: FeeStrategy,
   amount: number,
-): { rawFee: number; clampedFee: number; appliedMinimum?: number; appliedMaximum?: number } {
+): {
+  rawFee: number;
+  clampedFee: number;
+  appliedMinimum?: number;
+  appliedMaximum?: number;
+} {
   const rawFee = amount * ((strategy.feePercentage ?? 0) / 100);
-  const { clamped, appliedMin, appliedMax } = clampFee(rawFee, strategy.feeMinimum, strategy.feeMaximum);
-  return { rawFee, clampedFee: clamped, appliedMinimum: appliedMin, appliedMaximum: appliedMax };
+  const { clamped, appliedMin, appliedMax } = clampFee(
+    rawFee,
+    strategy.feeMinimum,
+    strategy.feeMaximum,
+  );
+  return {
+    rawFee,
+    clampedFee: clamped,
+    appliedMinimum: appliedMin,
+    appliedMaximum: appliedMax,
+  };
 }
 
 /**
@@ -213,12 +245,17 @@ function applyTimeBasedFee(
   strategy: FeeStrategy,
   amount: number,
   evaluationTime: Date,
-): { rawFee: number; clampedFee: number; appliedMinimum?: number; appliedMaximum?: number } | null {
+): {
+  rawFee: number;
+  clampedFee: number;
+  appliedMinimum?: number;
+  appliedMaximum?: number;
+} | null {
   const daysOfWeek = strategy.daysOfWeek ?? [];
 
   // ISO weekday: getDay() returns 0=Sun…6=Sat; convert to 1=Mon…7=Sun
   const jsDay = evaluationTime.getUTCDay(); // 0=Sun
-  const isoDay = jsDay === 0 ? 7 : jsDay;  // 7=Sun
+  const isoDay = jsDay === 0 ? 7 : jsDay; // 7=Sun
 
   if (!daysOfWeek.includes(isoDay)) {
     return null; // Day condition not met
@@ -243,8 +280,17 @@ function applyTimeBasedFee(
     rawFee = amount * ((strategy.overridePercentage ?? 0) / 100);
   }
 
-  const { clamped, appliedMin, appliedMax } = clampFee(rawFee, strategy.feeMinimum, strategy.feeMaximum);
-  return { rawFee, clampedFee: clamped, appliedMinimum: appliedMin, appliedMaximum: appliedMax };
+  const { clamped, appliedMin, appliedMax } = clampFee(
+    rawFee,
+    strategy.feeMinimum,
+    strategy.feeMaximum,
+  );
+  return {
+    rawFee,
+    clampedFee: clamped,
+    appliedMinimum: appliedMin,
+    appliedMaximum: appliedMax,
+  };
 }
 
 /**
@@ -254,11 +300,17 @@ function applyTimeBasedFee(
 function applyVolumeBasedFee(
   strategy: FeeStrategy,
   amount: number,
-): { rawFee: number; clampedFee: number; appliedMinimum?: number; appliedMaximum?: number } {
+): {
+  rawFee: number;
+  clampedFee: number;
+  appliedMinimum?: number;
+  appliedMaximum?: number;
+} {
   const tiers = strategy.volumeTiers ?? [];
 
   const matchedTier = tiers.find(
-    (t) => amount >= t.minAmount && (t.maxAmount === null || amount < t.maxAmount),
+    (t) =>
+      amount >= t.minAmount && (t.maxAmount === null || amount < t.maxAmount),
   );
 
   let rawFee = 0;
@@ -270,8 +322,17 @@ function applyVolumeBasedFee(
     }
   }
 
-  const { clamped, appliedMin, appliedMax } = clampFee(rawFee, strategy.feeMinimum, strategy.feeMaximum);
-  return { rawFee, clampedFee: clamped, appliedMinimum: appliedMin, appliedMaximum: appliedMax };
+  const { clamped, appliedMin, appliedMax } = clampFee(
+    rawFee,
+    strategy.feeMinimum,
+    strategy.feeMaximum,
+  );
+  return {
+    rawFee,
+    clampedFee: clamped,
+    appliedMinimum: appliedMin,
+    appliedMaximum: appliedMax,
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -294,7 +355,11 @@ async function cacheGet(key: string): Promise<FeeStrategy[] | null> {
 
 async function cacheSet(key: string, strategies: FeeStrategy[]): Promise<void> {
   try {
-    await redisClient.setEx(`${CACHE_PREFIX}${key}`, CACHE_TTL_SECONDS, JSON.stringify(strategies));
+    await redisClient.setEx(
+      `${CACHE_PREFIX}${key}`,
+      CACHE_TTL_SECONDS,
+      JSON.stringify(strategies),
+    );
   } catch {
     // Cache write failure is non-fatal
   }
@@ -326,15 +391,33 @@ function rowToStrategy(row: Record<string, unknown>): FeeStrategy {
     provider: row.provider as string | undefined,
     priority: row.priority as number,
     isActive: row.is_active as boolean,
-    flatAmount: row.flat_amount != null ? parseFloat(row.flat_amount as string) : undefined,
-    feePercentage: row.fee_percentage != null ? parseFloat(row.fee_percentage as string) : undefined,
-    feeMinimum: row.fee_minimum != null ? parseFloat(row.fee_minimum as string) : undefined,
-    feeMaximum: row.fee_maximum != null ? parseFloat(row.fee_maximum as string) : undefined,
+    flatAmount:
+      row.flat_amount != null
+        ? parseFloat(row.flat_amount as string)
+        : undefined,
+    feePercentage:
+      row.fee_percentage != null
+        ? parseFloat(row.fee_percentage as string)
+        : undefined,
+    feeMinimum:
+      row.fee_minimum != null
+        ? parseFloat(row.fee_minimum as string)
+        : undefined,
+    feeMaximum:
+      row.fee_maximum != null
+        ? parseFloat(row.fee_maximum as string)
+        : undefined,
     daysOfWeek: row.days_of_week as number[] | undefined,
     timeStart: row.time_start as string | undefined,
     timeEnd: row.time_end as string | undefined,
-    overridePercentage: row.override_percentage != null ? parseFloat(row.override_percentage as string) : undefined,
-    overrideFlatAmount: row.override_flat_amount != null ? parseFloat(row.override_flat_amount as string) : undefined,
+    overridePercentage:
+      row.override_percentage != null
+        ? parseFloat(row.override_percentage as string)
+        : undefined,
+    overrideFlatAmount:
+      row.override_flat_amount != null
+        ? parseFloat(row.override_flat_amount as string)
+        : undefined,
     volumeTiers: row.volume_tiers as VolumeTier[] | undefined,
     createdBy: row.created_by as string,
     updatedBy: row.updated_by as string,
@@ -388,7 +471,9 @@ export class FeeStrategyEngine {
    *
    * Falls back to the legacy FeeService active configuration when no strategy matches.
    */
-  async calculateFee(ctx: FeeCalculationContext): Promise<FeeCalculationResult> {
+  async calculateFee(
+    ctx: FeeCalculationContext,
+  ): Promise<FeeCalculationResult> {
     const evaluationTime = ctx.evaluationTime ?? new Date();
     const candidates = await this.resolveStrategies(ctx.userId, ctx.provider);
 
@@ -437,7 +522,12 @@ export class FeeStrategyEngine {
     strategy: FeeStrategy,
     amount: number,
     evaluationTime: Date,
-  ): { rawFee: number; clampedFee: number; appliedMinimum?: number; appliedMaximum?: number } | null {
+  ): {
+    rawFee: number;
+    clampedFee: number;
+    appliedMinimum?: number;
+    appliedMaximum?: number;
+  } | null {
     switch (strategy.strategyType) {
       case "flat":
         return applyFlatFee(strategy, amount);
@@ -457,7 +547,10 @@ export class FeeStrategyEngine {
    * Strategies are returned in priority order: user → provider → global,
    * with lower `priority` number winning within each scope.
    */
-  async resolveStrategies(userId?: string, provider?: string): Promise<FeeStrategy[]> {
+  async resolveStrategies(
+    userId?: string,
+    provider?: string,
+  ): Promise<FeeStrategy[]> {
     const cacheKey = `resolved:${userId ?? ""}:${provider ?? ""}`;
     const cached = await cacheGet(cacheKey);
     if (cached) return cached;
@@ -470,7 +563,9 @@ export class FeeStrategyEngine {
 
     if (provider) {
       params.push(provider);
-      scopeClauses.push(`(scope = 'provider' AND provider = $${params.length})`);
+      scopeClauses.push(
+        `(scope = 'provider' AND provider = $${params.length})`,
+      );
     }
 
     if (userId) {
@@ -551,7 +646,15 @@ export class FeeStrategyEngine {
     ]);
 
     const strategy = rowToStrategy(result.rows[0]);
-    await this.logAudit(strategy.id, "CREATE", null, strategy, createdBy, ipAddress, userAgent);
+    await this.logAudit(
+      strategy.id,
+      "CREATE",
+      null,
+      strategy,
+      createdBy,
+      ipAddress,
+      userAgent,
+    );
     await cacheInvalidateAll();
 
     return strategy;
@@ -584,15 +687,20 @@ export class FeeStrategyEngine {
     if (data.priority !== undefined) set("priority", data.priority);
     if (data.isActive !== undefined) set("is_active", data.isActive);
     if (data.flatAmount !== undefined) set("flat_amount", data.flatAmount);
-    if (data.feePercentage !== undefined) set("fee_percentage", data.feePercentage);
+    if (data.feePercentage !== undefined)
+      set("fee_percentage", data.feePercentage);
     if (data.feeMinimum !== undefined) set("fee_minimum", data.feeMinimum);
     if (data.feeMaximum !== undefined) set("fee_maximum", data.feeMaximum);
-    if (data.daysOfWeek !== undefined) set("days_of_week", JSON.stringify(data.daysOfWeek));
+    if (data.daysOfWeek !== undefined)
+      set("days_of_week", JSON.stringify(data.daysOfWeek));
     if (data.timeStart !== undefined) set("time_start", data.timeStart);
     if (data.timeEnd !== undefined) set("time_end", data.timeEnd);
-    if (data.overridePercentage !== undefined) set("override_percentage", data.overridePercentage);
-    if (data.overrideFlatAmount !== undefined) set("override_flat_amount", data.overrideFlatAmount);
-    if (data.volumeTiers !== undefined) set("volume_tiers", JSON.stringify(data.volumeTiers));
+    if (data.overridePercentage !== undefined)
+      set("override_percentage", data.overridePercentage);
+    if (data.overrideFlatAmount !== undefined)
+      set("override_flat_amount", data.overrideFlatAmount);
+    if (data.volumeTiers !== undefined)
+      set("volume_tiers", JSON.stringify(data.volumeTiers));
 
     if (fields.length === 0) return old;
 
@@ -610,8 +718,21 @@ export class FeeStrategyEngine {
     if (result.rows.length === 0) return null;
 
     const updated = rowToStrategy(result.rows[0]);
-    const action = data.isActive === true ? "ACTIVATE" : data.isActive === false ? "DEACTIVATE" : "UPDATE";
-    await this.logAudit(id, action, old, updated, updatedBy, ipAddress, userAgent);
+    const action =
+      data.isActive === true
+        ? "ACTIVATE"
+        : data.isActive === false
+          ? "DEACTIVATE"
+          : "UPDATE";
+    await this.logAudit(
+      id,
+      action,
+      old,
+      updated,
+      updatedBy,
+      ipAddress,
+      userAgent,
+    );
     await cacheInvalidateAll();
 
     return updated;
@@ -629,10 +750,21 @@ export class FeeStrategyEngine {
     const old = await this.getStrategyById(id);
     if (!old) return false;
 
-    const result = await pool.query("DELETE FROM fee_strategies WHERE id = $1", [id]);
+    const result = await pool.query(
+      "DELETE FROM fee_strategies WHERE id = $1",
+      [id],
+    );
     if ((result.rowCount ?? 0) === 0) return false;
 
-    await this.logAudit(id, "DELETE", old, null, deletedBy, ipAddress, userAgent);
+    await this.logAudit(
+      id,
+      "DELETE",
+      old,
+      null,
+      deletedBy,
+      ipAddress,
+      userAgent,
+    );
     await cacheInvalidateAll();
 
     return true;
@@ -647,7 +779,13 @@ export class FeeStrategyEngine {
     ipAddress?: string,
     userAgent?: string,
   ): Promise<FeeStrategy | null> {
-    return this.updateStrategy(id, { isActive: true }, activatedBy, ipAddress, userAgent);
+    return this.updateStrategy(
+      id,
+      { isActive: true },
+      activatedBy,
+      ipAddress,
+      userAgent,
+    );
   }
 
   /**
@@ -659,7 +797,13 @@ export class FeeStrategyEngine {
     ipAddress?: string,
     userAgent?: string,
   ): Promise<FeeStrategy | null> {
-    return this.updateStrategy(id, { isActive: false }, deactivatedBy, ipAddress, userAgent);
+    return this.updateStrategy(
+      id,
+      { isActive: false },
+      deactivatedBy,
+      ipAddress,
+      userAgent,
+    );
   }
 
   // ─── Queries ───────────────────────────────────────────────────────────────

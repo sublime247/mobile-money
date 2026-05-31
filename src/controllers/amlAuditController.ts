@@ -17,15 +17,8 @@ export const listAmlAlertsForAudit = async (
   res: Response,
 ): Promise<void> => {
   try {
-    const {
-      status,
-      userId,
-      severity,
-      startDate,
-      endDate,
-      limit,
-      offset,
-    } = req.query;
+    const { status, userId, severity, startDate, endDate, limit, offset } =
+      req.query;
 
     const validStatuses = ["pending_review", "reviewed", "dismissed"] as const;
     const validSeverities = ["medium", "high"] as const;

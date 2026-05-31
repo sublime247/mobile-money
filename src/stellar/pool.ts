@@ -157,7 +157,7 @@ export class ChannelAccountsPool {
    * Fetches current sequence numbers from Horizon
    */
   async initialize(
-    accountConfigs: Array<{ publicKey: string; secretKey: string }>
+    accountConfigs: Array<{ publicKey: string; secretKey: string }>,
   ): Promise<void> {
     if (this.isInitialized) {
       throw new Error("Pool is already initialized");
@@ -167,7 +167,9 @@ export class ChannelAccountsPool {
       throw new Error("At least one channel account is required");
     }
 
-    console.log(`[Pool] Initializing with ${accountConfigs.length} channel accounts...`);
+    console.log(
+      `[Pool] Initializing with ${accountConfigs.length} channel accounts...`,
+    );
 
     // Load all accounts in parallel
     const loadPromises = accountConfigs.map(async (config) => {
@@ -175,7 +177,9 @@ export class ChannelAccountsPool {
         // Validate keypair
         const keypair = StellarSdk.Keypair.fromSecret(config.secretKey);
         if (keypair.publicKey() !== config.publicKey) {
-          throw new Error(`Public key mismatch for account ${config.publicKey}`);
+          throw new Error(
+            `Public key mismatch for account ${config.publicKey}`,
+          );
         }
 
         // Fetch current sequence from Horizon
@@ -193,9 +197,14 @@ export class ChannelAccountsPool {
         };
 
         this.accounts.set(config.publicKey, channelAccount);
-        console.log(`[Pool] Loaded account ${config.publicKey.substring(0, 8)}... seq=${sequence}`);
+        console.log(
+          `[Pool] Loaded account ${config.publicKey.substring(0, 8)}... seq=${sequence}`,
+        );
       } catch (error) {
-        console.error(`[Pool] Failed to load account ${config.publicKey}:`, error);
+        console.error(
+          `[Pool] Failed to load account ${config.publicKey}:`,
+          error,
+        );
         throw error;
       }
     });
@@ -206,7 +215,9 @@ export class ChannelAccountsPool {
     this.startMaintenance();
     this.isInitialized = true;
 
-    console.log(`[Pool] Initialized successfully with ${this.accounts.size} accounts`);
+    console.log(
+      `[Pool] Initialized successfully with ${this.accounts.size} accounts`,
+    );
   }
 
   /**
@@ -242,7 +253,11 @@ export class ChannelAccountsPool {
         const index = this.acquireQueue.indexOf(deferred);
         if (index !== -1) {
           this.acquireQueue.splice(index, 1);
-          reject(new Error(`Pool exhausted: queue timeout after ${this.config.queueTimeoutMs}ms`));
+          reject(
+            new Error(
+              `Pool exhausted: queue timeout after ${this.config.queueTimeoutMs}ms`,
+            ),
+          );
         }
       }, this.config.queueTimeoutMs);
     });
@@ -256,9 +271,9 @@ export class ChannelAccountsPool {
     buildAndSubmit: (
       sourcePublicKey: string,
       sequence: bigint,
-      keypair: StellarSdk.Keypair
+      keypair: StellarSdk.Keypair,
     ) => Promise<T>,
-    options: { maxRetries?: number } = {}
+    options: { maxRetries?: number } = {},
   ): Promise<T> {
     const maxRetries = options.maxRetries ?? 3;
     let lastError: Error | undefined;
@@ -273,7 +288,7 @@ export class ChannelAccountsPool {
         const result = await buildAndSubmit(
           account.publicKey,
           txSequence,
-          keypair
+          keypair,
         );
 
         // Success! Update sequence and release
@@ -287,7 +302,9 @@ export class ChannelAccountsPool {
 
         // Check if this is a sequence error
         if (this.isSequenceError(err)) {
-          console.warn(`[Pool] Sequence error on ${account.publicKey.substring(0, 8)}..., resyncing...`);
+          console.warn(
+            `[Pool] Sequence error on ${account.publicKey.substring(0, 8)}..., resyncing...`,
+          );
           this.stats.sequenceErrorCount++;
 
           // Resync sequence from network
@@ -301,7 +318,10 @@ export class ChannelAccountsPool {
         // Check if retryable
         if (this.isRetryableError(err) && attempt < maxRetries - 1) {
           release(false);
-          console.warn(`[Pool] Retryable error (attempt ${attempt + 1}/${maxRetries}):`, err.message);
+          console.warn(
+            `[Pool] Retryable error (attempt ${attempt + 1}/${maxRetries}):`,
+            err.message,
+          );
           continue;
         }
 
@@ -324,10 +344,10 @@ export class ChannelAccountsPool {
       build: (
         sourcePublicKey: string,
         sequence: bigint,
-        keypair: StellarSdk.Keypair
+        keypair: StellarSdk.Keypair,
       ) => Promise<T>;
     }>,
-    options: { concurrency?: number } = {}
+    options: { concurrency?: number } = {},
   ): Promise<Array<{ success: boolean; result?: T; error?: Error }>> {
     const concurrency = options.concurrency ?? this.accounts.size;
     const results: Array<{ success: boolean; result?: T; error?: Error }> = [];
@@ -344,7 +364,7 @@ export class ChannelAccountsPool {
           } catch (error) {
             return { success: false, error: error as Error };
           }
-        })
+        }),
       );
 
       results.push(...batchResults);
@@ -395,11 +415,16 @@ export class ChannelAccountsPool {
       const newSequence = BigInt(accountInfo.sequenceNumber());
 
       account.sequence = newSequence;
-      console.log(`[Pool] Resynced ${publicKey.substring(0, 8)}... sequence to ${newSequence}`);
+      console.log(
+        `[Pool] Resynced ${publicKey.substring(0, 8)}... sequence to ${newSequence}`,
+      );
 
       return newSequence;
     } catch (error) {
-      console.error(`[Pool] Failed to resync sequence for ${publicKey}:`, error);
+      console.error(
+        `[Pool] Failed to resync sequence for ${publicKey}:`,
+        error,
+      );
       throw error;
     }
   }
@@ -413,7 +438,7 @@ export class ChannelAccountsPool {
     const promises = Array.from(this.accounts.keys()).map((publicKey) =>
       this.resyncSequence(publicKey).catch((err) => {
         console.error(`[Pool] Failed to resync ${publicKey}:`, err);
-      })
+      }),
     );
 
     await Promise.all(promises);
@@ -428,7 +453,9 @@ export class ChannelAccountsPool {
     if (account) {
       account.isLocked = false;
       account.lockedAt = null;
-      console.log(`[Pool] Force released account ${publicKey.substring(0, 8)}...`);
+      console.log(
+        `[Pool] Force released account ${publicKey.substring(0, 8)}...`,
+      );
       this.processQueue();
     }
   }
@@ -465,7 +492,9 @@ export class ChannelAccountsPool {
     // Wait for all locked accounts to be released (with timeout)
     const timeout = Date.now() + 10_000;
     while (Date.now() < timeout) {
-      const hasLocked = Array.from(this.accounts.values()).some((a) => a.isLocked);
+      const hasLocked = Array.from(this.accounts.values()).some(
+        (a) => a.isLocked,
+      );
       if (!hasLocked) break;
       await new Promise((r) => setTimeout(r, 100));
     }
@@ -508,7 +537,9 @@ export class ChannelAccountsPool {
         // Disable account if too many consecutive errors
         if (account.errorCount >= this.config.maxConsecutiveErrors) {
           account.isDisabled = true;
-          console.warn(`[Pool] Account ${account.publicKey.substring(0, 8)}... disabled after ${account.errorCount} errors`);
+          console.warn(
+            `[Pool] Account ${account.publicKey.substring(0, 8)}... disabled after ${account.errorCount} errors`,
+          );
         }
       }
 
@@ -552,7 +583,9 @@ export class ChannelAccountsPool {
         account.lockedAt &&
         now - account.lockedAt > this.config.lockTimeoutMs
       ) {
-        console.warn(`[Pool] Auto-releasing timed-out lock on ${account.publicKey.substring(0, 8)}...`);
+        console.warn(
+          `[Pool] Auto-releasing timed-out lock on ${account.publicKey.substring(0, 8)}...`,
+        );
         account.isLocked = false;
         account.lockedAt = null;
         account.errorCount++;
@@ -566,7 +599,9 @@ export class ChannelAccountsPool {
           account.errorCount--;
           if (account.errorCount <= 0) {
             account.isDisabled = false;
-            console.log(`[Pool] Auto-recovered account ${account.publicKey.substring(0, 8)}...`);
+            console.log(
+              `[Pool] Auto-recovered account ${account.publicKey.substring(0, 8)}...`,
+            );
           }
         }
       }
@@ -576,7 +611,7 @@ export class ChannelAccountsPool {
     while (
       this.acquireQueue.length > 0 &&
       now - this.acquireQueue[0].timestamp > this.config.queueTimeoutMs
-      ) {
+    ) {
       const deferred = this.acquireQueue.shift();
       if (deferred) {
         deferred.reject(new Error("Queue timeout"));
@@ -663,7 +698,7 @@ export async function initializeDefaultPool(): Promise<ChannelAccountsPool> {
  */
 export async function generateTestChannelAccounts(
   count: number,
-  funderKeypair: StellarSdk.Keypair
+  funderKeypair: StellarSdk.Keypair,
 ): Promise<Array<{ publicKey: string; secretKey: string }>> {
   const server = getStellarServer();
   const networkPassphrase = getNetworkPassphrase();
@@ -685,7 +720,7 @@ export async function generateTestChannelAccounts(
           StellarSdk.Operation.createAccount({
             destination: newKeypair.publicKey(),
             startingBalance: "2", // Minimum + buffer for fees
-          })
+          }),
         )
         .setTimeout(30)
         .build();
@@ -698,7 +733,9 @@ export async function generateTestChannelAccounts(
         secretKey: newKeypair.secret(),
       });
 
-      console.log(`[Pool] Created channel account ${i + 1}/${count}: ${newKeypair.publicKey().substring(0, 8)}...`);
+      console.log(
+        `[Pool] Created channel account ${i + 1}/${count}: ${newKeypair.publicKey().substring(0, 8)}...`,
+      );
     } catch (error) {
       console.error(`[Pool] Failed to create account ${i + 1}:`, error);
       throw error;

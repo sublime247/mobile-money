@@ -158,7 +158,12 @@ describe("errorHandler middleware - Integration Tests", () => {
       legacyError.statusCode = 500;
       legacyError.legacyField = "legacy";
 
-      errorHandler(legacyError, mockReq as Request, mockRes as Response, mockNext);
+      errorHandler(
+        legacyError,
+        mockReq as Request,
+        mockRes as Response,
+        mockNext,
+      );
 
       const response = jsonMock.mock.calls[jsonMock.mock.calls.length - 1][0];
 
@@ -172,7 +177,12 @@ describe("errorHandler middleware - Integration Tests", () => {
       const partialError: any = new Error("Partial error");
       partialError.statusCode = 400;
 
-      errorHandler(partialError, mockReq as Request, mockRes as Response, mockNext);
+      errorHandler(
+        partialError,
+        mockReq as Request,
+        mockRes as Response,
+        mockNext,
+      );
 
       const response = jsonMock.mock.calls[jsonMock.mock.calls.length - 1][0];
 
@@ -212,4 +222,3 @@ describe("errorHandler middleware - Integration Tests", () => {
     });
   });
 });
-

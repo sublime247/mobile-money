@@ -126,7 +126,7 @@ export class RefreshTokenFamilyModel {
     }
   }
 
-  async revokeAll(userId: string, familyId:string) {
+  async revokeAll(userId: string, familyId: string) {
     const client = await pool.connect();
 
     try {

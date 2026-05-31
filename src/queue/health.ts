@@ -59,4 +59,3 @@ export async function resumeQueueEndpoint(req: Request, res: Response) {
     res.status(500).json({ error: "Failed to resume queue" });
   }
 }
-

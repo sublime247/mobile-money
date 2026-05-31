@@ -110,10 +110,14 @@ router.post("/:id/reject", async (req: Request, res: Response) => {
     const notes =
       typeof req.body?.notes === "string" ? req.body.notes.trim() : undefined;
     const rejectionReason =
-      typeof req.body?.rejection_reason === "string" ? req.body.rejection_reason.trim() : undefined;
+      typeof req.body?.rejection_reason === "string"
+        ? req.body.rejection_reason.trim()
+        : undefined;
 
     if (!rejectionReason) {
-      return res.status(400).json({ error: "rejection_reason is required when rejecting KYC" });
+      return res
+        .status(400)
+        .json({ error: "rejection_reason is required when rejecting KYC" });
     }
 
     if (!KYC_REJECTION_REASONS.includes(rejectionReason as any)) {
@@ -215,10 +219,14 @@ router.post("/bulk/reject", async (req: Request, res: Response) => {
     const notes =
       typeof req.body?.notes === "string" ? req.body.notes.trim() : undefined;
     const rejectionReason =
-      typeof req.body?.rejection_reason === "string" ? req.body.rejection_reason.trim() : undefined;
+      typeof req.body?.rejection_reason === "string"
+        ? req.body.rejection_reason.trim()
+        : undefined;
 
     if (!rejectionReason) {
-      return res.status(400).json({ error: "rejection_reason is required when rejecting KYC" });
+      return res
+        .status(400)
+        .json({ error: "rejection_reason is required when rejecting KYC" });
     }
 
     if (!KYC_REJECTION_REASONS.includes(rejectionReason as any)) {
@@ -229,7 +237,12 @@ router.post("/bulk/reject", async (req: Request, res: Response) => {
 
     for (const requestId of requestIds) {
       try {
-        await rejectKycUpgrade({ requestId, reviewedBy, notes, rejectionReason });
+        await rejectKycUpgrade({
+          requestId,
+          reviewedBy,
+          notes,
+          rejectionReason,
+        });
         results.push({ requestId, status: "success" });
       } catch (err) {
         results.push({

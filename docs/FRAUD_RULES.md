@@ -23,24 +23,28 @@ Fraud detection rules are configurable via environment variables:
 ## Detection Rules
 
 ### 1. Velocity Check
+
 - **Description**: Detects rapid transaction sequences that may indicate automated attacks
 - **Condition**: More than `maxTransactionsPerHour` transactions within `timeWindowMs`
 - **Score**: `velocityScore` points
 - **Example**: 6+ transactions in 1 hour
 
 ### 2. Amount Anomaly
+
 - **Description**: Identifies unusually large transactions compared to user history
 - **Condition**: Transaction amount > `amountMultiplier` × recent average transaction amount
 - **Score**: `amountScore` points
 - **Example**: $1000 transaction when average is $50
 
 ### 3. Geographic Anomaly
+
 - **Description**: Flags transactions from locations far from recent activity
 - **Condition**: Location change > `maxDistanceKm` within `timeWindowMs`
 - **Score**: `geoScore` points
 - **Example**: Transaction 1500km from last location within 1 hour
 
 ### 4. Pattern Detection
+
 - **Description**: Identifies repeated failed attempts that may indicate brute force
 - **Condition**: 3+ failed transactions within `timeWindowMs`
 - **Score**: `patternScore` points
@@ -55,6 +59,7 @@ Fraud detection rules are configurable via environment variables:
 ## Response Actions
 
 When fraud is detected:
+
 1. Transaction is logged with structured JSON alerts
 2. Transaction is added to manual review queue
 3. Metrics are updated for monitoring
@@ -63,13 +68,14 @@ When fraud is detected:
 ## Monitoring
 
 Fraud detection metrics are available via Prometheus:
+
 - `transaction_total{type="fraud_check", status="passed|flagged"}`
 - `transaction_errors_total{type="fraud_detection", error_type="fraud_flagged"}`
 
 ## Usage
 
 ```typescript
-import { fraudService } from './services/fraud';
+import { fraudService } from "./services/fraud";
 
 // In transaction processing
 const result = fraudService.processTransaction(transaction, userHistory);
@@ -93,4 +99,4 @@ npm test tests/services/fraud.test.ts
 - IP address analysis
 - Device fingerprinting
 - Integration with external fraud databases</content>
-<parameter name="filePath">c:\Users\HP\Desktop\drips\mobile-money\docs/FRAUD_RULES.md
+  <parameter name="filePath">c:\Users\HP\Desktop\drips\mobile-money\docs/FRAUD_RULES.md

@@ -1,14 +1,14 @@
-import crypto from 'crypto';
+import crypto from "crypto";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const ALGORITHM = 'aes-256-gcm';
-const KEY_DERIVATION = 'sha256';
-const IV_LENGTH = 16;       // bytes — random per encryption
-const TAG_LENGTH = 16;      // GCM auth tag bytes
-const SALT_LENGTH = 32;     // bytes — random per key derivation
+const ALGORITHM = "aes-256-gcm";
+const KEY_DERIVATION = "sha256";
+const IV_LENGTH = 16; // bytes — random per encryption
+const TAG_LENGTH = 16; // GCM auth tag bytes
+const SALT_LENGTH = 32; // bytes — random per key derivation
 const PBKDF2_ITERATIONS = 310_000; // OWASP 2023 recommendation for PBKDF2-SHA256
-const PBKDF2_KEYLEN = 32;   // 256-bit derived key
+const PBKDF2_KEYLEN = 32; // 256-bit derived key
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -43,17 +43,16 @@ export class KeyVault {
   constructor() {
     const rawKey = process.env.KEY_VAULT_MASTER_SECRET;
     if (!rawKey) {
-      throw new Error('KEY_VAULT_MASTER_SECRET environment variable is not set');
+      throw new Error(
+        "KEY_VAULT_MASTER_SECRET environment variable is not set",
+      );
     }
     if (rawKey.length < 32) {
-      throw new Error('KEY_VAULT_MASTER_SECRET must be at least 32 characters');
+      throw new Error("KEY_VAULT_MASTER_SECRET must be at least 32 characters");
     }
     // Derive a fixed-length key from the master secret
     // This allows the env var to be any length while always getting 32 bytes
-    this.masterKey = crypto
-      .createHash(KEY_DERIVATION)
-      .update(rawKey)
-      .digest();
+    this.masterKey = crypto.createHash(KEY_DERIVATION).update(rawKey).digest();
   }
 
   /**
@@ -74,21 +73,21 @@ export class KeyVault {
       salt,
       PBKDF2_ITERATIONS,
       PBKDF2_KEYLEN,
-      'sha256'
+      "sha256",
     );
 
     const cipher = crypto.createCipheriv(ALGORITHM, derivedKey, iv);
     const ciphertext = Buffer.concat([
-      cipher.update(plaintextSecret, 'utf8'),
+      cipher.update(plaintextSecret, "utf8"),
       cipher.final(),
     ]);
     const tag = cipher.getAuthTag();
 
     return {
-      ciphertext: ciphertext.toString('base64'),
-      iv: iv.toString('base64'),
-      tag: tag.toString('base64'),
-      salt: salt.toString('base64'),
+      ciphertext: ciphertext.toString("base64"),
+      iv: iv.toString("base64"),
+      tag: tag.toString("base64"),
+      salt: salt.toString("base64"),
       algorithm: ALGORITHM,
     };
   }
@@ -106,17 +105,17 @@ export class KeyVault {
       throw new Error(`Unsupported encryption algorithm: ${payload.algorithm}`);
     }
 
-    const salt = Buffer.from(payload.salt, 'base64');
-    const iv = Buffer.from(payload.iv, 'base64');
-    const tag = Buffer.from(payload.tag, 'base64');
-    const ciphertext = Buffer.from(payload.ciphertext, 'base64');
+    const salt = Buffer.from(payload.salt, "base64");
+    const iv = Buffer.from(payload.iv, "base64");
+    const tag = Buffer.from(payload.tag, "base64");
+    const ciphertext = Buffer.from(payload.ciphertext, "base64");
 
     const derivedKey = crypto.pbkdf2Sync(
       this.masterKey,
       salt,
       PBKDF2_ITERATIONS,
       PBKDF2_KEYLEN,
-      'sha256'
+      "sha256",
     );
 
     const decipher = crypto.createDecipheriv(ALGORITHM, derivedKey, iv);
@@ -128,7 +127,7 @@ export class KeyVault {
       decipher.final(),
     ]);
 
-    return plaintext.toString('utf8');
+    return plaintext.toString("utf8");
   }
 
   /**
@@ -138,7 +137,7 @@ export class KeyVault {
   static reEncrypt(
     oldVault: KeyVault,
     newVault: KeyVault,
-    payload: EncryptedPayload
+    payload: EncryptedPayload,
   ): EncryptedPayload {
     const plaintext = oldVault.decrypt(payload);
     const newPayload = newVault.encrypt(plaintext);

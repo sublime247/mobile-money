@@ -1,41 +1,45 @@
-import PDFDocument from 'pdfkit';
-import { Transaction } from '../models/transaction';
-import { User } from '../models/users';
-import { maskPhoneNumber, maskStellarAddress } from '../utils/masking';
-import { currencyService } from './currency';
+import PDFDocument from "pdfkit";
+import { Transaction } from "../models/transaction";
+import { User } from "../models/users";
+import { maskPhoneNumber, maskStellarAddress } from "../utils/masking";
+import { currencyService } from "./currency";
 
 export class InvoiceService {
   async generateMonthlyInvoicePDF(
     user: User,
     month: number,
     year: number,
-    transactions: Transaction[]
+    transactions: Transaction[],
   ): Promise<Buffer> {
     return new Promise((resolve, reject) => {
       const doc = new PDFDocument({ margin: 50 });
       const chunks: Buffer[] = [];
 
-      doc.on('data', (chunk) => chunks.push(chunk));
-      doc.on('end', () => resolve(Buffer.concat(chunks)));
-      doc.on('error', (err) => reject(err));
+      doc.on("data", (chunk) => chunks.push(chunk));
+      doc.on("end", () => resolve(Buffer.concat(chunks)));
+      doc.on("error", (err) => reject(err));
 
       // Header - Branding
       doc
-        .fillColor('#444444')
+        .fillColor("#444444")
         .fontSize(20)
-        .text('OPULENCE MOBILE MONEY', 50, 45)
+        .text("OPULENCE MOBILE MONEY", 50, 45)
         .fontSize(10)
-        .text('Branded Monthly Invoice', 50, 70)
-        .text('Opulence Financial Services Ltd.', 200, 45, { align: 'right' })
-        .text('123 Finance Plaza, Douala, Cameroon', 200, 60, { align: 'right' })
-        .text('https://mobilemoney.opulence.com', 200, 75, { align: 'right' })
+        .text("Branded Monthly Invoice", 50, 70)
+        .text("Opulence Financial Services Ltd.", 200, 45, { align: "right" })
+        .text("123 Finance Plaza, Douala, Cameroon", 200, 60, {
+          align: "right",
+        })
+        .text("https://mobilemoney.opulence.com", 200, 75, { align: "right" })
         .moveDown();
 
       // Horizontal Line
       doc.moveTo(50, 100).lineTo(550, 100).stroke();
 
       // Invoice Info
-      const monthName = new Date(year, month - 1).toLocaleString('default', { month: 'long' });
+      const monthName = new Date(year, month - 1).toLocaleString("default", {
+        month: "long",
+      });
       doc
         .fontSize(12)
         .text(`Billing Period: ${monthName} ${year}`, 50, 120)
@@ -45,39 +49,49 @@ export class InvoiceService {
       // Customer Info
       doc
         .fontSize(12)
-        .text('BILL TO:', 350, 120, { bold: true })
-        .text(user.phoneNumber ? maskPhoneNumber(user.phoneNumber) : 'N/A', 350, 135)
-        .text(user.email || 'N/A', 350, 150)
+        .text("BILL TO:", 350, 120, { bold: true })
+        .text(
+          user.phoneNumber ? maskPhoneNumber(user.phoneNumber) : "N/A",
+          350,
+          135,
+        )
+        .text(user.email || "N/A", 350, 150)
         .moveDown(2);
 
       // Summary Table Header
-      doc
-        .fontSize(14)
-        .text('Monthly Summary by Currency', 50, 200)
-        .moveDown();
+      doc.fontSize(14).text("Monthly Summary by Currency", 50, 200).moveDown();
 
       // Group transactions by currency
-      const currencyGroups: Record<string, {
-        deposits: number;
-        withdrawals: number;
-        fees: number;
-        total: number;
-        count: number;
-      }> = {};
-
-      transactions.forEach(tx => {
-        const currency = tx.currency || 'USD';
-        if (!currencyGroups[currency]) {
-          currencyGroups[currency] = { deposits: 0, withdrawals: 0, fees: 0, total: 0, count: 0 };
+      const currencyGroups: Record<
+        string,
+        {
+          deposits: number;
+          withdrawals: number;
+          fees: number;
+          total: number;
+          count: number;
         }
-        
+      > = {};
+
+      transactions.forEach((tx) => {
+        const currency = tx.currency || "USD";
+        if (!currencyGroups[currency]) {
+          currencyGroups[currency] = {
+            deposits: 0,
+            withdrawals: 0,
+            fees: 0,
+            total: 0,
+            count: 0,
+          };
+        }
+
         const amount = parseFloat(tx.amount);
         const fee = tx.fee ? parseFloat(tx.fee) : 0;
-        
+
         currencyGroups[currency].count++;
         currencyGroups[currency].fees += fee;
-        
-        if (tx.type === 'deposit') {
+
+        if (tx.type === "deposit") {
           currencyGroups[currency].deposits += amount;
           currencyGroups[currency].total += amount;
         } else {
@@ -88,14 +102,17 @@ export class InvoiceService {
 
       // Render Summary Table
       let y = 230;
-      doc.fontSize(10).fillColor('#444444');
-      doc.text('Currency', 50, y, { bold: true });
-      doc.text('Deposits', 150, y, { bold: true });
-      doc.text('Withdrawals', 250, y, { bold: true });
-      doc.text('Fees', 350, y, { bold: true });
-      doc.text('Net Total', 450, y, { bold: true });
+      doc.fontSize(10).fillColor("#444444");
+      doc.text("Currency", 50, y, { bold: true });
+      doc.text("Deposits", 150, y, { bold: true });
+      doc.text("Withdrawals", 250, y, { bold: true });
+      doc.text("Fees", 350, y, { bold: true });
+      doc.text("Net Total", 450, y, { bold: true });
       y += 20;
-      doc.moveTo(50, y - 5).lineTo(550, y - 5).stroke();
+      doc
+        .moveTo(50, y - 5)
+        .lineTo(550, y - 5)
+        .stroke();
 
       Object.entries(currencyGroups).forEach(([currency, stats]) => {
         doc.text(currency, 50, y);
@@ -114,39 +131,45 @@ export class InvoiceService {
         y += 30;
       }
 
-      doc
-        .fontSize(14)
-        .text('Detailed Transaction List', 50, y)
-        .moveDown();
-      
+      doc.fontSize(14).text("Detailed Transaction List", 50, y).moveDown();
+
       y += 25;
       doc.fontSize(8);
-      doc.text('Date', 50, y, { bold: true });
-      doc.text('Type', 120, y, { bold: true });
-      doc.text('Amount', 180, y, { bold: true });
-      doc.text('Fee', 250, y, { bold: true });
-      doc.text('Provider', 300, y, { bold: true });
-      doc.text('Reference', 380, y, { bold: true });
-      
-      y += 15;
-      doc.moveTo(50, y - 2).lineTo(550, y - 2).stroke();
+      doc.text("Date", 50, y, { bold: true });
+      doc.text("Type", 120, y, { bold: true });
+      doc.text("Amount", 180, y, { bold: true });
+      doc.text("Fee", 250, y, { bold: true });
+      doc.text("Provider", 300, y, { bold: true });
+      doc.text("Reference", 380, y, { bold: true });
 
-      transactions.slice(0, 50).forEach(tx => { // Limit to 50 for now
+      y += 15;
+      doc
+        .moveTo(50, y - 2)
+        .lineTo(550, y - 2)
+        .stroke();
+
+      transactions.slice(0, 50).forEach((tx) => {
+        // Limit to 50 for now
         if (y > 730) {
           doc.addPage();
           y = 50;
         }
         doc.text(new Date(tx.createdAt).toLocaleDateString(), 50, y);
         doc.text(tx.type.toUpperCase(), 120, y);
-        doc.text(`${tx.amount} ${tx.currency || 'USD'}`, 180, y);
-        doc.text(tx.fee || '0.00', 250, y);
+        doc.text(`${tx.amount} ${tx.currency || "USD"}`, 180, y);
+        doc.text(tx.fee || "0.00", 250, y);
         doc.text(tx.provider.toUpperCase(), 300, y);
         doc.text(tx.referenceNumber, 380, y);
         y += 15;
       });
 
       if (transactions.length > 50) {
-        doc.text(`... and ${transactions.length - 50} more transactions.`, 50, y, { italic: true });
+        doc.text(
+          `... and ${transactions.length - 50} more transactions.`,
+          50,
+          y,
+          { italic: true },
+        );
       }
 
       // Footer
@@ -155,12 +178,12 @@ export class InvoiceService {
         doc.switchToPage(i);
         doc
           .fontSize(8)
-          .fillColor('#888888')
+          .fillColor("#888888")
           .text(
-            'Thank you for using Opulence Mobile Money. This is a computer-generated document.',
+            "Thank you for using Opulence Mobile Money. This is a computer-generated document.",
             50,
             750,
-            { align: 'center', width: 500 }
+            { align: "center", width: 500 },
           );
       }
 

@@ -111,7 +111,9 @@ describe("GeolocationService", () => {
   });
 
   it("returns UNKNOWN_LOCATION when the API times out", async () => {
-    mockedAxios.get = jest.fn().mockRejectedValue(new Error("timeout of 3000ms exceeded"));
+    mockedAxios.get = jest
+      .fn()
+      .mockRejectedValue(new Error("timeout of 3000ms exceeded"));
 
     const result = await service.lookup("8.8.8.8");
 
@@ -150,6 +152,8 @@ describe("GeolocationService", () => {
       data: { status: "fail", message: "invalid query" },
     });
 
-    await expect(service.lookup("not-an-ip")).resolves.toMatchObject(UNKNOWN_LOCATION);
+    await expect(service.lookup("not-an-ip")).resolves.toMatchObject(
+      UNKNOWN_LOCATION,
+    );
   });
 });

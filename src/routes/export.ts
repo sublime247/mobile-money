@@ -1,16 +1,16 @@
-import { Router, Request, Response } from 'express';
-import { Transform } from 'stream';
-import { pipeline } from 'stream/promises';
+import { Router, Request, Response } from "express";
+import { Transform } from "stream";
+import { pipeline } from "stream/promises";
 
 const CSV_HEADERS = [
-  'id',
-  'user_id',
-  'amount',
-  'currency',
-  'type',
-  'status',
-  'created_at',
-  'description'
+  "id",
+  "user_id",
+  "amount",
+  "currency",
+  "type",
+  "status",
+  "created_at",
+  "description",
 ];
 
 function parseTransactionExportFilters(query: any) {
@@ -58,24 +58,29 @@ function buildTransactionExportQuery(filters: any) {
     values.push(filters.type);
   }
 
-  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  const whereClause =
+    conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
   const text = `SELECT * FROM transactions ${whereClause} ORDER BY created_at DESC`;
 
   return { text, values };
 }
 
 function transactionRowToCsv(row: Record<string, unknown>): string {
-  const values = CSV_HEADERS.map(header => {
+  const values = CSV_HEADERS.map((header) => {
     const value = row[header];
-    if (value === null || value === undefined) return '';
+    if (value === null || value === undefined) return "";
     const stringValue = String(value);
     // Escape commas and quotes
-    if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
+    if (
+      stringValue.includes(",") ||
+      stringValue.includes('"') ||
+      stringValue.includes("\n")
+    ) {
       return `"${stringValue.replace(/"/g, '""')}"`;
     }
     return stringValue;
   });
-  return values.join(',') + '\n';
+  return values.join(",") + "\n";
 }
 
 export function createExportRoutes(options?: {
@@ -83,7 +88,8 @@ export function createExportRoutes(options?: {
   createQueryStream?: any;
 }) {
   const db = options?.db || require("../config/database").pool;
-  const createQueryStream = options?.createQueryStream || require("pg-query-stream");
+  const createQueryStream =
+    options?.createQueryStream || require("pg-query-stream");
 
   const router = Router();
 
@@ -135,8 +141,7 @@ export function createExportRoutes(options?: {
         transform = new Transform({
           objectMode: true,
           transform(chunk: Record<string, unknown>, _encoding, callback) {
-            const data =
-              (first ? "" : ",\n") + JSON.stringify(chunk, null, 2);
+            const data = (first ? "" : ",\n") + JSON.stringify(chunk, null, 2);
             first = false;
             callback(null, data);
           },

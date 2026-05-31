@@ -38,7 +38,7 @@ describe("LayeredCache", () => {
     const value = { foo: "bar" };
 
     await layeredCache.set(key, value, 60);
-    
+
     // Verify it's in L1
     const res1 = await layeredCache.get(key);
     expect(res1).toEqual(value);

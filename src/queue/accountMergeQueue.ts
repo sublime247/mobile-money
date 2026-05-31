@@ -52,7 +52,7 @@ export async function addBatchAccountMergeJobs(
     addAccountMergeJob(data, {
       ...options,
       jobId: `account-merge-batch-${Date.now()}-${index}`,
-    })
+    }),
   );
   return await Promise.all(jobPromises);
 }

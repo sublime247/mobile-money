@@ -36,7 +36,10 @@ export function getConfiguredPaymentAsset(): StellarSdk.Asset {
 export class AssetService {
   private server = getStellarServer();
 
-  async hasTrustline(accountId: string, asset: StellarSdk.Asset): Promise<boolean> {
+  async hasTrustline(
+    accountId: string,
+    asset: StellarSdk.Asset,
+  ): Promise<boolean> {
     if (asset.isNative()) return true;
     try {
       const account = await this.server.loadAccount(accountId);
@@ -58,7 +61,10 @@ export class AssetService {
   /**
    * Balance of `asset` for `accountId` (string amount, "0" if none / missing trustline).
    */
-  async getAssetBalance(accountId: string, asset: StellarSdk.Asset): Promise<string> {
+  async getAssetBalance(
+    accountId: string,
+    asset: StellarSdk.Asset,
+  ): Promise<string> {
     if (asset.isNative()) {
       try {
         const account = await this.server.loadAccount(accountId);

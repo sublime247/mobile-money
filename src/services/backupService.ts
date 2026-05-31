@@ -17,7 +17,11 @@ import { exec } from "child_process";
 import { promisify } from "util";
 import fs from "fs";
 import path from "path";
-import { S3Client, PutObjectCommand, HeadBucketCommand } from "@aws-sdk/client-s3";
+import {
+  S3Client,
+  PutObjectCommand,
+  HeadBucketCommand,
+} from "@aws-sdk/client-s3";
 import { pool } from "../config/database";
 import { env } from "../config/env";
 
@@ -70,14 +74,13 @@ export interface RestoreOptions {
  */
 function deriveBackupKey(): Buffer {
   const masterKey = env.DB_ENCRYPTION_KEY;
-  return crypto
-    .hkdfSync(
-      "sha256",
-      masterKey,
-      Buffer.from("backup-encryption"),
-      Buffer.from("database-backup"),
-      32,
-    );
+  return crypto.hkdfSync(
+    "sha256",
+    masterKey,
+    Buffer.from("backup-encryption"),
+    Buffer.from("database-backup"),
+    32,
+  );
 }
 
 /**
@@ -90,12 +93,9 @@ function deriveBackupKey(): Buffer {
 export function encryptBackup(dumpBuffer: Buffer): Buffer {
   const key = deriveBackupKey();
   const iv = crypto.randomBytes(IV_LENGTH);
-  
+
   const cipher = crypto.createCipheriv(ENCRYPTION_ALGORITHM, key, iv);
-  const encrypted = Buffer.concat([
-    cipher.update(dumpBuffer),
-    cipher.final(),
-  ]);
+  const encrypted = Buffer.concat([cipher.update(dumpBuffer), cipher.final()]);
   const authTag = cipher.getAuthTag();
 
   // Format: [IV][AuthTag][EncryptedData]
@@ -110,7 +110,7 @@ export function encryptBackup(dumpBuffer: Buffer): Buffer {
  */
 export function decryptBackup(encryptedBuffer: Buffer): Buffer {
   const key = deriveBackupKey();
-  
+
   // Extract IV and auth tag
   const iv = encryptedBuffer.slice(0, IV_LENGTH);
   const authTag = encryptedBuffer.slice(IV_LENGTH, IV_LENGTH + AUTH_TAG_LENGTH);
@@ -259,7 +259,9 @@ export async function createBackup(): Promise<BackupResult> {
       );
     }
 
-    console.log(`✓ Backup dump created: ${(dumpStats.size / 1024 / 1024).toFixed(2)} MB`);
+    console.log(
+      `✓ Backup dump created: ${(dumpStats.size / 1024 / 1024).toFixed(2)} MB`,
+    );
 
     // Read dump into memory
     const dumpBuffer = fs.readFileSync(tempDumpFile);

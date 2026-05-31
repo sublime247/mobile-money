@@ -9,7 +9,9 @@ import { z } from "zod";
 
 const CreateBufferSchema = z.object({
   provider: z.string().min(1),
-  currencyPair: z.string().regex(/^[A-Z]{3}_[A-Z]{3}$/, "Must be FORMAT: USD_XAF"),
+  currencyPair: z
+    .string()
+    .regex(/^[A-Z]{3}_[A-Z]{3}$/, "Must be FORMAT: USD_XAF"),
   bufferPercent: z.number().min(0).max(50),
   minBufferPct: z.number().min(0).max(50).optional(),
   maxBufferPct: z.number().min(0).max(50).optional(),
@@ -60,7 +62,9 @@ export class ExchangeRateBufferController {
    */
   getByProvider = async (req: Request, res: Response) => {
     try {
-      const buffers = await this.service.getBuffersByProvider(req.params.provider);
+      const buffers = await this.service.getBuffersByProvider(
+        req.params.provider,
+      );
       res.json({ success: true, data: buffers });
     } catch (err) {
       logger.error("Failed to get buffers by provider:", err);
@@ -80,7 +84,9 @@ export class ExchangeRateBufferController {
       res.status(201).json({ success: true, data: buffer });
     } catch (err) {
       if (err instanceof z.ZodError) {
-        return res.status(400).json({ error: "Validation error", details: err.issues });
+        return res
+          .status(400)
+          .json({ error: "Validation error", details: err.issues });
       }
       logger.error("Failed to create buffer:", err);
       res.status(500).json({ error: "Failed to create buffer" });
@@ -107,7 +113,9 @@ export class ExchangeRateBufferController {
       res.json({ success: true, data: buffer });
     } catch (err) {
       if (err instanceof z.ZodError) {
-        return res.status(400).json({ error: "Validation error", details: err.issues });
+        return res
+          .status(400)
+          .json({ error: "Validation error", details: err.issues });
       }
       logger.error("Failed to update buffer:", err);
       res.status(500).json({ error: "Failed to update buffer" });
@@ -120,7 +128,11 @@ export class ExchangeRateBufferController {
   deleteBuffer = async (req: Request, res: Response) => {
     try {
       const userId = req.jwtUser?.userId ?? "system";
-      const deleted = await this.service.deleteBuffer(req.params.id, userId, req.ip);
+      const deleted = await this.service.deleteBuffer(
+        req.params.id,
+        userId,
+        req.ip,
+      );
 
       if (!deleted) return res.status(404).json({ error: "Buffer not found" });
       res.json({ success: true, message: "Buffer deleted" });

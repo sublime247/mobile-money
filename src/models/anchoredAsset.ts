@@ -23,7 +23,7 @@ export class AnchoredAssetModel {
         issuer_secret_key as "issuerSecretKey", distribution_public_key as "distributionPublicKey",
         distribution_secret_key as "distributionSecretKey", issuance_limit as "issuanceLimit",
         status, metadata, created_at as "createdAt", updated_at as "updatedAt"
-      FROM anchored_assets`
+      FROM anchored_assets`,
     );
     return result.rows;
   }
@@ -37,12 +37,14 @@ export class AnchoredAssetModel {
         status, metadata, created_at as "createdAt", updated_at as "updatedAt"
       FROM anchored_assets 
       WHERE asset_code = $1`,
-      [code]
+      [code],
     );
     return result.rows[0] || null;
   }
 
-  async insert(asset: Omit<AnchoredAsset, "id" | "createdAt" | "updatedAt">): Promise<string> {
+  async insert(
+    asset: Omit<AnchoredAsset, "id" | "createdAt" | "updatedAt">,
+  ): Promise<string> {
     const id = uuidv4();
     await pool.query(
       `INSERT INTO anchored_assets (
@@ -51,15 +53,27 @@ export class AnchoredAssetModel {
         status, metadata
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
       [
-        id, asset.assetCode, asset.issuerPublicKey, asset.issuerSecretKey,
-        asset.distributionPublicKey, asset.distributionSecretKey, asset.issuanceLimit,
-        asset.status, JSON.stringify(asset.metadata)
-      ]
+        id,
+        asset.assetCode,
+        asset.issuerPublicKey,
+        asset.issuerSecretKey,
+        asset.distributionPublicKey,
+        asset.distributionSecretKey,
+        asset.issuanceLimit,
+        asset.status,
+        JSON.stringify(asset.metadata),
+      ],
     );
     return id;
   }
 
-  async updateStatus(id: string, status: AnchoredAsset["status"]): Promise<void> {
-    await pool.query("UPDATE anchored_assets SET status = $1 WHERE id = $2", [status, id]);
+  async updateStatus(
+    id: string,
+    status: AnchoredAsset["status"],
+  ): Promise<void> {
+    await pool.query("UPDATE anchored_assets SET status = $1 WHERE id = $2", [
+      status,
+      id,
+    ]);
   }
 }

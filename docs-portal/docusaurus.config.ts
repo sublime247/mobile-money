@@ -1,37 +1,37 @@
-import type { Config } from '@docusaurus/types';
-import type * as Preset from '@docusaurus/preset-classic';
+import type { Config } from "@docusaurus/types";
+import type * as Preset from "@docusaurus/preset-classic";
 
 const config: Config = {
-  title: 'Mobile Money API Portal',
-  tagline: 'Searchable API docs powered by OpenAPI + Redoc',
-  favicon: 'img/logo.svg',
+  title: "Mobile Money API Portal",
+  tagline: "Searchable API docs powered by OpenAPI + Redoc",
+  favicon: "img/logo.svg",
 
   future: {
     v4: true,
   },
 
-  url: 'https://sublime247.github.io',
-  baseUrl: '/mobile-money/',
+  url: "https://sublime247.github.io",
+  baseUrl: "/mobile-money/",
 
-  organizationName: 'sublime247',
-  projectName: 'mobile-money',
+  organizationName: "sublime247",
+  projectName: "mobile-money",
 
-  onBrokenLinks: 'throw',
-  onBrokenMarkdownLinks: 'warn',
+  onBrokenLinks: "throw",
+  onBrokenMarkdownLinks: "warn",
 
   i18n: {
-    defaultLocale: 'en',
-    locales: ['en'],
+    defaultLocale: "en",
+    locales: ["en"],
   },
 
   presets: [
     [
-      'classic',
+      "classic",
       {
         docs: false,
         blog: false,
         theme: {
-          customCss: './src/css/custom.css',
+          customCss: "./src/css/custom.css",
         },
       } satisfies Preset.Options,
     ],
@@ -39,23 +39,23 @@ const config: Config = {
 
   themeConfig: {
     navbar: {
-      title: 'Mobile Money API',
+      title: "Mobile Money API",
       items: [
-        { to: '/', label: 'Overview', position: 'left' },
-        { to: '/api', label: 'Reference', position: 'left' },
+        { to: "/", label: "Overview", position: "left" },
+        { to: "/api", label: "Reference", position: "left" },
         {
-          href: 'https://github.com/sublime247/mobile-money',
-          label: 'GitHub',
-          position: 'right',
+          href: "https://github.com/sublime247/mobile-money",
+          label: "GitHub",
+          position: "right",
         },
       ],
     },
     footer: {
-      style: 'dark',
+      style: "dark",
       links: [
         {
-          title: 'Docs',
-          items: [{ label: 'API Reference', to: '/api' }],
+          title: "Docs",
+          items: [{ label: "API Reference", to: "/api" }],
         },
       ],
       copyright: `Copyright © ${new Date().getFullYear()} Mobile Money`,

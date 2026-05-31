@@ -5,7 +5,11 @@ import { logger } from "../../utils/logger";
 import { z } from "zod";
 
 const IssueAssetSchema = z.object({
-  assetCode: z.string().min(1).max(12).regex(/^[a-zA-Z0-9]+$/),
+  assetCode: z
+    .string()
+    .min(1)
+    .max(12)
+    .regex(/^[a-zA-Z0-9]+$/),
   limit: z.string().regex(/^\d+(\.\d+)?$/),
   name: z.string().min(1),
   description: z.string().optional(),
@@ -21,16 +25,23 @@ export class AssetWizardController {
    */
   issueAsset = async (req: Request, res: Response) => {
     try {
-      const { assetCode, limit, name, description } = IssueAssetSchema.parse(req.body);
+      const { assetCode, limit, name, description } = IssueAssetSchema.parse(
+        req.body,
+      );
 
       // 1. Check if asset already exists in our DB
       const existing = await this.assetModel.findByCode(assetCode);
       if (existing) {
-        return res.status(400).json({ error: `Asset code ${assetCode} already exists.` });
+        return res
+          .status(400)
+          .json({ error: `Asset code ${assetCode} already exists.` });
       }
 
       // 2. Perform Stellar Issuance
-      const setupResult = await this.issuanceService.setupAnchoredAsset(assetCode, limit);
+      const setupResult = await this.issuanceService.setupAnchoredAsset(
+        assetCode,
+        limit,
+      );
 
       // 3. Save to Database
       const assetId = await this.assetModel.insert({
@@ -58,10 +69,14 @@ export class AssetWizardController {
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: "Validation failed", details: error.issues });
+        return res
+          .status(400)
+          .json({ error: "Validation failed", details: error.issues });
       }
       logger.error("[asset-wizard] Issuance failed:", error);
-      res.status(500).json({ error: "Asset issuance failed. Please check logs." });
+      res
+        .status(500)
+        .json({ error: "Asset issuance failed. Please check logs." });
     }
   };
 
@@ -73,7 +88,9 @@ export class AssetWizardController {
     try {
       const assets = await this.assetModel.findAll();
       // Sanitize: don't return encrypted secrets
-      const sanitized = assets.map(({ issuerSecretKey, distributionSecretKey, ...rest }) => rest);
+      const sanitized = assets.map(
+        ({ issuerSecretKey, distributionSecretKey, ...rest }) => rest,
+      );
       res.json({ success: true, data: sanitized });
     } catch (error) {
       logger.error("[asset-wizard] List failed:", error);

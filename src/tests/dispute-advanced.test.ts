@@ -1,8 +1,8 @@
 import { DisputeStateMachine } from "../services/disputeStateMachine";
 import { validateDisputeEvidenceFile } from "../services/disputeS3Upload";
-import { 
-  generateUniqueFilename, 
-  generateDisputeS3Key 
+import {
+  generateUniqueFilename,
+  generateDisputeS3Key,
 } from "../middleware/disputeUpload";
 import { DisputeModel } from "../models/dispute";
 
@@ -15,14 +15,22 @@ describe("Advanced Dispute Resolution", () => {
     });
 
     test("should validate valid state transitions", () => {
-      expect(stateMachine.isValidTransition("open", "investigating")).toBe(true);
+      expect(stateMachine.isValidTransition("open", "investigating")).toBe(
+        true,
+      );
       expect(stateMachine.isValidTransition("open", "resolved")).toBe(true);
-      expect(stateMachine.isValidTransition("investigating", "resolved")).toBe(true);
-      expect(stateMachine.isValidTransition("investigating", "rejected")).toBe(true);
+      expect(stateMachine.isValidTransition("investigating", "resolved")).toBe(
+        true,
+      );
+      expect(stateMachine.isValidTransition("investigating", "rejected")).toBe(
+        true,
+      );
     });
 
     test("should reject invalid state transitions", () => {
-      expect(stateMachine.isValidTransition("resolved", "investigating")).toBe(false);
+      expect(stateMachine.isValidTransition("resolved", "investigating")).toBe(
+        false,
+      );
       expect(stateMachine.isValidTransition("rejected", "open")).toBe(false);
       expect(stateMachine.isValidTransition("open", "open")).toBe(false);
     });
@@ -40,9 +48,15 @@ describe("Advanced Dispute Resolution", () => {
       });
       expect(validation.valid).toBe(true);
 
-      const invalidValidation = stateMachine.validateTransition("open", "resolved", {});
+      const invalidValidation = stateMachine.validateTransition(
+        "open",
+        "resolved",
+        {},
+      );
       expect(invalidValidation.valid).toBe(false);
-      expect(invalidValidation.errors).toContain('Field "resolution" is required for transition to "resolved"');
+      expect(invalidValidation.errors).toContain(
+        'Field "resolution" is required for transition to "resolved"',
+      );
     });
 
     test("should calculate correct SLA hours", () => {
@@ -60,19 +74,20 @@ describe("Advanced Dispute Resolution", () => {
 
     test("should recommend next states", () => {
       expect(
-        stateMachine.getRecommendedNextState("open", { hasAssignee: true, priority: "high" })
+        stateMachine.getRecommendedNextState("open", {
+          hasAssignee: true,
+          priority: "high",
+        }),
       ).toBe("investigating");
 
       expect(
-        stateMachine.getRecommendedNextState("investigating", { 
-          hasEvidence: true, 
-          daysSinceCreated: 2 
-        })
+        stateMachine.getRecommendedNextState("investigating", {
+          hasEvidence: true,
+          daysSinceCreated: 2,
+        }),
       ).toBe("resolved");
 
-      expect(
-        stateMachine.getRecommendedNextState("resolved", {})
-      ).toBeNull();
+      expect(stateMachine.getRecommendedNextState("resolved", {})).toBeNull();
     });
   });
 
@@ -90,7 +105,7 @@ describe("Advanced Dispute Resolution", () => {
     test("should calculate time until SLA deadline", () => {
       const sm = new DisputeStateMachine();
       const createdAt = new Date(Date.now() - 2 * 60 * 60 * 1000); // 2 hours ago
-      
+
       const result = sm.getTimeUntilSlaDeadline(createdAt, "critical");
       expect(result.hours).toBe(2); // 4 hour SLA - 2 hours elapsed = 2 hours remaining
       expect(result.isOverdue).toBe(false);
@@ -141,15 +156,19 @@ describe("Advanced Dispute Resolution", () => {
     test("should generate unique filenames", () => {
       const filename1 = generateUniqueFilename("receipt.pdf");
       const filename2 = generateUniqueFilename("receipt.pdf");
-      
+
       expect(filename1).not.toBe(filename2);
       expect(filename1).toMatch(/receipt-\d+-[a-f0-9]+\.pdf/);
       expect(filename2).toMatch(/receipt-\d+-[a-f0-9]+\.pdf/);
     });
 
     test("should sanitize filenames", () => {
-      const filename = generateUniqueFilename("my file with spaces & symbols!.pdf");
-      expect(filename).toMatch(/my_file_with_spaces___symbols_-\d+-[a-f0-9]+\.pdf/);
+      const filename = generateUniqueFilename(
+        "my file with spaces & symbols!.pdf",
+      );
+      expect(filename).toMatch(
+        /my_file_with_spaces___symbols_-\d+-[a-f0-9]+\.pdf/,
+      );
     });
   });
 
@@ -157,10 +176,12 @@ describe("Advanced Dispute Resolution", () => {
     test("should generate proper S3 keys", () => {
       const disputeId = "dispute-123";
       const filename = "receipt-123-abc.pdf";
-      
+
       const key = generateDisputeS3Key(disputeId, filename);
-      
-      expect(key).toMatch(/^dispute-evidence\/\d{4}\/\d{2}\/dispute-123\/receipt-123-abc\.pdf$/);
+
+      expect(key).toMatch(
+        /^dispute-evidence\/\d{4}\/\d{2}\/dispute-123\/receipt-123-abc\.pdf$/,
+      );
     });
   });
 });

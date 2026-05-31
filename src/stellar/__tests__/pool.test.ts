@@ -1,8 +1,5 @@
 import * as StellarSdk from "stellar-sdk";
-import {
-  ChannelAccountPool,
-  isSequenceMismatchError,
-} from "../pool";
+import { ChannelAccountPool, isSequenceMismatchError } from "../pool";
 
 function makeChannelAccounts(count: number) {
   return Array.from({ length: count }, () => {
@@ -116,4 +113,3 @@ describe("ChannelAccountPool", () => {
     expect(isSequenceMismatchError(new Error("some other error"))).toBe(false);
   });
 });
-

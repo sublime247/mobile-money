@@ -31,19 +31,28 @@ describe("registerSchema password complexity", () => {
   });
 
   it("rejects passwords without an uppercase letter", () => {
-    const result = registerSchema.safeParse({ ...valid, password: "nouppercase1!" });
+    const result = registerSchema.safeParse({
+      ...valid,
+      password: "nouppercase1!",
+    });
     expect(result.success).toBe(false);
     expect(JSON.stringify(result)).toMatch(/uppercase/);
   });
 
   it("rejects passwords without a lowercase letter", () => {
-    const result = registerSchema.safeParse({ ...valid, password: "NOLOWERCASE1!" });
+    const result = registerSchema.safeParse({
+      ...valid,
+      password: "NOLOWERCASE1!",
+    });
     expect(result.success).toBe(false);
     expect(JSON.stringify(result)).toMatch(/lowercase/);
   });
 
   it("rejects passwords without a special character", () => {
-    const result = registerSchema.safeParse({ ...valid, password: "NoSpecialChar1" });
+    const result = registerSchema.safeParse({
+      ...valid,
+      password: "NoSpecialChar1",
+    });
     expect(result.success).toBe(false);
     expect(JSON.stringify(result)).toMatch(/special character/);
   });

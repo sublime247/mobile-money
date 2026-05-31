@@ -1,4 +1,3 @@
-
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
 import { v4 as uuidv4 } from "uuid";
@@ -51,7 +50,6 @@ export interface RefreshTokenPayload {
   exp?: number;
 }
 
-
 /**
  * Generates a JWT token for the given user payload
  * @param payload - User data to include in the token
@@ -63,7 +61,7 @@ export function generateToken(
 ): string {
   const expiresIn = options?.expiresIn ?? JWT_EXPIRES_IN;
   return jwt.sign(payload, getJwtSecret(), {
-    expiresIn: typeof expiresIn === 'string' ? expiresIn : expiresIn,
+    expiresIn: typeof expiresIn === "string" ? expiresIn : expiresIn,
   } as jwt.SignOptions);
 }
 
@@ -74,7 +72,11 @@ export function generateToken(
  * @param parentTokenId - Parent token ID (if rotating)
  * @returns Signed refresh token
  */
-export async function generateRefreshToken(userId: string, familyId?: string, parentTokenId?: string): Promise<string> {
+export async function generateRefreshToken(
+  userId: string,
+  familyId?: string,
+  parentTokenId?: string,
+): Promise<string> {
   const tokenId = uuidv4();
   const famId = familyId || uuidv4();
   const payload: RefreshTokenPayload = {
@@ -86,10 +88,14 @@ export async function generateRefreshToken(userId: string, familyId?: string, pa
   const token = jwt.sign(payload, getJwtSecret(), {
     expiresIn: REFRESH_TOKEN_EXPIRES_IN,
   });
-  await refreshTokenFamilyModel.create({ user_id: userId, family_id: famId, token, parent_token: parentTokenId });
+  await refreshTokenFamilyModel.create({
+    user_id: userId,
+    family_id: famId,
+    token,
+    parent_token: parentTokenId,
+  });
   return token;
 }
-
 
 /**
  * Verifies a JWT token and returns the decoded payload
@@ -119,7 +125,9 @@ export function verifyToken(token: string): JWTPayload {
  * @returns Decoded refresh token payload
  * @throws Error if token is invalid, expired, or reused
  */
-export async function verifyRefreshToken(token: string): Promise<RefreshTokenPayload> {
+export async function verifyRefreshToken(
+  token: string,
+): Promise<RefreshTokenPayload> {
   const secret = getJwtSecret();
   let decoded: RefreshTokenPayload;
   try {
@@ -138,9 +146,15 @@ export async function verifyRefreshToken(token: string): Promise<RefreshTokenPay
   if (!dbToken || dbToken.is_revoked) {
     // Revoke the whole family if reused
     if (decoded.familyId && decoded.userId) {
-      await refreshTokenFamilyModel.revokeFamily(decoded.familyId, decoded.userId, 'reuse_detected');
+      await refreshTokenFamilyModel.revokeFamily(
+        decoded.familyId,
+        decoded.userId,
+        "reuse_detected",
+      );
     }
-    throw new Error("Refresh token reuse detected. All tokens in this chain are revoked. Please re-login.");
+    throw new Error(
+      "Refresh token reuse detected. All tokens in this chain are revoked. Please re-login.",
+    );
   }
   return decoded;
 }

@@ -26,27 +26,27 @@ import { connect as natsConnect, StringCodec, type NatsConnection } from "nats";
 // Config
 // ---------------------------------------------------------------------------
 
-const PORT          = parseInt(process.env.PORT          || "3001");
-const REDIS_URL     = process.env.REDIS_URL              || "redis://localhost:6379";
-const NATS_URL      = process.env.NATS_URL               || "nats://localhost:4222";
-const REDIS_ENABLED = process.env.REDIS_ENABLED          !== "false";
-const NATS_ENABLED  = process.env.NATS_ENABLED           === "true";
-const REDIS_STREAM  = process.env.REDIS_STREAM           || "callbacks";
-const NATS_SUBJECT  = process.env.NATS_SUBJECT           || "callbacks.ingest";
+const PORT = parseInt(process.env.PORT || "3001");
+const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
+const NATS_URL = process.env.NATS_URL || "nats://localhost:4222";
+const REDIS_ENABLED = process.env.REDIS_ENABLED !== "false";
+const NATS_ENABLED = process.env.NATS_ENABLED === "true";
+const REDIS_STREAM = process.env.REDIS_STREAM || "callbacks";
+const NATS_SUBJECT = process.env.NATS_SUBJECT || "callbacks.ingest";
 
 // ---------------------------------------------------------------------------
 // Payload schema
 // ---------------------------------------------------------------------------
 
 const CallbackSchema = z.object({
-  event_type:    z.string().min(1).max(64),
-  provider:      z.string().min(1).max(32),
-  reference:     z.string().min(1).max(128),
-  amount:        z.number().positive(),
-  currency:      z.string().length(3),
-  status:        z.enum(["pending", "success", "failed"]),
-  timestamp:     z.string().datetime(),
-  metadata:      z.record(z.unknown()).optional(),
+  event_type: z.string().min(1).max(64),
+  provider: z.string().min(1).max(32),
+  reference: z.string().min(1).max(128),
+  amount: z.number().positive(),
+  currency: z.string().length(3),
+  status: z.enum(["pending", "success", "failed"]),
+  timestamp: z.string().datetime(),
+  metadata: z.record(z.unknown()).optional(),
 });
 
 type CallbackPayload = z.infer<typeof CallbackSchema>;
@@ -82,11 +82,15 @@ async function publish(payload: CallbackPayload): Promise<void> {
     // Redis Streams — at-least-once, persistent, consumer groups supported
     await redis.xadd(
       REDIS_STREAM,
-      "*",                        // auto-generate message ID
-      "event_type", payload.event_type,
-      "provider",   payload.provider,
-      "reference",  payload.reference,
-      "data",       serialised,
+      "*", // auto-generate message ID
+      "event_type",
+      payload.event_type,
+      "provider",
+      payload.provider,
+      "reference",
+      payload.reference,
+      "data",
+      serialised,
     );
   }
 
@@ -102,18 +106,22 @@ async function publish(payload: CallbackPayload): Promise<void> {
 // ---------------------------------------------------------------------------
 
 const app = Fastify({
-  logger: false,          // disable for benchmark — logging adds latency
+  logger: false, // disable for benchmark — logging adds latency
   trustProxy: true,
 });
 
 app.post<{ Body: unknown }>("/ingest", async (req, reply) => {
   const parsed = CallbackSchema.safeParse(req.body);
   if (!parsed.success) {
-    return reply.status(400).send({ error: "Invalid payload", details: parsed.error.flatten() });
+    return reply
+      .status(400)
+      .send({ error: "Invalid payload", details: parsed.error.flatten() });
   }
 
   await publish(parsed.data);
-  return reply.status(202).send({ status: "accepted", reference: parsed.data.reference });
+  return reply
+    .status(202)
+    .send({ status: "accepted", reference: parsed.data.reference });
 });
 
 app.get("/health", async (_req, reply) => {

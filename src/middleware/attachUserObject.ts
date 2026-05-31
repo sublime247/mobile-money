@@ -5,7 +5,11 @@ import { getUserById } from "../services/userService";
  * Middleware to fetch user object once per request after authentication.
  * Attaches user object to res.locals.user for downstream use.
  */
-export async function attachUserObject(req: Request, res: Response, next: NextFunction) {
+export async function attachUserObject(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
   try {
     // Prefer JWT userId, fallback to req.user?.id if present
     const userId = req.jwtUser?.userId || req.user?.id;

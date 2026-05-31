@@ -33,9 +33,9 @@
  *   for infrastructure sizing even in that case.
  */
 
-import http from 'k6/http';
-import { check, sleep, group } from 'k6';
-import { Counter, Rate, Trend } from 'k6/metrics';
+import http from "k6/http";
+import { check, sleep, group } from "k6";
+import { Counter, Rate, Trend } from "k6/metrics";
 
 // ---------------------------------------------------------------------------
 // Custom metrics
@@ -43,29 +43,29 @@ import { Counter, Rate, Trend } from 'k6/metrics';
 // for deposit and withdraw independently instead of mixing them into the generic
 // http_req_duration bucket that also includes health checks and list queries.
 // ---------------------------------------------------------------------------
-const depositLatency  = new Trend('deposit_latency_ms',  true);
-const withdrawLatency = new Trend('withdraw_latency_ms', true);
-const listLatency     = new Trend('list_latency_ms',     true);
-const txCreated       = new Counter('tx_created_total');
-const txFailed        = new Counter('tx_failed_total');
-const txSuccessRate   = new Rate('tx_success_rate');
+const depositLatency = new Trend("deposit_latency_ms", true);
+const withdrawLatency = new Trend("withdraw_latency_ms", true);
+const listLatency = new Trend("list_latency_ms", true);
+const txCreated = new Counter("tx_created_total");
+const txFailed = new Counter("tx_failed_total");
+const txSuccessRate = new Rate("tx_success_rate");
 
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
-const BASE_URL     = __ENV.BASE_URL     || 'http://localhost:3000';
-const API_KEY      = __ENV.API_KEY      || 'dev-admin-key';
-const TEST_USER_ID = __ENV.TEST_USER_ID || 'test-user-load';
-const SCENARIO     = __ENV.SCENARIO     || 'peak';
+const BASE_URL = __ENV.BASE_URL || "http://localhost:3000";
+const API_KEY = __ENV.API_KEY || "dev-admin-key";
+const TEST_USER_ID = __ENV.TEST_USER_ID || "test-user-load";
+const SCENARIO = __ENV.SCENARIO || "peak";
 
-const PROVIDERS = ['mtn', 'airtel', 'orange'];
+const PROVIDERS = ["mtn", "airtel", "orange"];
 
 // Keep amounts well inside provider limits to avoid validation rejections
 // that would skew error-rate metrics with expected business-logic failures.
 const AMOUNT_RANGES = {
-  mtn:    { min: 100,  max: 50000 },
-  airtel: { min: 100,  max: 50000 },
-  orange: { min: 500,  max: 50000 },
+  mtn: { min: 100, max: 50000 },
+  airtel: { min: 100, max: 50000 },
+  orange: { min: 500, max: 50000 },
 };
 
 // ---------------------------------------------------------------------------
@@ -73,136 +73,154 @@ const AMOUNT_RANGES = {
 // ---------------------------------------------------------------------------
 const PROFILES = {
   smoke: {
-    executor: 'constant-vus',
+    executor: "constant-vus",
     vus: 5,
-    duration: '1m',
+    duration: "1m",
   },
 
   average: {
-    executor: 'ramping-vus',
+    executor: "ramping-vus",
     startVUs: 0,
     stages: [
-      { duration: '2m', target: 50  },
-      { duration: '5m', target: 100 },
-      { duration: '2m', target: 50  },
-      { duration: '1m', target: 0   },
+      { duration: "2m", target: 50 },
+      { duration: "5m", target: 100 },
+      { duration: "2m", target: 50 },
+      { duration: "1m", target: 0 },
     ],
-    gracefulRampDown: '30s',
+    gracefulRampDown: "30s",
   },
 
   stress: {
-    executor: 'ramping-vus',
+    executor: "ramping-vus",
     startVUs: 0,
     stages: [
-      { duration: '2m', target: 100 },
-      { duration: '3m', target: 300 },
-      { duration: '3m', target: 500 },
-      { duration: '2m', target: 0   },
+      { duration: "2m", target: 100 },
+      { duration: "3m", target: 300 },
+      { duration: "3m", target: 500 },
+      { duration: "2m", target: 0 },
     ],
-    gracefulRampDown: '30s',
+    gracefulRampDown: "30s",
   },
 
   // Primary benchmark: ramp to 1000 concurrent VUs and hold.
   peak: {
-    executor: 'ramping-vus',
+    executor: "ramping-vus",
     startVUs: 0,
     stages: [
-      { duration: '2m',  target: 200  },
-      { duration: '3m',  target: 500  },
-      { duration: '3m',  target: 1000 },
-      { duration: '5m',  target: 1000 }, // sustained peak — size your server here
-      { duration: '3m',  target: 500  },
-      { duration: '2m',  target: 0    },
+      { duration: "2m", target: 200 },
+      { duration: "3m", target: 500 },
+      { duration: "3m", target: 1000 },
+      { duration: "5m", target: 1000 }, // sustained peak — size your server here
+      { duration: "3m", target: 500 },
+      { duration: "2m", target: 0 },
     ],
-    gracefulRampDown: '1m',
+    gracefulRampDown: "1m",
   },
 
   soak: {
-    executor: 'ramping-vus',
+    executor: "ramping-vus",
     startVUs: 0,
     stages: [
-      { duration: '3m',  target: 100 },
-      { duration: '30m', target: 100 },
-      { duration: '3m',  target: 0   },
+      { duration: "3m", target: 100 },
+      { duration: "30m", target: 100 },
+      { duration: "3m", target: 0 },
     ],
-    gracefulRampDown: '30s',
+    gracefulRampDown: "30s",
   },
 
   // Breakpoint: keep climbing until thresholds abort the run.
   // Run with: k6 run -e SCENARIO=breakpoint tests/load/api.js
   breakpoint: {
-    executor: 'ramping-vus',
+    executor: "ramping-vus",
     startVUs: 0,
-    stages: [
-      { duration: '2h', target: 10000 },
-    ],
-    gracefulRampDown: '5m',
+    stages: [{ duration: "2h", target: 10000 }],
+    gracefulRampDown: "5m",
   },
 
   // Pure write pressure: deposits and withdraws at 1000 VUs.
   transactions: {
-    executor: 'ramping-vus',
+    executor: "ramping-vus",
     startVUs: 0,
     stages: [
-      { duration: '2m',  target: 200  },
-      { duration: '3m',  target: 600  },
-      { duration: '3m',  target: 1000 },
-      { duration: '5m',  target: 1000 },
-      { duration: '2m',  target: 0    },
+      { duration: "2m", target: 200 },
+      { duration: "3m", target: 600 },
+      { duration: "3m", target: 1000 },
+      { duration: "5m", target: 1000 },
+      { duration: "2m", target: 0 },
     ],
-    gracefulRampDown: '1m',
+    gracefulRampDown: "1m",
   },
 };
 
 const activeProfile = PROFILES[SCENARIO] || PROFILES.peak;
-const isBreakpoint  = SCENARIO === 'breakpoint';
+const isBreakpoint = SCENARIO === "breakpoint";
 
 export const options = {
   scenarios: {
     main: {
       ...activeProfile,
-      exec: SCENARIO === 'transactions' ? 'transactionFocus' : 'default',
+      exec: SCENARIO === "transactions" ? "transactionFocus" : "default",
     },
   },
 
   thresholds: {
     // Overall HTTP availability — abort breakpoint run if server collapses
     http_req_failed: [
-      { threshold: 'rate<0.05', abortOnFail: isBreakpoint, delayAbortEval: '30s' },
+      {
+        threshold: "rate<0.05",
+        abortOnFail: isBreakpoint,
+        delayAbortEval: "30s",
+      },
     ],
 
     // Aggregate request latency (all operations combined)
     http_req_duration: [
-      'p(50)<400',
-      { threshold: 'p(95)<2000', abortOnFail: isBreakpoint, delayAbortEval: '30s' },
-      'p(99)<6000',
+      "p(50)<400",
+      {
+        threshold: "p(95)<2000",
+        abortOnFail: isBreakpoint,
+        delayAbortEval: "30s",
+      },
+      "p(99)<6000",
     ],
 
     // Deposit path — the critical write latency that drives server sizing
     deposit_latency_ms: [
-      'p(50)<500',
-      { threshold: 'p(95)<2000', abortOnFail: isBreakpoint, delayAbortEval: '30s' },
-      'p(99)<6000',
+      "p(50)<500",
+      {
+        threshold: "p(95)<2000",
+        abortOnFail: isBreakpoint,
+        delayAbortEval: "30s",
+      },
+      "p(99)<6000",
     ],
 
     // Withdraw path
-    withdraw_latency_ms: [
-      'p(50)<500',
-      'p(95)<2000',
-      'p(99)<6000',
-    ],
+    withdraw_latency_ms: ["p(50)<500", "p(95)<2000", "p(99)<6000"],
 
     // Transaction-level success independent of HTTP status (business logic check)
     tx_success_rate: [
-      { threshold: 'rate>0.90', abortOnFail: isBreakpoint, delayAbortEval: '30s' },
+      {
+        threshold: "rate>0.90",
+        abortOnFail: isBreakpoint,
+        delayAbortEval: "30s",
+      },
     ],
   },
 
   // Extended percentile set for the end-of-test summary table
   summaryTrendStats: [
-    'avg', 'min', 'med', 'max',
-    'p(50)', 'p(75)', 'p(90)', 'p(95)', 'p(99)', 'p(99.9)',
-    'count',
+    "avg",
+    "min",
+    "med",
+    "max",
+    "p(50)",
+    "p(75)",
+    "p(90)",
+    "p(95)",
+    "p(99)",
+    "p(99.9)",
+    "count",
   ],
 };
 
@@ -220,12 +238,12 @@ export const options = {
  * throughput, not end-to-end settlement.
  */
 function stellarAddress(seed) {
-  const B32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-  let addr = 'G';
-  let v    = Math.abs(seed % 999983) + 1; // prime-offset to spread characters
+  const B32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  let addr = "G";
+  let v = Math.abs(seed % 999983) + 1; // prime-offset to spread characters
   for (let i = 0; i < 55; i++) {
     addr += B32[v % 32];
-    v     = ((v * 7) + 13 + i) % 2147483647;
+    v = (v * 7 + 13 + i) % 2147483647;
   }
   return addr;
 }
@@ -265,13 +283,13 @@ function params(operation, extraHeaders) {
   return {
     headers: Object.assign(
       {
-        'Content-Type': 'application/json',
-        'X-API-Key':    API_KEY,
-        'Accept':       'application/json',
+        "Content-Type": "application/json",
+        "X-API-Key": API_KEY,
+        Accept: "application/json",
       },
       extraHeaders || {},
     ),
-    timeout: '15s',
+    timeout: "15s",
     tags: { operation },
   };
 }
@@ -280,29 +298,31 @@ function params(operation, extraHeaders) {
 // Setup — run once before any VU starts
 // ---------------------------------------------------------------------------
 export function setup() {
-  const health = http.get(`${BASE_URL}/health`, { timeout: '10s' });
+  const health = http.get(`${BASE_URL}/health`, { timeout: "10s" });
   if (health.status !== 200) {
     throw new Error(
       `Health check failed (HTTP ${health.status}). ` +
-      `Verify ${BASE_URL} is reachable and the server is running.`,
+        `Verify ${BASE_URL} is reachable and the server is running.`,
     );
   }
 
-  const ready = http.get(`${BASE_URL}/ready`, { timeout: '10s' });
+  const ready = http.get(`${BASE_URL}/ready`, { timeout: "10s" });
   if (ready.status !== 200) {
     // Warn but do not abort — the server may still serve requests even if
     // a readiness dependency (e.g. Redis) is temporarily unavailable.
     console.warn(
       `[setup] /ready returned HTTP ${ready.status}. ` +
-      'Database or Redis may not be fully available.',
+        "Database or Redis may not be fully available.",
     );
   }
 
   console.log(
     `[setup] Server online. Scenario: ${SCENARIO}. ` +
-    `Peak VUs: ${activeProfile.stages
-      ? Math.max(...activeProfile.stages.map((s) => s.target))
-      : activeProfile.vus}.`,
+      `Peak VUs: ${
+        activeProfile.stages
+          ? Math.max(...activeProfile.stages.map((s) => s.target))
+          : activeProfile.vus
+      }.`,
   );
 
   return { baseUrl: BASE_URL };
@@ -326,54 +346,63 @@ export default function () {
   const prov = providerForVU(vuId);
 
   // 1. Health probe
-  group('health_probe', function () {
-    const r = http.get(`${BASE_URL}/health`, params('health'));
+  group("health_probe", function () {
+    const r = http.get(`${BASE_URL}/health`, params("health"));
     check(r, {
-      'health 200': (r) => r.status === 200,
-      'status ok':  (r) => {
-        try { return r.json('status') === 'ok'; } catch (_) { return false; }
+      "health 200": (r) => r.status === 200,
+      "status ok": (r) => {
+        try {
+          return r.json("status") === "ok";
+        } catch (_) {
+          return false;
+        }
       },
     });
   });
 
   // 2. Transaction list (read path)
-  group('list_transactions', function () {
+  group("list_transactions", function () {
     const start = Date.now();
     const r = http.get(
       `${BASE_URL}/api/v1/transactions?limit=20&offset=0`,
-      params('list_transactions'),
+      params("list_transactions"),
     );
     listLatency.add(Date.now() - start);
 
     check(r, {
-      'list 200 or 401': (r) => r.status === 200 || r.status === 401 || r.status === 403,
+      "list 200 or 401": (r) =>
+        r.status === 200 || r.status === 401 || r.status === 403,
     });
   });
 
   // 3. Deposit creation (primary write path)
-  group('create_deposit', function () {
+  group("create_deposit", function () {
     const payload = JSON.stringify({
-      amount:         amountFor(prov, seed),
-      phoneNumber:    phoneNumber(seed),
-      provider:       prov,
+      amount: amountFor(prov, seed),
+      phoneNumber: phoneNumber(seed),
+      provider: prov,
       stellarAddress: stellarAddress(seed),
-      userId:         TEST_USER_ID,
+      userId: TEST_USER_ID,
     });
 
     const start = Date.now();
     const r = http.post(
       `${BASE_URL}/api/v1/transactions/deposit`,
       payload,
-      params('deposit', { 'Idempotency-Key': idempotencyKey(vuId, iter) }),
+      params("deposit", { "Idempotency-Key": idempotencyKey(vuId, iter) }),
     );
     const dur = Date.now() - start;
 
     depositLatency.add(dur);
 
     const ok = check(r, {
-      'deposit 201':       (r) => r.status === 201,
-      'has transactionId': (r) => {
-        try { return !!r.json('transactionId'); } catch (_) { return false; }
+      "deposit 201": (r) => r.status === 201,
+      "has transactionId": (r) => {
+        try {
+          return !!r.json("transactionId");
+        } catch (_) {
+          return false;
+        }
       },
     });
 
@@ -383,14 +412,20 @@ export default function () {
 
       // 4. Status poll — simulate the client checking progress (70 % of VUs)
       if (vuId % 10 < 7) {
-        const txId = (() => { try { return r.json('transactionId'); } catch (_) { return null; } })();
+        const txId = (() => {
+          try {
+            return r.json("transactionId");
+          } catch (_) {
+            return null;
+          }
+        })();
         if (txId) {
-          group('poll_transaction', function () {
+          group("poll_transaction", function () {
             const poll = http.get(
               `${BASE_URL}/api/v1/transactions/${txId}`,
-              params('poll_transaction'),
+              params("poll_transaction"),
             );
-            check(poll, { 'poll 200': (r) => r.status === 200 });
+            check(poll, { "poll 200": (r) => r.status === 200 });
           });
         }
       }
@@ -420,53 +455,60 @@ export function transactionFocus() {
   if (iter % 3 !== 2) {
     // Deposit (2 out of every 3 iterations)
     const payload = JSON.stringify({
-      amount:         amountFor(prov, seed),
-      phoneNumber:    phoneNumber(seed),
-      provider:       prov,
+      amount: amountFor(prov, seed),
+      phoneNumber: phoneNumber(seed),
+      provider: prov,
       stellarAddress: stellarAddress(seed),
-      userId:         TEST_USER_ID,
+      userId: TEST_USER_ID,
     });
 
     const start = Date.now();
     const r = http.post(
       `${BASE_URL}/api/v1/transactions/deposit`,
       payload,
-      params('deposit', { 'Idempotency-Key': idempotencyKey(vuId, iter) }),
+      params("deposit", { "Idempotency-Key": idempotencyKey(vuId, iter) }),
     );
     depositLatency.add(Date.now() - start);
 
     const ok = check(r, {
-      'deposit 201':       (r) => r.status === 201,
-      'has transactionId': (r) => {
-        try { return !!r.json('transactionId'); } catch (_) { return false; }
+      "deposit 201": (r) => r.status === 201,
+      "has transactionId": (r) => {
+        try {
+          return !!r.json("transactionId");
+        } catch (_) {
+          return false;
+        }
       },
     });
 
     txSuccessRate.add(ok);
     ok ? txCreated.add(1) : txFailed.add(1);
-
   } else {
     // Withdraw (1 out of every 3 iterations)
     const payload = JSON.stringify({
-      amount:         amountFor(prov, seed),
-      phoneNumber:    phoneNumber(seed),
-      provider:       prov,
+      amount: amountFor(prov, seed),
+      phoneNumber: phoneNumber(seed),
+      provider: prov,
       stellarAddress: stellarAddress(seed),
-      userId:         TEST_USER_ID,
+      userId: TEST_USER_ID,
     });
 
     const start = Date.now();
     const r = http.post(
       `${BASE_URL}/api/v1/transactions/withdraw`,
       payload,
-      params('withdraw', { 'Idempotency-Key': idempotencyKey(vuId, iter) }),
+      params("withdraw", { "Idempotency-Key": idempotencyKey(vuId, iter) }),
     );
     withdrawLatency.add(Date.now() - start);
 
     const ok = check(r, {
-      'withdraw 201':      (r) => r.status === 201,
-      'has transactionId': (r) => {
-        try { return !!r.json('transactionId'); } catch (_) { return false; }
+      "withdraw 201": (r) => r.status === 201,
+      "has transactionId": (r) => {
+        try {
+          return !!r.json("transactionId");
+        } catch (_) {
+          return false;
+        }
       },
     });
 
@@ -486,132 +528,134 @@ export function transactionFocus() {
 // ---------------------------------------------------------------------------
 export function handleSummary(data) {
   const durationSec = (data.state.testRunDurationMs || 0) / 1000;
-  const created     = data.metrics.tx_created_total?.values?.count  || 0;
-  const failed      = data.metrics.tx_failed_total?.values?.count   || 0;
-  const tps         = durationSec > 0 ? created / durationSec : 0;
-  const totalReqs   = data.metrics.http_reqs?.values?.count         || 0;
-  const rps         = durationSec > 0 ? totalReqs / durationSec     : 0;
-  const maxVUs      = data.metrics.vus_max?.values?.max             || 0;
-  const errRate     = data.metrics.http_req_failed?.values?.rate     || 0;
-  const txSuccRate  = data.metrics.tx_success_rate?.values?.rate     || 0;
+  const created = data.metrics.tx_created_total?.values?.count || 0;
+  const failed = data.metrics.tx_failed_total?.values?.count || 0;
+  const tps = durationSec > 0 ? created / durationSec : 0;
+  const totalReqs = data.metrics.http_reqs?.values?.count || 0;
+  const rps = durationSec > 0 ? totalReqs / durationSec : 0;
+  const maxVUs = data.metrics.vus_max?.values?.max || 0;
+  const errRate = data.metrics.http_req_failed?.values?.rate || 0;
+  const txSuccRate = data.metrics.tx_success_rate?.values?.rate || 0;
 
-  const dep = data.metrics.deposit_latency_ms?.values  || {};
+  const dep = data.metrics.deposit_latency_ms?.values || {};
   const wdr = data.metrics.withdraw_latency_ms?.values || {};
-  const all = data.metrics.http_req_duration?.values   || {};
+  const all = data.metrics.http_req_duration?.values || {};
 
-  const passErr  = errRate     < 0.05;
-  const passLat  = (dep['p(95)'] || Infinity) < 2000;
-  const passTxSR = txSuccRate  > 0.90;
+  const passErr = errRate < 0.05;
+  const passLat = (dep["p(95)"] || Infinity) < 2000;
+  const passTxSR = txSuccRate > 0.9;
   const overallPass = passErr && passLat && passTxSR;
 
-  const sizing = sizingRecommendation(tps, dep['p(95)'], errRate, maxVUs);
+  const sizing = sizingRecommendation(tps, dep["p(95)"], errRate, maxVUs);
 
   const pad = (s, n) => String(s).padEnd(n);
-  const fmt = (v) => v !== undefined && v !== null ? `${Math.round(v)}ms` : 'N/A';
+  const fmt = (v) =>
+    v !== undefined && v !== null ? `${Math.round(v)}ms` : "N/A";
 
   const lines = [
-    '',
-    '╔══════════════════════════════════════════════════════════════════════════════╗',
+    "",
+    "╔══════════════════════════════════════════════════════════════════════════════╗",
     `║  Mobile Money API — Load Test Report                                         ║`,
     `║  Scenario : ${pad(SCENARIO, 65)}║`,
-    `║  Result   : ${pad(overallPass ? 'PASS' : 'FAIL', 65)}║`,
-    '╚══════════════════════════════════════════════════════════════════════════════╝',
-    '',
-    '  LOAD PROFILE',
-    '  ──────────────────────────────────────────────────────────────────',
+    `║  Result   : ${pad(overallPass ? "PASS" : "FAIL", 65)}║`,
+    "╚══════════════════════════════════════════════════════════════════════════════╝",
+    "",
+    "  LOAD PROFILE",
+    "  ──────────────────────────────────────────────────────────────────",
     `  Peak concurrent VUs  : ${maxVUs}`,
     `  Test duration         : ${(durationSec / 60).toFixed(1)} min`,
     `  Total HTTP requests   : ${totalReqs}`,
     `  Overall RPS           : ${rps.toFixed(1)} req/s`,
-    '',
-    '  TRANSACTION THROUGHPUT',
-    '  ──────────────────────────────────────────────────────────────────',
+    "",
+    "  TRANSACTION THROUGHPUT",
+    "  ──────────────────────────────────────────────────────────────────",
     `  Transactions created  : ${created}`,
     `  Transactions failed   : ${failed}`,
     `  Transaction TPS       : ${tps.toFixed(2)} tx/s`,
-    `  TX success rate       : ${(txSuccRate * 100).toFixed(2)}%  (threshold >90 % : ${passTxSR ? 'PASS ✓' : 'FAIL ✗'})`,
-    '',
-    '  LATENCY — DEPOSIT PATH  (p50 / p75 / p90 / p95 / p99 / p99.9 / max)',
-    '  ──────────────────────────────────────────────────────────────────',
+    `  TX success rate       : ${(txSuccRate * 100).toFixed(2)}%  (threshold >90 % : ${passTxSR ? "PASS ✓" : "FAIL ✗"})`,
+    "",
+    "  LATENCY — DEPOSIT PATH  (p50 / p75 / p90 / p95 / p99 / p99.9 / max)",
+    "  ──────────────────────────────────────────────────────────────────",
     `  ${[
-      fmt(dep['p(50)']),
-      fmt(dep['p(75)']),
-      fmt(dep['p(90)']),
-      fmt(dep['p(95)']),
-      fmt(dep['p(99)']),
-      fmt(dep['p(99.9)']),
+      fmt(dep["p(50)"]),
+      fmt(dep["p(75)"]),
+      fmt(dep["p(90)"]),
+      fmt(dep["p(95)"]),
+      fmt(dep["p(99)"]),
+      fmt(dep["p(99.9)"]),
       fmt(dep.max),
-    ].join('  /  ')}`,
-    `  P95 < 2 000ms         : ${passLat ? 'PASS ✓' : 'FAIL ✗'}`,
-    '',
-    '  LATENCY — WITHDRAW PATH  (p50 / p95 / p99)',
-    '  ──────────────────────────────────────────────────────────────────',
-    `  ${[fmt(wdr['p(50)']), fmt(wdr['p(95)']), fmt(wdr['p(99)'])].join('  /  ')}`,
-    '',
-    '  LATENCY — ALL REQUESTS  (p50 / p95 / p99)',
-    '  ──────────────────────────────────────────────────────────────────',
-    `  ${[fmt(all['p(50)']), fmt(all['p(95)']), fmt(all['p(99)'])].join('  /  ')}`,
-    '',
-    '  RELIABILITY',
-    '  ──────────────────────────────────────────────────────────────────',
-    `  HTTP error rate       : ${(errRate * 100).toFixed(2)}%  (threshold <5 % : ${passErr ? 'PASS ✓' : 'FAIL ✗'})`,
-    '',
-    '  SERVER SIZING',
-    '  ──────────────────────────────────────────────────────────────────',
+    ].join("  /  ")}`,
+    `  P95 < 2 000ms         : ${passLat ? "PASS ✓" : "FAIL ✗"}`,
+    "",
+    "  LATENCY — WITHDRAW PATH  (p50 / p95 / p99)",
+    "  ──────────────────────────────────────────────────────────────────",
+    `  ${[fmt(wdr["p(50)"]), fmt(wdr["p(95)"]), fmt(wdr["p(99)"])].join("  /  ")}`,
+    "",
+    "  LATENCY — ALL REQUESTS  (p50 / p95 / p99)",
+    "  ──────────────────────────────────────────────────────────────────",
+    `  ${[fmt(all["p(50)"]), fmt(all["p(95)"]), fmt(all["p(99)"])].join("  /  ")}`,
+    "",
+    "  RELIABILITY",
+    "  ──────────────────────────────────────────────────────────────────",
+    `  HTTP error rate       : ${(errRate * 100).toFixed(2)}%  (threshold <5 % : ${passErr ? "PASS ✓" : "FAIL ✗"})`,
+    "",
+    "  SERVER SIZING",
+    "  ──────────────────────────────────────────────────────────────────",
     ...sizing.map((l) => `  ${l}`),
-    '',
-    '══════════════════════════════════════════════════════════════════════════════',
-    '',
+    "",
+    "══════════════════════════════════════════════════════════════════════════════",
+    "",
   ];
 
-  const report = lines.join('\n');
+  const report = lines.join("\n");
   console.log(report);
 
   const jsonPayload = JSON.stringify(
     {
       meta: {
-        scenario:  SCENARIO,
+        scenario: SCENARIO,
         timestamp: new Date().toISOString(),
-        baseUrl:   BASE_URL,
-        result:    overallPass ? 'pass' : 'fail',
+        baseUrl: BASE_URL,
+        result: overallPass ? "pass" : "fail",
       },
       load: {
-        peakVUs:       maxVUs,
-        durationSec:   Math.round(durationSec),
+        peakVUs: maxVUs,
+        durationSec: Math.round(durationSec),
         totalRequests: totalReqs,
-        rps:           parseFloat(rps.toFixed(2)),
+        rps: parseFloat(rps.toFixed(2)),
       },
       throughput: {
-        txCreated:    created,
-        txFailed:     failed,
-        tps:          parseFloat(tps.toFixed(2)),
+        txCreated: created,
+        txFailed: failed,
+        tps: parseFloat(tps.toFixed(2)),
         txSuccessRate: parseFloat((txSuccRate * 100).toFixed(2)),
       },
       latency: {
         deposit: {
-          p50:   dep['p(50)']   !== undefined ? Math.round(dep['p(50)'])   : null,
-          p75:   dep['p(75)']   !== undefined ? Math.round(dep['p(75)'])   : null,
-          p90:   dep['p(90)']   !== undefined ? Math.round(dep['p(90)'])   : null,
-          p95:   dep['p(95)']   !== undefined ? Math.round(dep['p(95)'])   : null,
-          p99:   dep['p(99)']   !== undefined ? Math.round(dep['p(99)'])   : null,
-          p99_9: dep['p(99.9)'] !== undefined ? Math.round(dep['p(99.9)']) : null,
-          max:   dep.max        !== undefined ? Math.round(dep.max)        : null,
+          p50: dep["p(50)"] !== undefined ? Math.round(dep["p(50)"]) : null,
+          p75: dep["p(75)"] !== undefined ? Math.round(dep["p(75)"]) : null,
+          p90: dep["p(90)"] !== undefined ? Math.round(dep["p(90)"]) : null,
+          p95: dep["p(95)"] !== undefined ? Math.round(dep["p(95)"]) : null,
+          p99: dep["p(99)"] !== undefined ? Math.round(dep["p(99)"]) : null,
+          p99_9:
+            dep["p(99.9)"] !== undefined ? Math.round(dep["p(99.9)"]) : null,
+          max: dep.max !== undefined ? Math.round(dep.max) : null,
         },
         withdraw: {
-          p50: wdr['p(50)'] !== undefined ? Math.round(wdr['p(50)']) : null,
-          p95: wdr['p(95)'] !== undefined ? Math.round(wdr['p(95)']) : null,
-          p99: wdr['p(99)'] !== undefined ? Math.round(wdr['p(99)']) : null,
+          p50: wdr["p(50)"] !== undefined ? Math.round(wdr["p(50)"]) : null,
+          p95: wdr["p(95)"] !== undefined ? Math.round(wdr["p(95)"]) : null,
+          p99: wdr["p(99)"] !== undefined ? Math.round(wdr["p(99)"]) : null,
         },
         overall: {
-          p50: all['p(50)'] !== undefined ? Math.round(all['p(50)']) : null,
-          p95: all['p(95)'] !== undefined ? Math.round(all['p(95)']) : null,
-          p99: all['p(99)'] !== undefined ? Math.round(all['p(99)']) : null,
+          p50: all["p(50)"] !== undefined ? Math.round(all["p(50)"]) : null,
+          p95: all["p(95)"] !== undefined ? Math.round(all["p(95)"]) : null,
+          p99: all["p(99)"] !== undefined ? Math.round(all["p(99)"]) : null,
         },
       },
       thresholds: {
-        httpErrorRatePass:   passErr,
-        depositP95Pass:      passLat,
-        txSuccessRatePass:   passTxSR,
+        httpErrorRatePass: passErr,
+        depositP95Pass: passLat,
+        txSuccessRatePass: passTxSR,
       },
       sizing,
     },
@@ -620,8 +664,8 @@ export function handleSummary(data) {
   );
 
   return {
-    stdout:                          report,
-    'results/load-test-summary.json': jsonPayload,
+    stdout: report,
+    "results/load-test-summary.json": jsonPayload,
   };
 }
 
@@ -631,24 +675,24 @@ export function handleSummary(data) {
 function sizingRecommendation(tps, p95ms, errRate, peakVUs) {
   if (tps === 0) {
     return [
-      'No successful transactions recorded.',
-      'Verify TEST_USER_ID exists in the database and API_KEY is correct.',
-      'Run `npm run seed` against the target environment first.',
+      "No successful transactions recorded.",
+      "Verify TEST_USER_ID exists in the database and API_KEY is correct.",
+      "Run `npm run seed` against the target environment first.",
     ];
   }
 
-  const safeTPS    = parseFloat((tps * 0.67).toFixed(1)); // 1.5× headroom
-  const p95display = p95ms !== undefined ? `${Math.round(p95ms)}ms` : 'N/A';
+  const safeTPS = parseFloat((tps * 0.67).toFixed(1)); // 1.5× headroom
+  const p95display = p95ms !== undefined ? `${Math.round(p95ms)}ms` : "N/A";
 
   if (errRate > 0.05) {
     return [
       `STATUS: OVER CAPACITY at ${peakVUs} VUs`,
       `  HTTP error rate ${(errRate * 100).toFixed(1)}% exceeds 5 % ceiling.`,
-      '  Actions:',
-      '  • Add API server replicas (horizontal scale)',
-      '  • Increase database connection pool (DB_POOL_MAX)',
-      '  • Check BullMQ queue depth — workers may be falling behind',
-      '  • Review Redis MAXMEMORY and eviction policy',
+      "  Actions:",
+      "  • Add API server replicas (horizontal scale)",
+      "  • Increase database connection pool (DB_POOL_MAX)",
+      "  • Check BullMQ queue depth — workers may be falling behind",
+      "  • Review Redis MAXMEMORY and eviction policy",
     ];
   }
 
@@ -656,19 +700,19 @@ function sizingRecommendation(tps, p95ms, errRate, peakVUs) {
     return [
       `STATUS: DEGRADED — P95 latency ${p95display} exceeds 2 000ms SLO`,
       `  Measured at ${peakVUs} VUs, ${tps.toFixed(2)} TPS.`,
-      '  Actions:',
-      '  • Enable slow-query logging and inspect top offenders',
-      '  • Add read replica for /api/v1/transactions list queries',
-      '  • Tune Redis distributed-lock TTL to reduce contention',
-      '  • Consider response caching for transaction history (short TTL)',
+      "  Actions:",
+      "  • Enable slow-query logging and inspect top offenders",
+      "  • Add read replica for /api/v1/transactions list queries",
+      "  • Tune Redis distributed-lock TTL to reduce contention",
+      "  • Consider response caching for transaction history (short TTL)",
     ];
   }
 
   return [
     `STATUS: WITHIN TARGET`,
     `  ${tps.toFixed(2)} TPS at P95=${p95display} with ${peakVUs} peak VUs — all thresholds met.`,
-    '',
-    '  Capacity planning (1.5× safety margin):',
+    "",
+    "  Capacity planning (1.5× safety margin):",
     `  • Recommended operating limit : ${safeTPS} TPS`,
     `  • Scale horizontally when P99 exceeds 3 000ms under sustained load`,
     `  • Re-run with SCENARIO=soak to verify no memory/connection leaks at 100 VUs × 30 min`,

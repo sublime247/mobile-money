@@ -151,7 +151,9 @@ export class VaultModel {
 
   async updateVault(
     id: string,
-    updates: Partial<Pick<Vault, "name" | "description" | "targetAmount" | "isActive">>,
+    updates: Partial<
+      Pick<Vault, "name" | "description" | "targetAmount" | "isActive">
+    >,
   ): Promise<Vault | null> {
     const fields: string[] = [];
     const values: any[] = [];
@@ -316,7 +318,7 @@ export class VaultModel {
     description?: string,
   ): Promise<{ vault: Vault; vaultTransaction: VaultTransaction }> {
     const client = await pool.connect();
-    
+
     try {
       await client.query("BEGIN");
 
@@ -360,16 +362,19 @@ export class VaultModel {
           [userId],
         );
 
-        const mainBalance = parseFloat(mainBalanceResult.rows[0]?.balance || "0");
+        const mainBalance = parseFloat(
+          mainBalanceResult.rows[0]?.balance || "0",
+        );
         if (mainBalance < amountNum) {
           throw new Error("Insufficient main balance");
         }
       }
 
       // Calculate new vault balance
-      const newBalance = type === "deposit" 
-        ? (currentBalance + amountNum).toString()
-        : (currentBalance - amountNum).toString();
+      const newBalance =
+        type === "deposit"
+          ? (currentBalance + amountNum).toString()
+          : (currentBalance - amountNum).toString();
 
       // Update vault balance
       await this.updateBalance(vaultId, newBalance, client);
@@ -389,7 +394,7 @@ export class VaultModel {
       // Create corresponding main transaction
       const { TransactionModel } = await import("./transaction");
       const transactionModel = new TransactionModel();
-      
+
       // Note: This creates a record of the vault transfer in the main transactions table
       // The actual balance calculation will account for this when vault_id is set
       await client.query(

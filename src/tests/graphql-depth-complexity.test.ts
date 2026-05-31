@@ -57,10 +57,7 @@ const resolvers = {
   },
 };
 
-function runValidation(
-  query: string,
-  rules: any[],
-): readonly GraphQLError[] {
+function runValidation(query: string, rules: any[]): readonly GraphQLError[] {
   const schema = makeExecutableSchema({ typeDefs, resolvers });
   const document = parse(query);
   return validate(schema, document, rules);

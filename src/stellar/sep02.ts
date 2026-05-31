@@ -3,6 +3,7 @@ const federationQuerySchema = z.object({
   type: z.enum(["name", "id", "txid", "forward"], {
     error: () => ({ message: "type must be one of: name, id, txid, forward" }),
   }),
-});if (!parsed.success) {
+});
+if (!parsed.success) {
   return res.status(400).json({ detail: parsed.error.issues[0].message });
 }

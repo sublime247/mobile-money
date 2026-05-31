@@ -131,7 +131,7 @@ export function validateSSOConfig(config: SSOEnvironmentConfig): string[] {
 
   if (config.enforceSSOForEmployees && !config.employeeEmailDomain) {
     errors.push(
-      "SSO_ENFORCE_EMPLOYEES is enabled but SSO_EMPLOYEE_EMAIL_DOMAIN is not set"
+      "SSO_ENFORCE_EMPLOYEES is enabled but SSO_EMPLOYEE_EMAIL_DOMAIN is not set",
     );
   }
 
@@ -160,13 +160,11 @@ export async function initializeSSOProviders(): Promise<void> {
   for (const providerConfig of config.providers) {
     try {
       await ssoService.upsertProvider(providerConfig);
-      console.log(
-        `[SSO] Initialized provider: ${providerConfig.providerName}`
-      );
+      console.log(`[SSO] Initialized provider: ${providerConfig.providerName}`);
     } catch (error) {
       console.error(
         `[SSO] Failed to initialize provider ${providerConfig.providerName}:`,
-        error
+        error,
       );
     }
   }

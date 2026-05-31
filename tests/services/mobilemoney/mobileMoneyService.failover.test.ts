@@ -41,8 +41,9 @@ class FakeProvider {
     if (next.success) {
       return {
         success: true,
-        data:
-          next.data ?? { reference: `${this.name}-${operation}-${Date.now()}` },
+        data: next.data ?? {
+          reference: `${this.name}-${operation}-${Date.now()}`,
+        },
       };
     }
 
@@ -72,9 +73,16 @@ describe("MobileMoneyService failover", () => {
     const providers = new Map();
     providers.set(
       "mtn",
-      new FakeProvider([{ success: false, error: new Error("mtn-down") }], [], "mtn"),
+      new FakeProvider(
+        [{ success: false, error: new Error("mtn-down") }],
+        [],
+        "mtn",
+      ),
     );
-    providers.set("airtel", new FakeProvider([{ success: true }], [], "airtel"));
+    providers.set(
+      "airtel",
+      new FakeProvider([{ success: true }], [], "airtel"),
+    );
 
     const service = new MobileMoneyService(providers as any);
     const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
@@ -185,7 +193,11 @@ describe("MobileMoneyService failover", () => {
       new Map([
         [
           "mtn",
-          new FakeProvider([{ success: false, error: new Error("mtn-down") }], [], "mtn"),
+          new FakeProvider(
+            [{ success: false, error: new Error("mtn-down") }],
+            [],
+            "mtn",
+          ),
         ],
         [
           "airtel",

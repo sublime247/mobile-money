@@ -283,9 +283,7 @@ export class AMLAlertModel {
     }));
   }
 
-  async getAlertsByTransaction(
-    transactionId: string,
-  ): Promise<AMLAlert[]> {
+  async getAlertsByTransaction(transactionId: string): Promise<AMLAlert[]> {
     const query = `
       SELECT
         id,

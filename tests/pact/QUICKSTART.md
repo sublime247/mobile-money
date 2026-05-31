@@ -17,6 +17,7 @@ npm run test:pact
 ```
 
 This will:
+
 - Run all Pact contract tests (MTN, Airtel, Orange)
 - Generate pact files in `pacts/` directory
 - Verify our service matches expected provider APIs
@@ -30,6 +31,7 @@ ls pacts/
 ```
 
 You should see:
+
 - `MobileMoneyService-MTNMoMoAPI.json`
 - `MobileMoneyService-AirtelMoneyAPI.json`
 - `MobileMoneyService-OrangeMoneyAPI.json`
@@ -43,6 +45,7 @@ cat pacts/MobileMoneyService-MTNMoMoAPI.json
 ```
 
 The file contains:
+
 - All API interactions (requests/responses)
 - Expected headers, bodies, status codes
 - Provider states and conditions

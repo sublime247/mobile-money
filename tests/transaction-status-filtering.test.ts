@@ -46,7 +46,10 @@ describe("Transaction Status Filtering - Utility Functions", () => {
     });
 
     it("should filter out empty values", () => {
-      expect(parseStatusFilter("pending,,completed")).toEqual(["pending", "completed"]);
+      expect(parseStatusFilter("pending,,completed")).toEqual([
+        "pending",
+        "completed",
+      ]);
     });
 
     it("should handle only hyphens", () => {

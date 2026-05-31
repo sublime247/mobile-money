@@ -1,4 +1,4 @@
-import { Request } from 'express';
+import { Request } from "express";
 
 interface GeoLocationResult {
   country?: {
@@ -19,22 +19,24 @@ function parseCsv(rawValue: string | undefined): Set<string> {
 
   return new Set(
     rawValue
-      .split(',')
+      .split(",")
       .map((value) => value.trim())
       .filter(Boolean)
-      .map((value) => value.toUpperCase())
+      .map((value) => value.toUpperCase()),
   );
 }
 
 function extractClientIp(req: Request): string {
-  const forwarded = req.headers['x-forwarded-for'];
-  const candidate = Array.isArray(forwarded) ? forwarded[0] : forwarded?.split(',')[0]?.trim();
+  const forwarded = req.headers["x-forwarded-for"];
+  const candidate = Array.isArray(forwarded)
+    ? forwarded[0]
+    : forwarded?.split(",")[0]?.trim();
 
   if (candidate) {
     return candidate;
   }
 
-  return req.ip || '';
+  return req.ip || "";
 }
 
 async function getGeoReader(): Promise<MaxmindReader | null> {
@@ -50,7 +52,9 @@ async function getGeoReader(): Promise<MaxmindReader | null> {
   readerPromise = (async () => {
     try {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const maxmind = require('maxmind') as { open: (path: string) => Promise<MaxmindReader> };
+      const maxmind = require("maxmind") as {
+        open: (path: string) => Promise<MaxmindReader>;
+      };
       return await maxmind.open(geoDbPath);
     } catch {
       return null;
@@ -67,10 +71,12 @@ function getSanctionedCountries(): Set<string> {
     return configured;
   }
 
-  return new Set(['CU', 'IR', 'KP', 'RU', 'SY']);
+  return new Set(["CU", "IR", "KP", "RU", "SY"]);
 }
 
-export async function evaluateGeoLoginAccess(req: Request): Promise<{ allowed: boolean; reason?: string }> {
+export async function evaluateGeoLoginAccess(
+  req: Request,
+): Promise<{ allowed: boolean; reason?: string }> {
   const requestIp = extractClientIp(req);
   const whitelistedIps = parseCsv(process.env.GEO_WHITELIST_IPS);
 
@@ -93,7 +99,10 @@ export async function evaluateGeoLoginAccess(req: Request): Promise<{ allowed: b
   }
 
   if (getSanctionedCountries().has(countryCode)) {
-    return { allowed: false, reason: `Logins are restricted for region ${countryCode}` };
+    return {
+      allowed: false,
+      reason: `Logins are restricted for region ${countryCode}`,
+    };
   }
 
   return { allowed: true };

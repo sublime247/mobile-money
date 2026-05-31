@@ -21,7 +21,6 @@ import helmet, { type HelmetOptions } from "helmet";
 import type { Application, Request, Response, NextFunction } from "express";
 import { maintenanceModeMiddleware } from "../middleware/maintenanceMode";
 
-
 /**
  * Parse the ALLOWED_ORIGINS environment variable into a frozen Set of exact
  * origin strings.  Falls back to an empty set so that misconfigured deployments
@@ -51,10 +50,7 @@ function parseAllowedOrigins(): ReadonlySet<string> {
       }
 
       // Reject non-HTTPS origins in production.
-      if (
-        process.env.NODE_ENV === "production" &&
-        !o.startsWith("https://")
-      ) {
+      if (process.env.NODE_ENV === "production" && !o.startsWith("https://")) {
         throw new Error(
           `[express.ts] Non-HTTPS origin "${o}" is not permitted in production.`,
         );
@@ -67,7 +63,6 @@ function parseAllowedOrigins(): ReadonlySet<string> {
 }
 
 const ALLOWED_ORIGINS: ReadonlySet<string> = parseAllowedOrigins();
-
 
 /**
  * Exact-match CORS configuration.
@@ -117,7 +112,11 @@ export const corsOptions: CorsOptions = {
     "X-Request-ID",
   ],
 
-  exposedHeaders: ["X-Request-ID", "X-RateLimit-Limit", "X-RateLimit-Remaining"],
+  exposedHeaders: [
+    "X-Request-ID",
+    "X-RateLimit-Limit",
+    "X-RateLimit-Remaining",
+  ],
 
   // Cache preflight responses for 10 minutes.
   maxAge: 600,
@@ -125,7 +124,6 @@ export const corsOptions: CorsOptions = {
   // Respond to preflight OPTIONS requests automatically.
   optionsSuccessStatus: 204,
 };
-
 
 /**
  * Build the CSP directives object.
@@ -144,57 +142,57 @@ export const corsOptions: CorsOptions = {
  * Adjust the `scriptSrc`, `styleSrc`, and `connectSrc` arrays to match your
  * actual asset origins (CDN, analytics, etc.) rather than using wildcards.
  */
-function buildCspDirectives(): Record<string, Iterable<string>>  {
+function buildCspDirectives(): Record<string, Iterable<string>> {
   const reportUri = process.env.CSP_REPORT_URI;
- 
+
   // Origins from the allowlist are safe to include in connect-src so that
   // fetch/XHR to those APIs is permitted without additional manual maintenance.
   const allowedOriginList = Array.from(ALLOWED_ORIGINS);
- 
+
   return {
     // Deny everything not explicitly permitted.
     defaultSrc: ["'none'"],
- 
+
     // Scripts: only same-origin. Add your CDN here if needed, e.g.
     // "https://cdn.example.com" — never "'unsafe-inline'" or "'unsafe-eval'".
     scriptSrc: ["'self'"],
- 
+
     // Styles: only same-origin.
     styleSrc: ["'self'"],
- 
+
     // Images: same-origin + data URIs (needed for inline SVG/img src="data:…").
     imgSrc: ["'self'", "data:"],
- 
+
     // Fonts: same-origin.
     fontSrc: ["'self'"],
- 
+
     // fetch(), XHR, WebSocket: same-origin + explicitly listed API origins.
     connectSrc: ["'self'", ...allowedOriginList],
- 
+
     // Iframes: deny.
     frameSrc: ["'none'"],
- 
+
     // Web Workers / nested browsing contexts: deny.
     workerSrc: ["'none'"],
- 
+
     // <object>, <embed>: deny.
     objectSrc: ["'none'"],
- 
+
     // <base> tag: only same-origin (prevents base-tag hijacking).
     baseUri: ["'self'"],
- 
+
     // Form submissions: only same-origin.
     formAction: ["'self'"],
- 
+
     // Prevent this page being framed by anyone (belt-and-suspenders with X-Frame-Options).
     frameAncestors: ["'none'"],
- 
+
     // Rewrite http:// sub-resource requests to https://.
     upgradeInsecureRequests: [],
- 
+
     // Block mixed content even if upgrade-insecure-requests misses something.
     blockAllMixedContent: [],
- 
+
     // CSP violation reporting.
     ...(reportUri
       ? {
@@ -204,7 +202,6 @@ function buildCspDirectives(): Record<string, Iterable<string>>  {
       : {}),
   };
 }
-
 
 /**
  * Helmet configuration targeting Mozilla Observatory A+.
@@ -258,12 +255,11 @@ export const helmetOptions: HelmetOptions = {
 
   originAgentCluster: true,
 
-  // Disable X-Powered-By 
+  // Disable X-Powered-By
   hidePoweredBy: true,
 
   dnsPrefetchControl: { allow: false },
 };
-
 
 /**
  * Standalone middleware that writes the Permissions-Policy response header.
@@ -301,8 +297,6 @@ export function permissionsPolicyMiddleware(
   next();
 }
 
-
-
 /**
  * Middleware that sets the `Report-To` header required by the CSP `report-to`
  * directive.  Only attached when CSP_REPORT_URI is configured.
@@ -326,7 +320,6 @@ export function reportToMiddleware(
   }
   next();
 }
-
 
 /**
  * Apply all security middleware to an Express application instance.

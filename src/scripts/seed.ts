@@ -5,7 +5,9 @@ import { Pool } from "pg";
 dotenv.config();
 
 if (process.env.NODE_ENV !== "development") {
-  console.error("Seeding is allowed only in development environment. Set NODE_ENV=development to proceed.");
+  console.error(
+    "Seeding is allowed only in development environment. Set NODE_ENV=development to proceed.",
+  );
   process.exit(1);
 }
 
@@ -21,7 +23,16 @@ async function upsertUser(phone: string, kyc: string) {
   return res.rows[0].id;
 }
 
-async function insertTransaction(ref: string, type: string, amount: number, phone: string, provider: string, stellar: string, status: string, userId: string | null) {
+async function insertTransaction(
+  ref: string,
+  type: string,
+  amount: number,
+  phone: string,
+  provider: string,
+  stellar: string,
+  status: string,
+  userId: string | null,
+) {
   await pool.query(
     `INSERT INTO transactions (reference_number, type, amount, phone_number, provider, stellar_address, status, user_id)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
@@ -63,7 +74,16 @@ async function seed() {
       const amount = Math.floor(Math.random() * 9000) + 100; // between 100 and 9100
       const ref = `SEED-${counter}-${provider.toUpperCase()}`;
       const stellar = `GSEED${String(counter).padStart(52, "0").slice(0, 56)}`;
-      await insertTransaction(ref, "deposit", amount, phone, provider, stellar, status, userIds[phone]);
+      await insertTransaction(
+        ref,
+        "deposit",
+        amount,
+        phone,
+        provider,
+        stellar,
+        status,
+        userIds[phone],
+      );
       counter++;
     }
 

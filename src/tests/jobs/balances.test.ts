@@ -22,7 +22,8 @@ describe("runProviderBalanceAlertJob", () => {
   });
 
   it("does not send alert when balances are above thresholds", async () => {
-    process.env.BALANCE_ALERT_WEBHOOK_URL = "https://alerts.example.com/webhook";
+    process.env.BALANCE_ALERT_WEBHOOK_URL =
+      "https://alerts.example.com/webhook";
     process.env.MTN_MIN_BALANCE_THRESHOLD = "1000";
     process.env.AIRTEL_MIN_BALANCE_THRESHOLD = "1000";
 
@@ -53,7 +54,8 @@ describe("runProviderBalanceAlertJob", () => {
   });
 
   it("sends alert when any provider balance is below threshold", async () => {
-    process.env.BALANCE_ALERT_WEBHOOK_URL = "https://alerts.example.com/webhook";
+    process.env.BALANCE_ALERT_WEBHOOK_URL =
+      "https://alerts.example.com/webhook";
     process.env.MTN_MIN_BALANCE_THRESHOLD = "1000";
     process.env.AIRTEL_MIN_BALANCE_THRESHOLD = "1000";
 

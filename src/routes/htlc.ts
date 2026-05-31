@@ -33,7 +33,7 @@ router.post("/lock", async (req: Request, res: Response) => {
   try {
     const params = lockSchema.parse(req.body);
     const tx = await htlcService.buildLockTx(params);
-    
+
     res.json({
       xdr: tx.toEnvelope().toXDR("base64"),
       hash: tx.hash().toString("hex"),
@@ -50,7 +50,7 @@ router.post("/claim", async (req: Request, res: Response) => {
   try {
     const params = claimSchema.parse(req.body);
     const tx = await htlcService.buildClaimTx(params);
-    
+
     res.json({
       xdr: tx.toEnvelope().toXDR("base64"),
       hash: tx.hash().toString("hex"),
@@ -67,7 +67,7 @@ router.post("/refund", async (req: Request, res: Response) => {
   try {
     const params = refundSchema.parse(req.body);
     const tx = await htlcService.buildRefundTx(params);
-    
+
     res.json({
       xdr: tx.toEnvelope().toXDR("base64"),
       hash: tx.hash().toString("hex"),

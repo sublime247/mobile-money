@@ -220,9 +220,7 @@ TXN-20260327-00002,250.00,pending,+0987654321`;
 
       expect(result.matched).toHaveLength(1);
       expect(result.orphaned_db).toHaveLength(1);
-      expect(result.orphaned_db[0].reference_number).toBe(
-        "TXN-20260327-00002",
-      );
+      expect(result.orphaned_db[0].reference_number).toBe("TXN-20260327-00002");
       expect(result.summary.total_orphaned_db).toBe(1);
     });
 

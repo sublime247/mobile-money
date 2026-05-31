@@ -32,32 +32,32 @@ export interface Sep12CustomerFields {
   birth_date?: string;
   birth_place?: string;
   birth_country?: string;
-  
+
   // Address fields
   address?: string;
   address_country_code?: string;
   state_or_province?: string;
   city?: string;
   postal_code?: string;
-  
+
   // ID document fields
   id_type?: string;
   id_country_code?: string;
   id_issue_date?: string;
   id_expiration_date?: string;
   id_number?: string;
-  
+
   // Photo ID
   photo_id_front?: string; // Base64 or URL
   photo_id_back?: string;
   photo_proof_residence?: string;
-  
+
   // Organization fields (for businesses)
   organization_name?: string;
   organization_registration_number?: string;
   organization_registration_date?: string;
   organization_registered_address?: string;
-  
+
   // Additional fields
   tax_id?: string;
   tax_id_name?: string;
@@ -85,53 +85,55 @@ export interface Sep12CustomerResponse {
 // Validation Schemas
 // ============================================================================
 
-const PutCustomerSchema = z.object({
-  account: z.string().optional(),
-  memo: z.string().optional(),
-  memo_type: z.enum(["id", "hash", "text"]).optional(),
-  type: z.string().optional(),
-  
-  // Natural person fields
-  first_name: z.string().optional(),
-  last_name: z.string().optional(),
-  email_address: z.string().email().optional(),
-  mobile_number: z.string().optional(),
-  birth_date: z.string().optional(),
-  birth_place: z.string().optional(),
-  birth_country: z.string().optional(),
-  
-  // Address
-  address: z.string().optional(),
-  address_country_code: z.string().length(3).optional(),
-  state_or_province: z.string().optional(),
-  city: z.string().optional(),
-  postal_code: z.string().optional(),
-  
-  // ID document
-  id_type: z.string().optional(),
-  id_country_code: z.string().length(3).optional(),
-  id_issue_date: z.string().optional(),
-  id_expiration_date: z.string().optional(),
-  id_number: z.string().optional(),
-  
-  // Photos (base64 or URLs)
-  photo_id_front: z.string().optional(),
-  photo_id_back: z.string().optional(),
-  photo_proof_residence: z.string().optional(),
-  
-  // Organization
-  organization_name: z.string().optional(),
-  organization_registration_number: z.string().optional(),
-  organization_registration_date: z.string().optional(),
-  organization_registered_address: z.string().optional(),
-  
-  // Additional
-  tax_id: z.string().optional(),
-  tax_id_name: z.string().optional(),
-  occupation: z.string().optional(),
-  employer_name: z.string().optional(),
-  employer_address: z.string().optional(),
-}).catchall(z.any()); // Catch all unmapped dynamic fields
+const PutCustomerSchema = z
+  .object({
+    account: z.string().optional(),
+    memo: z.string().optional(),
+    memo_type: z.enum(["id", "hash", "text"]).optional(),
+    type: z.string().optional(),
+
+    // Natural person fields
+    first_name: z.string().optional(),
+    last_name: z.string().optional(),
+    email_address: z.string().email().optional(),
+    mobile_number: z.string().optional(),
+    birth_date: z.string().optional(),
+    birth_place: z.string().optional(),
+    birth_country: z.string().optional(),
+
+    // Address
+    address: z.string().optional(),
+    address_country_code: z.string().length(3).optional(),
+    state_or_province: z.string().optional(),
+    city: z.string().optional(),
+    postal_code: z.string().optional(),
+
+    // ID document
+    id_type: z.string().optional(),
+    id_country_code: z.string().length(3).optional(),
+    id_issue_date: z.string().optional(),
+    id_expiration_date: z.string().optional(),
+    id_number: z.string().optional(),
+
+    // Photos (base64 or URLs)
+    photo_id_front: z.string().optional(),
+    photo_id_back: z.string().optional(),
+    photo_proof_residence: z.string().optional(),
+
+    // Organization
+    organization_name: z.string().optional(),
+    organization_registration_number: z.string().optional(),
+    organization_registration_date: z.string().optional(),
+    organization_registered_address: z.string().optional(),
+
+    // Additional
+    tax_id: z.string().optional(),
+    tax_id_name: z.string().optional(),
+    occupation: z.string().optional(),
+    employer_name: z.string().optional(),
+    employer_address: z.string().optional(),
+  })
+  .catchall(z.any()); // Catch all unmapped dynamic fields
 
 // ============================================================================
 // SEP-12 Service
@@ -149,15 +151,18 @@ export class Sep12Service {
   /**
    * Map internal KYC status to SEP-12 status
    */
-  private mapKYCStatusToSep12(kycStatus: KYCStatus, kycLevel: KYCLevel): Sep12CustomerStatus {
+  private mapKYCStatusToSep12(
+    kycStatus: KYCStatus,
+    kycLevel: KYCLevel,
+  ): Sep12CustomerStatus {
     if (kycStatus === KYCStatus.REJECTED) {
       return Sep12CustomerStatus.REJECTED;
     }
-    
+
     if (kycStatus === KYCStatus.PENDING || kycStatus === KYCStatus.REVIEW) {
       return Sep12CustomerStatus.PROCESSING;
     }
-    
+
     if (kycStatus === KYCStatus.APPROVED) {
       // Check if we need more info based on KYC level
       if (kycLevel === KYCLevel.NONE || kycLevel === KYCLevel.BASIC) {
@@ -165,14 +170,17 @@ export class Sep12Service {
       }
       return Sep12CustomerStatus.ACCEPTED;
     }
-    
+
     return Sep12CustomerStatus.NEEDS_INFO;
   }
 
   /**
    * Get required fields based on customer type and current status
    */
-  private getRequiredFields(type?: string, kycLevel?: KYCLevel): Record<string, Sep12ProvidedField> {
+  private getRequiredFields(
+    type?: string,
+    kycLevel?: KYCLevel,
+  ): Record<string, Sep12ProvidedField> {
     const naturalPersonFields: Record<string, Sep12ProvidedField> = {
       first_name: {
         type: "string",
@@ -222,11 +230,20 @@ export class Sep12Service {
     };
 
     // Add document fields for higher KYC levels
-    if (!kycLevel || kycLevel === KYCLevel.NONE || kycLevel === KYCLevel.BASIC) {
+    if (
+      !kycLevel ||
+      kycLevel === KYCLevel.NONE ||
+      kycLevel === KYCLevel.BASIC
+    ) {
       naturalPersonFields.id_type = {
         type: "string",
         description: "Type of ID document",
-        choices: ["passport", "drivers_license", "national_id", "residence_permit"],
+        choices: [
+          "passport",
+          "drivers_license",
+          "national_id",
+          "residence_permit",
+        ],
         optional: false,
       };
       naturalPersonFields.id_number = {
@@ -287,7 +304,7 @@ export class Sep12Service {
     account?: string,
     memo?: string,
     memoType?: string,
-    type?: string
+    type?: string,
   ): Promise<Sep12CustomerResponse> {
     try {
       // Find customer by Stellar account and memo
@@ -299,9 +316,9 @@ export class Sep12Service {
         ORDER BY ka.updated_at DESC
         LIMIT 1
       `;
-      
+
       const result = await this.db.query(customerQuery, [account]);
-      
+
       if (result.rows.length === 0) {
         // Customer not found - return required fields
         return {
@@ -314,17 +331,20 @@ export class Sep12Service {
 
       const customer = result.rows[0];
       const kycLevel = customer.kyc_level as KYCLevel;
-      const kycStatus = customer.verification_status as KYCStatus || KYCStatus.PENDING;
-      
+      const kycStatus =
+        (customer.verification_status as KYCStatus) || KYCStatus.PENDING;
+
       const sep12Status = this.mapKYCStatusToSep12(kycStatus, kycLevel);
-      
+
       // Get provided fields from KYC applicant
       const providedFields: Record<string, Sep12ProvidedField> = {};
-      
+
       if (customer.applicant_id) {
         try {
-          const applicant = await this.kycService.getApplicant(customer.applicant_id);
-          
+          const applicant = await this.kycService.getApplicant(
+            customer.applicant_id,
+          );
+
           if (applicant.first_name) {
             providedFields.first_name = {
               type: "string",
@@ -377,7 +397,9 @@ export class Sep12Service {
       return response;
     } catch (error) {
       console.error("Error getting customer:", error);
-      throw new Error(`Failed to get customer: ${error instanceof Error ? error.message : "Unknown error"}`);
+      throw new Error(
+        `Failed to get customer: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
   }
 
@@ -385,28 +407,52 @@ export class Sep12Service {
    * Create or update customer information
    */
   async putCustomer(
-    data: z.infer<typeof PutCustomerSchema>
+    data: z.infer<typeof PutCustomerSchema>,
   ): Promise<Sep12CustomerResponse> {
     try {
       const validatedData = PutCustomerSchema.parse(data);
-      
+
       const {
-        account, memo, memo_type, type,
-        first_name, last_name, email_address, mobile_number, birth_date,
-        birth_place, birth_country, address, address_country_code,
-        state_or_province, city, postal_code, id_type, id_country_code,
-        id_issue_date, id_expiration_date, id_number, photo_id_front,
-        photo_id_back, photo_proof_residence, organization_name,
-        organization_registration_number, organization_registration_date,
-        organization_registered_address, tax_id, tax_id_name, occupation,
-        employer_name, employer_address,
+        account,
+        memo,
+        memo_type,
+        type,
+        first_name,
+        last_name,
+        email_address,
+        mobile_number,
+        birth_date,
+        birth_place,
+        birth_country,
+        address,
+        address_country_code,
+        state_or_province,
+        city,
+        postal_code,
+        id_type,
+        id_country_code,
+        id_issue_date,
+        id_expiration_date,
+        id_number,
+        photo_id_front,
+        photo_id_back,
+        photo_proof_residence,
+        organization_name,
+        organization_registration_number,
+        organization_registration_date,
+        organization_registered_address,
+        tax_id,
+        tax_id_name,
+        occupation,
+        employer_name,
+        employer_address,
         ...customFields
       } = validatedData;
 
       // Find or create user by Stellar account
       let userId: string;
       let applicantId: string | null = null;
-      
+
       if (account) {
         const userQuery = `
           SELECT u.id, ka.applicant_id
@@ -416,9 +462,9 @@ export class Sep12Service {
           ORDER BY ka.updated_at DESC
           LIMIT 1
         `;
-        
+
         const userResult = await this.db.query(userQuery, [account]);
-        
+
         if (userResult.rows.length > 0) {
           userId = userResult.rows[0].id;
           applicantId = userResult.rows[0].applicant_id;
@@ -429,13 +475,13 @@ export class Sep12Service {
             VALUES ($1, $2, $3)
             RETURNING id
           `;
-          
+
           const newUserResult = await this.db.query(createUserQuery, [
             account,
             KYCLevel.NONE,
             mobile_number || "pending",
           ]);
-          
+
           userId = newUserResult.rows[0].id;
         }
       } else {
@@ -449,18 +495,21 @@ export class Sep12Service {
         email: email_address,
         dob: birth_date,
         phone_number: mobile_number,
-        address: address ? {
-          street: address,
-          town: city || "",
-          postcode: postal_code || "",
-          country: address_country_code || "USA",
-          state: state_or_province,
-        } : undefined,
-        custom_fields: Object.keys(customFields).length > 0 ? customFields : undefined,
+        address: address
+          ? {
+              street: address,
+              town: city || "",
+              postcode: postal_code || "",
+              country: address_country_code || "USA",
+              state: state_or_province,
+            }
+          : undefined,
+        custom_fields:
+          Object.keys(customFields).length > 0 ? customFields : undefined,
       };
 
       let applicant;
-      
+
       if (applicantId) {
         // Update existing applicant
         applicant = await this.kycService.getApplicant(applicantId);
@@ -468,7 +517,7 @@ export class Sep12Service {
         // Create new applicant
         applicant = await this.kycService.createApplicant(applicantData);
         applicantId = applicant.id;
-        
+
         // Link applicant to user
         const linkQuery = `
           INSERT INTO kyc_applicants (user_id, applicant_id, provider, verification_status, kyc_level)
@@ -476,14 +525,14 @@ export class Sep12Service {
           ON CONFLICT (user_id, applicant_id) DO UPDATE
           SET updated_at = CURRENT_TIMESTAMP
         `;
-        
+
         await this.db.query(linkQuery, [userId, applicantId]);
       }
 
       // Handle document uploads if provided
       if (photo_id_front) {
         const docType = this.mapIdTypeToDocumentType(id_type);
-        
+
         await this.kycService.uploadDocument({
           applicant_id: applicantId,
           type: docType,
@@ -495,7 +544,7 @@ export class Sep12Service {
 
       if (photo_id_back) {
         const docType = this.mapIdTypeToDocumentType(id_type);
-        
+
         await this.kycService.uploadDocument({
           applicant_id: applicantId,
           type: docType,
@@ -507,7 +556,7 @@ export class Sep12Service {
 
       // Process dynamic custom fields/documents attached
       for (const [key, value] of Object.entries(customFields)) {
-        if (typeof value === 'string' && value.length > 500) {
+        if (typeof value === "string" && value.length > 500) {
           const docType = this.mapIdTypeToDocumentType(id_type);
           await this.kycService.uploadDocument({
             applicant_id: applicantId,
@@ -530,7 +579,9 @@ export class Sep12Service {
         throw new Error(`Validation error: ${error.message}`);
       }
       console.error("Error putting customer:", error);
-      throw new Error(`Failed to update customer: ${error instanceof Error ? error.message : "Unknown error"}`);
+      throw new Error(
+        `Failed to update customer: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
   }
 
@@ -545,11 +596,13 @@ export class Sep12Service {
           SELECT id FROM users WHERE stellar_address = $1
         )
       `;
-      
+
       await this.db.query(deleteQuery, [account]);
     } catch (error) {
       console.error("Error deleting customer:", error);
-      throw new Error(`Failed to delete customer: ${error instanceof Error ? error.message : "Unknown error"}`);
+      throw new Error(
+        `Failed to delete customer: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
   }
 
@@ -603,7 +656,7 @@ export const createSep12Router = (db: Pool): Router => {
         account as string,
         memo as string,
         memo_type as string,
-        type as string
+        type as string,
       );
 
       res.json(customer);
@@ -619,51 +672,60 @@ export const createSep12Router = (db: Pool): Router => {
    * PUT /customer
    * * Create or update customer information
    */
-  router.put("/customer", sep12Limiter, upload.any(), async (req: Request, res: Response) => {
-    try {
-      const customerData = { ...req.body };
-      
-      // Support multipart upload: parse custom documents and map as base64 fields so KYC validation parses them
-      if (req.files && Array.isArray(req.files)) {
-        req.files.forEach((file: any) => {
-          customerData[file.fieldname] = file.buffer.toString("base64");
+  router.put(
+    "/customer",
+    sep12Limiter,
+    upload.any(),
+    async (req: Request, res: Response) => {
+      try {
+        const customerData = { ...req.body };
+
+        // Support multipart upload: parse custom documents and map as base64 fields so KYC validation parses them
+        if (req.files && Array.isArray(req.files)) {
+          req.files.forEach((file: any) => {
+            customerData[file.fieldname] = file.buffer.toString("base64");
+          });
+        }
+
+        const customer = await sep12Service.putCustomer(customerData);
+        res.json(customer);
+      } catch (error: any) {
+        console.error("[SEP-12] Error putting customer:", error);
+        res.status(400).json({
+          error: error.message || "Failed to update customer information",
         });
       }
-
-      const customer = await sep12Service.putCustomer(customerData);
-      res.json(customer);
-    } catch (error: any) {
-      console.error("[SEP-12] Error putting customer:", error);
-      res.status(400).json({
-        error: error.message || "Failed to update customer information",
-      });
-    }
-  });
+    },
+  );
 
   /**
    * DELETE /customer/:account
    * * Delete customer information (GDPR compliance)
    */
-  router.delete("/customer/:account", sep12Limiter, async (req: Request, res: Response) => {
-    try {
-      const { account } = req.params;
+  router.delete(
+    "/customer/:account",
+    sep12Limiter,
+    async (req: Request, res: Response) => {
+      try {
+        const { account } = req.params;
 
-      if (!account) {
-        return res.status(400).json({
-          error: "account parameter is required",
+        if (!account) {
+          return res.status(400).json({
+            error: "account parameter is required",
+          });
+        }
+
+        await sep12Service.deleteCustomer(account);
+
+        res.status(204).send();
+      } catch (error: any) {
+        console.error("[SEP-12] Error deleting customer:", error);
+        res.status(500).json({
+          error: error.message || "Failed to delete customer information",
         });
       }
-
-      await sep12Service.deleteCustomer(account);
-      
-      res.status(204).send();
-    } catch (error: any) {
-      console.error("[SEP-12] Error deleting customer:", error);
-      res.status(500).json({
-        error: error.message || "Failed to delete customer information",
-      });
-    }
-  });
+    },
+  );
 
   return router;
 };

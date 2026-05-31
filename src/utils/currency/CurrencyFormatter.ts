@@ -4,10 +4,10 @@
  * Wraps Intl.NumberFormat API with caching, validation, and error handling
  */
 
-import { FormatOptions, FormattingResult } from './types';
-import { CurrencyConfig } from './CurrencyConfig';
-import { FormatterCache } from './FormatterCache';
-import { ValidationEngine } from './ValidationEngine';
+import { FormatOptions, FormattingResult } from "./types";
+import { CurrencyConfig } from "./CurrencyConfig";
+import { FormatterCache } from "./FormatterCache";
+import { ValidationEngine } from "./ValidationEngine";
 
 /**
  * Main Currency Formatter class providing standardized currency formatting
@@ -48,7 +48,11 @@ export class CurrencyFormatter {
    * @returns Formatted currency string
    * @throws Error if amount or currency code is invalid
    */
-  static format(amount: number, currencyCode: string, options?: FormatOptions): string {
+  static format(
+    amount: number,
+    currencyCode: string,
+    options?: FormatOptions,
+  ): string {
     // Validate amount
     const amountValidation = ValidationEngine.validateAmount(amount);
     if (!amountValidation.isValid) {
@@ -56,7 +60,8 @@ export class CurrencyFormatter {
     }
 
     // Validate currency code
-    const currencyValidation = ValidationEngine.validateCurrencyCode(currencyCode);
+    const currencyValidation =
+      ValidationEngine.validateCurrencyCode(currencyCode);
     if (!currencyValidation.isValid) {
       throw new Error(`Invalid currency code: ${currencyValidation.error}`);
     }
@@ -84,15 +89,17 @@ export class CurrencyFormatter {
    */
   static formatBatch(
     amounts: Array<{ amount: number; currency: string }>,
-    options?: FormatOptions
+    options?: FormatOptions,
   ): string[] {
     if (!Array.isArray(amounts)) {
-      throw new Error('amounts must be an array');
+      throw new Error("amounts must be an array");
     }
 
     return amounts.map((item, index) => {
-      if (!item || typeof item !== 'object') {
-        throw new Error(`Item at index ${index} must be an object with amount and currency`);
+      if (!item || typeof item !== "object") {
+        throw new Error(
+          `Item at index ${index} must be an object with amount and currency`,
+        );
       }
       return CurrencyFormatter.format(item.amount, item.currency, options);
     });
@@ -110,8 +117,8 @@ export class CurrencyFormatter {
 
     if (!resolvedCurrency) {
       throw new Error(
-        'No currency code provided and no default currency set. ' +
-          'Pass a currency code or create the formatter with a default currency.'
+        "No currency code provided and no default currency set. " +
+          "Pass a currency code or create the formatter with a default currency.",
       );
     }
 
@@ -122,7 +129,8 @@ export class CurrencyFormatter {
     }
 
     // Validate currency code
-    const currencyValidation = ValidationEngine.validateCurrencyCode(resolvedCurrency);
+    const currencyValidation =
+      ValidationEngine.validateCurrencyCode(resolvedCurrency);
     if (!currencyValidation.isValid) {
       throw new Error(`Invalid currency code: ${currencyValidation.error}`);
     }
@@ -131,7 +139,9 @@ export class CurrencyFormatter {
     const sanitizedCode = currencyValidation.sanitizedValue as string;
 
     // Build options from instance locale if set
-    const options: FormatOptions | undefined = this.locale ? { locale: this.locale } : undefined;
+    const options: FormatOptions | undefined = this.locale
+      ? { locale: this.locale }
+      : undefined;
 
     return CurrencyFormatter._doFormat(sanitizedAmount, sanitizedCode, options);
   }
@@ -179,14 +189,17 @@ export class CurrencyFormatter {
   private static _applyRounding(
     amount: number,
     decimals: number,
-    roundingMode: 'round' | 'floor' | 'ceil'
+    roundingMode: "round" | "floor" | "ceil",
   ): number {
     // Use Number(x.toFixed()) for floor/ceil to avoid drift, then re-apply direction
     if (decimals === 0) {
       switch (roundingMode) {
-        case 'floor': return Math.floor(amount);
-        case 'ceil':  return Math.ceil(amount);
-        default:      return Math.round(amount);
+        case "floor":
+          return Math.floor(amount);
+        case "ceil":
+          return Math.ceil(amount);
+        default:
+          return Math.round(amount);
       }
     }
 
@@ -194,13 +207,13 @@ export class CurrencyFormatter {
     const shifted = Number(`${amount}e+${decimals}`);
     let result: number;
     switch (roundingMode) {
-      case 'floor':
+      case "floor":
         result = Math.floor(shifted);
         break;
-      case 'ceil':
+      case "ceil":
         result = Math.ceil(shifted);
         break;
-      case 'round':
+      case "round":
       default:
         result = Math.round(shifted);
         break;
@@ -216,9 +229,12 @@ export class CurrencyFormatter {
   static isIntlSupported(): boolean {
     try {
       return (
-        typeof Intl !== 'undefined' &&
-        typeof Intl.NumberFormat === 'function' &&
-        typeof new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format === 'function'
+        typeof Intl !== "undefined" &&
+        typeof Intl.NumberFormat === "function" &&
+        typeof new Intl.NumberFormat("en-US", {
+          style: "currency",
+          currency: "USD",
+        }).format === "function"
       );
     } catch {
       return false;
@@ -233,30 +249,44 @@ export class CurrencyFormatter {
    * @param options - Optional formatting options
    * @returns Formatted string using manual symbol + number logic
    */
-  static fallbackFormat(amount: number, currencyCode: string, options?: FormatOptions): string {
+  static fallbackFormat(
+    amount: number,
+    currencyCode: string,
+    options?: FormatOptions,
+  ): string {
     const currencyRule = CurrencyConfig.getCurrencyRule(currencyCode);
-    
+
     // Use custom fraction digits if provided, otherwise use currency's minorUnits
-    const decimals = options?.minimumFractionDigits !== undefined 
-      ? options.minimumFractionDigits 
-      : options?.maximumFractionDigits !== undefined
-        ? options.maximumFractionDigits
-        : currencyRule.minorUnits;
-    
-    const roundingMode = options?.roundingMode ?? currencyRule.formatting.roundingMode;
-    const rounded = CurrencyFormatter._applyRounding(amount, decimals, roundingMode);
+    const decimals =
+      options?.minimumFractionDigits !== undefined
+        ? options.minimumFractionDigits
+        : options?.maximumFractionDigits !== undefined
+          ? options.maximumFractionDigits
+          : currencyRule.minorUnits;
+
+    const roundingMode =
+      options?.roundingMode ?? currencyRule.formatting.roundingMode;
+    const rounded = CurrencyFormatter._applyRounding(
+      amount,
+      decimals,
+      roundingMode,
+    );
 
     // Build the number string with correct decimal places
     const numberStr = rounded.toFixed(decimals);
 
     // Add thousands separators if useGrouping is not false
-    const useGrouping = options?.useGrouping ?? currencyRule.formatting.useGrouping;
+    const useGrouping =
+      options?.useGrouping ?? currencyRule.formatting.useGrouping;
     let formattedNumber = numberStr;
-    
+
     if (useGrouping) {
-      const [intPart, decPart] = numberStr.split('.');
-      const intWithGrouping = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-      formattedNumber = decPart !== undefined ? `${intWithGrouping}.${decPart}` : intWithGrouping;
+      const [intPart, decPart] = numberStr.split(".");
+      const intWithGrouping = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+      formattedNumber =
+        decPart !== undefined
+          ? `${intWithGrouping}.${decPart}`
+          : intWithGrouping;
     }
 
     return `${currencyRule.symbol}${formattedNumber}`;
@@ -276,7 +306,7 @@ export class CurrencyFormatter {
     amount: number,
     currencyCode: string,
     locale: string,
-    options?: FormatOptions
+    options?: FormatOptions,
   ): string {
     // Validate amount
     const amountValidation = ValidationEngine.validateAmount(amount);
@@ -285,7 +315,8 @@ export class CurrencyFormatter {
     }
 
     // Validate currency code
-    const currencyValidation = ValidationEngine.validateCurrencyCode(currencyCode);
+    const currencyValidation =
+      ValidationEngine.validateCurrencyCode(currencyCode);
     if (!currencyValidation.isValid) {
       throw new Error(`Invalid currency code: ${currencyValidation.error}`);
     }
@@ -302,7 +333,7 @@ export class CurrencyFormatter {
 
     return CurrencyFormatter._doFormat(sanitizedAmount, sanitizedCode, {
       ...options,
-      locale: sanitizedLocale
+      locale: sanitizedLocale,
     });
   }
 
@@ -317,7 +348,7 @@ export class CurrencyFormatter {
   private static _doFormat(
     amount: number,
     currencyCode: string,
-    options?: FormatOptions
+    options?: FormatOptions,
   ): string {
     const currencyRule = CurrencyConfig.getCurrencyRule(currencyCode);
 
@@ -338,44 +369,63 @@ export class CurrencyFormatter {
       if (hasCustomFractionDigits) {
         // For custom fraction digits, we need to handle rounding ourselves
         // because Intl.NumberFormat might not support roundingMode option
-        const roundingMode = options?.roundingMode ?? currencyRule.formatting.roundingMode;
-        const decimals = options?.minimumFractionDigits ?? options?.maximumFractionDigits ?? currencyRule.minorUnits;
-        const roundedAmount = CurrencyFormatter._applyRounding(amount, decimals, roundingMode);
-        
+        const roundingMode =
+          options?.roundingMode ?? currencyRule.formatting.roundingMode;
+        const decimals =
+          options?.minimumFractionDigits ??
+          options?.maximumFractionDigits ??
+          currencyRule.minorUnits;
+        const roundedAmount = CurrencyFormatter._applyRounding(
+          amount,
+          decimals,
+          roundingMode,
+        );
+
         const customFormatter = new Intl.NumberFormat(locale, {
-          style: 'currency',
+          style: "currency",
           currency: currencyCode,
-          useGrouping: options?.useGrouping ?? currencyRule.formatting.useGrouping,
+          useGrouping:
+            options?.useGrouping ?? currencyRule.formatting.useGrouping,
           minimumFractionDigits:
             options?.minimumFractionDigits ?? currencyRule.minorUnits,
           maximumFractionDigits:
-            options?.maximumFractionDigits ?? currencyRule.minorUnits
+            options?.maximumFractionDigits ?? currencyRule.minorUnits,
         });
         result = customFormatter.format(roundedAmount);
       } else {
         // Apply currency-specific rounding before formatting (Req 4.5)
-        const roundingMode = options?.roundingMode ?? currencyRule.formatting.roundingMode;
+        const roundingMode =
+          options?.roundingMode ?? currencyRule.formatting.roundingMode;
         const decimals = currencyRule.minorUnits;
-        const roundedAmount = CurrencyFormatter._applyRounding(amount, decimals, roundingMode);
-        
+        const roundedAmount = CurrencyFormatter._applyRounding(
+          amount,
+          decimals,
+          roundingMode,
+        );
+
         // Get (or create) a cached Intl.NumberFormat instance
         const formatter = FormatterCache.getFormatter(currencyCode, locale);
         result = formatter.format(roundedAmount);
       }
     } catch (error) {
       // Intl.NumberFormat unavailable or threw — use manual fallback (Req 3.5)
-      console.warn(`Intl.NumberFormat failed for ${currencyCode}, using fallback formatting:`, 
-        error instanceof Error ? error.message : 'Unknown error');
+      console.warn(
+        `Intl.NumberFormat failed for ${currencyCode}, using fallback formatting:`,
+        error instanceof Error ? error.message : "Unknown error",
+      );
       result = CurrencyFormatter.fallbackFormat(amount, currencyCode, options);
     }
 
     const endTime = performance.now();
     const duration = endTime - startTime;
-    
+
     // Log warning if operation is slow (threshold from CurrencyConfig or default 10ms)
-    const performanceThreshold = CurrencyConfig.getConfiguration().settings.performanceThreshold;
+    const performanceThreshold =
+      CurrencyConfig.getConfiguration().settings.performanceThreshold;
     if (duration > performanceThreshold) {
-      console.warn(`Currency formatting operation took ${duration.toFixed(2)}ms for ${currencyCode}, exceeding threshold of ${performanceThreshold}ms`);
+      console.warn(
+        `Currency formatting operation took ${duration.toFixed(2)}ms for ${currencyCode}, exceeding threshold of ${performanceThreshold}ms`,
+      );
     }
 
     return result;
@@ -392,7 +442,7 @@ export class CurrencyFormatter {
   static formatWithResult(
     amount: number,
     currencyCode: string,
-    options?: FormatOptions
+    options?: FormatOptions,
   ): FormattingResult {
     // Validate amount
     const amountValidation = ValidationEngine.validateAmount(amount);
@@ -401,22 +451,23 @@ export class CurrencyFormatter {
         formatted: options?.fallbackValue ?? String(amount),
         originalAmount: amount,
         currencyCode,
-        locale: 'unknown',
+        locale: "unknown",
         success: false,
-        error: amountValidation.error
+        error: amountValidation.error,
       };
     }
 
     // Validate currency code
-    const currencyValidation = ValidationEngine.validateCurrencyCode(currencyCode);
+    const currencyValidation =
+      ValidationEngine.validateCurrencyCode(currencyCode);
     if (!currencyValidation.isValid) {
       return {
         formatted: options?.fallbackValue ?? String(amount),
         originalAmount: amount,
         currencyCode,
-        locale: 'unknown',
+        locale: "unknown",
         success: false,
-        error: currencyValidation.error
+        error: currencyValidation.error,
       };
     }
 
@@ -426,23 +477,28 @@ export class CurrencyFormatter {
     const locale = options?.locale ?? currencyRule.formatting.locale;
 
     try {
-      const formatted = CurrencyFormatter._doFormat(sanitizedAmount, sanitizedCode, options);
+      const formatted = CurrencyFormatter._doFormat(
+        sanitizedAmount,
+        sanitizedCode,
+        options,
+      );
       return {
         formatted,
         originalAmount: amount,
         currencyCode: sanitizedCode,
         locale,
-        success: true
+        success: true,
       };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown formatting error';
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown formatting error";
       return {
         formatted: options?.fallbackValue ?? String(amount),
         originalAmount: amount,
         currencyCode: sanitizedCode,
         locale,
         success: false,
-        error: errorMessage
+        error: errorMessage,
       };
     }
   }

@@ -8,19 +8,19 @@
  * Mount this router BEFORE the error handler in src/index.ts.
  */
 
-import { Router, Request, Response } from 'express';
-import swaggerUi from 'swagger-ui-express';
-import { generateOpenAPIDocument } from '../openapi/generator';
+import { Router, Request, Response } from "express";
+import swaggerUi from "swagger-ui-express";
+import { generateOpenAPIDocument } from "../openapi/generator";
 
 export const docsRouter = Router();
 
-const isDev = process.env.NODE_ENV === 'development';
+const isDev = process.env.NODE_ENV === "development";
 
 // ─── Guard middleware ─────────────────────────────────────────────────────────
 
 function devOnly(_req: Request, res: Response, next: () => void): void {
   if (!isDev) {
-    res.status(404).json({ error: 'Not found' });
+    res.status(404).json({ error: "Not found" });
     return;
   }
   next();
@@ -28,9 +28,9 @@ function devOnly(_req: Request, res: Response, next: () => void): void {
 
 // ─── /docs/openapi.json ───────────────────────────────────────────────────────
 
-docsRouter.get('/openapi.json', devOnly, (_req: Request, res: Response) => {
+docsRouter.get("/openapi.json", devOnly, (_req: Request, res: Response) => {
   const spec = generateOpenAPIDocument();
-  res.setHeader('Content-Type', 'application/json');
+  res.setHeader("Content-Type", "application/json");
   res.json(spec);
 });
 
@@ -47,11 +47,11 @@ if (isDev) {
   const spec = generateOpenAPIDocument();
 
   docsRouter.use(
-    '/',
+    "/",
     devOnly,
     swaggerUi.serve,
     swaggerUi.setup(spec, {
-      customSiteTitle: 'Mobile Money Bridge — API Docs',
+      customSiteTitle: "Mobile Money Bridge — API Docs",
       swaggerOptions: {
         persistAuthorization: true,
         displayRequestDuration: true,
@@ -62,7 +62,7 @@ if (isDev) {
   );
 } else {
   // In non-dev environments the route still exists but devOnly will 404 it.
-  docsRouter.use('/', devOnly, (_req: Request, res: Response) => {
-    res.status(404).json({ error: 'Not found' });
+  docsRouter.use("/", devOnly, (_req: Request, res: Response) => {
+    res.status(404).json({ error: "Not found" });
   });
 }

@@ -118,7 +118,10 @@ function getOrCreateCircuitBreaker<T>(
   const breaker = new CircuitBreaker<
     [BreakerInvocation<T>, BreakerFallback<T> | undefined],
     CircuitBreakerActionResult<T>
-  >(async (execute) => normalizeResult(await execute()), getBreakerOptions(key));
+  >(
+    async (execute) => normalizeResult(await execute()),
+    getBreakerOptions(key),
+  );
 
   breaker.fallback(async (_execute, fallback, error) => {
     if (!fallback) {
@@ -129,15 +132,21 @@ function getOrCreateCircuitBreaker<T>(
   });
 
   breaker.on("open", () => {
-    console.error(`Circuit breaker opened for ${provider}:${operation} due to high error rate`);
+    console.error(
+      `Circuit breaker opened for ${provider}:${operation} due to high error rate`,
+    );
     emitStateTransitionMetric(provider, operation, "open");
   });
   breaker.on("halfOpen", () => {
-    console.log(`Circuit breaker half-open for ${provider}:${operation}, testing recovery`);
+    console.log(
+      `Circuit breaker half-open for ${provider}:${operation}, testing recovery`,
+    );
     emitStateTransitionMetric(provider, operation, "half_open");
   });
   breaker.on("close", () => {
-    console.log(`Circuit breaker closed for ${provider}:${operation}, service recovered`);
+    console.log(
+      `Circuit breaker closed for ${provider}:${operation}, service recovered`,
+    );
     emitStateTransitionMetric(provider, operation, "closed");
   });
 
@@ -159,9 +168,7 @@ export async function executeWithCircuitBreaker<T>(
 
 export function isCircuitBreakerOpenError(error: unknown): boolean {
   return (
-    error instanceof Error &&
-    "code" in error &&
-    error.code === "EOPENBREAKER"
+    error instanceof Error && "code" in error && error.code === "EOPENBREAKER"
   );
 }
 
@@ -172,7 +179,10 @@ export function resetCircuitBreakers(): void {
   circuitBreakers.clear();
 }
 
-export async function checkAndResetCircuitBreaker(provider: string, operation: string): Promise<boolean> {
+export async function checkAndResetCircuitBreaker(
+  provider: string,
+  operation: string,
+): Promise<boolean> {
   const key = getCircuitKey(provider, operation);
   const breaker = circuitBreakers.get(key);
   if (!breaker) {
@@ -183,10 +193,13 @@ export async function checkAndResetCircuitBreaker(provider: string, operation: s
   if (breaker.opened) {
     try {
       const healthResult = await checkMobileMoneyHealth();
-      const providerHealth = healthResult.providers[provider as keyof typeof healthResult.providers];
+      const providerHealth =
+        healthResult.providers[provider as keyof typeof healthResult.providers];
       if (providerHealth && providerHealth.status === "up") {
         breaker.close();
-        console.log(`Circuit breaker for ${provider}:${operation} reset due to health check`);
+        console.log(
+          `Circuit breaker for ${provider}:${operation} reset due to health check`,
+        );
         return true;
       }
     } catch (error) {

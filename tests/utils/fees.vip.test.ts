@@ -49,7 +49,11 @@ function mockDbVolume(volume: number) {
   });
 }
 
-function mockActiveConfig(feePercentage = 1.5, feeMinimum = 50, feeMaximum = 5000) {
+function mockActiveConfig(
+  feePercentage = 1.5,
+  feeMinimum = 50,
+  feeMaximum = 5000,
+) {
   mockFeeService.getActiveConfiguration.mockResolvedValue({
     id: "cfg-1",
     name: "default",
@@ -70,15 +74,15 @@ function mockActiveConfig(feePercentage = 1.5, feeMinimum = 50, feeMaximum = 500
 
 describe("mapVolumeToTier", () => {
   const cases: [number, VipTier][] = [
-    [0,      VipTier.STANDARD],
-    [999,    VipTier.STANDARD],
-    [1000,   VipTier.SILVER],
-    [4999,   VipTier.SILVER],
-    [5000,   VipTier.GOLD],
-    [19999,  VipTier.GOLD],
-    [20000,  VipTier.PLATINUM],
-    [49999,  VipTier.PLATINUM],
-    [50000,  VipTier.DIAMOND],
+    [0, VipTier.STANDARD],
+    [999, VipTier.STANDARD],
+    [1000, VipTier.SILVER],
+    [4999, VipTier.SILVER],
+    [5000, VipTier.GOLD],
+    [19999, VipTier.GOLD],
+    [20000, VipTier.PLATINUM],
+    [49999, VipTier.PLATINUM],
+    [50000, VipTier.DIAMOND],
     [999999, VipTier.DIAMOND],
   ];
 
@@ -135,7 +139,9 @@ describe("getThirtyDayVolume", () => {
 
   it("returns 0 when user has no completed transactions", async () => {
     mockRedisEmpty();
-    (mockPool.query as jest.Mock).mockResolvedValue({ rows: [{ volume: "0" }] });
+    (mockPool.query as jest.Mock).mockResolvedValue({
+      rows: [{ volume: "0" }],
+    });
 
     const volume = await getThirtyDayVolume("user-new");
 

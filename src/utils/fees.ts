@@ -59,11 +59,31 @@ export interface TierConfig {
  * entry wins when iterating with `find()`.
  */
 export const VIP_TIERS: readonly TierConfig[] = [
-  { tier: VipTier.DIAMOND,  minVolume: 50_000, discountPercent: 65, label: "Diamond"  },
-  { tier: VipTier.PLATINUM, minVolume: 20_000, discountPercent: 50, label: "Platinum" },
-  { tier: VipTier.GOLD,     minVolume:  5_000, discountPercent: 35, label: "Gold"     },
-  { tier: VipTier.SILVER,   minVolume:  1_000, discountPercent: 20, label: "Silver"   },
-  { tier: VipTier.STANDARD, minVolume:      0, discountPercent:  0, label: "Standard" },
+  {
+    tier: VipTier.DIAMOND,
+    minVolume: 50_000,
+    discountPercent: 65,
+    label: "Diamond",
+  },
+  {
+    tier: VipTier.PLATINUM,
+    minVolume: 20_000,
+    discountPercent: 50,
+    label: "Platinum",
+  },
+  { tier: VipTier.GOLD, minVolume: 5_000, discountPercent: 35, label: "Gold" },
+  {
+    tier: VipTier.SILVER,
+    minVolume: 1_000,
+    discountPercent: 20,
+    label: "Silver",
+  },
+  {
+    tier: VipTier.STANDARD,
+    minVolume: 0,
+    discountPercent: 0,
+    label: "Standard",
+  },
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -102,7 +122,7 @@ export async function getThirtyDayVolume(userId: string): Promise<number> {
   try {
     const cached = await redisClient.get(cacheKey);
     if (cached !== null) {
-      const cachedStr = typeof cached === 'string' ? cached : cached.toString();
+      const cachedStr = typeof cached === "string" ? cached : cached.toString();
       return parseFloat(cachedStr);
     }
   } catch {
@@ -144,7 +164,7 @@ export function mapVolumeToTier(volume: number): TierConfig {
   // VIP_TIERS is ordered highest→lowest, so the first match is the best tier.
   return (
     VIP_TIERS.find((t) => volume >= t.minVolume) ??
-    VIP_TIERS[VIP_TIERS.length - 1]   // STANDARD (fallback, should never be needed)
+    VIP_TIERS[VIP_TIERS.length - 1] // STANDARD (fallback, should never be needed)
   );
 }
 

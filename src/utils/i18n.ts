@@ -140,7 +140,11 @@ export function translate(
   });
 }
 
-export function i18nMiddleware(req: Request, res: Response, next: NextFunction): void {
+export function i18nMiddleware(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): void {
   const locale = resolveLocaleFromRequest(req);
   req.locale = locale;
   (res.locals as Record<string, unknown>).locale = locale;

@@ -22,12 +22,16 @@ describe("AssetIssuanceService", () => {
       }),
       submitTransaction: jest.fn().mockResolvedValue({ hash: "123" }),
     };
-    (StellarSdk as any).Horizon = { Server: jest.fn().mockReturnValue(mockServer) };
-    (StellarSdk as any).Asset = jest.fn().mockImplementation((code, issuer) => ({
+    (StellarSdk as any).Horizon = {
+      Server: jest.fn().mockReturnValue(mockServer),
+    };
+    (StellarSdk as any).Asset = jest
+      .fn()
+      .mockImplementation((code, issuer) => ({
         getCode: () => code,
         getIssuer: () => issuer,
-        isNative: () => false
-    }));
+        isNative: () => false,
+      }));
     (StellarSdk as any).Keypair = {
       random: jest.fn().mockReturnValue({
         publicKey: () => "GBC...",
@@ -35,14 +39,16 @@ describe("AssetIssuanceService", () => {
       }),
     };
     (StellarSdk as any).Operation = {
-        changeTrust: jest.fn().mockReturnValue({}),
-        payment: jest.fn().mockReturnValue({}),
+      changeTrust: jest.fn().mockReturnValue({}),
+      payment: jest.fn().mockReturnValue({}),
     };
-    (StellarSdk as any).TransactionBuilder = jest.fn().mockImplementation(() => ({
+    (StellarSdk as any).TransactionBuilder = jest
+      .fn()
+      .mockImplementation(() => ({
         addOperation: jest.fn().mockReturnThis(),
         setTimeout: jest.fn().mockReturnThis(),
         build: jest.fn().mockReturnValue({ sign: jest.fn() }),
-    }));
+      }));
     (StellarSdk as any).BASE_FEE = "100";
 
     service = new AssetIssuanceService();
@@ -63,6 +69,8 @@ describe("AssetIssuanceService", () => {
 
   it("should fail on mainnet without funding source", async () => {
     process.env.STELLAR_NETWORK = "mainnet";
-    await expect(service.setupAnchoredAsset("USDX", "1000000")).rejects.toThrow("Mainnet issuance automation requires a funding source account");
+    await expect(service.setupAnchoredAsset("USDX", "1000000")).rejects.toThrow(
+      "Mainnet issuance automation requires a funding source account",
+    );
   });
 });

@@ -17,10 +17,7 @@ const transactionModel = new TransactionModel();
 export async function runStaleTransactionWatchdog(
   service?: MobileMoneyService,
 ): Promise<void> {
-  const staleHours = parseInt(
-    process.env.STALE_TRANSACTION_HOURS || "12",
-    10,
-  );
+  const staleHours = parseInt(process.env.STALE_TRANSACTION_HOURS || "12", 10);
 
   const result = await pool.query<{
     id: string;
@@ -65,7 +62,7 @@ export async function runStaleTransactionWatchdog(
       //   );
       //   resolved++;
       // } else {
-      
+
       // Mark stale transaction as failed since we can't verify its status
       await transactionModel.updateStatus(row.id, TransactionStatus.Failed);
       console.log(

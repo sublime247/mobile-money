@@ -181,7 +181,7 @@ npm run test:pact
 ### Contract Coverage Summary
 
 | Provider | Endpoints Covered | Auth | Collection | Disbursement | Status | Balance | Errors |
-|----------|-------------------|------|------------|--------------|--------|---------|--------|
+| -------- | ----------------- | ---- | ---------- | ------------ | ------ | ------- | ------ |
 | MTN      | 4                 | ✅   | ✅         | ❌           | ✅     | ✅      | ❌     |
 | Airtel   | 5                 | ✅   | ✅         | ✅           | ✅     | ✅      | ❌     |
 | Orange   | 4                 | ✅   | ✅         | ✅           | ✅     | ❌      | ✅     |

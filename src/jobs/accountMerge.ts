@@ -1,6 +1,9 @@
 import * as StellarSdk from "stellar-sdk";
 import { getNetworkPassphrase, getStellarServer } from "../config/stellar";
-import { addAccountMergeJob, addBatchAccountMergeJobs } from "../queue/accountMergeQueue";
+import {
+  addAccountMergeJob,
+  addBatchAccountMergeJobs,
+} from "../queue/accountMergeQueue";
 
 const ACCOUNT_MERGE_PREFIX = "[account-merge]";
 const STROOPS_PER_XLM = 10_000_000n;

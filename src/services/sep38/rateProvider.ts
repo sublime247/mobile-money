@@ -8,7 +8,6 @@
 import { currencyService, SupportedCurrency } from "../currency";
 import { exchangeRateBufferService } from "../exchangeRateBufferService";
 
-
 // ---------------------------------------------------------------------------
 // Interface
 // ---------------------------------------------------------------------------
@@ -27,7 +26,10 @@ export interface IRateProvider {
    * Returns an indicative price for the given asset pair.
    * Returns null if the pair is not supported or rates are unavailable.
    */
-  getIndicativePrice(sellAsset: string, buyAsset: string): Promise<RateResult | null>;
+  getIndicativePrice(
+    sellAsset: string,
+    buyAsset: string,
+  ): Promise<RateResult | null>;
 
   /**
    * Returns a firm price for the given asset pair.
@@ -63,14 +65,25 @@ function resolveRate(sellCode: string, buyCode: string): number {
   if (sellCode === "XLM" && buyCode === "USD") return XLM_USD_FALLBACK;
   if (sellCode === "USD" && buyCode === "XLM") return 1 / XLM_USD_FALLBACK;
   if (sellCode === "XLM") {
-    const usdToBuy = currencyService.convert(1, "USD", buyCode as SupportedCurrency).rate;
+    const usdToBuy = currencyService.convert(
+      1,
+      "USD",
+      buyCode as SupportedCurrency,
+    ).rate;
     return XLM_USD_FALLBACK * usdToBuy;
   }
   if (buyCode === "XLM") {
-    const sellToUsd = currencyService.convertToBase(1, sellCode as SupportedCurrency).rate;
+    const sellToUsd = currencyService.convertToBase(
+      1,
+      sellCode as SupportedCurrency,
+    ).rate;
     return sellToUsd / XLM_USD_FALLBACK;
   }
-  return currencyService.convert(1, sellCode as SupportedCurrency, buyCode as SupportedCurrency).rate;
+  return currencyService.convert(
+    1,
+    sellCode as SupportedCurrency,
+    buyCode as SupportedCurrency,
+  ).rate;
 }
 
 // ---------------------------------------------------------------------------
@@ -90,7 +103,10 @@ export class CurrencyServiceRateProvider implements IRateProvider {
     this.feeFixed = feeFixed;
   }
 
-  async getIndicativePrice(sellAsset: string, buyAsset: string): Promise<RateResult | null> {
+  async getIndicativePrice(
+    sellAsset: string,
+    buyAsset: string,
+  ): Promise<RateResult | null> {
     const sellCode = assetToCurrencyCode(sellAsset);
     const buyCode = assetToCurrencyCode(buyAsset);
     if (!sellCode || !buyCode) return null;
@@ -101,7 +117,7 @@ export class CurrencyServiceRateProvider implements IRateProvider {
       // Apply exchange rate buffer for volatility protection
       const buffered = await exchangeRateBufferService.applyBuffer(
         baseRate,
-        "*",        // SEP-38 uses global wildcard provider
+        "*", // SEP-38 uses global wildcard provider
         sellCode,
         buyCode,
         "sell",
@@ -120,8 +136,10 @@ export class CurrencyServiceRateProvider implements IRateProvider {
     }
   }
 
-
-  async getFirmPrice(sellAsset: string, buyAsset: string): Promise<RateResult | null> {
+  async getFirmPrice(
+    sellAsset: string,
+    buyAsset: string,
+  ): Promise<RateResult | null> {
     const sellCode = assetToCurrencyCode(sellAsset);
     const buyCode = assetToCurrencyCode(buyAsset);
     if (!sellCode || !buyCode) return null;
@@ -148,7 +166,6 @@ export class CurrencyServiceRateProvider implements IRateProvider {
       return null;
     }
   }
-
 }
 
 // Singleton used by the router — can be replaced in tests

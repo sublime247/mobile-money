@@ -1,5 +1,9 @@
 import { Router, Request, Response, NextFunction } from "express";
-import { ValidationError, NotFoundError, BusinessLogicError } from "../utils/errors";
+import {
+  ValidationError,
+  NotFoundError,
+  BusinessLogicError,
+} from "../utils/errors";
 import { ERROR_CODES } from "../constants/errorCodes";
 
 const router = Router();
@@ -63,34 +67,31 @@ router.get(
 );
 
 // Example: Business logic error
-router.post(
-  "/withdraw",
-  (req: Request, res: Response, next: NextFunction) => {
-    const balance = 100;
-    const amount = req.body.amount;
+router.post("/withdraw", (req: Request, res: Response, next: NextFunction) => {
+  const balance = 100;
+  const amount = req.body.amount;
 
-    if (amount > balance) {
-      return next(
-        new BusinessLogicError(
-          "Insufficient balance for withdrawal",
-          ERROR_CODES.INSUFFICIENT_BALANCE,
-          { balance, requested: amount },
-        ),
-      );
-    }
+  if (amount > balance) {
+    return next(
+      new BusinessLogicError(
+        "Insufficient balance for withdrawal",
+        ERROR_CODES.INSUFFICIENT_BALANCE,
+        { balance, requested: amount },
+      ),
+    );
+  }
 
-    if (amount > 5000) {
-      return next(
-        new BusinessLogicError(
-          "Daily limit exceeded",
-          ERROR_CODES.LIMIT_EXCEEDED,
-          { dailyLimit: 5000, requested: amount },
-        ),
-      );
-    }
+  if (amount > 5000) {
+    return next(
+      new BusinessLogicError(
+        "Daily limit exceeded",
+        ERROR_CODES.LIMIT_EXCEEDED,
+        { dailyLimit: 5000, requested: amount },
+      ),
+    );
+  }
 
-    res.json({ success: true });
-  },
-);
+  res.json({ success: true });
+});
 
 export default router;

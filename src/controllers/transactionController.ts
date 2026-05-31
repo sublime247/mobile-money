@@ -26,7 +26,10 @@ import {
   TransactionDetailResponse,
   TransactionResponse,
 } from "../types/api";
-import { checkDestinationTrustline, TrustlineError } from "../stellar/trustlines";
+import {
+  checkDestinationTrustline,
+  TrustlineError,
+} from "../stellar/trustlines";
 import { getConfiguredPaymentAsset } from "../services/stellar/assetService";
 import { ERROR_CODES } from "../constants/errorCodes";
 
@@ -179,7 +182,10 @@ export const getTransactionHistoryHandler = async (
         startDate as string | undefined,
         endDate as string | undefined,
         filters,
-        { before: before as string | undefined, after: after as string | undefined },
+        {
+          before: before as string | undefined,
+          after: after as string | undefined,
+        },
       );
 
       // If 'before' was used we fetched ascending results; reverse to keep newest-first
@@ -194,8 +200,16 @@ export const getTransactionHistoryHandler = async (
         data: transactions,
         pagination: {
           limit: limitNum,
-          before: transactions.length ? Buffer.from(`${transactions[0].createdAt.toISOString()}|${transactions[0].id}`).toString('base64') : null,
-          after: transactions.length ? Buffer.from(`${transactions[transactions.length - 1].createdAt.toISOString()}|${transactions[transactions.length - 1].id}`).toString('base64') : null,
+          before: transactions.length
+            ? Buffer.from(
+                `${transactions[0].createdAt.toISOString()}|${transactions[0].id}`,
+              ).toString("base64")
+            : null,
+          after: transactions.length
+            ? Buffer.from(
+                `${transactions[transactions.length - 1].createdAt.toISOString()}|${transactions[transactions.length - 1].id}`,
+              ).toString("base64")
+            : null,
           hasMore,
         },
       });
@@ -352,14 +366,14 @@ async function applyTravelRule(transaction: Transaction): Promise<void> {
       amount,
       currency: transaction.currency ?? "USD",
       sender: {
-        name: transaction.metadata?.senderName as string ?? "Unknown",
+        name: (transaction.metadata?.senderName as string) ?? "Unknown",
         account: transaction.phoneNumber,
         address: transaction.metadata?.senderAddress as string | undefined,
         dob: transaction.metadata?.senderDob as string | undefined,
         idNumber: transaction.metadata?.senderIdNumber as string | undefined,
       },
       receiver: {
-        name: transaction.metadata?.receiverName as string ?? "Unknown",
+        name: (transaction.metadata?.receiverName as string) ?? "Unknown",
         account: transaction.stellarAddress,
         address: transaction.metadata?.receiverAddress as string | undefined,
       },
@@ -457,30 +471,35 @@ async function processTransactionRequest(
 
     // Check mandatory 2FA for withdrawals
     if (type === "withdraw") {
-      const requires2FA = await twoFactorWithdrawalService.requires2FAForWithdrawal(userId);
+      const requires2FA =
+        await twoFactorWithdrawalService.requires2FAForWithdrawal(userId);
       if (requires2FA) {
-        const twoFactorToken = req.body.twoFactorToken || req.headers['x-2fa-token'] as string;
+        const twoFactorToken =
+          req.body.twoFactorToken || (req.headers["x-2fa-token"] as string);
         const backupCode = req.body.backupCode;
 
         if (!twoFactorToken && !backupCode) {
           return res.status(400).json({
             error: "2FA verification required for withdrawal",
             code: "TWO_FACTOR_REQUIRED",
-            message: "This account requires 2FA verification for all withdrawals. Please provide a TOTP token or backup code."
+            message:
+              "This account requires 2FA verification for all withdrawals. Please provide a TOTP token or backup code.",
           });
         }
 
-        const verificationResult = await twoFactorWithdrawalService.verifyWithdrawal2FA({
-          userId,
-          token: twoFactorToken,
-          backupCode
-        });
+        const verificationResult =
+          await twoFactorWithdrawalService.verifyWithdrawal2FA({
+            userId,
+            token: twoFactorToken,
+            backupCode,
+          });
 
         if (!verificationResult.success) {
           return res.status(401).json({
             error: "2FA verification failed",
             code: "TWO_FACTOR_INVALID",
-            message: verificationResult.error || "Invalid 2FA token or backup code"
+            message:
+              verificationResult.error || "Invalid 2FA token or backup code",
           });
         }
       }
@@ -500,7 +519,9 @@ async function processTransactionRequest(
           });
         }
         // Unexpected Horizon error — surface as 502 so callers can retry
-        return res.status(502).json({ error: "Failed to verify destination trustline" });
+        return res
+          .status(502)
+          .json({ error: "Failed to verify destination trustline" });
       }
     }
 
@@ -901,10 +922,12 @@ export const listTransactionsHandler = async (req: Request, res: Response) => {
       {
         tags: [], // Could be extended
         referenceNumber: filters.reference,
-      }
+      },
     );
-    const total = filters.reference 
-      ? await transactionModel.count(undefined, undefined, { referenceNumber: filters.reference })
+    const total = filters.reference
+      ? await transactionModel.count(undefined, undefined, {
+          referenceNumber: filters.reference,
+        })
       : totalCount;
 
     return res.json({

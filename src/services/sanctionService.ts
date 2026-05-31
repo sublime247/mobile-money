@@ -32,13 +32,37 @@ export class SanctionService {
   async fetchSanctionUpdates(): Promise<SanctionEntity[]> {
     // In a production environment, this would call external APIs like UN or OFAC.
     // Example: const response = await axios.get("https://scsanctions.un.org/resources/xml/en/consolidated.xml");
-    
+
     // Mocked data for demonstration
     return [
-      { name: "John Doe", country: "Country A", source: "UN", category: "Individual", external_id: "UN-123" },
-      { name: "Global Arms Ltd", country: "Country B", source: "OFAC", category: "Entity", external_id: "OFAC-456" },
-      { name: "Jane Smith", country: "Country C", source: "EU", category: "Individual", external_id: "EU-789" },
-      { name: "Osama bin Laden", country: "Saudi Arabia", source: "UN", category: "Individual", external_id: "UN-001" },
+      {
+        name: "John Doe",
+        country: "Country A",
+        source: "UN",
+        category: "Individual",
+        external_id: "UN-123",
+      },
+      {
+        name: "Global Arms Ltd",
+        country: "Country B",
+        source: "OFAC",
+        category: "Entity",
+        external_id: "OFAC-456",
+      },
+      {
+        name: "Jane Smith",
+        country: "Country C",
+        source: "EU",
+        category: "Individual",
+        external_id: "EU-789",
+      },
+      {
+        name: "Osama bin Laden",
+        country: "Saudi Arabia",
+        source: "UN",
+        category: "Individual",
+        external_id: "UN-001",
+      },
     ];
   }
 
@@ -49,7 +73,7 @@ export class SanctionService {
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
-      
+
       for (const entity of entities) {
         const query = `
           INSERT INTO sanction_list (name, country, source, category, external_id)
@@ -68,7 +92,7 @@ export class SanctionService {
           entity.external_id ?? null,
         ]);
       }
-      
+
       await client.query("COMMIT");
       console.log(`Successfully synced ${entities.length} sanction entities.`);
     } catch (error) {
@@ -84,17 +108,21 @@ export class SanctionService {
    * Searches for a name in the sanction list using fuzzy matching.
    * Returns a list of potential matches with their scores.
    */
-  async searchSanctions(name: string, threshold: number = 0.85): Promise<{ entity: SanctionEntity; score: number }[]> {
-    const query = "SELECT name, country, source, category, external_id FROM sanction_list";
+  async searchSanctions(
+    name: string,
+    threshold: number = 0.85,
+  ): Promise<{ entity: SanctionEntity; score: number }[]> {
+    const query =
+      "SELECT name, country, source, category, external_id FROM sanction_list";
     const { rows } = await pool.query(query);
-    
+
     const matches: { entity: SanctionEntity; score: number }[] = [];
     const normalizedTarget = name.toLowerCase().trim();
-    
+
     for (const row of rows) {
       const normalizedSource = row.name.toLowerCase().trim();
       const score = this.jaroWinkler(normalizedTarget, normalizedSource);
-      
+
       if (score >= threshold) {
         matches.push({
           entity: {
@@ -108,7 +136,7 @@ export class SanctionService {
         });
       }
     }
-    
+
     return matches.sort((a, b) => b.score - a.score);
   }
 
@@ -117,16 +145,16 @@ export class SanctionService {
    */
   private jaroWinkler(s1: string, s2: string): number {
     if (s1 === s2) return 1.0;
-    
+
     const len1 = s1.length;
     const len2 = s2.length;
     if (len1 === 0 || len2 === 0) return 0.0;
-    
+
     const maxDist = Math.floor(Math.max(len1, len2) / 2) - 1;
-    
+
     const match1 = new Array(len1).fill(false);
     const match2 = new Array(len2).fill(false);
-    
+
     let matches = 0;
     for (let i = 0; i < len1; i++) {
       const start = Math.max(0, i - maxDist);
@@ -140,9 +168,9 @@ export class SanctionService {
         break;
       }
     }
-    
+
     if (matches === 0) return 0.0;
-    
+
     let transpositions = 0;
     let k = 0;
     for (let i = 0; i < len1; i++) {
@@ -151,15 +179,19 @@ export class SanctionService {
       if (s1[i] !== s2[k]) transpositions++;
       k++;
     }
-    
-    const jaro = (matches / len1 + matches / len2 + (matches - transpositions / 2) / matches) / 3;
-    
+
+    const jaro =
+      (matches / len1 +
+        matches / len2 +
+        (matches - transpositions / 2) / matches) /
+      3;
+
     let prefix = 0;
     for (let i = 0; i < Math.min(4, len1, len2); i++) {
       if (s1[i] === s2[i]) prefix++;
       else break;
     }
-    
+
     return jaro + prefix * 0.1 * (1 - jaro);
   }
 

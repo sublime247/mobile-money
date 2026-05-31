@@ -12,8 +12,8 @@ spec:
   strategy:
     type: RollingUpdate
     rollingUpdate:
-      maxSurge: 1        # one extra pod while rolling (blue-green style)
-      maxUnavailable: 0  # never take a pod down before the new one is ready
+      maxSurge: 1 # one extra pod while rolling (blue-green style)
+      maxUnavailable: 0 # never take a pod down before the new one is ready
   template:
     metadata:
       labels:
@@ -62,7 +62,7 @@ spec:
             initialDelaySeconds: 10
             periodSeconds: 5
             timeoutSeconds: 3
-            successThreshold: 2   # must pass twice before marked ready
+            successThreshold: 2 # must pass twice before marked ready
             failureThreshold: 3
           # Liveness: restart pod if /health fails repeatedly
           livenessProbe:
@@ -80,7 +80,7 @@ spec:
               port: 3000
             initialDelaySeconds: 5
             periodSeconds: 5
-            failureThreshold: 18  # 18 × 5 s = 90 s max startup window
+            failureThreshold: 18 # 18 × 5 s = 90 s max startup window
           lifecycle:
             preStop:
               exec:
@@ -92,7 +92,7 @@ kind: PodDisruptionBudget
 metadata:
   name: mobile-money-pdb
 spec:
-  minAvailable: 2          # always keep at least 2 pods up during voluntary disruptions
+  minAvailable: 2 # always keep at least 2 pods up during voluntary disruptions
   selector:
     matchLabels:
       app: mobile-money

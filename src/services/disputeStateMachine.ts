@@ -2,14 +2,14 @@ import { DisputeStatus, DisputePriority } from "../models/dispute";
 
 /**
  * Dispute State Machine
- * 
+ *
  * Manages valid state transitions and business rules for dispute workflow.
- * 
+ *
  * State Flow:
  * open → investigating → resolved
  *   │           │
  *   └───────────┴─→ rejected
- * 
+ *
  * Terminal states: resolved, rejected
  */
 
@@ -34,14 +34,14 @@ export const DISPUTE_TRANSITIONS: StateTransition[] = [
     conditions: ["Must be assigned to an agent"],
   },
   {
-    from: "open", 
+    from: "open",
     to: "resolved",
     requiredFields: ["resolution"],
     conditions: ["Resolution text is required"],
   },
   {
     from: "open",
-    to: "rejected", 
+    to: "rejected",
     requiredFields: ["resolution"],
     conditions: ["Resolution text is required"],
   },
@@ -54,7 +54,7 @@ export const DISPUTE_TRANSITIONS: StateTransition[] = [
   {
     from: "investigating",
     to: "rejected",
-    requiredFields: ["resolution"], 
+    requiredFields: ["resolution"],
     conditions: ["Resolution text is required"],
   },
 ];
@@ -80,7 +80,7 @@ export class DisputeStateMachine {
    */
   isValidTransition(from: DisputeStatus, to: DisputeStatus): boolean {
     return this.config.transitions.some(
-      (transition) => transition.from === from && transition.to === to
+      (transition) => transition.from === from && transition.to === to,
     );
   }
 
@@ -105,7 +105,7 @@ export class DisputeStateMachine {
    */
   getRequiredFields(from: DisputeStatus, to: DisputeStatus): string[] {
     const transition = this.config.transitions.find(
-      (t) => t.from === from && t.to === to
+      (t) => t.from === from && t.to === to,
     );
     return transition?.requiredFields || [];
   }
@@ -115,7 +115,7 @@ export class DisputeStateMachine {
    */
   getTransitionConditions(from: DisputeStatus, to: DisputeStatus): string[] {
     const transition = this.config.transitions.find(
-      (t) => t.from === from && t.to === to
+      (t) => t.from === from && t.to === to,
     );
     return transition?.conditions || [];
   }
@@ -126,7 +126,7 @@ export class DisputeStateMachine {
   validateTransition(
     from: DisputeStatus,
     to: DisputeStatus,
-    data: Record<string, any> = {}
+    data: Record<string, any> = {},
   ): { valid: boolean; errors: string[] } {
     const errors: string[] = [];
 
@@ -135,23 +135,28 @@ export class DisputeStateMachine {
       const allowed = this.getAllowedTransitions(from);
       errors.push(
         `Cannot transition from "${from}" to "${to}". ` +
-        (allowed.length 
-          ? `Allowed transitions: ${allowed.join(", ")}`
-          : `"${from}" is a terminal state.`)
+          (allowed.length
+            ? `Allowed transitions: ${allowed.join(", ")}`
+            : `"${from}" is a terminal state.`),
       );
     }
 
     // Check required fields
     const requiredFields = this.getRequiredFields(from, to);
     for (const field of requiredFields) {
-      if (!data[field] || (typeof data[field] === 'string' && data[field].trim() === '')) {
+      if (
+        !data[field] ||
+        (typeof data[field] === "string" && data[field].trim() === "")
+      ) {
         errors.push(`Field "${field}" is required for transition to "${to}"`);
       }
     }
 
     // Additional business rule validations
     if (to === "investigating" && !data.assignedTo) {
-      errors.push("Dispute must be assigned to an agent when moving to investigating status");
+      errors.push(
+        "Dispute must be assigned to an agent when moving to investigating status",
+      );
     }
 
     return {
@@ -170,7 +175,7 @@ export class DisputeStateMachine {
       hasEvidence?: boolean;
       priority?: DisputePriority;
       daysSinceCreated?: number;
-    }
+    },
   ): DisputeStatus | null {
     const { hasAssignee, hasEvidence, priority, daysSinceCreated } = context;
 
@@ -209,7 +214,7 @@ export class DisputeStateMachine {
     switch (priority) {
       case "critical":
         return 4;
-      case "high": 
+      case "high":
         return 24;
       case "medium":
         return 72;
@@ -225,19 +230,26 @@ export class DisputeStateMachine {
    */
   isOverdue(createdAt: Date, priority: DisputePriority): boolean {
     const slaHours = this.getSlaHours(priority);
-    const slaDeadline = new Date(createdAt.getTime() + slaHours * 60 * 60 * 1000);
+    const slaDeadline = new Date(
+      createdAt.getTime() + slaHours * 60 * 60 * 1000,
+    );
     return new Date() > slaDeadline;
   }
 
   /**
    * Get time remaining until SLA deadline
    */
-  getTimeUntilSlaDeadline(createdAt: Date, priority: DisputePriority): {
+  getTimeUntilSlaDeadline(
+    createdAt: Date,
+    priority: DisputePriority,
+  ): {
     hours: number;
     isOverdue: boolean;
   } {
     const slaHours = this.getSlaHours(priority);
-    const slaDeadline = new Date(createdAt.getTime() + slaHours * 60 * 60 * 1000);
+    const slaDeadline = new Date(
+      createdAt.getTime() + slaHours * 60 * 60 * 1000,
+    );
     const now = new Date();
     const diffMs = slaDeadline.getTime() - now.getTime();
     const diffHours = diffMs / (1000 * 60 * 60);

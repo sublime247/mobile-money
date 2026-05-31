@@ -32,11 +32,11 @@ GET /transactions
 
 **Query Parameters:**
 
-| Parameter | Type   | Required | Default | Max | Description |
-|-----------|--------|----------|---------|-----|-------------|
+| Parameter | Type   | Required | Default | Max | Description                                                    |
+| --------- | ------ | -------- | ------- | --- | -------------------------------------------------------------- |
 | `status`  | string | No       | (none)  | -   | Single or comma-separated statuses (e.g., `pending,completed`) |
-| `limit`   | number | No       | 50      | 100 | Results per page |
-| `offset`  | number | No       | 0       | -   | Number of results to skip |
+| `limit`   | number | No       | 50      | 100 | Results per page                                               |
+| `offset`  | number | No       | 0       | -   | Number of results to skip                                      |
 
 **Response Format:**
 
@@ -96,13 +96,14 @@ The feature uses a layered approach:
 Parses the status query parameter into an array of valid status enums.
 
 ```typescript
-parseStatusFilter("pending")              // ["pending"]
-parseStatusFilter("pending,completed")    // ["pending", "completed"]
-parseStatusFilter("")                      // []
-parseStatusFilter("invalid")               // throws error
+parseStatusFilter("pending"); // ["pending"]
+parseStatusFilter("pending,completed"); // ["pending", "completed"]
+parseStatusFilter(""); // []
+parseStatusFilter("invalid"); // throws error
 ```
 
 **Features:**
+
 - Comma-separated value splitting
 - Whitespace trimming
 - Enum value validation
@@ -113,9 +114,9 @@ parseStatusFilter("invalid")               // throws error
 Generates SQL WHERE clause for database queries.
 
 ```typescript
-buildStatusWhereClause(["pending"])           // "status IN ('pending')"
-buildStatusWhereClause(["pending", "failed"]) // "status IN ('pending', 'failed')"
-buildStatusWhereClause([])                    // ""
+buildStatusWhereClause(["pending"]); // "status IN ('pending')"
+buildStatusWhereClause(["pending", "failed"]); // "status IN ('pending', 'failed')"
+buildStatusWhereClause([]); // ""
 ```
 
 #### validateTransactionFilters
@@ -128,6 +129,7 @@ Express middleware that validates all query parameters and attaches parsed filte
 ```
 
 **Validation Rules:**
+
 - Status: Must be valid enum value or comma-separated valid values
 - Limit: Must be numeric, positive, max 100
 - Offset: Must be numeric, non-negative
@@ -137,7 +139,7 @@ Express middleware that validates all query parameters and attaches parsed filte
 Helper function to calculate pagination metadata.
 
 ```typescript
-getPaginationInfo(total, limit, offset)
+getPaginationInfo(total, limit, offset);
 // Returns: { total, limit, offset, hasMore, totalPages, currentPage }
 ```
 
@@ -172,7 +174,7 @@ curl "http://localhost:3000/transactions?status=failed&limit=100&offset=200"
 ```javascript
 // Fetch pending and completed transactions, page 1
 const response = await fetch(
-  '/transactions?status=pending,completed&limit=50&offset=0'
+  "/transactions?status=pending,completed&limit=50&offset=0",
 );
 const { data, pagination } = await response.json();
 
@@ -182,7 +184,7 @@ console.log(`Page ${pagination.currentPage} of ${pagination.totalPages}`);
 // Fetch next page
 if (pagination.hasMore) {
   const nextPage = await fetch(
-    `/transactions?status=pending,completed&limit=50&offset=${pagination.offset + pagination.limit}`
+    `/transactions?status=pending,completed&limit=50&offset=${pagination.offset + pagination.limit}`,
   );
   const nextData = await nextPage.json();
 }
@@ -201,13 +203,14 @@ SELECT COUNT(*) FROM transactions WHERE status = ANY($1);
 ### Find transactions with pagination
 
 ```sql
-SELECT * FROM transactions 
-WHERE status = ANY($1) 
-ORDER BY created_at DESC 
+SELECT * FROM transactions
+WHERE status = ANY($1)
+ORDER BY created_at DESC
 LIMIT $2 OFFSET $3;
 ```
 
 **Query Optimization:**
+
 - Uses `status = ANY($1)` instead of multiple OR conditions
 - PostgreSQL can optimize status column if indexed
 - Ordered by `created_at DESC` for most recent first
@@ -323,11 +326,11 @@ LIMIT $2 OFFSET $3;
 
 ```sql
 -- Index for status filtering and ordering
-CREATE INDEX idx_transactions_status_created 
+CREATE INDEX idx_transactions_status_created
 ON transactions(status, created_at DESC);
 
 -- Index for count queries
-CREATE INDEX idx_transactions_status 
+CREATE INDEX idx_transactions_status
 ON transactions(status);
 ```
 
@@ -358,16 +361,19 @@ ON transactions(status);
 ## Troubleshooting
 
 **Empty results returned:**
+
 - Verify transaction status values are valid
 - Check if transactions exist in database with specified status
 - Verify date filtering if recently added
 
 **Slow queries:**
+
 - Add index on `status` column
 - Add index on `created_at` column
 - Consider cursor-based pagination for very large datasets
 
 **Invalid status errors:**
+
 - Ensure status value is one of: pending, completed, failed, cancelled
 - Check for typos (case-sensitive)
 - Verify comma-separated values format

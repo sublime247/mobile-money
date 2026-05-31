@@ -12,8 +12,14 @@ function getMtnCallbackSecret(): string {
 }
 
 function getSignatureHeaderName(): string {
-  const configuredHeader = getConfigValue("providers.mtn.callbackSignatureHeader");
-  return String(configuredHeader ?? "").trim().toLowerCase() || DEFAULT_SIGNATURE_HEADER;
+  const configuredHeader = getConfigValue(
+    "providers.mtn.callbackSignatureHeader",
+  );
+  return (
+    String(configuredHeader ?? "")
+      .trim()
+      .toLowerCase() || DEFAULT_SIGNATURE_HEADER
+  );
 }
 
 function getSignatureHeader(req: Request): string | undefined {
@@ -23,7 +29,11 @@ function getSignatureHeader(req: Request): string | undefined {
   return req.headers[ALT_SIGNATURE_HEADER] as string | undefined;
 }
 
-function computeExpectedSignature(rawBody: Buffer, secret: string, headerValue: string): string {
+function computeExpectedSignature(
+  rawBody: Buffer,
+  secret: string,
+  headerValue: string,
+): string {
   const hasPrefix = headerValue.startsWith("sha256=");
   if (hasPrefix) {
     return createHmac("sha256", secret).update(rawBody).digest("hex");
@@ -31,7 +41,11 @@ function computeExpectedSignature(rawBody: Buffer, secret: string, headerValue: 
   return createHmac("sha256", secret).update(rawBody).digest("base64");
 }
 
-function verifySignature(rawBody: Buffer, headerValue: string, secret: string): boolean {
+function verifySignature(
+  rawBody: Buffer,
+  headerValue: string,
+  secret: string,
+): boolean {
   const expected = computeExpectedSignature(rawBody, secret, headerValue);
   const incoming = headerValue.startsWith("sha256=")
     ? headerValue.substring(7)
@@ -44,7 +58,11 @@ function verifySignature(rawBody: Buffer, headerValue: string, secret: string): 
   return timingSafeEqual(Buffer.from(incoming), Buffer.from(expected));
 }
 
-function buildFailureEvent(req: Request, reason: string, headerPresent: boolean): void {
+function buildFailureEvent(
+  req: Request,
+  reason: string,
+  headerPresent: boolean,
+): void {
   logSecurityAnomaly({
     event: "security.anomaly",
     timestamp: new Date().toISOString(),

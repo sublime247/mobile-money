@@ -4,7 +4,7 @@ import { getStellarServer, getNetworkPassphrase } from "../../config/stellar";
 export interface ReserveConfig {
   assetCode: string;
   assetIssuer: string; // empty string = native XLM
-  minReserve: number;  // trigger rebalance below this
+  minReserve: number; // trigger rebalance below this
   targetReserve: number;
 }
 
@@ -43,7 +43,7 @@ async function getAssetBalance(
   server: StellarSdk.Horizon.Server,
   publicKey: string,
   assetCode: string,
-  assetIssuer: string
+  assetIssuer: string,
 ): Promise<number> {
   const account = await server.loadAccount(publicKey);
   for (const b of account.balances) {
@@ -69,7 +69,7 @@ async function executePathPayment(
   server: StellarSdk.Horizon.Server,
   keypair: StellarSdk.Keypair,
   destAsset: StellarSdk.Asset,
-  destAmount: string
+  destAmount: string,
 ): Promise<string> {
   const account = await server.loadAccount(keypair.publicKey());
 
@@ -86,7 +86,7 @@ async function executePathPayment(
         destAsset,
         destAmount,
         path: [], // let Horizon find the best path through LPs
-      })
+      }),
     )
     .setTimeout(30)
     .build();
@@ -103,7 +103,9 @@ async function executePathPayment(
 export async function rebalanceReserves(): Promise<RebalanceResult[]> {
   const keypair = getDistributionKeypair();
   if (!keypair) {
-    console.warn("[lp-rebalance] STELLAR_DISTRIBUTION_SECRET not configured — skipping");
+    console.warn(
+      "[lp-rebalance] STELLAR_DISTRIBUTION_SECRET not configured — skipping",
+    );
     return [];
   }
 
@@ -121,7 +123,7 @@ export async function rebalanceReserves(): Promise<RebalanceResult[]> {
       server,
       keypair.publicKey(),
       cfg.assetCode,
-      cfg.assetIssuer
+      cfg.assetIssuer,
     );
 
     if (balance >= cfg.minReserve) {
@@ -139,7 +141,7 @@ export async function rebalanceReserves(): Promise<RebalanceResult[]> {
 
     const deficit = cfg.targetReserve - balance;
     console.log(
-      `[lp-rebalance] ${cfg.assetCode} balance=${balance} below min=${cfg.minReserve}, buying ${deficit}`
+      `[lp-rebalance] ${cfg.assetCode} balance=${balance} below min=${cfg.minReserve}, buying ${deficit}`,
     );
 
     try {
@@ -152,7 +154,7 @@ export async function rebalanceReserves(): Promise<RebalanceResult[]> {
         server,
         keypair,
         destAsset,
-        String(deficit)
+        String(deficit),
       );
 
       results.push({
@@ -164,7 +166,10 @@ export async function rebalanceReserves(): Promise<RebalanceResult[]> {
         skipped: false,
       });
     } catch (err) {
-      console.error(`[lp-rebalance] Path payment failed for ${cfg.assetCode}:`, err);
+      console.error(
+        `[lp-rebalance] Path payment failed for ${cfg.assetCode}:`,
+        err,
+      );
       results.push({
         assetCode: cfg.assetCode,
         currentBalance: balance,

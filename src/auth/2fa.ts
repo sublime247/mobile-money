@@ -1,7 +1,7 @@
-import speakeasy from 'speakeasy';
-import QRCode from 'qrcode';
-import bcrypt from 'bcrypt';
-import crypto from 'crypto';
+import speakeasy from "speakeasy";
+import QRCode from "qrcode";
+import bcrypt from "bcrypt";
+import crypto from "crypto";
 
 export interface TOTPSecret {
   secret: string;
@@ -24,15 +24,15 @@ export interface BackupCode {
 export function generateTOTPSecret(userEmail: string): TOTPSecret {
   const secret = speakeasy.generateSecret({
     name: `Mobile Money (${userEmail})`,
-    issuer: 'Mobile Money',
-    length: 32
+    issuer: "Mobile Money",
+    length: 32,
   });
 
   // Generate QR code
   const otpauthUrl = speakeasy.otpauthURL({
     secret: secret.base32,
     label: `Mobile Money (${userEmail})`,
-    issuer: 'Mobile Money'
+    issuer: "Mobile Money",
   });
 
   // Generate backup codes
@@ -41,7 +41,7 @@ export function generateTOTPSecret(userEmail: string): TOTPSecret {
   return {
     secret: secret.base32,
     qrCode: otpauthUrl,
-    backupCodes
+    backupCodes,
   };
 }
 
@@ -50,11 +50,13 @@ export function generateTOTPSecret(userEmail: string): TOTPSecret {
  * @param qrCodeUrl The OTPAuth URL for QR code
  * @returns Base64 encoded QR code image
  */
-export async function generateQRCodeDataURL(qrCodeUrl: string): Promise<string> {
+export async function generateQRCodeDataURL(
+  qrCodeUrl: string,
+): Promise<string> {
   try {
     return await QRCode.toDataURL(qrCodeUrl);
   } catch (error) {
-    throw new Error('Failed to generate QR code');
+    throw new Error("Failed to generate QR code");
   }
 }
 
@@ -65,12 +67,16 @@ export async function generateQRCodeDataURL(qrCodeUrl: string): Promise<string> 
  * @param window Time window for verification (default: 2)
  * @returns True if token is valid
  */
-export function verifyTOTPToken(secret: string, token: string, window: number = 2): boolean {
+export function verifyTOTPToken(
+  secret: string,
+  token: string,
+  window: number = 2,
+): boolean {
   return speakeasy.totp.verify({
     secret,
-    encoding: 'base32',
+    encoding: "base32",
     token,
-    window
+    window,
   });
 }
 
@@ -82,7 +88,7 @@ export function generateBackupCodes(): string[] {
   const codes: string[] = [];
   for (let i = 0; i < 10; i++) {
     // Generate 8-character alphanumeric code
-    codes.push(crypto.randomBytes(4).toString('hex').toUpperCase());
+    codes.push(crypto.randomBytes(4).toString("hex").toUpperCase());
   }
   return codes;
 }
@@ -94,12 +100,12 @@ export function generateBackupCodes(): string[] {
  */
 export async function hashBackupCodes(codes: string[]): Promise<string[]> {
   const hashedCodes: string[] = [];
-  
+
   for (const code of codes) {
     const hash = await bcrypt.hash(code, 10);
     hashedCodes.push(hash);
   }
-  
+
   return hashedCodes;
 }
 
@@ -110,18 +116,18 @@ export async function hashBackupCodes(codes: string[]): Promise<string[]> {
  * @returns True if code is valid and not used
  */
 export async function verifyBackupCode(
-  code: string, 
-  hashedCodes: BackupCode[]
+  code: string,
+  hashedCodes: BackupCode[],
 ): Promise<{ valid: boolean; codeId?: string }> {
   for (const hashedCode of hashedCodes) {
     if (hashedCode.used) continue;
-    
+
     const isValid = await bcrypt.compare(code, hashedCode.code_hash);
     if (isValid) {
       return { valid: true, codeId: hashedCode.id };
     }
   }
-  
+
   return { valid: false };
 }
 
@@ -132,8 +138,8 @@ export async function verifyBackupCode(
  */
 export function is2FAEnabled(user: any): boolean {
   return !!(
-    user.two_factor_secret && 
-    user.two_factor_enabled && 
+    user.two_factor_secret &&
+    user.two_factor_enabled &&
     user.two_factor_verified
   );
 }

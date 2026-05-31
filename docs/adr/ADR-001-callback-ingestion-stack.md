@@ -1,11 +1,11 @@
 # ADR-001 — Callback Ingestion Service Tech Stack
 
-| Field    | Value                          |
-|----------|-------------------------------|
-| Status   | Accepted                       |
-| Date     | 2026-04-23                     |
-| Authors  | Platform Engineering           |
-| Replaces | —                              |
+| Field    | Value                |
+| -------- | -------------------- |
+| Status   | Accepted             |
+| Date     | 2026-04-23           |
+| Authors  | Platform Engineering |
+| Replaces | —                    |
 
 ---
 
@@ -83,25 +83,25 @@ The next-gen core must handle **10,000 req/s sustained** with P99 < 20ms and zer
 ### Throughput & Latency
 
 | Service | RPS Target | Actual RPS | P50 (ms) | P95 (ms) | P99 (ms) | Error Rate | RSS Memory |
-|---------|-----------|------------|----------|----------|----------|------------|------------|
-| Node.js | 1,000     | 998        | 3.2      | 8.1      | 14.3     | 0.00%      | 68 MB      |
-| Node.js | 5,000     | 4,971      | 5.8      | 18.4     | 34.7     | 0.02%      | 112 MB     |
-| Node.js | 10,000    | 9,203      | 12.1     | 48.6     | 97.2     | **0.41%**  | 198 MB     |
-| Go      | 1,000     | 1,000      | 1.1      | 2.8      | 4.9      | 0.00%      | 18 MB      |
-| Go      | 5,000     | 5,000      | 1.4      | 3.9      | 7.1      | 0.00%      | 21 MB      |
-| Go      | 10,000    | **10,000** | **1.8**  | **5.2**  | **9.8**  | **0.00%**  | **24 MB**  |
+| ------- | ---------- | ---------- | -------- | -------- | -------- | ---------- | ---------- |
+| Node.js | 1,000      | 998        | 3.2      | 8.1      | 14.3     | 0.00%      | 68 MB      |
+| Node.js | 5,000      | 4,971      | 5.8      | 18.4     | 34.7     | 0.02%      | 112 MB     |
+| Node.js | 10,000     | 9,203      | 12.1     | 48.6     | 97.2     | **0.41%**  | 198 MB     |
+| Go      | 1,000      | 1,000      | 1.1      | 2.8      | 4.9      | 0.00%      | 18 MB      |
+| Go      | 5,000      | 5,000      | 1.4      | 3.9      | 7.1      | 0.00%      | 21 MB      |
+| Go      | 10,000     | **10,000** | **1.8**  | **5.2**  | **9.8**  | **0.00%**  | **24 MB**  |
 
 ### CPU at 10k req/s
 
 | Service | Avg CPU | Peak CPU |
-|---------|---------|----------|
+| ------- | ------- | -------- |
 | Node.js | 78%     | 94%      |
 | Go      | 31%     | 48%      |
 
 ### Message Bus at 10k req/s (Go service)
 
 | Broker         | Publish P50 | Publish P99 | At-least-once | Ops Complexity |
-|----------------|-------------|-------------|---------------|----------------|
+| -------------- | ----------- | ----------- | ------------- | -------------- |
 | Redis Streams  | 0.4 ms      | 1.2 ms      | Yes (XACK)    | Low            |
 | NATS JetStream | 0.6 ms      | 2.1 ms      | Yes (Ack)     | Medium         |
 

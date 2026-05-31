@@ -26,15 +26,15 @@ import { Rate, Trend } from "k6/metrics";
 // ---------------------------------------------------------------------------
 
 const TARGET_URL = __ENV.TARGET_URL || "http://localhost:3001";
-const RPS        = parseInt(__ENV.RPS || "1000");
-const DURATION   = __ENV.DURATION   || "30s";
-const WARMUP     = __ENV.WARMUP     || "5s";
+const RPS = parseInt(__ENV.RPS || "1000");
+const DURATION = __ENV.DURATION || "30s";
+const WARMUP = __ENV.WARMUP || "5s";
 
 // ---------------------------------------------------------------------------
 // Custom metrics
 // ---------------------------------------------------------------------------
 
-const errorRate    = new Rate("error_rate");
+const errorRate = new Rate("error_rate");
 const publishLatency = new Trend("publish_latency_ms", true);
 
 // ---------------------------------------------------------------------------
@@ -54,13 +54,22 @@ export const options = {
   },
   thresholds: {
     http_req_duration: [
-      "p(50)<50",    // P50 < 50ms
-      "p(95)<200",   // P95 < 200ms
-      "p(99)<500",   // P99 < 500ms
+      "p(50)<50", // P50 < 50ms
+      "p(95)<200", // P95 < 200ms
+      "p(99)<500", // P99 < 500ms
     ],
-    error_rate: ["rate<0.01"],  // < 1% errors
+    error_rate: ["rate<0.01"], // < 1% errors
   },
-  summaryTrendStats: ["min", "med", "avg", "p(90)", "p(95)", "p(99)", "max", "count"],
+  summaryTrendStats: [
+    "min",
+    "med",
+    "avg",
+    "p(90)",
+    "p(95)",
+    "p(99)",
+    "max",
+    "count",
+  ],
 };
 
 // ---------------------------------------------------------------------------
@@ -70,16 +79,16 @@ export const options = {
 function makePayload() {
   return JSON.stringify({
     event_type: "payment.callback",
-    provider:   "mtn",
-    reference:  `REF-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-    amount:     5000.00,
-    currency:   "XAF",
-    status:     "success",
-    timestamp:  new Date().toISOString(),
+    provider: "mtn",
+    reference: `REF-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+    amount: 5000.0,
+    currency: "XAF",
+    status: "success",
+    timestamp: new Date().toISOString(),
     metadata: {
       customer_id: "cust-bench",
-      channel:     "mobile",
-      region:      "CM",
+      channel: "mobile",
+      region: "CM",
     },
   });
 }
@@ -101,7 +110,7 @@ export default function () {
 
   const ok = check(res, {
     "status is 202": (r) => r.status === 202,
-    "has reference":  (r) => r.json("reference") !== undefined,
+    "has reference": (r) => r.json("reference") !== undefined,
   });
 
   errorRate.add(!ok);
@@ -112,11 +121,15 @@ export default function () {
 // ---------------------------------------------------------------------------
 
 export function handleSummary(data) {
-  const rps    = data.metrics.http_reqs?.values?.rate?.toFixed(1) ?? "N/A";
-  const p50    = data.metrics.http_req_duration?.values?.["p(50)"]?.toFixed(2) ?? "N/A";
-  const p95    = data.metrics.http_req_duration?.values?.["p(95)"]?.toFixed(2) ?? "N/A";
-  const p99    = data.metrics.http_req_duration?.values?.["p(99)"]?.toFixed(2) ?? "N/A";
-  const errors = (data.metrics.error_rate?.values?.rate * 100)?.toFixed(2) ?? "N/A";
+  const rps = data.metrics.http_reqs?.values?.rate?.toFixed(1) ?? "N/A";
+  const p50 =
+    data.metrics.http_req_duration?.values?.["p(50)"]?.toFixed(2) ?? "N/A";
+  const p95 =
+    data.metrics.http_req_duration?.values?.["p(95)"]?.toFixed(2) ?? "N/A";
+  const p99 =
+    data.metrics.http_req_duration?.values?.["p(99)"]?.toFixed(2) ?? "N/A";
+  const errors =
+    (data.metrics.error_rate?.values?.rate * 100)?.toFixed(2) ?? "N/A";
 
   console.log("\n========================================");
   console.log(`  Benchmark: ${TARGET_URL}  @  ${RPS} req/s`);

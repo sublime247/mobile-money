@@ -40,10 +40,12 @@ export async function addTransactionJob(
   await rabbitMQManager.publish(
     EXCHANGES.TRANSACTIONS,
     ROUTING_KEYS.TRANSACTION_PROCESS,
-    data
+    data,
   );
-  
-  console.log(`[Queue] Added transaction job to RabbitMQ: ${data.transactionId}`);
+
+  console.log(
+    `[Queue] Added transaction job to RabbitMQ: ${data.transactionId}`,
+  );
   return { id: data.transactionId }; // Return something compatible
 }
 
@@ -55,11 +57,11 @@ export async function getJobById(jobId: string) {
 export async function getJobProgress(jobId: string): Promise<number> {
   const transaction = await transactionModel.findById(jobId);
   if (!transaction) return 0;
-  
+
   // Try to get from metadata.progress
   const progress = (transaction.metadata as any)?.progress;
   if (typeof progress === "number") return progress;
-  
+
   // Fallback to status proxy
   if (transaction.status === TransactionStatus.Completed) return 100;
   if (transaction.status === TransactionStatus.Failed) return 0;
@@ -74,7 +76,7 @@ export async function getQueueStats() {
   ]);
 
   return {
-    waiting: pending, 
+    waiting: pending,
     active: 0, // RabbitMQ doesn't easily expose this through this client
     completed,
     failed,
@@ -95,4 +97,3 @@ export async function drainQueue() {
   // Purging a queue in RabbitMQ
   console.warn("drainQueue not fully implemented for RabbitMQ migration");
 }
-

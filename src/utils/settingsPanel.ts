@@ -98,7 +98,9 @@ export interface ValidationError {
  * Validates a partial settings update and returns a list of errors.
  * An empty array means the input is valid.
  */
-export function validateSettings(input: PartialUserSettings): ValidationError[] {
+export function validateSettings(
+  input: PartialUserSettings,
+): ValidationError[] {
   const errors: ValidationError[] = [];
 
   if (input.theme !== undefined && !VALID_THEMES.has(input.theme)) {
@@ -121,7 +123,10 @@ export function validateSettings(input: PartialUserSettings): ValidationError[] 
   if (input.notifications !== undefined) {
     const { toastDensity, quietMode } = input.notifications;
 
-    if (toastDensity !== undefined && !VALID_TOAST_DENSITIES.has(toastDensity)) {
+    if (
+      toastDensity !== undefined &&
+      !VALID_TOAST_DENSITIES.has(toastDensity)
+    ) {
       errors.push({
         field: "notifications.toastDensity",
         message: `Invalid toastDensity "${toastDensity}". Must be one of: ${[...VALID_TOAST_DENSITIES].join(", ")}.`,
@@ -236,7 +241,7 @@ export function updateSettings(
   // Normalise currency to uppercase before storing.
   const normalisedCurrency =
     patch.currency !== undefined
-      ? normaliseCurrency(patch.currency) ?? current.currency
+      ? (normaliseCurrency(patch.currency) ?? current.currency)
       : current.currency;
 
   const updated: UserSettings = {

@@ -1,5 +1,5 @@
-import { Router, Request, Response } from 'express';
-import { Sep30Service } from '../services/sep30/sep30Service';
+import { Router, Request, Response } from "express";
+import { Sep30Service } from "../services/sep30/sep30Service";
 
 const router = Router();
 const sep30 = new Sep30Service();
@@ -13,22 +13,25 @@ const sep30 = new Sep30Service();
  * Body: { userId: string, recoveryThreshold?: number }
  * Returns: { publicKey, keyId }
  */
-router.post('/keys', async (req: Request, res: Response) => {
+router.post("/keys", async (req: Request, res: Response) => {
   try {
     const { userId, recoveryThreshold = 1 } = req.body;
 
     if (!userId) {
-      return res.status(400).json({ error: 'userId is required' });
+      return res.status(400).json({ error: "userId is required" });
     }
 
-    if (typeof recoveryThreshold !== 'number' || recoveryThreshold < 1) {
-      return res.status(400).json({ error: 'recoveryThreshold must be a positive integer' });
+    if (typeof recoveryThreshold !== "number" || recoveryThreshold < 1) {
+      return res
+        .status(400)
+        .json({ error: "recoveryThreshold must be a positive integer" });
     }
 
     const result = await sep30.createManagedKey(userId, recoveryThreshold);
     res.status(201).json(result);
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to create managed key';
+    const message =
+      error instanceof Error ? error.message : "Failed to create managed key";
     res.status(500).json({ error: message });
   }
 });
@@ -39,18 +42,21 @@ router.post('/keys', async (req: Request, res: Response) => {
  *
  * Query: userId
  */
-router.get('/keys', async (req: Request, res: Response) => {
+router.get("/keys", async (req: Request, res: Response) => {
   try {
     const { userId } = req.query as { userId: string };
 
     if (!userId) {
-      return res.status(400).json({ error: 'userId query parameter is required' });
+      return res
+        .status(400)
+        .json({ error: "userId query parameter is required" });
     }
 
     const keys = await sep30.listManagedKeys(userId);
     res.json({ keys });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to list managed keys';
+    const message =
+      error instanceof Error ? error.message : "Failed to list managed keys";
     res.status(500).json({ error: message });
   }
 });
@@ -61,19 +67,22 @@ router.get('/keys', async (req: Request, res: Response) => {
  *
  * Body: { userId, newThreshold }
  */
-router.patch('/keys/:keyId/threshold', async (req: Request, res: Response) => {
+router.patch("/keys/:keyId/threshold", async (req: Request, res: Response) => {
   try {
     const { keyId } = req.params;
     const { userId, newThreshold } = req.body;
 
     if (!userId || !newThreshold) {
-      return res.status(400).json({ error: 'userId and newThreshold are required' });
+      return res
+        .status(400)
+        .json({ error: "userId and newThreshold are required" });
     }
 
     await sep30.updateRecoveryThreshold(keyId, userId, Number(newThreshold));
-    res.json({ message: 'Recovery threshold updated', keyId, newThreshold });
+    res.json({ message: "Recovery threshold updated", keyId, newThreshold });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to update threshold';
+    const message =
+      error instanceof Error ? error.message : "Failed to update threshold";
     res.status(400).json({ error: message });
   }
 });
@@ -86,21 +95,27 @@ router.patch('/keys/:keyId/threshold', async (req: Request, res: Response) => {
  *
  * Body: { userId, signerPublicKey, signerLabel }
  */
-router.post('/keys/:keyId/signers', async (req: Request, res: Response) => {
+router.post("/keys/:keyId/signers", async (req: Request, res: Response) => {
   try {
     const { keyId } = req.params;
     const { userId, signerPublicKey, signerLabel } = req.body;
 
     if (!userId || !signerPublicKey || !signerLabel) {
       return res.status(400).json({
-        error: 'userId, signerPublicKey, and signerLabel are required',
+        error: "userId, signerPublicKey, and signerLabel are required",
       });
     }
 
-    const signer = await sep30.addRecoverySigner(keyId, userId, signerPublicKey, signerLabel);
+    const signer = await sep30.addRecoverySigner(
+      keyId,
+      userId,
+      signerPublicKey,
+      signerLabel,
+    );
     res.status(201).json(signer);
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to add recovery signer';
+    const message =
+      error instanceof Error ? error.message : "Failed to add recovery signer";
     res.status(400).json({ error: message });
   }
 });
@@ -111,19 +126,22 @@ router.post('/keys/:keyId/signers', async (req: Request, res: Response) => {
  *
  * Query: userId
  */
-router.get('/keys/:keyId/signers', async (req: Request, res: Response) => {
+router.get("/keys/:keyId/signers", async (req: Request, res: Response) => {
   try {
     const { keyId } = req.params;
     const { userId } = req.query as { userId: string };
 
     if (!userId) {
-      return res.status(400).json({ error: 'userId query parameter is required' });
+      return res
+        .status(400)
+        .json({ error: "userId query parameter is required" });
     }
 
     const signers = await sep30.listRecoverySigners(keyId, userId);
     res.json({ signers });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to list signers';
+    const message =
+      error instanceof Error ? error.message : "Failed to list signers";
     res.status(500).json({ error: message });
   }
 });
@@ -134,22 +152,26 @@ router.get('/keys/:keyId/signers', async (req: Request, res: Response) => {
  *
  * Body: { userId }
  */
-router.delete('/keys/:keyId/signers/:signerPublicKey', async (req: Request, res: Response) => {
-  try {
-    const { keyId, signerPublicKey } = req.params;
-    const { userId } = req.body;
+router.delete(
+  "/keys/:keyId/signers/:signerPublicKey",
+  async (req: Request, res: Response) => {
+    try {
+      const { keyId, signerPublicKey } = req.params;
+      const { userId } = req.body;
 
-    if (!userId) {
-      return res.status(400).json({ error: 'userId is required' });
+      if (!userId) {
+        return res.status(400).json({ error: "userId is required" });
+      }
+
+      await sep30.removeRecoverySigner(keyId, userId, signerPublicKey);
+      res.json({ message: "Recovery signer removed" });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to remove signer";
+      res.status(400).json({ error: message });
     }
-
-    await sep30.removeRecoverySigner(keyId, userId, signerPublicKey);
-    res.json({ message: 'Recovery signer removed' });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to remove signer';
-    res.status(400).json({ error: message });
-  }
-});
+  },
+);
 
 // ─── Recovery Flow ────────────────────────────────────────────────────────────
 
@@ -161,25 +183,30 @@ router.delete('/keys/:keyId/signers/:signerPublicKey', async (req: Request, res:
  * Body: { signerPublicKey }
  * Returns: { token, expiresAt }
  */
-router.post('/keys/:keyId/recovery/initiate', async (req: Request, res: Response) => {
-  try {
-    const { keyId } = req.params;
-    const { signerPublicKey } = req.body;
+router.post(
+  "/keys/:keyId/recovery/initiate",
+  async (req: Request, res: Response) => {
+    try {
+      const { keyId } = req.params;
+      const { signerPublicKey } = req.body;
 
-    if (!signerPublicKey) {
-      return res.status(400).json({ error: 'signerPublicKey is required' });
+      if (!signerPublicKey) {
+        return res.status(400).json({ error: "signerPublicKey is required" });
+      }
+
+      const result = await sep30.initiateRecovery(keyId, signerPublicKey);
+      res.json({
+        ...result,
+        instructions:
+          "Sign the token bytes with your Stellar private key and call /verify",
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to initiate recovery";
+      res.status(400).json({ error: message });
     }
-
-    const result = await sep30.initiateRecovery(keyId, signerPublicKey);
-    res.json({
-      ...result,
-      instructions: 'Sign the token bytes with your Stellar private key and call /verify',
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to initiate recovery';
-    res.status(400).json({ error: message });
-  }
-});
+  },
+);
 
 /**
  * POST /sep30/keys/:keyId/recovery/verify
@@ -188,29 +215,38 @@ router.post('/keys/:keyId/recovery/initiate', async (req: Request, res: Response
  * Body: { signerPublicKey, token, signature (base64) }
  * Returns: { verified: boolean }
  */
-router.post('/keys/:keyId/recovery/verify', async (req: Request, res: Response) => {
-  try {
-    const { keyId } = req.params;
-    const { signerPublicKey, token, signature } = req.body;
+router.post(
+  "/keys/:keyId/recovery/verify",
+  async (req: Request, res: Response) => {
+    try {
+      const { keyId } = req.params;
+      const { signerPublicKey, token, signature } = req.body;
 
-    if (!signerPublicKey || !token || !signature) {
-      return res.status(400).json({
-        error: 'signerPublicKey, token, and signature are required',
-      });
+      if (!signerPublicKey || !token || !signature) {
+        return res.status(400).json({
+          error: "signerPublicKey, token, and signature are required",
+        });
+      }
+
+      const verified = await sep30.verifyRecoverySignature(
+        keyId,
+        token,
+        signature,
+        signerPublicKey,
+      );
+
+      if (!verified) {
+        return res.status(401).json({ error: "Signature verification failed" });
+      }
+
+      res.json({ verified: true, signerPublicKey });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Verification failed";
+      res.status(400).json({ error: message });
     }
-
-    const verified = await sep30.verifyRecoverySignature(keyId, token, signature, signerPublicKey);
-
-    if (!verified) {
-      return res.status(401).json({ error: 'Signature verification failed' });
-    }
-
-    res.json({ verified: true, signerPublicKey });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Verification failed';
-    res.status(400).json({ error: message });
-  }
-});
+  },
+);
 
 /**
  * POST /sep30/keys/:keyId/recovery/complete
@@ -219,24 +255,35 @@ router.post('/keys/:keyId/recovery/verify', async (req: Request, res: Response) 
  * Body: { verifiedSignerPublicKeys: string[], newStellarAddress?: string }
  * Returns: { newPublicKey, oldPublicKey, rotatedAt }
  */
-router.post('/keys/:keyId/recovery/complete', async (req: Request, res: Response) => {
-  try {
-    const { keyId } = req.params;
-    const { verifiedSignerPublicKeys, newStellarAddress } = req.body;
+router.post(
+  "/keys/:keyId/recovery/complete",
+  async (req: Request, res: Response) => {
+    try {
+      const { keyId } = req.params;
+      const { verifiedSignerPublicKeys, newStellarAddress } = req.body;
 
-    if (!Array.isArray(verifiedSignerPublicKeys) || verifiedSignerPublicKeys.length === 0) {
-      return res.status(400).json({
-        error: 'verifiedSignerPublicKeys must be a non-empty array',
-      });
+      if (
+        !Array.isArray(verifiedSignerPublicKeys) ||
+        verifiedSignerPublicKeys.length === 0
+      ) {
+        return res.status(400).json({
+          error: "verifiedSignerPublicKeys must be a non-empty array",
+        });
+      }
+
+      const result = await sep30.completeRecovery(
+        keyId,
+        verifiedSignerPublicKeys,
+        newStellarAddress,
+      );
+      res.json(result);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Recovery failed";
+      res.status(400).json({ error: message });
     }
-
-    const result = await sep30.completeRecovery(keyId, verifiedSignerPublicKeys, newStellarAddress);
-    res.json(result);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Recovery failed';
-    res.status(400).json({ error: message });
-  }
-});
+  },
+);
 
 // ─── Key Rotation ─────────────────────────────────────────────────────────────
 
@@ -247,19 +294,20 @@ router.post('/keys/:keyId/recovery/complete', async (req: Request, res: Response
  * Body: { userId }
  * Returns: { newPublicKey, oldPublicKey, rotatedAt }
  */
-router.post('/keys/:keyId/rotate', async (req: Request, res: Response) => {
+router.post("/keys/:keyId/rotate", async (req: Request, res: Response) => {
   try {
     const { keyId } = req.params;
     const { userId } = req.body;
 
     if (!userId) {
-      return res.status(400).json({ error: 'userId is required' });
+      return res.status(400).json({ error: "userId is required" });
     }
 
     const result = await sep30.rotateKey(keyId, userId);
     res.json(result);
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Key rotation failed';
+    const message =
+      error instanceof Error ? error.message : "Key rotation failed";
     res.status(400).json({ error: message });
   }
 });

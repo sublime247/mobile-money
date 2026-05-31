@@ -2,14 +2,21 @@ import request from "supertest";
 import express, { Express } from "express";
 import { Pool } from "pg";
 import crypto from "crypto";
-import { createFederationRouter, FederationService, buildStellarToml } from "../sep02";
+import {
+  createFederationRouter,
+  FederationService,
+  buildStellarToml,
+} from "../sep02";
 
 // ============================================================================
 // Helpers (mirror the private helpers in sep02.ts)
 // ============================================================================
 
 function sha256(value: string): string {
-  return crypto.createHash("sha256").update(value.toLowerCase().trim()).digest("hex");
+  return crypto
+    .createHash("sha256")
+    .update(value.toLowerCase().trim())
+    .digest("hex");
 }
 
 function mockQueryResult(rows: object[]) {
@@ -31,7 +38,8 @@ describe("SEP-02 Federation Server", () => {
   let mockDb: jest.Mocked<Pool>;
 
   const DOMAIN = "mobilemoney.com";
-  const ACCOUNT_ID = "GABC1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ12345678901234567890";
+  const ACCOUNT_ID =
+    "GABC1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ12345678901234567890";
 
   beforeEach(() => {
     process.env.STELLAR_FEDERATION_DOMAIN = DOMAIN;
@@ -60,22 +68,30 @@ describe("SEP-02 Federation Server", () => {
     });
 
     it("returns 400 when type is missing", async () => {
-      const res = await request(app).get("/federation").query({ q: `alice*${DOMAIN}` });
+      const res = await request(app)
+        .get("/federation")
+        .query({ q: `alice*${DOMAIN}` });
       expect(res.status).toBe(400);
     });
 
     it("returns 400 when type is invalid", async () => {
-      const res = await request(app).get("/federation").query({ q: `alice*${DOMAIN}`, type: "bad" });
+      const res = await request(app)
+        .get("/federation")
+        .query({ q: `alice*${DOMAIN}`, type: "bad" });
       expect(res.status).toBe(400);
     });
 
     it("returns 501 for txid type", async () => {
-      const res = await request(app).get("/federation").query({ q: "sometxid", type: "txid" });
+      const res = await request(app)
+        .get("/federation")
+        .query({ q: "sometxid", type: "txid" });
       expect(res.status).toBe(501);
     });
 
     it("returns 501 for forward type", async () => {
-      const res = await request(app).get("/federation").query({ q: "somequery", type: "forward" });
+      const res = await request(app)
+        .get("/federation")
+        .query({ q: "somequery", type: "forward" });
       expect(res.status).toBe(501);
     });
   });
@@ -86,10 +102,11 @@ describe("SEP-02 Federation Server", () => {
 
   describe("GET /federation?type=name", () => {
     it("resolves federation address by username", async () => {
-      mockDb.query
-        .mockResolvedValueOnce(mockQueryResult([
+      mockDb.query.mockResolvedValueOnce(
+        mockQueryResult([
           { id: "user-1", stellar_address: ACCOUNT_ID, username: "alice" },
-        ]));
+        ]),
+      );
 
       const res = await request(app)
         .get("/federation")
@@ -105,9 +122,16 @@ describe("SEP-02 Federation Server", () => {
       mockDb.query
         .mockResolvedValueOnce(mockQueryResult([]))
         // phone hash lookup: found
-        .mockResolvedValueOnce(mockQueryResult([
-          { id: "user-2", stellar_address: ACCOUNT_ID, username: null, phone_hash: sha256("+254712345678") },
-        ]));
+        .mockResolvedValueOnce(
+          mockQueryResult([
+            {
+              id: "user-2",
+              stellar_address: ACCOUNT_ID,
+              username: null,
+              phone_hash: sha256("+254712345678"),
+            },
+          ]),
+        );
 
       const res = await request(app)
         .get("/federation")
@@ -119,11 +143,18 @@ describe("SEP-02 Federation Server", () => {
 
     it("resolves by email hash when username and phone not found", async () => {
       mockDb.query
-        .mockResolvedValueOnce(mockQueryResult([]))   // username miss
-        .mockResolvedValueOnce(mockQueryResult([]))   // phone miss
-        .mockResolvedValueOnce(mockQueryResult([
-          { id: "user-3", stellar_address: ACCOUNT_ID, username: "bob", email_hash: sha256("bob@example.com") },
-        ]));
+        .mockResolvedValueOnce(mockQueryResult([])) // username miss
+        .mockResolvedValueOnce(mockQueryResult([])) // phone miss
+        .mockResolvedValueOnce(
+          mockQueryResult([
+            {
+              id: "user-3",
+              stellar_address: ACCOUNT_ID,
+              username: "bob",
+              email_hash: sha256("bob@example.com"),
+            },
+          ]),
+        );
 
       const res = await request(app)
         .get("/federation")
@@ -173,9 +204,11 @@ describe("SEP-02 Federation Server", () => {
 
   describe("GET /federation?type=id", () => {
     it("resolves stellar address to federation record", async () => {
-      mockDb.query.mockResolvedValueOnce(mockQueryResult([
-        { stellar_address: ACCOUNT_ID, username: "carol", phone_hash: null },
-      ]));
+      mockDb.query.mockResolvedValueOnce(
+        mockQueryResult([
+          { stellar_address: ACCOUNT_ID, username: "carol", phone_hash: null },
+        ]),
+      );
 
       const res = await request(app)
         .get("/federation")
@@ -187,9 +220,11 @@ describe("SEP-02 Federation Server", () => {
     });
 
     it("uses account_id as localPart when username is null", async () => {
-      mockDb.query.mockResolvedValueOnce(mockQueryResult([
-        { stellar_address: ACCOUNT_ID, username: null, phone_hash: null },
-      ]));
+      mockDb.query.mockResolvedValueOnce(
+        mockQueryResult([
+          { stellar_address: ACCOUNT_ID, username: null, phone_hash: null },
+        ]),
+      );
 
       const res = await request(app)
         .get("/federation")
@@ -216,9 +251,11 @@ describe("SEP-02 Federation Server", () => {
 
   describe("SEP-02 response structure", () => {
     it("always includes stellar_address and account_id", async () => {
-      mockDb.query.mockResolvedValueOnce(mockQueryResult([
-        { id: "user-1", stellar_address: ACCOUNT_ID, username: "dave" },
-      ]));
+      mockDb.query.mockResolvedValueOnce(
+        mockQueryResult([
+          { id: "user-1", stellar_address: ACCOUNT_ID, username: "dave" },
+        ]),
+      );
 
       const res = await request(app)
         .get("/federation")
@@ -233,9 +270,11 @@ describe("SEP-02 Federation Server", () => {
     });
 
     it("stellar_address in response matches query domain", async () => {
-      mockDb.query.mockResolvedValueOnce(mockQueryResult([
-        { id: "user-1", stellar_address: ACCOUNT_ID, username: "dave" },
-      ]));
+      mockDb.query.mockResolvedValueOnce(
+        mockQueryResult([
+          { id: "user-1", stellar_address: ACCOUNT_ID, username: "dave" },
+        ]),
+      );
 
       const res = await request(app)
         .get("/federation")
@@ -268,16 +307,18 @@ describe("SEP-02 Federation Server", () => {
     });
 
     it("lookupById queries by stellar_address", async () => {
-      mockDb.query.mockResolvedValueOnce(mockQueryResult([
-        { stellar_address: ACCOUNT_ID, username: "eve", phone_hash: null },
-      ]));
+      mockDb.query.mockResolvedValueOnce(
+        mockQueryResult([
+          { stellar_address: ACCOUNT_ID, username: "eve", phone_hash: null },
+        ]),
+      );
 
       const result = await service.lookupById(ACCOUNT_ID);
       expect(result).not.toBeNull();
       expect(result!.account_id).toBe(ACCOUNT_ID);
       expect(mockDb.query).toHaveBeenCalledWith(
         expect.stringContaining("stellar_address = $1"),
-        [ACCOUNT_ID]
+        [ACCOUNT_ID],
       );
     });
   });

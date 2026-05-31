@@ -1,5 +1,9 @@
 import passport from "passport";
-import { Strategy as GoogleStrategy, Profile as GoogleProfile, VerifyCallback as GoogleVerifyCallback } from "passport-google-oauth20";
+import {
+  Strategy as GoogleStrategy,
+  Profile as GoogleProfile,
+  VerifyCallback as GoogleVerifyCallback,
+} from "passport-google-oauth20";
 import { Strategy as OpenIDConnectStrategy } from "passport-openidconnect";
 import { Router, Request, Response, NextFunction } from "express";
 import { pool } from "../config/database";
@@ -9,11 +13,12 @@ import { generateToken } from "./jwt";
 // Map OIDC profile to local user mimicking SAML implementation
 async function processOIDCProfile(
   providerType: "google" | "azure",
-  profile: any
+  profile: any,
 ): Promise<Express.User> {
   const client = await pool.connect();
   const ssoSubject = profile.id || profile.sub;
-  const email = profile.emails?.[0]?.value || `${ssoSubject}@${providerType}.sso`;
+  const email =
+    profile.emails?.[0]?.value || `${ssoSubject}@${providerType}.sso`;
   // Provide a generic provider ID for OIDC if not defined in DB, normally this links to sso_providers
   // We'll use a string like "oidc-google" or "oidc-azure"
   const providerId = `oidc-${providerType}`;
@@ -23,11 +28,11 @@ async function processOIDCProfile(
 
     // Ensure the OIDC provider exists in sso_providers or we just rely on string matching
     // Attempting to use existing sso_providers table or bypassing it. The task says "reusing the existing sso_users table pattern"
-    
+
     // Check if SSO user exists
     const ssoUserResult = await client.query(
       "SELECT * FROM sso_users WHERE provider_id = $1 AND sso_subject = $2",
-      [providerId, ssoSubject]
+      [providerId, ssoSubject],
     );
 
     let ssoUser;
@@ -41,7 +46,7 @@ async function processOIDCProfile(
         `UPDATE sso_users 
          SET sso_email = $1, last_login_at = CURRENT_TIMESTAMP, is_active = true
          WHERE id = $2`,
-        [email, ssoUser.id]
+        [email, ssoUser.id],
       );
       console.log(`[OIDC] Updated existing SSO user: ${userId}`);
     } else {
@@ -51,7 +56,7 @@ async function processOIDCProfile(
         `INSERT INTO users (phone_number, kyc_level, sso_only)
          VALUES ($1, 'unverified', true)
          RETURNING id`,
-        [phoneNumber]
+        [phoneNumber],
       );
 
       userId = userResult.rows[0].id;
@@ -60,7 +65,7 @@ async function processOIDCProfile(
         `INSERT INTO sso_users (user_id, provider_id, sso_subject, sso_email, last_login_at)
          VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
          RETURNING *`,
-        [userId, providerId, ssoSubject, email]
+        [userId, providerId, ssoSubject, email],
       );
 
       ssoUser = ssoUserInsertResult.rows[0];
@@ -77,7 +82,7 @@ async function processOIDCProfile(
           sso_subject: ssoSubject,
           sso_email: email,
         }),
-      ]
+      ],
     );
 
     await client.query("COMMIT");
@@ -108,21 +113,31 @@ export function initializeOIDCProviders() {
           clientSecret: googleConfig.clientSecret,
           callbackURL: googleConfig.callbackURL,
         },
-        async (accessToken: string, refreshToken: string, profile: GoogleProfile, done: GoogleVerifyCallback) => {
+        async (
+          accessToken: string,
+          refreshToken: string,
+          profile: GoogleProfile,
+          done: GoogleVerifyCallback,
+        ) => {
           try {
             const user = await processOIDCProfile("google", profile);
             return done(null, user);
           } catch (error) {
             return done(error as Error);
           }
-        }
-      )
+        },
+      ),
     );
     console.log("[OIDC] Google OAuth2 strategy initialized");
   }
 
   const azureConfig = ssoConfig.oidc.azure;
-  if (azureConfig && azureConfig.clientID && azureConfig.clientSecret && azureConfig.issuer) {
+  if (
+    azureConfig &&
+    azureConfig.clientID &&
+    azureConfig.clientSecret &&
+    azureConfig.issuer
+  ) {
     passport.use(
       "azure-oidc",
       new OpenIDConnectStrategy(
@@ -143,8 +158,8 @@ export function initializeOIDCProviders() {
           } catch (error) {
             return done(error as Error);
           }
-        }
-      )
+        },
+      ),
     );
     console.log("[OIDC] Azure AD OIDC strategy initialized");
   }
@@ -165,19 +180,36 @@ export function createOIDCRouter() {
       role: "user", // Default OIDC role
     });
 
-    // In a real app we'd redirect to a frontend with token or issue a secure cookie, 
+    // In a real app we'd redirect to a frontend with token or issue a secure cookie,
     // but returning JSON for API
     return res.json({ token, user });
   };
 
   if (ssoConfig.oidc.google?.clientID) {
-    router.get("/google", passport.authenticate("google", { scope: ["profile", "email"], session: false }));
-    router.get("/google/callback", passport.authenticate("google", { session: false }), handleSuccess);
+    router.get(
+      "/google",
+      passport.authenticate("google", {
+        scope: ["profile", "email"],
+        session: false,
+      }),
+    );
+    router.get(
+      "/google/callback",
+      passport.authenticate("google", { session: false }),
+      handleSuccess,
+    );
   }
 
   if (ssoConfig.oidc.azure?.clientID) {
-    router.get("/azure", passport.authenticate("azure-oidc", { session: false }));
-    router.get("/azure/callback", passport.authenticate("azure-oidc", { session: false }), handleSuccess);
+    router.get(
+      "/azure",
+      passport.authenticate("azure-oidc", { session: false }),
+    );
+    router.get(
+      "/azure/callback",
+      passport.authenticate("azure-oidc", { session: false }),
+      handleSuccess,
+    );
   }
 
   return router;

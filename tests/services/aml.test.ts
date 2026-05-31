@@ -17,7 +17,9 @@ describe("AMLService", () => {
     amlService.clearAlerts();
   });
 
-  const baseTx = (partial: Partial<AMLTransactionRecord> = {}): AMLTransactionRecord => ({
+  const baseTx = (
+    partial: Partial<AMLTransactionRecord> = {},
+  ): AMLTransactionRecord => ({
     id: partial.id ?? "txn-current",
     userId: partial.userId ?? "user-1",
     type: partial.type ?? "deposit",
@@ -33,7 +35,11 @@ describe("AMLService", () => {
     );
 
     expect(result.flagged).toBe(true);
-    expect(result.ruleHits.some((hit) => hit.rule === "single_transaction_threshold")).toBe(true);
+    expect(
+      result.ruleHits.some(
+        (hit) => hit.rule === "single_transaction_threshold",
+      ),
+    ).toBe(true);
     expect(amlService.getPendingReviewAlerts()).toHaveLength(1);
   });
 
@@ -57,7 +63,9 @@ describe("AMLService", () => {
     );
 
     expect(result.flagged).toBe(true);
-    expect(result.ruleHits.some((hit) => hit.rule === "daily_total_threshold")).toBe(true);
+    expect(
+      result.ruleHits.some((hit) => hit.rule === "daily_total_threshold"),
+    ).toBe(true);
   });
 
   it("flags rapid deposit and withdrawal structuring pattern", () => {
@@ -87,7 +95,9 @@ describe("AMLService", () => {
     );
 
     expect(result.flagged).toBe(true);
-    expect(result.ruleHits.some((hit) => hit.rule === "rapid_structuring")).toBe(true);
+    expect(
+      result.ruleHits.some((hit) => hit.rule === "rapid_structuring"),
+    ).toBe(true);
   });
 
   it("supports manual review workflow for generated alerts", () => {
@@ -111,7 +121,10 @@ describe("AMLService", () => {
   });
 
   it("generates AML report with rule and status breakdown", () => {
-    amlService.evaluateTransaction(baseTx({ id: "txn-a", amount: 1_200_000 }), []);
+    amlService.evaluateTransaction(
+      baseTx({ id: "txn-a", amount: 1_200_000 }),
+      [],
+    );
     const alert = amlService.getPendingReviewAlerts()[0];
     amlService.reviewAlert(alert.id, {
       status: "dismissed",
@@ -126,7 +139,9 @@ describe("AMLService", () => {
 
     expect(report.summary.totalAlerts).toBe(1);
     expect(report.summary.dismissed).toBe(1);
-    expect(report.byRule.single_transaction_threshold).toBeGreaterThanOrEqual(1);
+    expect(report.byRule.single_transaction_threshold).toBeGreaterThanOrEqual(
+      1,
+    );
     expect(report.daily.length).toBeGreaterThan(0);
   });
 });

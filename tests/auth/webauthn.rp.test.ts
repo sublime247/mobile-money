@@ -12,12 +12,16 @@ describe("WebAuthn getRpConfig", () => {
 
   function setupMocksAndGetRpConfig() {
     // { virtual: true } tells Jest not to resolve the module on disk
-    jest.doMock("@simplewebauthn/server", () => ({
-      generateRegistrationOptions: jest.fn(),
-      verifyRegistrationResponse: jest.fn(),
-      generateAuthenticationOptions: jest.fn(),
-      verifyAuthenticationResponse: jest.fn(),
-    }), { virtual: true });
+    jest.doMock(
+      "@simplewebauthn/server",
+      () => ({
+        generateRegistrationOptions: jest.fn(),
+        verifyRegistrationResponse: jest.fn(),
+        generateAuthenticationOptions: jest.fn(),
+        verifyAuthenticationResponse: jest.fn(),
+      }),
+      { virtual: true },
+    );
     jest.doMock("../../src/config/database", () => ({ pool: {} }));
     jest.doMock("../../src/config/redis", () => ({ redisClient: {} }));
     jest.doMock("../../src/utils/encryption", () => ({

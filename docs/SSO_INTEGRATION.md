@@ -41,6 +41,7 @@ The Admin SSO Integration allows internal staff to login to the admin portal via
 ### Tables
 
 #### `sso_providers`
+
 Stores SSO provider configurations.
 
 ```sql
@@ -59,6 +60,7 @@ CREATE TABLE sso_providers (
 ```
 
 #### `sso_group_role_mappings`
+
 Maps IdP groups to RBAC roles.
 
 ```sql
@@ -74,6 +76,7 @@ CREATE TABLE sso_group_role_mappings (
 ```
 
 #### `sso_users`
+
 Stores SSO-specific user data.
 
 ```sql
@@ -93,6 +96,7 @@ CREATE TABLE sso_users (
 ```
 
 #### `sso_audit_log`
+
 Logs all SSO events for compliance and debugging.
 
 ```sql
@@ -191,9 +195,11 @@ SSO_ENTRA_CALLBACK_URL=http://localhost:3000/api/auth/sso/callback/entra
 ### SSO Authentication
 
 #### `GET /api/auth/sso/providers`
+
 List all active SSO providers.
 
 **Response:**
+
 ```json
 {
   "providers": [
@@ -208,14 +214,17 @@ List all active SSO providers.
 ```
 
 #### `GET /api/auth/sso/login/:providerId`
+
 Initiate SSO login for a specific provider.
 
 **Response:** Redirects to IdP login page.
 
 #### `POST /api/auth/sso/callback/:providerId`
+
 Handle SAML callback from IdP.
 
 **Response:**
+
 ```json
 {
   "message": "SSO login successful",
@@ -232,9 +241,11 @@ Handle SAML callback from IdP.
 ### Group-to-Role Mappings (Admin Only)
 
 #### `GET /api/auth/sso/mappings/:providerId`
+
 Get group-to-role mappings for a provider.
 
 **Response:**
+
 ```json
 {
   "mappings": [
@@ -248,9 +259,11 @@ Get group-to-role mappings for a provider.
 ```
 
 #### `POST /api/auth/sso/mappings/:providerId`
+
 Add group-to-role mapping.
 
 **Request:**
+
 ```json
 {
   "sso_group_name": "Developers",
@@ -259,6 +272,7 @@ Add group-to-role mapping.
 ```
 
 **Response:**
+
 ```json
 {
   "message": "Group-role mapping added successfully",
@@ -270,9 +284,11 @@ Add group-to-role mapping.
 ```
 
 #### `DELETE /api/auth/sso/mappings/:providerId/:groupName`
+
 Remove group-to-role mapping.
 
 **Response:**
+
 ```json
 {
   "message": "Group-role mapping removed successfully"
@@ -282,12 +298,15 @@ Remove group-to-role mapping.
 ### Audit Log (Admin Only)
 
 #### `GET /api/auth/sso/audit/:userId`
+
 Get SSO audit log for a user.
 
 **Query Parameters:**
+
 - `limit` (optional): Number of records to return (default: 50)
 
 **Response:**
+
 ```json
 {
   "audit_log": [
@@ -323,14 +342,14 @@ When a user belongs to multiple groups, the system assigns the highest priority 
 ```sql
 -- Map Okta "Admins" group to admin role
 INSERT INTO sso_group_role_mappings (provider_id, sso_group_name, role_id)
-SELECT 
+SELECT
   (SELECT id FROM sso_providers WHERE name = 'Okta'),
   'Admins',
   (SELECT id FROM roles WHERE name = 'admin');
 
 -- Map Okta "Developers" group to user role
 INSERT INTO sso_group_role_mappings (provider_id, sso_group_name, role_id)
-SELECT 
+SELECT
   (SELECT id FROM sso_providers WHERE name = 'Okta'),
   'Developers',
   (SELECT id FROM roles WHERE name = 'user');
@@ -345,9 +364,9 @@ When a user is deactivated in the IdP, the system can automatically disable thei
 Use the SSO service to deactivate a user:
 
 ```typescript
-import { ssoService } from '../auth/sso';
+import { ssoService } from "../auth/sso";
 
-await ssoService.deactivateUser(userId, 'User left the company');
+await ssoService.deactivateUser(userId, "User left the company");
 ```
 
 ### Automatic Offboarding via IdP
@@ -380,18 +399,23 @@ Users created via SSO are marked as `sso_only=true` in the database:
 ## Middleware
 
 ### `enforceSSOOnly`
+
 Checks if user is SSO-only and rejects password-based auth.
 
 ### `enforceSSOForEmployees`
+
 Checks if employee email domain requires SSO.
 
 ### `checkSSOUserStatus`
+
 Validates SSO user account is active.
 
 ### `attachSSOContext`
+
 Attaches SSO user information to request.
 
 ### `validateSSOProvider`
+
 Validates SSO provider exists and is active.
 
 ## Usage Examples
@@ -399,19 +423,23 @@ Validates SSO provider exists and is active.
 ### Protect Admin Routes with SSO
 
 ```typescript
-import { Router } from 'express';
-import { authenticateToken } from '../middleware/auth';
-import { requireAdmin } from '../middleware/rbac';
-import { checkSSOUserStatus, attachSSOContext } from '../middleware/ssoEnforcement';
+import { Router } from "express";
+import { authenticateToken } from "../middleware/auth";
+import { requireAdmin } from "../middleware/rbac";
+import {
+  checkSSOUserStatus,
+  attachSSOContext,
+} from "../middleware/ssoEnforcement";
 
 const router = Router();
 
-router.get('/admin/users',
+router.get(
+  "/admin/users",
   authenticateToken,
   checkSSOUserStatus,
   attachSSOContext,
   requireAdmin,
-  getUsersHandler
+  getUsersHandler,
 );
 ```
 
@@ -423,7 +451,9 @@ async function getUsersHandler(req: Request, res: Response) {
   const ssoUser = (req as any).ssoUser;
 
   if (isSSOUser) {
-    console.log(`SSO User: ${ssoUser.sso_subject}, Groups: ${ssoUser.sso_groups}`);
+    console.log(
+      `SSO User: ${ssoUser.sso_subject}, Groups: ${ssoUser.sso_groups}`,
+    );
   }
 
   // ... rest of handler
@@ -446,11 +476,13 @@ async function getUsersHandler(req: Request, res: Response) {
 #### 1. SSO Login Fails with "Invalid SAML Response"
 
 **Causes:**
+
 - Certificate mismatch
 - Incorrect issuer/entry point
 - Clock skew between systems
 
 **Solution:**
+
 - Verify certificate matches IdP configuration
 - Check issuer and entry point URLs
 - Ensure system clocks are synchronized
@@ -458,11 +490,13 @@ async function getUsersHandler(req: Request, res: Response) {
 #### 2. User Not Getting Correct Role
 
 **Causes:**
+
 - Group name mismatch
 - Missing group-to-role mapping
 - User not in expected groups
 
 **Solution:**
+
 - Check `sso_audit_log` for group sync events
 - Verify group names match IdP configuration
 - Add missing group-to-role mappings
@@ -470,11 +504,13 @@ async function getUsersHandler(req: Request, res: Response) {
 #### 3. SSO-Only User Cannot Login
 
 **Causes:**
+
 - SSO provider inactive
 - User account deactivated
 - Certificate expired
 
 **Solution:**
+
 - Check `sso_providers` table for active status
 - Verify `sso_users.is_active = true`
 - Renew IdP certificate
@@ -491,20 +527,20 @@ DEBUG=passport-saml:* npm run dev
 
 ```sql
 -- Recent SSO logins
-SELECT * FROM sso_audit_log 
-WHERE event_type = 'login' 
-ORDER BY created_at DESC 
+SELECT * FROM sso_audit_log
+WHERE event_type = 'login'
+ORDER BY created_at DESC
 LIMIT 10;
 
 -- Failed SSO attempts
-SELECT * FROM sso_audit_log 
-WHERE event_type = 'error' 
-ORDER BY created_at DESC 
+SELECT * FROM sso_audit_log
+WHERE event_type = 'error'
+ORDER BY created_at DESC
 LIMIT 10;
 
 -- User role changes
-SELECT * FROM sso_audit_log 
-WHERE event_type = 'role_update' 
+SELECT * FROM sso_audit_log
+WHERE event_type = 'role_update'
 AND user_id = 'user-uuid'
 ORDER BY created_at DESC;
 ```
@@ -514,6 +550,7 @@ ORDER BY created_at DESC;
 ### From Password Auth to SSO
 
 1. **Run the migration:**
+
    ```bash
    psql -d your_database -f database/migrations/009_add_sso_support.sql
    ```
@@ -521,8 +558,9 @@ ORDER BY created_at DESC;
 2. **Configure SSO providers** in `.env`
 
 3. **Initialize providers:**
+
    ```typescript
-   import { initializeSSOProviders } from '../config/sso';
+   import { initializeSSOProviders } from "../config/sso";
    await initializeSSOProviders();
    ```
 

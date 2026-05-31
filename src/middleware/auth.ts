@@ -226,15 +226,17 @@ export function optionalAuthentication(
 export async function verifyTokenStateful(token: string): Promise<JWTPayload> {
   // Run standard cryptographic verification
   const decoded = verifyToken(token);
-  
+
   // Fast Redis check to ensure token wasn't issued before a password change
   if (redisClient.isOpen && decoded.userId && decoded.iat) {
-    const invalidatedAtRaw = await redisClient.get(`user:${decoded.userId}:jwt_invalidated_at`);
+    const invalidatedAtRaw = await redisClient.get(
+      `user:${decoded.userId}:jwt_invalidated_at`,
+    );
     const invalidatedAt = invalidatedAtRaw ? String(invalidatedAtRaw) : null;
     if (invalidatedAt && decoded.iat <= parseInt(invalidatedAt, 10)) {
       throw new Error("Token has been revoked due to password change");
     }
   }
-  
+
   return decoded;
 }

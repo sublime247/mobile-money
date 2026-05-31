@@ -10,7 +10,10 @@
  */
 
 import { EventEmitter } from "events";
-import { transactionChannel, SubscriptionChannels } from "../graphql/subscriptions";
+import {
+  transactionChannel,
+  SubscriptionChannels,
+} from "../graphql/subscriptions";
 import { createSubscriptionResolvers } from "../graphql/subscriptionResolvers";
 
 // ---------------------------------------------------------------------------
@@ -18,7 +21,10 @@ import { createSubscriptionResolvers } from "../graphql/subscriptionResolvers";
 // ---------------------------------------------------------------------------
 
 class StubPubSub extends EventEmitter {
-  private iterators: Map<string, { queue: any[]; resolve: (() => void) | null }> = new Map();
+  private iterators: Map<
+    string,
+    { queue: any[]; resolve: (() => void) | null }
+  > = new Map();
 
   async publish(channel: string, payload: unknown): Promise<void> {
     this.emit(channel, payload);
@@ -46,13 +52,17 @@ class StubPubSub extends EventEmitter {
     }
 
     return {
-      [Symbol.asyncIterator]() { return this; },
+      [Symbol.asyncIterator]() {
+        return this;
+      },
       async next(): Promise<IteratorResult<T>> {
         if (queue.length > 0) {
           return { value: queue.shift()!, done: false };
         }
         if (done) return { value: undefined as any, done: true };
-        await new Promise<void>((r) => { resolve = r; });
+        await new Promise<void>((r) => {
+          resolve = r;
+        });
         if (queue.length > 0) {
           return { value: queue.shift()!, done: false };
         }
@@ -119,7 +129,12 @@ describe("WS authentication guard", () => {
   it("rejects unauthenticated transactionCreated subscription", () => {
     const { resolvers } = makeResolvers();
     expect(() =>
-      resolvers.Subscription.transactionCreated.subscribe(null, {}, ANON_CTX, null as any),
+      resolvers.Subscription.transactionCreated.subscribe(
+        null,
+        {},
+        ANON_CTX,
+        null as any,
+      ),
     ).toThrow(/UNAUTHENTICATED/);
   });
 });
@@ -133,9 +148,19 @@ describe("transactionUpdated subscription", () => {
     const { pubsub, resolvers } = makeResolvers();
     const sub = resolvers.Subscription.transactionUpdated;
 
-    const iterator = sub.subscribe(null, { id: "tx-42" }, AUTH_CTX, null as any);
+    const iterator = sub.subscribe(
+      null,
+      { id: "tx-42" },
+      AUTH_CTX,
+      null as any,
+    );
 
-    const payload = { id: "tx-42", referenceNumber: "REF-001", status: "completed", updatedAt: new Date().toISOString() };
+    const payload = {
+      id: "tx-42",
+      referenceNumber: "REF-001",
+      status: "completed",
+      updatedAt: new Date().toISOString(),
+    };
     await pubsub.publish(transactionChannel("tx-42"), payload);
 
     const result = await iterator.next();
@@ -156,11 +181,19 @@ describe("transactionUpdated subscription", () => {
 
     // Publish to tx-2 — should not arrive on tx-1's iterator
     await pubsub.publish(transactionChannel("tx-2"), {
-      id: "tx-2", referenceNumber: "REF-002", status: "failed", updatedAt: new Date().toISOString(),
+      id: "tx-2",
+      referenceNumber: "REF-002",
+      status: "failed",
+      updatedAt: new Date().toISOString(),
     });
 
     // Publish to tx-1 — should arrive
-    const expected = { id: "tx-1", referenceNumber: "REF-001", status: "completed", updatedAt: new Date().toISOString() };
+    const expected = {
+      id: "tx-1",
+      referenceNumber: "REF-001",
+      status: "completed",
+      updatedAt: new Date().toISOString(),
+    };
     await pubsub.publish(transactionChannel("tx-1"), expected);
 
     const result = await iterator.next();
@@ -180,7 +213,12 @@ describe("state transition events", () => {
     const sub = resolvers.Subscription.transactionCompleted;
     const iterator = sub.subscribe(null, {}, AUTH_CTX, null as any);
 
-    const payload = { id: "tx-99", referenceNumber: "REF-099", status: "completed", updatedAt: new Date().toISOString() };
+    const payload = {
+      id: "tx-99",
+      referenceNumber: "REF-099",
+      status: "completed",
+      updatedAt: new Date().toISOString(),
+    };
     await pubsub.publish(SubscriptionChannels.TRANSACTION_COMPLETED, payload);
 
     const result = await iterator.next();
@@ -195,7 +233,12 @@ describe("state transition events", () => {
     const sub = resolvers.Subscription.transactionFailed;
     const iterator = sub.subscribe(null, {}, AUTH_CTX, null as any);
 
-    const payload = { id: "tx-88", referenceNumber: "REF-088", status: "failed", updatedAt: new Date().toISOString() };
+    const payload = {
+      id: "tx-88",
+      referenceNumber: "REF-088",
+      status: "failed",
+      updatedAt: new Date().toISOString(),
+    };
     await pubsub.publish(SubscriptionChannels.TRANSACTION_FAILED, payload);
 
     const result = await iterator.next();
@@ -211,9 +254,16 @@ describe("state transition events", () => {
     const iterator = sub.subscribe(null, {}, AUTH_CTX, null as any);
 
     const payload = {
-      id: "tx-new", referenceNumber: "REF-NEW", type: "deposit",
-      amount: "100", phoneNumber: "+237600000000", provider: "mtn",
-      stellarAddress: "GABC", status: "pending", tags: [], createdAt: new Date().toISOString(),
+      id: "tx-new",
+      referenceNumber: "REF-NEW",
+      type: "deposit",
+      amount: "100",
+      phoneNumber: "+237600000000",
+      provider: "mtn",
+      stellarAddress: "GABC",
+      status: "pending",
+      tags: [],
+      createdAt: new Date().toISOString(),
     };
     await pubsub.publish(SubscriptionChannels.TRANSACTION_CREATED, payload);
 
@@ -234,10 +284,16 @@ describe("subscription resolve() output shape", () => {
   it("transactionUpdated resolve returns expected fields", () => {
     const { resolvers } = makeResolvers();
     const payload = {
-      id: "tx-1", referenceNumber: "REF-001", status: "completed",
+      id: "tx-1",
+      referenceNumber: "REF-001",
+      status: "completed",
       updatedAt: "2026-04-23T00:00:00.000Z",
     };
     const result = resolvers.Subscription.transactionUpdated.resolve(payload);
-    expect(result).toMatchObject({ id: "tx-1", status: "completed", referenceNumber: "REF-001" });
+    expect(result).toMatchObject({
+      id: "tx-1",
+      status: "completed",
+      referenceNumber: "REF-001",
+    });
   });
 });

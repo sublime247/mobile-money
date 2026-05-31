@@ -33,23 +33,29 @@ const syncDataSchema = z.object({
 router.use(requireAuth);
 
 // Get authorization URLs
-router.get("/auth/quickbooks/url", async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const authUrl = accountingService.getQuickBooksAuthUrl();
-    res.json({ authUrl });
-  } catch (error) {
-    next(error);
-  }
-});
+router.get(
+  "/auth/quickbooks/url",
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const authUrl = accountingService.getQuickBooksAuthUrl();
+      res.json({ authUrl });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
 
-router.get("/auth/xero/url", async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const authUrl = accountingService.getXeroAuthUrl();
-    res.json({ authUrl });
-  } catch (error) {
-    next(error);
-  }
-});
+router.get(
+  "/auth/xero/url",
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const authUrl = accountingService.getXeroAuthUrl();
+      res.json({ authUrl });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
 
 // Handle OAuth callbacks
 router.post(
@@ -60,8 +66,12 @@ router.post(
       const { code, realmId } = req.body;
       const userId = (req as any).user.id;
 
-      const connection = await accountingService.handleQuickBooksCallback(code, realmId, userId);
-      
+      const connection = await accountingService.handleQuickBooksCallback(
+        code,
+        realmId,
+        userId,
+      );
+
       res.status(201).json({
         connection: {
           id: connection.id,
@@ -73,7 +83,7 @@ router.post(
     } catch (error) {
       next(error);
     }
-  }
+  },
 );
 
 router.post(
@@ -84,8 +94,11 @@ router.post(
       const { code } = req.body;
       const userId = (req as any).user.id;
 
-      const connection = await accountingService.handleXeroCallback(code, userId);
-      
+      const connection = await accountingService.handleXeroCallback(
+        code,
+        userId,
+      );
+
       res.status(201).json({
         connection: {
           id: connection.id,
@@ -97,31 +110,34 @@ router.post(
     } catch (error) {
       next(error);
     }
-  }
+  },
 );
 
 // Get user's accounting connections
-router.get("/connections", async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const userId = (req as any).user.id;
-    const connections = await accountingService.getUserConnections(userId);
+router.get(
+  "/connections",
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const userId = (req as any).user.id;
+      const connections = await accountingService.getUserConnections(userId);
 
-    // Don't expose sensitive tokens
-    const safeConnections = connections.map(conn => ({
-      id: conn.id,
-      provider: conn.provider,
-      realmId: conn.realmId,
-      tenantId: conn.tenantId,
-      isActive: conn.isActive,
-      createdAt: conn.createdAt,
-      updatedAt: conn.updatedAt,
-    }));
+      // Don't expose sensitive tokens
+      const safeConnections = connections.map((conn) => ({
+        id: conn.id,
+        provider: conn.provider,
+        realmId: conn.realmId,
+        tenantId: conn.tenantId,
+        isActive: conn.isActive,
+        createdAt: conn.createdAt,
+        updatedAt: conn.updatedAt,
+      }));
 
-    res.json({ connections: safeConnections });
-  } catch (error) {
-    next(error);
-  }
-});
+      res.json({ connections: safeConnections });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
 
 // Get accounting categories for a connection
 router.get(
@@ -137,12 +153,13 @@ router.get(
         return res.status(404).json({ error: "Connection not found" });
       }
 
-      const categories = await accountingService.getAccountingCategories(connectionId);
+      const categories =
+        await accountingService.getAccountingCategories(connectionId);
       res.json({ categories });
     } catch (error) {
       next(error);
     }
-  }
+  },
 );
 
 // Create category mapping
@@ -151,7 +168,12 @@ router.post(
   validateRequest(createCategoryMappingSchema),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { connectionId, mobileMoneyCategory, accountingCategoryId, accountingCategoryName } = req.body;
+      const {
+        connectionId,
+        mobileMoneyCategory,
+        accountingCategoryId,
+        accountingCategoryName,
+      } = req.body;
       const userId = (req as any).user.id;
 
       // Verify user owns this connection
@@ -164,14 +186,14 @@ router.post(
         connectionId,
         mobileMoneyCategory,
         accountingCategoryId,
-        accountingCategoryName
+        accountingCategoryName,
       );
 
       res.status(201).json({ mapping });
     } catch (error) {
       next(error);
     }
-  }
+  },
 );
 
 // Get category mappings for a connection
@@ -188,12 +210,13 @@ router.get(
         return res.status(404).json({ error: "Connection not found" });
       }
 
-      const mappings = await accountingService.getCategoryMappings(connectionId);
+      const mappings =
+        await accountingService.getCategoryMappings(connectionId);
       res.json({ mappings });
     } catch (error) {
       next(error);
     }
-  }
+  },
 );
 
 // Manual sync triggers
@@ -216,7 +239,7 @@ router.post(
     } catch (error) {
       next(error);
     }
-  }
+  },
 );
 
 router.post(
@@ -233,12 +256,15 @@ router.post(
         return res.status(404).json({ error: "Connection not found" });
       }
 
-      const syncLog = await accountingService.syncFeeRevenue(connectionId, date);
+      const syncLog = await accountingService.syncFeeRevenue(
+        connectionId,
+        date,
+      );
       res.json({ syncLog });
     } catch (error) {
       next(error);
     }
-  }
+  },
 );
 
 // Get sync logs for a connection
@@ -261,7 +287,7 @@ router.get(
     } catch (error) {
       next(error);
     }
-  }
+  },
 );
 
 // Delete a connection
@@ -281,14 +307,14 @@ router.delete(
       const { pool } = await import("../config/database");
       await pool.query(
         "UPDATE accounting_connections SET is_active = false, updated_at = CURRENT_TIMESTAMP WHERE id = $1",
-        [connectionId]
+        [connectionId],
       );
 
       res.json({ message: "Connection deleted successfully" });
     } catch (error) {
       next(error);
     }
-  }
+  },
 );
 
 export default router;

@@ -7,10 +7,7 @@ module.exports = {
   testPathIgnorePatterns: ["/node_modules/", "/tests/pact/"],
   testTimeout: 30000,
   transform: {
-    "^.+\\.ts$": [
-      "ts-jest",
-      { diagnostics: false },
-    ],
+    "^.+\\.ts$": ["ts-jest", { diagnostics: false }],
   },
   collectCoverageFrom: [
     "src/**/*.ts",

@@ -4,13 +4,9 @@ import { CrossChainMonitorService } from "../services/crossChainMonitorService";
 
 const router = Router();
 
-router.get(
-  "/balances",
-  requireAuth,
-  (_req: AuthRequest, res: Response) => {
-    const snapshots = CrossChainMonitorService.getInstance().getLastSnapshot();
-    res.json(snapshots);
-  },
-);
+router.get("/balances", requireAuth, (_req: AuthRequest, res: Response) => {
+  const snapshots = CrossChainMonitorService.getInstance().getLastSnapshot();
+  res.json(snapshots);
+});
 
 export default router;

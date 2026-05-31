@@ -18,7 +18,7 @@ import crypto from "crypto";
 
 interface AssetEntry {
   code: string;
-  issuer?: string;       // absent means native XLM
+  issuer?: string; // absent means native XLM
   status: "live" | "test" | "private" | "dead";
   desc?: string;
   displayDecimals?: number;
@@ -56,11 +56,14 @@ function getAssets(): AssetEntry[] {
       code: assetCode,
       issuer: assetIssuer,
       status: process.env.STELLAR_NETWORK === "mainnet" ? "live" : "test",
-      desc: process.env.STELLAR_ASSET_DESC || `${assetCode} issued by this anchor`,
+      desc:
+        process.env.STELLAR_ASSET_DESC || `${assetCode} issued by this anchor`,
       displayDecimals: parseInt(process.env.STELLAR_ASSET_DECIMALS || "7", 10),
       isAssetAnchored: process.env.STELLAR_ASSET_ANCHORED !== "false",
       anchorAssetType: process.env.STELLAR_ASSET_ANCHOR_TYPE || "fiat",
-      anchorAsset: process.env.STELLAR_ASSET_ANCHOR_ASSET || assetCode.replace(/[^A-Z]/g, ""),
+      anchorAsset:
+        process.env.STELLAR_ASSET_ANCHOR_ASSET ||
+        assetCode.replace(/[^A-Z]/g, ""),
     });
   }
 
@@ -71,7 +74,9 @@ function getAssets(): AssetEntry[] {
       const extra: AssetEntry[] = JSON.parse(extraRaw);
       assets.push(...extra);
     } catch {
-      console.warn("[stellar.toml] STELLAR_EXTRA_ASSETS is not valid JSON — skipping");
+      console.warn(
+        "[stellar.toml] STELLAR_EXTRA_ASSETS is not valid JSON — skipping",
+      );
     }
   }
 
@@ -95,15 +100,19 @@ function buildGeneralSection(): string {
     ? "Public Global Stellar Network ; September 2015"
     : "Test SDF Network ; September 2015";
 
-  const baseUrl = (process.env.STELLAR_FEDERATION_SERVER_URL || `https://${process.env.STELLAR_WEB_AUTH_DOMAIN || "mobilemoney.com"}`).replace(/\/$/, "");
+  const baseUrl = (
+    process.env.STELLAR_FEDERATION_SERVER_URL ||
+    `https://${process.env.STELLAR_WEB_AUTH_DOMAIN || "mobilemoney.com"}`
+  ).replace(/\/$/, "");
 
-  const lines: string[] = [
-    `NETWORK_PASSPHRASE=${tomlStr(passphrase)}`,
-  ];
+  const lines: string[] = [`NETWORK_PASSPHRASE=${tomlStr(passphrase)}`];
 
   // FEDERATION_SERVER (SEP-02)
-  const federationServer = process.env.STELLAR_FEDERATION_SERVER
-    || (process.env.STELLAR_FEDERATION_DOMAIN ? `https://${process.env.STELLAR_FEDERATION_DOMAIN}/federation` : `${baseUrl}/federation`);
+  const federationServer =
+    process.env.STELLAR_FEDERATION_SERVER ||
+    (process.env.STELLAR_FEDERATION_DOMAIN
+      ? `https://${process.env.STELLAR_FEDERATION_DOMAIN}/federation`
+      : `${baseUrl}/federation`);
   lines.push(`FEDERATION_SERVER=${tomlStr(federationServer)}`);
 
   // AUTH_SERVER (SEP-10)
@@ -124,7 +133,8 @@ function buildGeneralSection(): string {
   lines.push(`DIRECT_PAYMENT_SERVER=${tomlStr(sep31Url)}`);
 
   // SIGNING_KEY
-  const signingKey = process.env.STELLAR_SIGNING_KEY || process.env.STELLAR_ISSUER_ACCOUNT || "";
+  const signingKey =
+    process.env.STELLAR_SIGNING_KEY || process.env.STELLAR_ISSUER_ACCOUNT || "";
   if (signingKey) {
     lines.push(`SIGNING_KEY=${tomlStr(signingKey)}`);
   }
@@ -137,7 +147,8 @@ function buildDocumentationSection(): string {
   const orgDba = process.env.ORG_DBA || "";
   const orgUrl = process.env.ORG_URL || "";
   const orgLogo = process.env.ORG_LOGO || "";
-  const orgDescription = process.env.ORG_DESCRIPTION || "Mobile money to Stellar asset anchor";
+  const orgDescription =
+    process.env.ORG_DESCRIPTION || "Mobile money to Stellar asset anchor";
   const orgSupportEmail = process.env.ORG_SUPPORT_EMAIL || "";
 
   const lines = ["[DOCUMENTATION]", `ORG_NAME=${tomlStr(orgName)}`];
@@ -146,7 +157,8 @@ function buildDocumentationSection(): string {
   if (orgUrl) lines.push(`ORG_URL=${tomlStr(orgUrl)}`);
   if (orgLogo) lines.push(`ORG_LOGO=${tomlStr(orgLogo)}`);
   lines.push(`ORG_DESCRIPTION=${tomlStr(orgDescription)}`);
-  if (orgSupportEmail) lines.push(`ORG_OFFICIAL_EMAIL=${tomlStr(orgSupportEmail)}`);
+  if (orgSupportEmail)
+    lines.push(`ORG_OFFICIAL_EMAIL=${tomlStr(orgSupportEmail)}`);
 
   return lines.join("\n");
 }
@@ -154,10 +166,7 @@ function buildDocumentationSection(): string {
 function buildCurrenciesSection(assets: AssetEntry[]): string {
   return assets
     .map((asset) => {
-      const lines = [
-        "[[CURRENCIES]]",
-        `code=${tomlStr(asset.code)}`,
-      ];
+      const lines = ["[[CURRENCIES]]", `code=${tomlStr(asset.code)}`];
 
       if (asset.issuer) {
         lines.push(`issuer=${tomlStr(asset.issuer)}`);
@@ -171,10 +180,14 @@ function buildCurrenciesSection(assets: AssetEntry[]): string {
       lines.push(`status=${tomlStr(asset.status)}`);
 
       if (asset.desc) lines.push(`desc=${tomlStr(asset.desc)}`);
-      if (asset.displayDecimals !== undefined) lines.push(`display_decimals=${asset.displayDecimals}`);
-      if (asset.isAssetAnchored !== undefined) lines.push(`is_asset_anchored=${asset.isAssetAnchored}`);
-      if (asset.anchorAssetType) lines.push(`anchor_asset_type=${tomlStr(asset.anchorAssetType)}`);
-      if (asset.anchorAsset) lines.push(`anchor_asset=${tomlStr(asset.anchorAsset)}`);
+      if (asset.displayDecimals !== undefined)
+        lines.push(`display_decimals=${asset.displayDecimals}`);
+      if (asset.isAssetAnchored !== undefined)
+        lines.push(`is_asset_anchored=${asset.isAssetAnchored}`);
+      if (asset.anchorAssetType)
+        lines.push(`anchor_asset_type=${tomlStr(asset.anchorAssetType)}`);
+      if (asset.anchorAsset)
+        lines.push(`anchor_asset=${tomlStr(asset.anchorAsset)}`);
 
       return lines.join("\n");
     })
@@ -205,7 +218,11 @@ export function generateToml(): string {
 
 /** SHA-256 ETag for the given content (double-quoted per RFC 7232 §2.3). */
 function computeETag(content: string): string {
-  const hash = crypto.createHash("sha256").update(content, "utf8").digest("hex").slice(0, 32);
+  const hash = crypto
+    .createHash("sha256")
+    .update(content, "utf8")
+    .digest("hex")
+    .slice(0, 32);
   return `"${hash}"`;
 }
 

@@ -8,7 +8,12 @@ import { Transaction } from "../models/transaction";
 
 export type NotificationSeverity = "low" | "medium" | "high" | "critical";
 
-export type NotificationChannel = "email" | "sms" | "push" | "whatsapp" | "pagerduty";
+export type NotificationChannel =
+  | "email"
+  | "sms"
+  | "push"
+  | "whatsapp"
+  | "pagerduty";
 
 export interface NotificationContext {
   userId?: string;
@@ -54,7 +59,10 @@ export class NotificationRouter {
   private userModel: UserModel;
 
   // Default routing rules by severity
-  private readonly routingRules: Record<NotificationSeverity, NotificationRoutingRule> = {
+  private readonly routingRules: Record<
+    NotificationSeverity,
+    NotificationRoutingRule
+  > = {
     low: {
       severity: "low",
       channels: ["push"],
@@ -98,7 +106,9 @@ export class NotificationRouter {
   /**
    * Get user notification preferences
    */
-  private async getUserPreferences(userId: string): Promise<UserNotificationPreferences> {
+  private async getUserPreferences(
+    userId: string,
+  ): Promise<UserNotificationPreferences> {
     try {
       const user = await this.userModel.findById(userId);
       if (!user) {
@@ -154,7 +164,12 @@ export class NotificationRouter {
     const preferences = await this.getUserPreferences(context.userId);
 
     // Check if notification meets user's severity threshold
-    if (!this.meetsSeverityThreshold(context.severity, preferences.severityThreshold)) {
+    if (
+      !this.meetsSeverityThreshold(
+        context.severity,
+        preferences.severityThreshold,
+      )
+    ) {
       return [];
     }
 
@@ -208,7 +223,9 @@ export class NotificationRouter {
     }
   }
 
-  private async sendEmailNotification(context: NotificationContext): Promise<void> {
+  private async sendEmailNotification(
+    context: NotificationContext,
+  ): Promise<void> {
     if (!context.userId) return;
 
     const user = await this.userModel.findById(context.userId);
@@ -246,7 +263,9 @@ export class NotificationRouter {
     }
   }
 
-  private async sendSmsNotification(context: NotificationContext): Promise<void> {
+  private async sendSmsNotification(
+    context: NotificationContext,
+  ): Promise<void> {
     if (!context.transaction) return;
 
     const eventKind: "transaction_completed" | "transaction_failed" =
@@ -254,18 +273,26 @@ export class NotificationRouter {
         ? "transaction_failed"
         : "transaction_completed";
 
-    await this.smsService.notifyTransactionEvent(context.transaction.phoneNumber, {
-      referenceNumber: context.transaction.referenceNumber,
-      type: context.transaction.type as "deposit" | "withdraw",
-      amount: String(context.transaction.amount),
-      provider: context.transaction.provider,
-      kind: eventKind,
-      errorMessage: context.severity === "high" || context.severity === "critical" ? context.message : undefined,
-      locale: context.locale,
-    });
+    await this.smsService.notifyTransactionEvent(
+      context.transaction.phoneNumber,
+      {
+        referenceNumber: context.transaction.referenceNumber,
+        type: context.transaction.type as "deposit" | "withdraw",
+        amount: String(context.transaction.amount),
+        provider: context.transaction.provider,
+        kind: eventKind,
+        errorMessage:
+          context.severity === "high" || context.severity === "critical"
+            ? context.message
+            : undefined,
+        locale: context.locale,
+      },
+    );
   }
 
-  private async sendPushNotification(context: NotificationContext): Promise<void> {
+  private async sendPushNotification(
+    context: NotificationContext,
+  ): Promise<void> {
     if (!context.userId || !context.transaction) return;
 
     if (context.severity === "high" || context.severity === "critical") {
@@ -290,7 +317,9 @@ export class NotificationRouter {
     }
   }
 
-  private async sendWhatsappNotification(context: NotificationContext): Promise<void> {
+  private async sendWhatsappNotification(
+    context: NotificationContext,
+  ): Promise<void> {
     if (!context.transaction) return;
 
     const eventKind: "transaction_completed" | "transaction_failed" =
@@ -298,18 +327,26 @@ export class NotificationRouter {
         ? "transaction_failed"
         : "transaction_completed";
 
-    await this.whatsappService.notifyTransactionEvent(context.transaction.phoneNumber, {
-      referenceNumber: context.transaction.referenceNumber,
-      type: context.transaction.type as "deposit" | "withdraw",
-      amount: String(context.transaction.amount),
-      provider: context.transaction.provider,
-      kind: eventKind,
-      errorMessage: context.severity === "high" || context.severity === "critical" ? context.message : undefined,
-      locale: context.locale,
-    });
+    await this.whatsappService.notifyTransactionEvent(
+      context.transaction.phoneNumber,
+      {
+        referenceNumber: context.transaction.referenceNumber,
+        type: context.transaction.type as "deposit" | "withdraw",
+        amount: String(context.transaction.amount),
+        provider: context.transaction.provider,
+        kind: eventKind,
+        errorMessage:
+          context.severity === "high" || context.severity === "critical"
+            ? context.message
+            : undefined,
+        locale: context.locale,
+      },
+    );
   }
 
-  private async sendPagerDutyNotification(context: NotificationContext): Promise<void> {
+  private async sendPagerDutyNotification(
+    context: NotificationContext,
+  ): Promise<void> {
     // Only send critical system notifications to PagerDuty
     if (context.severity !== "critical") return;
 
@@ -331,7 +368,9 @@ export class NotificationRouter {
     const enabledChannels = await this.getEnabledChannels(context, rule);
 
     if (enabledChannels.length === 0) {
-      console.log(`No enabled channels for notification: ${context.category} (${context.severity})`);
+      console.log(
+        `No enabled channels for notification: ${context.category} (${context.severity})`,
+      );
       return;
     }
 
@@ -355,9 +394,13 @@ export class NotificationRouter {
     status: "completed" | "failed",
     errorMessage?: string,
   ): Promise<void> {
-    const severity: NotificationSeverity = status === "failed" ? "high" : "medium";
-    const title = status === "failed" ? "Transaction Failed" : "Transaction Completed";
-    const message = errorMessage || `Your ${transaction.type} of ${transaction.amount} ${transaction.provider.toUpperCase()} has ${status}`;
+    const severity: NotificationSeverity =
+      status === "failed" ? "high" : "medium";
+    const title =
+      status === "failed" ? "Transaction Failed" : "Transaction Completed";
+    const message =
+      errorMessage ||
+      `Your ${transaction.type} of ${transaction.amount} ${transaction.provider.toUpperCase()} has ${status}`;
 
     await this.routeNotification({
       userId: transaction.userId,

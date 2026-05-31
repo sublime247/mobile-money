@@ -38,12 +38,11 @@ export async function findPaymentPaths(
     .strictReceivePaths([sendAsset], destAsset, destAmount)
     .call();
   // Filter to paths that end in the desired destAsset
-  return response.records.filter(
-    (p) =>
-      p.destination_asset_type !== "native"
-        ? p.destination_asset_code === destAsset.getCode() &&
-          p.destination_asset_issuer === destAsset.getIssuer()
-        : destAsset.isNative(),
+  return response.records.filter((p) =>
+    p.destination_asset_type !== "native"
+      ? p.destination_asset_code === destAsset.getCode() &&
+        p.destination_asset_issuer === destAsset.getIssuer()
+      : destAsset.isNative(),
   );
 }
 
@@ -129,7 +128,11 @@ export class SlippageError extends Error {
 
 function isSlippageError(err: unknown): boolean {
   if (!err || typeof err !== "object") return false;
-  const e = err as { response?: { data?: { extras?: { result_codes?: { operations?: string[] } } } } };
+  const e = err as {
+    response?: {
+      data?: { extras?: { result_codes?: { operations?: string[] } } };
+    };
+  };
   const ops = e.response?.data?.extras?.result_codes?.operations ?? [];
   return ops.includes("op_over_sendmax");
 }

@@ -37,7 +37,11 @@ function pipeline(
 
 describe("smoke — sensitive body fields are redacted in log output", () => {
   it("redacts password and token from a logged request body", () => {
-    const body = { username: "alice", password: "test-value-not-real", token: "test-token-not-real" };
+    const body = {
+      username: "alice",
+      password: "test-value-not-real",
+      token: "test-token-not-real",
+    };
     const log = pipeline("info", { event: "user.login", body });
 
     const loggedBody = (log as any).body as Record<string, unknown>;
@@ -47,7 +51,11 @@ describe("smoke — sensitive body fields are redacted in log output", () => {
   });
 
   it("redacts apiKey and secret from a logged payload", () => {
-    const payload = { apiKey: "test-api-key-not-real", secret: "test-secret-not-real", amount: 500 };
+    const payload = {
+      apiKey: "test-api-key-not-real",
+      secret: "test-secret-not-real",
+      amount: 500,
+    };
     const log = pipeline("info", { event: "api.call", payload });
 
     const loggedPayload = (log as any).payload as Record<string, unknown>;
@@ -60,7 +68,10 @@ describe("smoke — sensitive body fields are redacted in log output", () => {
     const data = {
       user: {
         id: "u-1",
-        loginInfo: { password: "test-value-not-real", refreshToken: "rt-test-not-real" },
+        loginInfo: {
+          password: "test-value-not-real",
+          refreshToken: "rt-test-not-real",
+        },
       },
     };
     const log = pipeline("info", { event: "debug.dump", data });
@@ -86,7 +97,10 @@ describe("smoke — sensitive body fields are redacted in log output", () => {
   });
 
   it("redacts a stringified-JSON body field", () => {
-    const rawBody = JSON.stringify({ password: "pw-test-not-real", user: "bob" });
+    const rawBody = JSON.stringify({
+      password: "pw-test-not-real",
+      user: "bob",
+    });
     const log = pipeline("info", { event: "raw.body", rawBody });
 
     const loggedRaw = (log as any).rawBody as string;
@@ -128,11 +142,23 @@ describe("smoke — sensitive HTTP headers are redacted", () => {
   });
 
   it("redacts X-Api-Key header (case-insensitive)", () => {
-    const headersLower = { "x-api-key": "test-api-key-not-real", host: "api.example.com" };
-    const headersUpper = { "X-Api-Key": "test-api-key-not-real", host: "api.example.com" };
+    const headersLower = {
+      "x-api-key": "test-api-key-not-real",
+      host: "api.example.com",
+    };
+    const headersUpper = {
+      "X-Api-Key": "test-api-key-not-real",
+      host: "api.example.com",
+    };
 
-    const logLower = pipeline("info", { event: "http.request", headers: headersLower });
-    const logUpper = pipeline("info", { event: "http.request", headers: headersUpper });
+    const logLower = pipeline("info", {
+      event: "http.request",
+      headers: headersLower,
+    });
+    const logUpper = pipeline("info", {
+      event: "http.request",
+      headers: headersUpper,
+    });
 
     expect((logLower as any).headers["x-api-key"]).toBe(REDACTED);
     expect((logUpper as any).headers["X-Api-Key"]).toBe(REDACTED);
@@ -196,7 +222,10 @@ describe("smoke — error objects with sensitive content are scrubbed", () => {
     const err = new Error("Login failed") as Error & {
       details?: Record<string, unknown>;
     };
-    err.details = { attempted_password: "test-value-not-real", username: "alice" };
+    err.details = {
+      attempted_password: "test-value-not-real",
+      username: "alice",
+    };
 
     const log = pipeline("error", { event: "login.error", err });
 
@@ -292,7 +321,10 @@ describe("smoke — original objects are not mutated through the pipeline", () =
   });
 
   it("does not mutate a headers object passed to the logger", () => {
-    const headers = { authorization: "Bearer test-token-not-real", "content-type": "application/json" };
+    const headers = {
+      authorization: "Bearer test-token-not-real",
+      "content-type": "application/json",
+    };
     const originalAuth = headers.authorization;
 
     pipeline("info", { event: "http.request", headers });

@@ -333,7 +333,10 @@ export class DisputeService {
         await this.disputeModel.markSlaWarningSent(dispute.id);
         warningsSent++;
       } catch (error) {
-        console.error(`Failed to send SLA warning for dispute ${dispute.id}:`, error);
+        console.error(
+          `Failed to send SLA warning for dispute ${dispute.id}:`,
+          error,
+        );
       }
     }
 

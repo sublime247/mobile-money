@@ -36,7 +36,8 @@ function upsert(
   const key = `${base}|${quote}|${recordedAt.toISOString()}`;
   const existing = rows.findIndex(
     (r) =>
-      `${r.base_currency}|${r.quote_currency}|${r.recorded_at.toISOString()}` === key,
+      `${r.base_currency}|${r.quote_currency}|${r.recorded_at.toISOString()}` ===
+      key,
   );
   const now = new Date();
   const row: Row = {
@@ -71,7 +72,11 @@ jest.mock("../../src/config/database", () => ({
     throw new Error(`Unhandled queryWrite: ${text}`);
   },
   async queryRead(text: string, params: unknown[] = []) {
-    if (/SELECT[\s\S]+FROM historical_prices[\s\S]+ORDER BY recorded_at DESC\s+LIMIT 1/i.test(text)) {
+    if (
+      /SELECT[\s\S]+FROM historical_prices[\s\S]+ORDER BY recorded_at DESC\s+LIMIT 1/i.test(
+        text,
+      )
+    ) {
       if (/recorded_at <= \$3/i.test(text)) {
         const [base, quote, at] = params as [string, string, string];
         const cutoff = new Date(at).getTime();
@@ -365,11 +370,7 @@ describe("findNearest / findLatest / findRange integration", () => {
     mockExchangeRateOnce(600);
     await captureSnapshot(new Date("2026-04-23T10:00:00Z"));
 
-    const r = await findNearest(
-      "XLM",
-      "USD",
-      new Date("2026-04-23T09:00:00Z"),
-    );
+    const r = await findNearest("XLM", "USD", new Date("2026-04-23T09:00:00Z"));
     expect(r).toBeNull();
   });
 

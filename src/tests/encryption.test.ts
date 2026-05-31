@@ -102,7 +102,10 @@ describe("AES-256-GCM encrypt / decrypt", () => {
     const key = makeKey();
     const payload = encryptAES("original", key);
     // Flip a byte in the ciphertext
-    const tampered = { ...payload, ciphertext: "00" + payload.ciphertext.slice(2) };
+    const tampered = {
+      ...payload,
+      ciphertext: "00" + payload.ciphertext.slice(2),
+    };
     expect(() => decryptAES(tampered, key)).toThrow(/PII decryption failed/);
   });
 
@@ -131,8 +134,12 @@ describe("serializePayload / deserializePayload", () => {
   });
 
   it("throws on malformed serialised string", () => {
-    expect(() => deserializePayload("notvalid")).toThrow(/Invalid encrypted payload/);
-    expect(() => deserializePayload("a:b")).toThrow(/Invalid encrypted payload/);
+    expect(() => deserializePayload("notvalid")).toThrow(
+      /Invalid encrypted payload/,
+    );
+    expect(() => deserializePayload("a:b")).toThrow(
+      /Invalid encrypted payload/,
+    );
   });
 });
 
@@ -210,7 +217,9 @@ describe("encryptFieldForUser / decryptFieldForUser (per-user key)", () => {
   it("wrong user ID fails decryption", () => {
     const plaintext = "ID-987654";
     const encrypted = encryptFieldForUser(plaintext, "user-correct") as string;
-    expect(() => decryptFieldForUser(encrypted, "user-wrong")).toThrow(/PII decryption failed/);
+    expect(() => decryptFieldForUser(encrypted, "user-wrong")).toThrow(
+      /PII decryption failed/,
+    );
   });
 });
 
@@ -239,7 +248,11 @@ describe("encryptPiiFields / decryptPiiFields", () => {
   });
 
   it("decrypts back to original plaintext", () => {
-    const row = { name: "Marie Curie", address: "1 Rue Pierre Curie", id_number: "FR-1234567" };
+    const row = {
+      name: "Marie Curie",
+      address: "1 Rue Pierre Curie",
+      id_number: "FR-1234567",
+    };
     const encrypted = encryptPiiFields(row);
     const decrypted = decryptPiiFields(encrypted);
 
@@ -262,7 +275,11 @@ describe("encryptPiiFields / decryptPiiFields", () => {
 describe("encryptPiiFieldsForUser / decryptPiiFieldsForUser", () => {
   it("round-trips with per-user key", () => {
     const userId = "user-789";
-    const row = { name: "Amara Diallo", address: "Dakar, Senegal", id_number: "SN-99887" };
+    const row = {
+      name: "Amara Diallo",
+      address: "Dakar, Senegal",
+      id_number: "SN-99887",
+    };
     const encrypted = encryptPiiFieldsForUser(row, userId);
     const decrypted = decryptPiiFieldsForUser(encrypted, userId);
 
@@ -272,8 +289,14 @@ describe("encryptPiiFieldsForUser / decryptPiiFieldsForUser", () => {
   });
 
   it("wrong user ID fails decryption on PII row", () => {
-    const row = { name: "Amara Diallo", address: "Dakar", id_number: "SN-99887" };
+    const row = {
+      name: "Amara Diallo",
+      address: "Dakar",
+      id_number: "SN-99887",
+    };
     const encrypted = encryptPiiFieldsForUser(row, "user-correct");
-    expect(() => decryptPiiFieldsForUser(encrypted, "user-wrong")).toThrow(/PII decryption failed/);
+    expect(() => decryptPiiFieldsForUser(encrypted, "user-wrong")).toThrow(
+      /PII decryption failed/,
+    );
   });
 });

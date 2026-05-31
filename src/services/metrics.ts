@@ -53,7 +53,10 @@ const CACHE_KEYS = {
 /**
  * Determines SLA status based on p99 percentile
  */
-function getSLAStatus(p99_ms: number, breachPercentage: number): "green" | "yellow" | "red" {
+function getSLAStatus(
+  p99_ms: number,
+  breachPercentage: number,
+): "green" | "yellow" | "red" {
   if (breachPercentage === 0) return "green";
   if (breachPercentage < 5) return "yellow";
   return "red";
@@ -63,7 +66,9 @@ function getSLAStatus(p99_ms: number, breachPercentage: number): "green" | "yell
  * Calculate resolution time in milliseconds
  */
 function calculateResolutionTimeMs(createdAt: Date, resolvedAt: Date): number {
-  return Math.round(new Date(resolvedAt).getTime() - new Date(createdAt).getTime());
+  return Math.round(
+    new Date(resolvedAt).getTime() - new Date(createdAt).getTime(),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -80,7 +85,7 @@ export async function getTransactionResolutionPercentiles(
   // Try to get from cache first
   const cached = await redisClient.get(CACHE_KEYS.TRANSACTION_METRICS);
   if (cached) {
-    const cachedStr = typeof cached === 'string' ? cached : cached.toString();
+    const cachedStr = typeof cached === "string" ? cached : cached.toString();
     return JSON.parse(cachedStr);
   }
 
@@ -121,7 +126,8 @@ export async function getTransactionResolutionPercentiles(
     const row = result.rows[0];
     const totalCount = parseInt(row.total_count || "0", 10);
     const breachCount = parseInt(row.sla_breaches_count || "0", 10);
-    const breachPercentage = totalCount > 0 ? (breachCount / totalCount) * 100 : 0;
+    const breachPercentage =
+      totalCount > 0 ? (breachCount / totalCount) * 100 : 0;
 
     const metrics: PercentileMetrics = {
       p95_ms: Math.round(row.p95_ms || 0),
@@ -158,7 +164,7 @@ export async function getTransactionResolutionTrends(
 ): Promise<ResolutionTrendData[]> {
   const cached = await redisClient.get(CACHE_KEYS.TRANSACTION_TREND);
   if (cached) {
-    const cachedStr = typeof cached === 'string' ? cached : cached.toString();
+    const cachedStr = typeof cached === "string" ? cached : cached.toString();
     return JSON.parse(cachedStr);
   }
 
@@ -221,7 +227,7 @@ export async function getDisputeResolutionPercentiles(
 ): Promise<PercentileMetrics> {
   const cached = await redisClient.get(CACHE_KEYS.DISPUTE_METRICS);
   if (cached) {
-    const cachedStr = typeof cached === 'string' ? cached : cached.toString();
+    const cachedStr = typeof cached === "string" ? cached : cached.toString();
     return JSON.parse(cachedStr);
   }
 
@@ -262,7 +268,8 @@ export async function getDisputeResolutionPercentiles(
     const row = result.rows[0];
     const totalCount = parseInt(row.total_count || "0", 10);
     const breachCount = parseInt(row.sla_breaches_count || "0", 10);
-    const breachPercentage = totalCount > 0 ? (breachCount / totalCount) * 100 : 0;
+    const breachPercentage =
+      totalCount > 0 ? (breachCount / totalCount) * 100 : 0;
 
     const metrics: PercentileMetrics = {
       p95_ms: Math.round(row.p95_ms || 0),
@@ -299,7 +306,7 @@ export async function getDisputeResolutionTrends(
 ): Promise<ResolutionTrendData[]> {
   const cached = await redisClient.get(CACHE_KEYS.DISPUTE_TREND);
   if (cached) {
-    const cachedStr = typeof cached === 'string' ? cached : cached.toString();
+    const cachedStr = typeof cached === "string" ? cached : cached.toString();
     return JSON.parse(cachedStr);
   }
 

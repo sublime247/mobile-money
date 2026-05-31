@@ -9,7 +9,9 @@ jest.mock("../../src/config/stellar", () => ({
       sequence: "1",
     }),
   }),
-  getNetworkPassphrase: jest.fn().mockReturnValue("Test SDF Network ; September 2015"),
+  getNetworkPassphrase: jest
+    .fn()
+    .mockReturnValue("Test SDF Network ; September 2015"),
 }));
 
 describe("HtlcService", () => {
@@ -22,7 +24,8 @@ describe("HtlcService", () => {
   it("should build a lock transaction", async () => {
     const params = {
       senderAddress: "GBAF7YV6T7YV6T7YV6T7YV6T7YV6T7YV6T7YV6T7YV6T7YV6T7YV6T7", // Placeholder
-      receiverAddress: "GBAF7YV6T7YV6T7YV6T7YV6T7YV6T7YV6T7YV6T7YV6T7YV6T7YV6T7",
+      receiverAddress:
+        "GBAF7YV6T7YV6T7YV6T7YV6T7YV6T7YV6T7YV6T7YV6T7YV6T7YV6T7",
       tokenAddress: "CDW7YV6T7YV6T7YV6T7YV6T7YV6T7YV6T7YV6T7YV6T7YV6T7YV6T7",
       amount: "100",
       hashlock: "0".repeat(64),

@@ -102,7 +102,11 @@ export class AirtelService {
    * REQUEST PAYMENT (COLLECTION)
    * =========================
    */
-  async requestPayment(phoneNumber: string, amount: string, requestId?: string) {
+  async requestPayment(
+    phoneNumber: string,
+    amount: string,
+    requestId?: string,
+  ) {
     const log = requestId ? logger.child({ requestId }) : logger;
     log.info({ phoneNumber, amount }, "Airtel: Requesting payment");
     const startTime = Date.now();
@@ -139,24 +143,30 @@ export class AirtelService {
         );
 
         const duration = Date.now() - startTime;
-        log.info({ duration, status: response.status }, "Airtel: Payment request successful");
+        log.info(
+          { duration, status: response.status },
+          "Airtel: Payment request successful",
+        );
 
-        return { 
-          success: true, 
+        return {
+          success: true,
           data: response.data,
-          providerResponseTimeMs: duration
+          providerResponseTimeMs: duration,
         };
       } catch (error: any) {
         const duration = Date.now() - startTime;
-        log.error({ 
-          duration, 
-          error: error.message,
-          response: error.response?.data
-        }, "Airtel: Payment request failed");
-        return { 
-          success: false, 
+        log.error(
+          {
+            duration,
+            error: error.message,
+            response: error.response?.data,
+          },
+          "Airtel: Payment request failed",
+        );
+        return {
+          success: false,
           error,
-          providerResponseTimeMs: duration
+          providerResponseTimeMs: duration,
         };
       }
     });
@@ -290,24 +300,30 @@ export class AirtelService {
         );
 
         const duration = Date.now() - startTime;
-        log.info({ duration, status: response.status }, "Airtel: Payout successful");
+        log.info(
+          { duration, status: response.status },
+          "Airtel: Payout successful",
+        );
 
-        return { 
-          success: true, 
+        return {
+          success: true,
           data: response.data,
-          providerResponseTimeMs: duration
+          providerResponseTimeMs: duration,
         };
       } catch (error: any) {
         const duration = Date.now() - startTime;
-        log.error({ 
-          duration, 
-          error: error.message,
-          response: error.response?.data
-        }, "Airtel: Payout failed");
-        return { 
-          success: false, 
+        log.error(
+          {
+            duration,
+            error: error.message,
+            response: error.response?.data,
+          },
+          "Airtel: Payout failed",
+        );
+        return {
+          success: false,
           error,
-          providerResponseTimeMs: duration
+          providerResponseTimeMs: duration,
         };
       }
     });

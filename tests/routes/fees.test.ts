@@ -26,7 +26,7 @@ describe("Fees API", () => {
       expect(response.body.success).toBe(true);
       expect(response.body.data.fee).toBe(150);
       expect(response.body.data.total).toBe(10150);
-      expect(response.body.data.configUsed).toBe('env_fallback');
+      expect(response.body.data.configUsed).toBe("env_fallback");
     });
 
     it("should return validation error for invalid amount", async () => {
@@ -44,8 +44,9 @@ describe("Fees API", () => {
     it("should return error when no active configuration found", async () => {
       mockPool.query.mockResolvedValueOnce({ rows: [] });
 
-      const response = await request(app)
-        .get("/api/fees/configurations/active");
+      const response = await request(app).get(
+        "/api/fees/configurations/active",
+      );
 
       expect(response.status).toBe(500);
       expect(response.body.success).toBe(false);

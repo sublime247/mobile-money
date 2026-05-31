@@ -234,7 +234,7 @@ function createRedisBackedStore(
           return null;
         }
         await redisClient.del(key);
-        const rawStr = typeof raw === 'string' ? raw : raw.toString();
+        const rawStr = typeof raw === "string" ? raw : raw.toString();
         const record = JSON.parse(rawStr) as AuthorizationCodeRecord;
         return record.expiresAt > Date.now() ? record : null;
       }
@@ -267,7 +267,7 @@ function createRedisBackedStore(
         if (!raw) {
           return null;
         }
-        const rawStr = typeof raw === 'string' ? raw : raw.toString();
+        const rawStr = typeof raw === "string" ? raw : raw.toString();
         const record = JSON.parse(rawStr) as RefreshTokenRecord;
         return record.expiresAt > Date.now() ? record : null;
       }

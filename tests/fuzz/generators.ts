@@ -71,13 +71,24 @@ export const integer = (
 
 /** Arbitrary float including special values. */
 export const float = (): Arbitrary<number> => {
-  const specials = [0, -0, Infinity, -Infinity, NaN, Number.MAX_VALUE,
-                    Number.MIN_VALUE, Number.EPSILON, -Number.MAX_VALUE];
-  return arb(() => (rand() < 0.15 ? pick(specials) : (rand() * 2e6 - 1e6)));
+  const specials = [
+    0,
+    -0,
+    Infinity,
+    -Infinity,
+    NaN,
+    Number.MAX_VALUE,
+    Number.MIN_VALUE,
+    Number.EPSILON,
+    -Number.MAX_VALUE,
+  ];
+  return arb(() => (rand() < 0.15 ? pick(specials) : rand() * 2e6 - 1e6));
 };
 
 /** Arbitrary ASCII printable string of variable length. */
-export const string = (opts: { minLength?: number; maxLength?: number } = {}): Arbitrary<string> => {
+export const string = (
+  opts: { minLength?: number; maxLength?: number } = {},
+): Arbitrary<string> => {
   const { minLength = 0, maxLength = 200 } = opts;
   const charset =
     " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ" +
@@ -96,14 +107,17 @@ export const constantFrom = <T>(...values: [T, ...T[]]): Arbitrary<T> =>
 export const uuid = (): Arbitrary<string> => {
   const hex = () => randInt(0, 15).toString(16);
   const seg = (n: number) => Array.from({ length: n }, hex).join("");
-  return arb(() => `${seg(8)}-${seg(4)}-4${seg(3)}-${pick(["8","9","a","b"])}${seg(3)}-${seg(12)}`);
+  return arb(
+    () =>
+      `${seg(8)}-${seg(4)}-4${seg(3)}-${pick(["8", "9", "a", "b"])}${seg(3)}-${seg(12)}`,
+  );
 };
 
 /** Arbitrary date string (ISO 8601). */
 export const isoDate = (): Arbitrary<string> => {
-  const year  = arb(() => randInt(1970, 2099));
+  const year = arb(() => randInt(1970, 2099));
   const month = arb(() => String(randInt(1, 12)).padStart(2, "0"));
-  const day   = arb(() => String(randInt(1, 28)).padStart(2, "0"));
+  const day = arb(() => String(randInt(1, 28)).padStart(2, "0"));
   return arb(() => `${year.generate()}-${month.generate()}-${day.generate()}`);
 };
 
@@ -114,7 +128,11 @@ export const isoDate = (): Arbitrary<string> => {
 /** A curated pool of strings that commonly trigger bugs. */
 export const ATTACK_STRINGS = [
   // Empty / whitespace
-  "", " ", "\t", "\n", "\r\n",
+  "",
+  " ",
+  "\t",
+  "\n",
+  "\r\n",
   // Very long
   "A".repeat(10_000),
   "A".repeat(100_000),
@@ -125,8 +143,8 @@ export const ATTACK_STRINGS = [
   // Unicode extremes
   "😀".repeat(500),
   "\u{1F4A9}",
-  "\uFEFF",   // BOM
-  "\uD800",   // lone surrogate
+  "\uFEFF", // BOM
+  "\uD800", // lone surrogate
   "\uFFFF",
   // SQL injection classics
   "' OR '1'='1",
@@ -135,7 +153,7 @@ export const ATTACK_STRINGS = [
   "UNION SELECT NULL,NULL,NULL--",
   // XSS
   "<script>alert(1)</script>",
-  "\"><img src=x onerror=alert(1)>",
+  '"><img src=x onerror=alert(1)>',
   "javascript:alert(1)",
   // Path traversal
   "../../../etc/passwd",
@@ -145,7 +163,11 @@ export const ATTACK_STRINGS = [
   '{"__proto__":{"polluted":true}}',
   '{"constructor":{"prototype":{"polluted":true}}}',
   // Numeric strings
-  "NaN", "Infinity", "-Infinity", "1e308", "-1e308",
+  "NaN",
+  "Infinity",
+  "-Infinity",
+  "1e308",
+  "-1e308",
   "9999999999999999999999999",
   // Format strings
   "%s%s%s%s%s",
@@ -153,15 +175,22 @@ export const ATTACK_STRINGS = [
   // CRLF injection
   "foo\r\nX-Injected: bar",
   // Template injection
-  "{{7*7}}", "${7*7}", "#{7*7}",
+  "{{7*7}}",
+  "${7*7}",
+  "#{7*7}",
   // RegExp DoS
   "a".repeat(30) + "!",
   // Type confusion
-  "true", "false", "null", "undefined", "[]", "{}",
+  "true",
+  "false",
+  "null",
+  "undefined",
+  "[]",
+  "{}",
   // Overflows
   String(Number.MAX_SAFE_INTEGER),
   String(Number.MIN_SAFE_INTEGER),
-  String(2**53),
+  String(2 ** 53),
 ] as const;
 
 /** Arbitrary malicious / boundary string drawn from ATTACK_STRINGS. */
@@ -183,12 +212,19 @@ export const anything = (depth = 0): Arbitrary<unknown> =>
     if (r < 0.15) return null;
     if (r < 0.25) return boolean().generate();
     if (r < 0.38) return integer().generate();
-    if (r < 0.50) return float().generate();
-    if (r < 0.70 || depth >= 3) return anyString().generate();
-    if (r < 0.85) return Array.from({ length: randInt(0, 5) }, () => anything(depth + 1).generate());
+    if (r < 0.5) return float().generate();
+    if (r < 0.7 || depth >= 3) return anyString().generate();
+    if (r < 0.85)
+      return Array.from({ length: randInt(0, 5) }, () =>
+        anything(depth + 1).generate(),
+      );
     // object
-    const keys = Array.from({ length: randInt(0, 4) }, () => string({ maxLength: 20 }).generate());
-    return Object.fromEntries(keys.map((k) => [k, anything(depth + 1).generate()]));
+    const keys = Array.from({ length: randInt(0, 4) }, () =>
+      string({ maxLength: 20 }).generate(),
+    );
+    return Object.fromEntries(
+      keys.map((k) => [k, anything(depth + 1).generate()]),
+    );
   });
 
 /** Arbitrary record with a fixed shape, each value drawn from its own arbitrary. */
@@ -211,12 +247,16 @@ export function array<T>(
 ): Arbitrary<T[]> {
   const { minLength = 0, maxLength = 10 } = opts;
   return arb(() =>
-    Array.from({ length: randInt(minLength, maxLength) }, () => inner.generate()),
+    Array.from({ length: randInt(minLength, maxLength) }, () =>
+      inner.generate(),
+    ),
   );
 }
 
 /** One of several arbitraries, chosen uniformly. */
-export function oneOf<T>(...arbitraries: [Arbitrary<T>, ...Arbitrary<T>[]]): Arbitrary<T> {
+export function oneOf<T>(
+  ...arbitraries: [Arbitrary<T>, ...Arbitrary<T>[]]
+): Arbitrary<T> {
   return arb(() => pick(arbitraries).generate());
 }
 
@@ -289,7 +329,9 @@ export function sample<T>(arb: Arbitrary<T>, count: number): T[] {
 /** Stellar-like G-address (56 chars, Base32 alphabet). */
 export const stellarAddress = (): Arbitrary<string> => {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
-  return arb(() => "G" + Array.from({ length: 55 }, () => pick([...chars])).join(""));
+  return arb(
+    () => "G" + Array.from({ length: 55 }, () => pick([...chars])).join(""),
+  );
 };
 
 /** Phone number string — valid-ish E.164 or completely fuzzed. */
@@ -303,7 +345,10 @@ export const phoneNumber = (): Arbitrary<string> =>
 /** Federation address (local*domain form or garbage). */
 export const federationAddress = (): Arbitrary<string> =>
   oneOf(
-    arb(() => `${string({ maxLength: 30 }).generate()}*${string({ maxLength: 30 }).generate()}`),
+    arb(
+      () =>
+        `${string({ maxLength: 30 }).generate()}*${string({ maxLength: 30 }).generate()}`,
+    ),
     attackString(),
     string(),
   );
@@ -311,8 +356,12 @@ export const federationAddress = (): Arbitrary<string> =>
 /** Pagination params object. */
 export const paginationParams = (): Arbitrary<Record<string, string>> =>
   arb(() => ({
-    offset: String(oneOf(integer({ min: -10, max: 1000 }), attackString()).generate()),
-    limit:  String(oneOf(integer({ min: -10, max: 10000 }), attackString()).generate()),
+    offset: String(
+      oneOf(integer({ min: -10, max: 1000 }), attackString()).generate(),
+    ),
+    limit: String(
+      oneOf(integer({ min: -10, max: 10000 }), attackString()).generate(),
+    ),
   }));
 
 /** Status filter string. */
@@ -327,7 +376,8 @@ export const transactionStatus = (): Arbitrary<string> =>
 export const jwtString = (): Arbitrary<string> =>
   oneOf(
     arb(() => {
-      const part = () => Buffer.from(anyString().generate()).toString("base64url");
+      const part = () =>
+        Buffer.from(anyString().generate()).toString("base64url");
       return `${part()}.${part()}.${part()}`;
     }),
     attackString(),

@@ -26,7 +26,9 @@ describe("SEP-12 KYC API", () => {
       getVerificationStatus: jest.fn(),
     } as any;
 
-    (KYCService as jest.MockedClass<typeof KYCService>).mockImplementation(() => mockKycService);
+    (KYCService as jest.MockedClass<typeof KYCService>).mockImplementation(
+      () => mockKycService,
+    );
 
     // Create Express app with SEP-12 router
     app = express();
@@ -360,7 +362,7 @@ describe("SEP-12 KYC API", () => {
       expect(response.status).toBe(204);
       expect(mockDb.query).toHaveBeenCalledWith(
         expect.stringContaining("DELETE FROM kyc_applicants"),
-        ["GABC123..."]
+        ["GABC123..."],
       );
     });
 
@@ -407,7 +409,9 @@ describe("SEP-12 KYC API", () => {
 
       expect(response.status).toBe(200);
       expect(response.body.fields.organization_name).toBeDefined();
-      expect(response.body.fields.organization_registration_number).toBeDefined();
+      expect(
+        response.body.fields.organization_registration_number,
+      ).toBeDefined();
     });
 
     it("should include document fields for unverified customers", async () => {

@@ -17,7 +17,11 @@ export interface TaxReportOptions {
   format: "CSV" | "XML";
 }
 
-export function generateTaxReport({ country, transactions, format }: TaxReportOptions): string {
+export function generateTaxReport({
+  country,
+  transactions,
+  format,
+}: TaxReportOptions): string {
   const tax = taxRequirements[country];
   const reportRows = transactions.map((tx) => {
     const vat = tx.amount * tax.vatRate;

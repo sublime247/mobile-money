@@ -201,22 +201,22 @@ curl -s -X POST http://localhost:3000/graphql \
 
 GraphQL responses use `errors[].extensions.code` where applicable, for example:
 
-| Code              | Typical case                          |
-|-------------------|----------------------------------------|
-| `UNAUTHENTICATED` | Missing or invalid API key             |
-| `NOT_FOUND`       | Resource missing                       |
-| `CONFLICT`        | Duplicate dispute or deposit lock      |
-| `BAD_USER_INPUT`  | Validation / invalid transition        |
-| `INTERNAL`        | Unexpected failure                     |
+| Code              | Typical case                      |
+| ----------------- | --------------------------------- |
+| `UNAUTHENTICATED` | Missing or invalid API key        |
+| `NOT_FOUND`       | Resource missing                  |
+| `CONFLICT`        | Duplicate dispute or deposit lock |
+| `BAD_USER_INPUT`  | Validation / invalid transition   |
+| `INTERNAL`        | Unexpected failure                |
 
 ## REST parity
 
-| REST | GraphQL |
-|------|---------|
-| `GET /api/transactions/:id` | `transaction`, `transactions`, `transactionByReferenceNumber`, `transactionsByTags` |
-| `POST .../deposit` | `deposit` |
-| `POST .../withdraw` | `withdraw` |
+| REST                                                                     | GraphQL                                                                                             |
+| ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
+| `GET /api/transactions/:id`                                              | `transaction`, `transactions`, `transactionByReferenceNumber`, `transactionsByTags`                 |
+| `POST .../deposit`                                                       | `deposit`                                                                                           |
+| `POST .../withdraw`                                                      | `withdraw`                                                                                          |
 | Dispute routes under `/api/disputes` and `/api/transactions/:id/dispute` | `dispute`, `disputeReport`, `openDispute`, `updateDisputeStatus`, `assignDispute`, `addDisputeNote` |
-| `GET /api/transactions/bulk/:jobId` | `bulkImportJob` |
+| `GET /api/transactions/bulk/:jobId`                                      | `bulkImportJob`                                                                                     |
 
 CSV bulk **upload** remains `POST /api/transactions/bulk` (multipart); GraphQL is used to query job status by id.

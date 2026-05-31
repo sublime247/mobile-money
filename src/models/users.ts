@@ -9,7 +9,7 @@ export interface User {
   email?: string;
   two_factor_secret?: string | null;
   backup_codes?: string[] | null;
-  status: 'active' | 'frozen' | 'suspended';
+  status: "active" | "frozen" | "suspended";
   tokenVersion?: number;
   createdAt: Date;
   updatedAt: Date;
@@ -44,49 +44,58 @@ export class UserModel {
 
   async updateEmail(id: string, email: string): Promise<void> {
     const encryptedEmail = encrypt(email);
-    await queryWrite("UPDATE users SET email = $1 WHERE id = $2", [encryptedEmail, id]);
+    await queryWrite("UPDATE users SET email = $1 WHERE id = $2", [
+      encryptedEmail,
+      id,
+    ]);
   }
 
   async updateStatus(
     id: string,
-    status: 'active' | 'frozen' | 'suspended',
+    status: "active" | "frozen" | "suspended",
     changedBy: string,
     reason?: string,
     ipAddress?: string,
-    userAgent?: string
+    userAgent?: string,
   ): Promise<User | null> {
     const client = await pool.connect();
-    
+
     try {
-      await client.query('BEGIN');
-      
+      await client.query("BEGIN");
+
       // Get current user status for audit
       const currentUser = await this.findById(id);
       if (!currentUser) {
-        await client.query('ROLLBACK');
+        await client.query("ROLLBACK");
         return null;
       }
-      
+
       // Update user status
-      const updateQuery = "UPDATE users SET status = $1 WHERE id = $2 RETURNING *";
+      const updateQuery =
+        "UPDATE users SET status = $1 WHERE id = $2 RETURNING *";
       const result = await client.query(updateQuery, [status, id]);
-      
+
       if (result.rows.length === 0) {
-        await client.query('ROLLBACK');
+        await client.query("ROLLBACK");
         return null;
       }
-      
+
       // Log audit entry
       const auditQuery = `
         INSERT INTO user_status_audit (
           user_id, action, old_status, new_status, reason, changed_by, ip_address, user_agent
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       `;
-      
-      const action = status === 'frozen' ? 'FREEZE' : 
-                     status === 'suspended' ? 'SUSPEND' : 
-                     currentUser.status === 'frozen' ? 'UNFREEZE' : 'UNSUSPEND';
-      
+
+      const action =
+        status === "frozen"
+          ? "FREEZE"
+          : status === "suspended"
+            ? "SUSPEND"
+            : currentUser.status === "frozen"
+              ? "UNFREEZE"
+              : "UNSUSPEND";
+
       await client.query(auditQuery, [
         id,
         action,
@@ -95,11 +104,11 @@ export class UserModel {
         reason,
         changedBy,
         ipAddress,
-        userAgent
+        userAgent,
       ]);
-      
-      await client.query('COMMIT');
-      
+
+      await client.query("COMMIT");
+
       // Return updated user
       const row = result.rows[0];
       return {
@@ -116,7 +125,7 @@ export class UserModel {
         smsOptOut: row.sms_opt_out ?? false,
       };
     } catch (error) {
-      await client.query('ROLLBACK');
+      await client.query("ROLLBACK");
       throw error;
     } finally {
       client.release();
@@ -155,10 +164,13 @@ export class UserModel {
     return result.rows[0]?.token_version || 0;
   }
 
-  async updateMandatory2FAWithdrawals(id: string, enabled: boolean): Promise<void> {
+  async updateMandatory2FAWithdrawals(
+    id: string,
+    enabled: boolean,
+  ): Promise<void> {
     await queryWrite(
       "UPDATE users SET mandatory_2fa_withdrawals = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2",
-      [enabled, id]
+      [enabled, id],
     );
   }
 }

@@ -35,7 +35,9 @@ export interface TransactionFilters {
  * @returns Array of valid status values
  * @throws Error if invalid status provided
  */
-export const parseStatusFilter = (statusParam: string | undefined): TransactionStatus[] => {
+export const parseStatusFilter = (
+  statusParam: string | undefined,
+): TransactionStatus[] => {
   if (!statusParam) {
     return [];
   }
@@ -50,11 +52,13 @@ export const parseStatusFilter = (statusParam: string | undefined): TransactionS
   }
 
   // Validate all statuses
-  const invalidStatuses = statuses.filter((s) => !VALID_STATUSES.includes(s as TransactionStatus));
+  const invalidStatuses = statuses.filter(
+    (s) => !VALID_STATUSES.includes(s as TransactionStatus),
+  );
 
   if (invalidStatuses.length > 0) {
     throw new Error(
-      `Invalid status values: ${invalidStatuses.join(", ")}. Valid values are: ${VALID_STATUSES.join(", ")}`
+      `Invalid status values: ${invalidStatuses.join(", ")}. Valid values are: ${VALID_STATUSES.join(", ")}`,
     );
   }
 
@@ -66,7 +70,9 @@ export const parseStatusFilter = (statusParam: string | undefined): TransactionS
  * @param statuses Array of statuses to filter by
  * @returns SQL WHERE clause fragment
  */
-export const buildStatusWhereClause = (statuses: TransactionStatus[]): string => {
+export const buildStatusWhereClause = (
+  statuses: TransactionStatus[],
+): string => {
   if (statuses.length === 0) return "";
   if (statuses.length === VALID_STATUSES.length) return "";
 
@@ -80,7 +86,7 @@ export const buildStatusWhereClause = (statuses: TransactionStatus[]): string =>
 export const validateTransactionFilters = (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const { status, limit = 50, offset = 0, reference } = req.query;
@@ -139,7 +145,7 @@ export const validateTransactionFilters = (
 export const getPaginationInfo = (
   total: number,
   limit: number,
-  offset: number
+  offset: number,
 ) => {
   return {
     total,

@@ -44,10 +44,13 @@ describe("GET /api/transactions/export", () => {
     });
 
     const app = express();
-    app.use("/api/transactions", createExportRoutes({
-      db: { connect },
-      createQueryStream: (text, values) => ({ text, values }),
-    }));
+    app.use(
+      "/api/transactions",
+      createExportRoutes({
+        db: { connect },
+        createQueryStream: (text, values) => ({ text, values }),
+      }),
+    );
 
     const response = await request(app)
       .get("/api/transactions/export")
@@ -59,9 +62,7 @@ describe("GET /api/transactions/export", () => {
     expect(response.text).toContain(
       "ID,Reference Number,Type,Amount,Phone Number,Provider,Status,Stellar Address,Tags,Notes,Admin Notes,User ID,Created At,Updated At",
     );
-    expect(response.text).toContain(
-      '"Needs, review ""today"""',
-    );
+    expect(response.text).toContain('"Needs, review ""today"""');
     expect(response.text).toContain("priority|vip");
     expect(release).toHaveBeenCalled();
   });
@@ -80,10 +81,13 @@ describe("GET /api/transactions/export", () => {
     });
 
     const app = express();
-    app.use("/api/transactions", createExportRoutes({
-      db: { connect },
-      createQueryStream: (text, values) => ({ text, values }),
-    }));
+    app.use(
+      "/api/transactions",
+      createExportRoutes({
+        db: { connect },
+        createQueryStream: (text, values) => ({ text, values }),
+      }),
+    );
 
     const response = await request(app)
       .get("/api/transactions/export")
@@ -101,12 +105,15 @@ describe("GET /api/transactions/export", () => {
 
   it("returns 401 without admin auth", async () => {
     const app = express();
-    app.use("/api/transactions", createExportRoutes({
-      db: {
-        connect: jest.fn(),
-      },
-      createQueryStream: (text, values) => ({ text, values }),
-    }));
+    app.use(
+      "/api/transactions",
+      createExportRoutes({
+        db: {
+          connect: jest.fn(),
+        },
+        createQueryStream: (text, values) => ({ text, values }),
+      }),
+    );
 
     const response = await request(app).get("/api/transactions/export");
 

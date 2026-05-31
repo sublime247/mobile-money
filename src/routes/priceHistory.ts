@@ -35,13 +35,14 @@ priceHistoryRoutes.get("/latest", async (req: Request, res: Response) => {
   }
   const { base, quote } = parsed.data;
   if (base === quote) {
-    return res
-      .status(400)
-      .json({ error: "base and quote must differ" });
+    return res.status(400).json({ error: "base and quote must differ" });
   }
 
   try {
-    const snapshot = await findLatest(base as CurrencyCode, quote as CurrencyCode);
+    const snapshot = await findLatest(
+      base as CurrencyCode,
+      quote as CurrencyCode,
+    );
     if (!snapshot) {
       return res.status(404).json({
         error: `No price data for ${base}/${quote}`,
@@ -147,7 +148,9 @@ priceHistoryRoutes.get("/at", async (req: Request, res: Response) => {
     return res.json(result);
   } catch (err) {
     console.error("[priceHistory] /at failed:", err);
-    return res.status(500).json({ error: "Failed to compute historical value" });
+    return res
+      .status(500)
+      .json({ error: "Failed to compute historical value" });
   }
 });
 

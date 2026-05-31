@@ -116,16 +116,23 @@ export async function startApolloServer(
 
         if (apiKeyRequired) {
           if (!token) {
-            console.warn("[WS] Rejected unauthenticated connection — no authToken");
+            console.warn(
+              "[WS] Rejected unauthenticated connection — no authToken",
+            );
             return false; // graphql-ws closes the connection
           }
           try {
             const claims = verifyToken(String(token));
             // Attach claims to context so subscription resolvers can access them
             ctx.extra.jwtClaims = claims;
-            console.log(`[WS] Authenticated connection for user ${claims.userId}`);
+            console.log(
+              `[WS] Authenticated connection for user ${claims.userId}`,
+            );
           } catch (err) {
-            console.warn("[WS] Rejected connection — invalid token:", (err as Error).message);
+            console.warn(
+              "[WS] Rejected connection — invalid token:",
+              (err as Error).message,
+            );
             return false;
           }
         }

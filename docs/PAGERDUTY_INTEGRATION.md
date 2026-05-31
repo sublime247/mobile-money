@@ -5,6 +5,7 @@
 This integrates PagerDuty Events API V2 with the mobile-money platform to automatically alert on-call engineers when provider error rates exceed 15% in a 5-minute sliding window.
 
 **Key Features:**
+
 - ✅ Automatic CRITICAL incident creation when error rates spike
 - ✅ Auto-resolution when error rates recover below threshold
 - ✅ Sliding window calculations (5-minute windows)
@@ -50,7 +51,7 @@ This integrates PagerDuty Events API V2 with the mobile-money platform to automa
 ### Data Flow
 
 1. **Error Recording**: Provider operations succeed/fail, metrics are recorded
-2. **Collection**: MonitoringService polls Prometheus metrics every 30 seconds  
+2. **Collection**: MonitoringService polls Prometheus metrics every 30 seconds
 3. **Calculation**: Error rate calculated within 5-minute sliding window
 4. **Decision**: If error rate > 15%, trigger incident; if < 15%, resolve
 5. **Notification**: PagerDuty incident created/resolved, on-call notified
@@ -60,12 +61,14 @@ This integrates PagerDuty Events API V2 with the mobile-money platform to automa
 ### 1. Configure PagerDuty Account
 
 #### Create an Integration Key
+
 1. Go to PagerDuty → Services → Your Service → Integrations
 2. Click "Add Integration" and select "Use our API directly"
 3. Select "Events API V2" as the integration type
 4. Copy the generated **Integration Key** (Routing Key)
 
 #### Example Integration Key Format
+
 ```
 RxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxE
 ```
@@ -87,11 +90,13 @@ REDIS_URL=redis://...
 ### 3. Verify Integration
 
 Check logs during startup:
+
 ```
 PagerDuty monitoring service started
 ```
 
 If the key is missing or invalid:
+
 ```
 PagerDuty service is disabled
 ```
@@ -118,7 +123,10 @@ Timeline:
 When handling provider operations, ensure metrics are tracked:
 
 ```typescript
-import { recordProviderSuccess, recordProviderError } from "../middleware/providerMetrics";
+import {
+  recordProviderSuccess,
+  recordProviderError,
+} from "../middleware/providerMetrics";
 
 try {
   const result = await callPaymentProvider("stripe", paymentData);
@@ -151,16 +159,17 @@ if ((stripeMetrics?.errorRate ?? 0) > 0.15) {
 
 ## Thresholds & Timing
 
-| Setting | Value | Rationale |
-|---------|-------|-----------|
-| Error Rate Threshold | 15% | Balances sensitivity with false positives |
-| Time Window | 5 minutes | Captures provider degradation patterns |
-| Check Interval | 30 seconds | Responsive alerts without excessive polling |
-| Auto-Resolve Threshold | < 15% | Same threshold in reverse |
+| Setting                | Value      | Rationale                                   |
+| ---------------------- | ---------- | ------------------------------------------- |
+| Error Rate Threshold   | 15%        | Balances sensitivity with false positives   |
+| Time Window            | 5 minutes  | Captures provider degradation patterns      |
+| Check Interval         | 30 seconds | Responsive alerts without excessive polling |
+| Auto-Resolve Threshold | < 15%      | Same threshold in reverse                   |
 
 ## PagerDuty Incident Details
 
 ### Alert Payload Example
+
 ```json
 {
   "routing_key": "Rxxx...",
@@ -183,6 +192,7 @@ if ((stripeMetrics?.errorRate ?? 0) > 0.15) {
 ```
 
 ### Resolution Payload Example
+
 ```json
 {
   "routing_key": "Rxxx...",
@@ -204,23 +214,26 @@ if ((stripeMetrics?.errorRate ?? 0) > 0.15) {
 ## Testing
 
 ### Unit Tests
+
 ```bash
 npm run test -- pagerDutyService.test.ts
 ```
 
 ### Manual Testing with Debug
+
 ```typescript
 // In development, temporarily enable console logging:
 const service = new PagerDutyService({
   integrationKey: process.env.PAGERDUTY_INTEGRATION_KEY,
   dedupKey: "mobile-money",
-  enabled: true,  // Force enable for testing
+  enabled: true, // Force enable for testing
 });
 
 service.start();
 ```
 
 ### Simulating Error Spikes (Development Only)
+
 ```typescript
 // For local testing, artificially trigger errors:
 const pagerDuty = createPagerDutyService();
@@ -238,35 +251,42 @@ for (let i = 0; i < 100; i++) {
 ## Troubleshooting
 
 ### "PagerDuty service is disabled"
+
 **Cause**: Missing `PAGERDUTY_INTEGRATION_KEY` environment variable  
 **Solution**: Set the integration key and restart the application
 
 ### Incidents not triggering
+
 1. Verify `PAGERDUTY_INTEGRATION_KEY` is correct
 2. Check error rate exceeds 15% threshold
 3. Review PagerDuty integration service settings
 4. Check application logs for API errors
 
 ### False positives (too many alerts)
+
 **Issue**: Alerts above 15% might be normal for your service  
 **Solution**: Adjust threshold in `PagerDutyService` (currently line 36)
+
 ```typescript
 private static readonly ERROR_RATE_THRESHOLD = 0.15; // Change to 0.20 for 20%
 ```
 
 ### Incidents not auto-resolving
+
 **Cause**: Error rate may be hovering around threshold  
 **Solution**: Monitor the error rate trend in PagerDuty dashboard
 
 ## Metrics Schema
 
 ### Tracked Metrics
+
 - `transaction_errors_total`: Counter tracking errors by provider
 - `transaction_total`: Counter tracking all transactions by provider
 - `provider_response_time_seconds`: Histogram of provider response times
 - `provider_circuit_breaker_state`: Gauge for circuit breaker status
 
 ### Labels
+
 ```typescript
 // Error tracking labels
 {
@@ -296,18 +316,21 @@ private static readonly ERROR_RATE_THRESHOLD = 0.15; // Change to 0.20 for 20%
 ## Advanced Configuration
 
 ### Custom Threshold
+
 ```typescript
 // In MonitoringService.ts, line 21
 private static readonly ERROR_RATE_THRESHOLD = 0.20; // 20% instead of 15%
 ```
 
 ### Custom Window Duration
+
 ```typescript
 // In PagerDutyService.ts, line 37
 private static readonly WINDOW_MS = 10 * 60 * 1000; // 10 minutes instead of 5
 ```
 
 ### Custom Check Interval
+
 ```typescript
 // In index.ts, during initialization
 MonitoringService.start(15000); // Check every 15 seconds instead of 30
@@ -323,6 +346,7 @@ MonitoringService.start(15000); // Check every 15 seconds instead of 30
 ## Support
 
 For issues or questions:
+
 1. Check application logs for error messages
 2. Verify PagerDuty integration key validity
 3. Test with manual error rate simulation

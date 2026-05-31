@@ -17,14 +17,15 @@ describe("AccountingService", () => {
   beforeEach(() => {
     // Reset all mocks
     jest.clearAllMocks();
-    
+
     // Mock UUID generation
     mockUuid.v4.mockReturnValue("test-uuid-123");
-    
+
     // Setup environment variables
     process.env.QUICKBOOKS_CLIENT_ID = "test-qb-client-id";
     process.env.QUICKBOOKS_CLIENT_SECRET = "test-qb-client-secret";
-    process.env.QUICKBOOKS_REDIRECT_URI = "http://localhost:3000/auth/quickbooks/callback";
+    process.env.QUICKBOOKS_REDIRECT_URI =
+      "http://localhost:3000/auth/quickbooks/callback";
     process.env.XERO_CLIENT_ID = "test-xero-client-id";
     process.env.XERO_CLIENT_SECRET = "test-xero-client-secret";
     process.env.XERO_REDIRECT_URI = "http://localhost:3000/auth/xero/callback";
@@ -48,7 +49,7 @@ describe("AccountingService", () => {
   describe("getQuickBooksAuthUrl", () => {
     it("should generate QuickBooks authorization URL", () => {
       const authUrl = accountingService.getQuickBooksAuthUrl();
-      
+
       expect(authUrl).toContain("https://appcenter.intuit.com/connect/oauth2");
       expect(authUrl).toContain("client_id=test-qb-client-id");
       expect(authUrl).toContain("scope=com.intuit.quickbooks.accounting");
@@ -59,8 +60,10 @@ describe("AccountingService", () => {
   describe("getXeroAuthUrl", () => {
     it("should generate Xero authorization URL", () => {
       const authUrl = accountingService.getXeroAuthUrl();
-      
-      expect(authUrl).toContain("https://login.xero.com/identity/connect/authorize");
+
+      expect(authUrl).toContain(
+        "https://login.xero.com/identity/connect/authorize",
+      );
       expect(authUrl).toContain("client_id=test-xero-client-id");
       expect(authUrl).toContain("scope=accounting.transactions");
       expect(authUrl).toContain("response_type=code");
@@ -82,7 +85,7 @@ describe("AccountingService", () => {
       const result = await accountingService.handleQuickBooksCallback(
         "test-code",
         "test-realm-id",
-        "test-user-id"
+        "test-user-id",
       );
 
       expect(result).toEqual(
@@ -94,7 +97,7 @@ describe("AccountingService", () => {
           accessToken: "new-access-token",
           refreshToken: "new-refresh-token",
           isActive: true,
-        })
+        }),
       );
 
       expect(mockAxios.post).toHaveBeenCalledWith(
@@ -104,7 +107,7 @@ describe("AccountingService", () => {
           headers: expect.objectContaining({
             Authorization: expect.stringContaining("Basic "),
           }),
-        })
+        }),
       );
     });
 
@@ -112,7 +115,11 @@ describe("AccountingService", () => {
       mockAxios.post.mockRejectedValue(new Error("OAuth failed"));
 
       await expect(
-        accountingService.handleQuickBooksCallback("invalid-code", "test-realm-id", "test-user-id")
+        accountingService.handleQuickBooksCallback(
+          "invalid-code",
+          "test-realm-id",
+          "test-user-id",
+        ),
       ).rejects.toThrow("QuickBooks OAuth failed: Error: OAuth failed");
     });
   });
@@ -135,7 +142,10 @@ describe("AccountingService", () => {
       mockAxios.get.mockResolvedValue({ data: mockTenantsResponse });
       mockPool.query.mockResolvedValue({ rows: [] });
 
-      const result = await accountingService.handleXeroCallback("test-code", "test-user-id");
+      const result = await accountingService.handleXeroCallback(
+        "test-code",
+        "test-user-id",
+      );
 
       expect(result).toEqual(
         expect.objectContaining({
@@ -146,7 +156,7 @@ describe("AccountingService", () => {
           accessToken: "new-access-token",
           refreshToken: "new-refresh-token",
           isActive: true,
-        })
+        }),
       );
     });
 
@@ -154,7 +164,7 @@ describe("AccountingService", () => {
       mockAxios.post.mockRejectedValue(new Error("OAuth failed"));
 
       await expect(
-        accountingService.handleXeroCallback("invalid-code", "test-user-id")
+        accountingService.handleXeroCallback("invalid-code", "test-user-id"),
       ).rejects.toThrow("Xero OAuth failed: Error: OAuth failed");
     });
   });
@@ -167,7 +177,7 @@ describe("AccountingService", () => {
         "test-connection-id",
         "Transaction Fees",
         "accounting-category-id",
-        "Accounting Category Name"
+        "Accounting Category Name",
       );
 
       expect(result).toEqual({
@@ -188,7 +198,7 @@ describe("AccountingService", () => {
           "accounting-category-id",
           "Accounting Category Name",
           expect.any(Date),
-        ]
+        ],
       );
     });
   });
@@ -199,12 +209,13 @@ describe("AccountingService", () => {
         rows: [mockConnection],
       });
 
-      const result = await accountingService.getConnection("test-connection-id");
+      const result =
+        await accountingService.getConnection("test-connection-id");
 
       expect(result).toEqual(mockConnection);
       expect(mockPool.query).toHaveBeenCalledWith(
         "SELECT * FROM accounting_connections WHERE id = $1",
-        ["test-connection-id"]
+        ["test-connection-id"],
       );
     });
 
@@ -227,7 +238,7 @@ describe("AccountingService", () => {
       expect(result).toEqual(mockConnections);
       expect(mockPool.query).toHaveBeenCalledWith(
         "SELECT * FROM accounting_connections WHERE user_id = $1 AND is_active = true ORDER BY created_at DESC",
-        ["test-user-id"]
+        ["test-user-id"],
       );
     });
   });
@@ -248,7 +259,10 @@ describe("AccountingService", () => {
 
       mockAxios.post.mockResolvedValue({ data: { Id: "test-journal-id" } });
 
-      const result = await accountingService.syncDailyPnL("test-connection-id", "2024-01-01");
+      const result = await accountingService.syncDailyPnL(
+        "test-connection-id",
+        "2024-01-01",
+      );
 
       expect(result).toEqual(
         expect.objectContaining({
@@ -258,7 +272,7 @@ describe("AccountingService", () => {
           recordsProcessed: 1,
           recordsSucceeded: 1,
           recordsFailed: 0,
-        })
+        }),
       );
     });
 
@@ -270,7 +284,10 @@ describe("AccountingService", () => {
 
       mockAxios.post.mockRejectedValue(new Error("API Error"));
 
-      const result = await accountingService.syncDailyPnL("test-connection-id", "2024-01-01");
+      const result = await accountingService.syncDailyPnL(
+        "test-connection-id",
+        "2024-01-01",
+      );
 
       expect(result).toEqual(
         expect.objectContaining({
@@ -281,7 +298,7 @@ describe("AccountingService", () => {
           recordsSucceeded: 0,
           recordsFailed: 1,
           errorMessage: "Error: API Error",
-        })
+        }),
       );
     });
   });
@@ -303,12 +320,15 @@ describe("AccountingService", () => {
 
       mockPool.query.mockResolvedValue({ rows: mockSyncLogs });
 
-      const result = await accountingService.getSyncLogs("test-connection-id", 50);
+      const result = await accountingService.getSyncLogs(
+        "test-connection-id",
+        50,
+      );
 
       expect(result).toEqual(mockSyncLogs);
       expect(mockPool.query).toHaveBeenCalledWith(
         "SELECT * FROM sync_logs WHERE connection_id = $1 ORDER BY synced_at DESC LIMIT $2",
-        ["test-connection-id", 50]
+        ["test-connection-id", 50],
       );
     });
   });
@@ -334,7 +354,7 @@ describe("AccountingService", () => {
           headers: expect.objectContaining({
             Authorization: expect.stringContaining("Basic "),
           }),
-        })
+        }),
       );
 
       expect(mockPool.query).toHaveBeenCalledWith(
@@ -345,7 +365,7 @@ describe("AccountingService", () => {
           expect.any(Date),
           expect.any(Date),
           "test-connection-id",
-        ]
+        ],
       );
     });
 
@@ -353,7 +373,7 @@ describe("AccountingService", () => {
       mockPool.query.mockResolvedValue({ rows: [] });
 
       await expect(
-        accountingService.refreshQuickBooksToken("invalid-id")
+        accountingService.refreshQuickBooksToken("invalid-id"),
       ).rejects.toThrow("QuickBooks connection not found");
     });
   });
@@ -391,7 +411,9 @@ describe("AccountingService", () => {
       mockPool.query.mockResolvedValue({ rows: mockFeeData });
 
       // Access private method through prototype
-      const result = await (accountingService as any).getFeeRevenueData("2024-01-01");
+      const result = await (accountingService as any).getFeeRevenueData(
+        "2024-01-01",
+      );
 
       expect(result).toEqual([
         { category: "Transaction Fees", amount: 30 },
@@ -400,17 +422,15 @@ describe("AccountingService", () => {
     });
 
     it("should handle null fee_category", async () => {
-      const mockFeeData = [
-        { fee_category: null, amount: 50 },
-      ];
+      const mockFeeData = [{ fee_category: null, amount: 50 }];
 
       mockPool.query.mockResolvedValue({ rows: mockFeeData });
 
-      const result = await (accountingService as any).getFeeRevenueData("2024-01-01");
+      const result = await (accountingService as any).getFeeRevenueData(
+        "2024-01-01",
+      );
 
-      expect(result).toEqual([
-        { category: "General Fees", amount: 50 },
-      ]);
+      expect(result).toEqual([{ category: "General Fees", amount: 50 }]);
     });
   });
 });

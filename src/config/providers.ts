@@ -1,4 +1,4 @@
-import { getConfigValue } from './appConfig';
+import { getConfigValue } from "./appConfig";
 
 export enum MobileMoneyProvider {
   MTN = "mtn",
@@ -22,7 +22,7 @@ export interface ProviderLimitsConfig {
  * This replaces hardcoded defaults with values from appConfig.
  */
 export function getProviderLimitsConfig(): ProviderLimitsConfig {
-  const providers = getConfigValue('providers');
+  const providers = getConfigValue("providers");
   return {
     [MobileMoneyProvider.MTN]: {
       minAmount: providers.mtn.minAmount,

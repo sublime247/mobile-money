@@ -9,4 +9,8 @@ export const developerDashboardRoutes = Router();
  * @desc    Get API rate limit usage stats for the authenticated partner
  * @access  Private
  */
-developerDashboardRoutes.get("/dashboard", requireAuth, DeveloperDashboardController.getDashboard);
+developerDashboardRoutes.get(
+  "/dashboard",
+  requireAuth,
+  DeveloperDashboardController.getDashboard,
+);

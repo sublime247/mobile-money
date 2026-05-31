@@ -2,7 +2,6 @@ import PDFDocument from "pdfkit";
 import { Transaction } from "../models/transaction";
 import { maskPhoneNumber, maskStellarAddress } from "../utils/masking";
 
-
 export async function generateTransactionPdfBuffer(
   transaction: Transaction,
 ): Promise<Buffer> {
@@ -42,23 +41,36 @@ export async function generateTransactionPdfBuffer(
       doc.text(`Provider: ${transaction.provider}`, leftX);
       doc.text(`Phone: ${maskPhoneNumber(transaction.phoneNumber)}`, leftX);
       if (transaction.stellarAddress)
-        doc.text(`Stellar: ${maskStellarAddress(transaction.stellarAddress)}`, leftX);
+        doc.text(
+          `Stellar: ${maskStellarAddress(transaction.stellarAddress)}`,
+          leftX,
+        );
 
       // Add StellarExpert Transaction Hash Link if available
-      const metadata = (transaction as any).metadata as Record<string, any> | undefined;
-      const txHash = metadata?.transactionHash || metadata?.stellarTransactionId || (transaction as any).transactionHash || (transaction as any).stellarTransactionId;
-      
+      const metadata = (transaction as any).metadata as
+        | Record<string, any>
+        | undefined;
+      const txHash =
+        metadata?.transactionHash ||
+        metadata?.stellarTransactionId ||
+        (transaction as any).transactionHash ||
+        (transaction as any).stellarTransactionId;
+
       if (txHash) {
-        const network = process.env.STELLAR_NETWORK === 'mainnet' || process.env.STELLAR_NETWORK === 'public' ? 'public' : 'testnet';
+        const network =
+          process.env.STELLAR_NETWORK === "mainnet" ||
+          process.env.STELLAR_NETWORK === "public"
+            ? "public"
+            : "testnet";
         const stellarExpertUrl = `https://stellar.expert/explorer/${network}/tx/${txHash}`;
-        
+
         doc.moveDown(0.2);
         doc
           .fontSize(10)
           .fillColor("#3498db")
           .text(`View Transaction on StellarExpert`, leftX, doc.y, {
             link: stellarExpertUrl,
-            underline: true
+            underline: true,
           })
           .fillColor("#000"); // Reset text color
       }

@@ -169,3 +169,15 @@ CREATE TABLE IF NOT EXISTS aml_alert_review_history (
 CREATE INDEX IF NOT EXISTS idx_aml_review_history_alert_id ON aml_alert_review_history(alert_id);
 CREATE INDEX IF NOT EXISTS idx_aml_review_history_reviewed_by ON aml_review_history(reviewed_by);
 CREATE INDEX IF NOT EXISTS idx_aml_review_history_created_at ON aml_alert_review_history(created_at DESC);
+
+-- Merchants table for batch onboarding
+CREATE TABLE IF NOT EXISTS merchants (
+  id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  email         VARCHAR(255) UNIQUE NOT NULL,
+  name          VARCHAR(255) NOT NULL,
+  business_type VARCHAR(255) NOT NULL,
+  created_at    TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at    TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_merchants_email ON merchants(email);

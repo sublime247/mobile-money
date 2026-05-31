@@ -1,50 +1,47 @@
-import * as vscode from 'vscode';
+import * as vscode from "vscode";
 
 export class LogViewProvider implements vscode.WebviewViewProvider {
-    public static readonly viewType = 'transaction-monitor.liveLogs';
+  public static readonly viewType = "transaction-monitor.liveLogs";
 
-    private _view?: vscode.WebviewView;
+  private _view?: vscode.WebviewView;
 
-    constructor(
-        private readonly _extensionUri: vscode.Uri,
-    ) { }
+  constructor(private readonly _extensionUri: vscode.Uri) {}
 
-    public resolveWebviewView(
-        webviewView: vscode.WebviewView,
-        context: vscode.WebviewViewResolveContext,
-        _token: vscode.CancellationToken,
-    ) {
-        this._view = webviewView;
+  public resolveWebviewView(
+    webviewView: vscode.WebviewView,
+    context: vscode.WebviewViewResolveContext,
+    _token: vscode.CancellationToken,
+  ) {
+    this._view = webviewView;
 
-        webviewView.webview.options = {
-            enableScripts: true,
-            localResourceRoots: [
-                this._extensionUri
-            ]
-        };
+    webviewView.webview.options = {
+      enableScripts: true,
+      localResourceRoots: [this._extensionUri],
+    };
 
-        webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
+    webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
 
-        webviewView.webview.onDidReceiveMessage(data => {
-            switch (data.type) {
-                case 'colorSelected':
-                    {
-                        vscode.window.activeTextEditor?.insertSnippet(new vscode.SnippetString(`#${data.value}`));
-                        break;
-                    }
-            }
-        });
-    }
-
-    public addLog(log: any) {
-        if (this._view) {
-            this._view.show?.(true); // `show` is not always available on all types of views, but for WebviewView it works.
-            this._view.webview.postMessage({ type: 'addLog', log });
+    webviewView.webview.onDidReceiveMessage((data) => {
+      switch (data.type) {
+        case "colorSelected": {
+          vscode.window.activeTextEditor?.insertSnippet(
+            new vscode.SnippetString(`#${data.value}`),
+          );
+          break;
         }
-    }
+      }
+    });
+  }
 
-    private _getHtmlForWebview(webview: vscode.Webview) {
-        return `<!DOCTYPE html>
+  public addLog(log: any) {
+    if (this._view) {
+      this._view.show?.(true); // `show` is not always available on all types of views, but for WebviewView it works.
+      this._view.webview.postMessage({ type: "addLog", log });
+    }
+  }
+
+  private _getHtmlForWebview(webview: vscode.Webview) {
+    return `<!DOCTYPE html>
 			<html lang="en">
 			<head>
 				<meta charset="UTF-8">
@@ -255,5 +252,5 @@ export class LogViewProvider implements vscode.WebviewViewProvider {
 				</script>
 			</body>
 			</html>`;
-    }
+  }
 }

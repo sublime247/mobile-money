@@ -64,15 +64,16 @@ export function requireTwoFactor(
       const backupCode = req.body["backupCode"] || req.body["backup_code"];
 
       if (backupCode && user.backup_codes) {
-        const backupCodes: BackupCode[] = user.backup_codes.map((item, index) =>
-          typeof item === 'string'
-            ? {
-                id: String(index),
-                code_hash: item,
-                used: false,
-                created_at: new Date(0),
-              }
-            : item,
+        const backupCodes: BackupCode[] = user.backup_codes.map(
+          (item, index) =>
+            typeof item === "string"
+              ? {
+                  id: String(index),
+                  code_hash: item,
+                  used: false,
+                  created_at: new Date(0),
+                }
+              : item,
         );
         // Verify backup code
         const verification = await verifyBackupCode(

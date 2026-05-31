@@ -45,6 +45,7 @@ curl -X GET "https://api.example.com/v1/bridge/quotes" \
 ```
 
 **Response:**
+
 ```json
 {
   "sourceChain": "stellar",
@@ -70,6 +71,7 @@ curl -X GET "https://api.example.com/v1/user/kyc-status" \
 ```
 
 **Response:**
+
 ```json
 {
   "userId": "user-123",
@@ -101,18 +103,20 @@ curl -X POST "https://api.example.com/v1/bridge/lock" \
 ```
 
 **Request Body:**
+
 ```typescript
 interface LockRequest {
-  amount: string;              // e.g., "100"
-  assetCode: string;           // e.g., "USDC"
+  amount: string; // e.g., "100"
+  assetCode: string; // e.g., "USDC"
   sourceChain: "stellar" | "ethereum" | "polygon";
   targetChain: "ethereum" | "polygon" | "stellar";
-  evmRecipient?: string;       // Required if targetChain is EVM
-  memo?: string;               // Optional reference
+  evmRecipient?: string; // Required if targetChain is EVM
+  memo?: string; // Optional reference
 }
 ```
 
 **Response (201 Created):**
+
 ```json
 {
   "bridgeTransactionId": "BRIDGE-1714158600000-abc123",
@@ -143,6 +147,7 @@ curl -X GET "https://api.example.com/v1/bridge/transactions/BRIDGE-1714158600000
 ```
 
 **Response:**
+
 ```json
 {
   "bridgeTransactionId": "BRIDGE-1714158600000-abc123",
@@ -166,6 +171,7 @@ curl -X GET "https://api.example.com/v1/bridge/transactions/BRIDGE-1714158600000
 ```
 
 **Status Progress Mapping:**
+
 ```
 initiated:         10%
 kyc_verified:      20%
@@ -185,6 +191,7 @@ curl -X GET "https://api.example.com/v1/bridge/transactions?limit=10&offset=0&st
 ```
 
 **Response:**
+
 ```json
 {
   "total": 5,
@@ -222,6 +229,7 @@ curl -X POST "https://api.example.com/v1/bridge/redeem" \
 ```
 
 **Response:**
+
 ```json
 {
   "redemptionTxId": "REDEEM-1714158800000-def456",
@@ -244,6 +252,7 @@ curl -X GET "https://api.example.com/v1/bridge/status" \
 ```
 
 **Response:**
+
 ```json
 {
   "bridgeStatus": "operational",
@@ -297,15 +306,15 @@ curl -X GET "https://api.example.com/v1/bridge/status" \
 
 ### Common Error Codes
 
-| Code | HTTP | Meaning | Solution |
-|------|------|---------|----------|
-| `INSUFFICIENT_KYC` | 403 | KYC not completed | Complete KYC verification |
-| `TRANSACTION_LIMIT_EXCEEDED` | 422 | Amount exceeds limit | Check daily limits |
-| `SANCTIONS_CHECK_FAILED` | 403 | Sanctions list match | Contact support |
-| `INVALID_EVM_ADDRESS` | 400 | Invalid recipient address | Verify EVM address format |
-| `BRIDGE_PAUSED` | 503 | Bridge maintenance | Try again later |
-| `INSUFFICIENT_LIQUIDITY` | 503 | Not enough liquidity | Reduce amount or try later |
-| `VALIDATOR_CONSENSUS_TIMEOUT` | 504 | Validator timeout | Try again |
+| Code                          | HTTP | Meaning                   | Solution                   |
+| ----------------------------- | ---- | ------------------------- | -------------------------- |
+| `INSUFFICIENT_KYC`            | 403  | KYC not completed         | Complete KYC verification  |
+| `TRANSACTION_LIMIT_EXCEEDED`  | 422  | Amount exceeds limit      | Check daily limits         |
+| `SANCTIONS_CHECK_FAILED`      | 403  | Sanctions list match      | Contact support            |
+| `INVALID_EVM_ADDRESS`         | 400  | Invalid recipient address | Verify EVM address format  |
+| `BRIDGE_PAUSED`               | 503  | Bridge maintenance        | Try again later            |
+| `INSUFFICIENT_LIQUIDITY`      | 503  | Not enough liquidity      | Reduce amount or try later |
+| `VALIDATOR_CONSENSUS_TIMEOUT` | 504  | Validator timeout         | Try again                  |
 
 ---
 
@@ -314,21 +323,21 @@ curl -X GET "https://api.example.com/v1/bridge/status" \
 ### JavaScript/Node.js
 
 ```javascript
-import axios from 'axios';
+import axios from "axios";
 
 class BridgeClient {
   constructor(baseURL, token) {
     this.client = axios.create({
       baseURL,
       headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
     });
   }
 
   async initiateLock(request) {
-    const response = await this.client.post('/v1/bridge/lock', request);
+    const response = await this.client.post("/v1/bridge/lock", request);
     return response.data;
   }
 
@@ -339,41 +348,41 @@ class BridgeClient {
 
   async pollUntilCompleted(txId, maxAttempts = 60, interval = 5000) {
     let attempts = 0;
-    
+
     while (attempts < maxAttempts) {
       const status = await this.getStatus(txId);
-      
-      if (status.status === 'completed') {
+
+      if (status.status === "completed") {
         return status;
       }
-      
-      if (status.status === 'failed') {
+
+      if (status.status === "failed") {
         throw new Error(`Transaction failed: ${status.errorMessage}`);
       }
-      
-      await new Promise(r => setTimeout(r, interval));
+
+      await new Promise((r) => setTimeout(r, interval));
       attempts++;
     }
-    
-    throw new Error('Transaction polling timeout');
+
+    throw new Error("Transaction polling timeout");
   }
 }
 
 // Usage
-const bridge = new BridgeClient('https://api.example.com', token);
+const bridge = new BridgeClient("https://api.example.com", token);
 
 const tx = await bridge.initiateLock({
-  amount: '100',
-  assetCode: 'USDC',
-  sourceChain: 'stellar',
-  targetChain: 'ethereum',
-  evmRecipient: '0x...'
+  amount: "100",
+  assetCode: "USDC",
+  sourceChain: "stellar",
+  targetChain: "ethereum",
+  evmRecipient: "0x...",
 });
 
-console.log('Bridge TX:', tx.bridgeTransactionId);
+console.log("Bridge TX:", tx.bridgeTransactionId);
 
 const completed = await bridge.pollUntilCompleted(tx.bridgeTransactionId);
-console.log('Completed:', completed);
+console.log("Completed:", completed);
 ```
 
 ### Python
@@ -410,15 +419,15 @@ class BridgeClient:
     def poll_until_completed(self, tx_id, max_attempts=60, interval=5):
         for attempt in range(max_attempts):
             status = self.get_status(tx_id)
-            
+
             if status['status'] == 'completed':
                 return status
-            
+
             if status['status'] == 'failed':
                 raise Exception(f"Transaction failed: {status.get('error_message')}")
-            
+
             time.sleep(interval)
-        
+
         raise TimeoutError('Transaction polling timeout')
 
 # Usage
@@ -460,6 +469,7 @@ curl -X POST "https://api.example.com/v1/webhooks" \
 ```
 
 **Webhook Payload:**
+
 ```json
 {
   "event": "bridge.transaction.minted",
@@ -482,6 +492,7 @@ curl -X POST "https://api.example.com/v1/webhooks" \
 - **Status checks:** 500 req/minute
 
 Headers returned:
+
 ```
 X-RateLimit-Limit: 1000
 X-RateLimit-Remaining: 999

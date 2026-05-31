@@ -27,12 +27,12 @@ FeeCalculationContext
 
 ### Strategy Types
 
-| Type | Description |
-|------|-------------|
-| `flat` | Fixed fee amount regardless of transaction size |
-| `percentage` | Percentage of amount, clamped to `[feeMinimum, feeMaximum]` |
-| `time_based` | Overrides fee during specific days/hours (e.g. Fee-free Fridays). Falls through if condition not met. |
-| `volume_based` | Tiered fee based on transaction amount brackets |
+| Type           | Description                                                                                           |
+| -------------- | ----------------------------------------------------------------------------------------------------- |
+| `flat`         | Fixed fee amount regardless of transaction size                                                       |
+| `percentage`   | Percentage of amount, clamped to `[feeMinimum, feeMaximum]`                                           |
+| `time_based`   | Overrides fee during specific days/hours (e.g. Fee-free Fridays). Falls through if condition not met. |
+| `volume_based` | Tiered fee based on transaction amount brackets                                                       |
 
 ### Priority Hierarchy
 
@@ -55,6 +55,7 @@ POST /api/fee-strategies/calculate
 ```
 
 **Body:**
+
 ```json
 {
   "amount": 10000,
@@ -65,6 +66,7 @@ POST /api/fee-strategies/calculate
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -167,6 +169,7 @@ Marketing can create this via the API — no developer needed.
 `daysOfWeek` uses ISO weekday numbers: 1=Monday … 7=Sunday.
 
 To limit to business hours only:
+
 ```json
 {
   "daysOfWeek": [5],
@@ -204,9 +207,9 @@ Reduced fee for high-value transactions:
   "scope": "global",
   "priority": 50,
   "volumeTiers": [
-    { "minAmount": 0,       "maxAmount": 100000, "feePercentage": 1.5 },
-    { "minAmount": 100000,  "maxAmount": 500000, "feePercentage": 0.8 },
-    { "minAmount": 500000,  "maxAmount": null,   "feePercentage": 0.5 }
+    { "minAmount": 0, "maxAmount": 100000, "feePercentage": 1.5 },
+    { "minAmount": 100000, "maxAmount": 500000, "feePercentage": 0.8 },
+    { "minAmount": 500000, "maxAmount": null, "feePercentage": 0.5 }
   ]
 }
 ```
@@ -277,6 +280,7 @@ npm run migrate:up
 Migration file: `migrations/20260424_create_fee_strategies.sql`
 
 Tables created:
+
 - `fee_strategies` — strategy definitions
 - `fee_strategy_audit` — full audit trail of all changes
 

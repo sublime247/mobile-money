@@ -19,6 +19,7 @@ SEP-12 defines a standard API for anchors to collect and manage customer informa
 Retrieve customer information and KYC status.
 
 **Query Parameters:**
+
 - `account` (required): Stellar account address (G...)
 - `memo` (optional): Memo value for account identification
 - `memo_type` (optional): Type of memo (id, hash, text)
@@ -53,6 +54,7 @@ Retrieve customer information and KYC status.
 ```
 
 **Status Values:**
+
 - `ACCEPTED`: Customer is fully verified and approved
 - `PROCESSING`: Customer information is being reviewed
 - `NEEDS_INFO`: Additional information is required
@@ -100,46 +102,49 @@ Create or update customer information.
 Delete customer information (GDPR compliance).
 
 **Parameters:**
+
 - `account` (required): Stellar account address
 
 **Response:**
+
 - Status: 204 No Content
 
 ## Field Definitions
 
 ### Natural Person Fields
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| first_name | string | Yes | First or given name |
-| last_name | string | Yes | Last or family name |
-| email_address | string | Yes | Email address |
-| mobile_number | string | No | Mobile phone with country code |
-| birth_date | date | Yes | Date of birth (YYYY-MM-DD) |
-| address | string | Yes | Full street address |
-| city | string | Yes | City of residence |
-| postal_code | string | Yes | Postal or ZIP code |
-| address_country_code | string | Yes | ISO 3166-1 alpha-3 country code |
-| id_type | string | Yes* | Type of ID document |
-| id_number | string | Yes* | ID document number |
-| id_country_code | string | Yes* | Country that issued the ID |
-| photo_id_front | binary | Yes* | Image of front of ID |
-| photo_id_back | binary | No | Image of back of ID |
+| Field                | Type   | Required | Description                     |
+| -------------------- | ------ | -------- | ------------------------------- |
+| first_name           | string | Yes      | First or given name             |
+| last_name            | string | Yes      | Last or family name             |
+| email_address        | string | Yes      | Email address                   |
+| mobile_number        | string | No       | Mobile phone with country code  |
+| birth_date           | date   | Yes      | Date of birth (YYYY-MM-DD)      |
+| address              | string | Yes      | Full street address             |
+| city                 | string | Yes      | City of residence               |
+| postal_code          | string | Yes      | Postal or ZIP code              |
+| address_country_code | string | Yes      | ISO 3166-1 alpha-3 country code |
+| id_type              | string | Yes\*    | Type of ID document             |
+| id_number            | string | Yes\*    | ID document number              |
+| id_country_code      | string | Yes\*    | Country that issued the ID      |
+| photo_id_front       | binary | Yes\*    | Image of front of ID            |
+| photo_id_back        | binary | No       | Image of back of ID             |
 
-*Required for KYC verification levels above basic
+\*Required for KYC verification levels above basic
 
 ### Organization Fields
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| organization_name | string | Yes | Legal name of organization |
-| organization_registration_number | string | Yes | Business registration number |
-| organization_registered_address | string | Yes | Registered business address |
-| address_country_code | string | Yes | ISO 3166-1 alpha-3 country code |
+| Field                            | Type   | Required | Description                     |
+| -------------------------------- | ------ | -------- | ------------------------------- |
+| organization_name                | string | Yes      | Legal name of organization      |
+| organization_registration_number | string | Yes      | Business registration number    |
+| organization_registered_address  | string | Yes      | Registered business address     |
+| address_country_code             | string | Yes      | ISO 3166-1 alpha-3 country code |
 
 ### ID Types
 
 Supported ID document types:
+
 - `passport`: International passport
 - `drivers_license`: Driver's license
 - `national_id`: National identity card
@@ -152,13 +157,13 @@ The SEP-12 implementation maps to our internal KYC system:
 ### Status Mapping
 
 | Internal Status | KYC Level | SEP-12 Status |
-|----------------|-----------|---------------|
-| PENDING | NONE | NEEDS_INFO |
-| PENDING | BASIC | PROCESSING |
-| APPROVED | BASIC | NEEDS_INFO |
-| APPROVED | FULL | ACCEPTED |
-| REJECTED | * | REJECTED |
-| REVIEW | * | PROCESSING |
+| --------------- | --------- | ------------- |
+| PENDING         | NONE      | NEEDS_INFO    |
+| PENDING         | BASIC     | PROCESSING    |
+| APPROVED        | BASIC     | NEEDS_INFO    |
+| APPROVED        | FULL      | ACCEPTED      |
+| REJECTED        | \*        | REJECTED      |
+| REVIEW          | \*        | PROCESSING    |
 
 ### Data Flow
 
@@ -185,7 +190,7 @@ The SEP-12 implementation maps to our internal KYC system:
 ### Users Table
 
 ```sql
-ALTER TABLE users 
+ALTER TABLE users
 ADD COLUMN stellar_address VARCHAR(56);
 
 CREATE INDEX idx_users_stellar_address ON users(stellar_address);
@@ -245,24 +250,26 @@ To pass the Stellar validator:
 
 ```javascript
 // Check customer status
-const response = await fetch('https://api.example.com/sep12/customer?account=GABC123...');
+const response = await fetch(
+  "https://api.example.com/sep12/customer?account=GABC123...",
+);
 const customer = await response.json();
 
-if (customer.status === 'NEEDS_INFO') {
+if (customer.status === "NEEDS_INFO") {
   // Collect required fields
   const fields = customer.fields;
-  
+
   // Submit customer information
-  await fetch('https://api.example.com/sep12/customer', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+  await fetch("https://api.example.com/sep12/customer", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      account: 'GABC123...',
-      first_name: 'John',
-      last_name: 'Doe',
-      email_address: 'john@example.com',
+      account: "GABC123...",
+      first_name: "John",
+      last_name: "Doe",
+      email_address: "john@example.com",
       // ... other required fields
-    })
+    }),
   });
 }
 ```
@@ -294,6 +301,7 @@ LIMIT_FULL=1000000
 ## Monitoring
 
 Key metrics to monitor:
+
 - Customer submission rate
 - Verification processing time
 - Approval/rejection rates

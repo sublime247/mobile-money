@@ -19,7 +19,10 @@ function resolveHealthAlertWebhookUrls(): string[] {
   return [...new Set(values)];
 }
 
-async function postHealthAlert(url: string, payload: ProviderHealthAlert): Promise<void> {
+async function postHealthAlert(
+  url: string,
+  payload: ProviderHealthAlert,
+): Promise<void> {
   const response = await fetch(url, {
     method: "POST",
     headers: {
@@ -45,9 +48,14 @@ export async function runProviderHealthCheckJob(): Promise<void> {
     const healthResult = await checkMobileMoneyHealth();
 
     const downProviders: string[] = [];
-    const allProviders: Record<string, { status: string; responseTime: number | null }> = {};
+    const allProviders: Record<
+      string,
+      { status: string; responseTime: number | null }
+    > = {};
 
-    for (const [providerName, health] of Object.entries(healthResult.providers)) {
+    for (const [providerName, health] of Object.entries(
+      healthResult.providers,
+    )) {
       allProviders[providerName] = {
         status: health.status,
         responseTime: health.responseTime,
@@ -60,18 +68,27 @@ export async function runProviderHealthCheckJob(): Promise<void> {
         const operations = ["requestPayment", "sendPayout"];
         for (const operation of operations) {
           try {
-            const reset = await checkAndResetCircuitBreaker(providerName, operation);
+            const reset = await checkAndResetCircuitBreaker(
+              providerName,
+              operation,
+            );
             if (reset) {
-              console.log(`[provider-health] Reset circuit breaker for ${providerName}:${operation}`);
+              console.log(
+                `[provider-health] Reset circuit breaker for ${providerName}:${operation}`,
+              );
             }
           } catch (error) {
-            console.error(`[provider-health] Failed to reset breaker for ${providerName}:${operation}: ${toErrorMessage(error)}`);
+            console.error(
+              `[provider-health] Failed to reset breaker for ${providerName}:${operation}: ${toErrorMessage(error)}`,
+            );
           }
         }
       }
     }
 
-    console.log(`[provider-health] Health check completed - ${downProviders.length} provider(s) down`);
+    console.log(
+      `[provider-health] Health check completed - ${downProviders.length} provider(s) down`,
+    );
 
     if (downProviders.length === 0) {
       console.log("[provider-health] All providers are operational");

@@ -18,10 +18,22 @@ export interface DashboardStats {
 }
 
 const ENDPOINT_CONFIGS: Record<string, { limit: number; windowMs: number }> = {
-  SEP24: { limit: RATE_LIMIT_CONFIG.SEP24_LIMIT, windowMs: RATE_LIMIT_CONFIG.SEP24_WINDOW_MS },
-  SEP31: { limit: RATE_LIMIT_CONFIG.SEP31_LIMIT, windowMs: RATE_LIMIT_CONFIG.SEP31_WINDOW_MS },
-  SEP12: { limit: RATE_LIMIT_CONFIG.SEP12_LIMIT, windowMs: RATE_LIMIT_CONFIG.SEP12_WINDOW_MS },
-  EXPORT: { limit: RATE_LIMIT_CONFIG.EXPORT_LIMIT, windowMs: RATE_LIMIT_CONFIG.EXPORT_WINDOW_MS },
+  SEP24: {
+    limit: RATE_LIMIT_CONFIG.SEP24_LIMIT,
+    windowMs: RATE_LIMIT_CONFIG.SEP24_WINDOW_MS,
+  },
+  SEP31: {
+    limit: RATE_LIMIT_CONFIG.SEP31_LIMIT,
+    windowMs: RATE_LIMIT_CONFIG.SEP31_WINDOW_MS,
+  },
+  SEP12: {
+    limit: RATE_LIMIT_CONFIG.SEP12_LIMIT,
+    windowMs: RATE_LIMIT_CONFIG.SEP12_WINDOW_MS,
+  },
+  EXPORT: {
+    limit: RATE_LIMIT_CONFIG.EXPORT_LIMIT,
+    windowMs: RATE_LIMIT_CONFIG.EXPORT_WINDOW_MS,
+  },
 };
 
 export class DeveloperDashboardService {

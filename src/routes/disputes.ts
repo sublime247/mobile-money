@@ -60,8 +60,15 @@ import { DisputeService } from "../services/dispute";
 import { DisputeStatus, DisputePriority } from "../models/dispute";
 import { DisputeStateMachine } from "../services/disputeStateMachine";
 import { uploadSingle, uploadMultiple } from "../middleware/disputeUpload";
-import { uploadDisputeEvidenceToS3, uploadMultipleDisputeEvidenceToS3, validateDisputeEvidenceFile } from "../services/disputeS3Upload";
-import { generateDisputeSlaReport, runDisputeSlaJob } from "../jobs/disputeSlaJob";
+import {
+  uploadDisputeEvidenceToS3,
+  uploadMultipleDisputeEvidenceToS3,
+  validateDisputeEvidenceFile,
+} from "../services/disputeS3Upload";
+import {
+  generateDisputeSlaReport,
+  runDisputeSlaJob,
+} from "../jobs/disputeSlaJob";
 import { requireAuth } from "../middleware/auth";
 import { requirePermission } from "../middleware/rbac";
 
@@ -201,7 +208,7 @@ disputeRoutes.get(
         error instanceof Error ? error.message : "Failed to generate report";
       return res.status(500).json({ error: message });
     }
-  }
+  },
 );
 
 /**
@@ -216,7 +223,7 @@ disputeRoutes.get(
 
     if (isNaN(days) || days < 1 || days > 365) {
       return res.status(400).json({
-        error: "Invalid days parameter. Must be between 1 and 365"
+        error: "Invalid days parameter. Must be between 1 and 365",
       });
     }
 
@@ -225,10 +232,12 @@ disputeRoutes.get(
       return res.json(report);
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Failed to generate SLA report";
+        error instanceof Error
+          ? error.message
+          : "Failed to generate SLA report";
       return res.status(500).json({ error: message });
     }
-  }
+  },
 );
 
 /**
@@ -244,10 +253,12 @@ disputeRoutes.get(
       return res.json(overdue);
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Failed to get overdue disputes";
+        error instanceof Error
+          ? error.message
+          : "Failed to get overdue disputes";
       return res.status(500).json({ error: message });
     }
-  }
+  },
 );
 
 /**
@@ -263,10 +274,12 @@ disputeRoutes.post(
       return res.json(result);
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Failed to process SLA warnings";
+        error instanceof Error
+          ? error.message
+          : "Failed to process SLA warnings";
       return res.status(500).json({ error: message });
     }
-  }
+  },
 );
 
 /**
@@ -287,7 +300,7 @@ disputeRoutes.get(
         .status(message.includes("not found") ? 404 : 500)
         .json({ error: message });
     }
-  }
+  },
 );
 
 /**
@@ -299,16 +312,20 @@ disputeRoutes.get(
   requirePermission("dispute:read"),
   async (req: Request, res: Response) => {
     try {
-      const dispute = await disputeService.getDisputeWithDetails(req.params.disputeId);
+      const dispute = await disputeService.getDisputeWithDetails(
+        req.params.disputeId,
+      );
       return res.json(dispute);
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Failed to fetch dispute details";
+        error instanceof Error
+          ? error.message
+          : "Failed to fetch dispute details";
       return res
         .status(message.includes("not found") ? 404 : 500)
         .json({ error: message });
     }
-  }
+  },
 );
 
 /**
@@ -329,13 +346,15 @@ disputeRoutes.patch(
 
     try {
       // Get current dispute to validate transition
-      const currentDispute = await disputeService.getDispute(req.params.disputeId);
+      const currentDispute = await disputeService.getDispute(
+        req.params.disputeId,
+      );
 
       // Validate state transition
       const validation = stateMachine.validateTransition(
         currentDispute.status,
         status,
-        { resolution, assignedTo }
+        { resolution, assignedTo },
       );
 
       if (!validation.valid) {
@@ -360,7 +379,7 @@ disputeRoutes.patch(
       const code = message.includes("not found")
         ? 404
         : message.includes("Cannot transition") ||
-        message.includes("resolution text")
+            message.includes("resolution text")
           ? 422
           : 500;
       return res.status(code).json({ error: message });
@@ -398,7 +417,7 @@ disputeRoutes.patch(
         .status(message.includes("not found") ? 404 : 500)
         .json({ error: message });
     }
-  }
+  },
 );
 
 /**
@@ -469,7 +488,7 @@ disputeRoutes.post(
         .status(message.includes("not found") ? 404 : 500)
         .json({ error: message });
     }
-  }
+  },
 );
 
 /**
@@ -479,7 +498,7 @@ disputeRoutes.post(
   "/:disputeId/evidence",
   requireAuth,
   requirePermission("dispute:update"),
-  uploadSingle.single('file'),
+  uploadSingle.single("file"),
   async (req: Request, res: Response) => {
     const { disputeId } = req.params;
     const { description } = req.body;
@@ -500,7 +519,7 @@ disputeRoutes.post(
       const uploadResult = await uploadDisputeEvidenceToS3({
         disputeId,
         file,
-        uploadedBy: req.user?.id || 'unknown',
+        uploadedBy: req.user?.id || "unknown",
       });
 
       if (!uploadResult.success) {
@@ -515,7 +534,7 @@ disputeRoutes.post(
         file.size,
         uploadResult.key!,
         uploadResult.fileUrl!,
-        req.user?.id || 'unknown',
+        req.user?.id || "unknown",
         description,
       );
 
@@ -527,7 +546,7 @@ disputeRoutes.post(
         .status(message.includes("not found") ? 404 : 500)
         .json({ error: message });
     }
-  }
+  },
 );
 
 /**
@@ -537,7 +556,7 @@ disputeRoutes.post(
   "/:disputeId/evidence/multiple",
   requireAuth,
   requirePermission("dispute:update"),
-  uploadMultiple.array('files', 5),
+  uploadMultiple.array("files", 5),
   async (req: Request, res: Response) => {
     const { disputeId } = req.params;
     const { descriptions } = req.body;
@@ -552,7 +571,7 @@ disputeRoutes.post(
       const validation = validateDisputeEvidenceFile(file);
       if (!validation.valid) {
         return res.status(400).json({
-          error: `File "${file.originalname}": ${validation.error}`
+          error: `File "${file.originalname}": ${validation.error}`,
         });
       }
     }
@@ -562,11 +581,11 @@ disputeRoutes.post(
       const uploadResults = await uploadMultipleDisputeEvidenceToS3(
         disputeId,
         files,
-        req.user?.id || 'unknown'
+        req.user?.id || "unknown",
       );
 
       // Check for upload failures
-      const failedUploads = uploadResults.filter(r => !r.success);
+      const failedUploads = uploadResults.filter((r) => !r.success);
       if (failedUploads.length > 0) {
         return res.status(500).json({
           error: "Some files failed to upload",
@@ -579,7 +598,9 @@ disputeRoutes.post(
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         const uploadResult = uploadResults[i];
-        const description = Array.isArray(descriptions) ? descriptions[i] : descriptions;
+        const description = Array.isArray(descriptions)
+          ? descriptions[i]
+          : descriptions;
 
         const evidence = await disputeService.addEvidence(
           disputeId,
@@ -588,7 +609,7 @@ disputeRoutes.post(
           file.size,
           uploadResult.key!,
           uploadResult.fileUrl!,
-          req.user?.id || 'unknown',
+          req.user?.id || "unknown",
           description,
         );
         evidenceRecords.push(evidence);
@@ -602,7 +623,7 @@ disputeRoutes.post(
         .status(message.includes("not found") ? 404 : 500)
         .json({ error: message });
     }
-  }
+  },
 );
 
 /**
@@ -623,5 +644,5 @@ disputeRoutes.get(
         .status(message.includes("not found") ? 404 : 500)
         .json({ error: message });
     }
-  }
+  },
 );

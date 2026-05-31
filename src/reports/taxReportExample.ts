@@ -1,9 +1,27 @@
-import { generateTaxReport, TaxReportOptions, Transaction } from "./taxReportGenerator";
+import {
+  generateTaxReport,
+  TaxReportOptions,
+  Transaction,
+} from "./taxReportGenerator";
 
 // Example usage: Generate a tax report for CMR in CSV format
 const transactions: Transaction[] = [
-  { id: "1", userId: "U1", amount: 1000, type: "deposit", country: "CMR", date: "2026-04-24" },
-  { id: "2", userId: "U2", amount: 500, type: "withdrawal", country: "CMR", date: "2026-04-24" },
+  {
+    id: "1",
+    userId: "U1",
+    amount: 1000,
+    type: "deposit",
+    country: "CMR",
+    date: "2026-04-24",
+  },
+  {
+    id: "2",
+    userId: "U2",
+    amount: 500,
+    type: "withdrawal",
+    country: "CMR",
+    date: "2026-04-24",
+  },
 ];
 
 const options: TaxReportOptions = {

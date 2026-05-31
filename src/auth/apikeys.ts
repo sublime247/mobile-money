@@ -64,9 +64,7 @@ export function validateApiKey(user: any, key: string): ApiKey | null {
 
   const validKey = user.apiKeys.find(
     (k: ApiKey) =>
-      k.key === key &&
-      k.isActive &&
-      new Date(k.expiresAt) > new Date()
+      k.key === key && k.isActive && new Date(k.expiresAt) > new Date(),
   );
 
   return validKey || null;
@@ -99,8 +97,7 @@ export function rotateApiKey(user: any, sourceKey?: ApiKey): ApiKey {
   }
 
   // Inherit permissions from source key if provided, otherwise default to ALL
-  const inheritedPermissions =
-    sourceKey?.permissions ?? ApiKeyPermission.ALL;
+  const inheritedPermissions = sourceKey?.permissions ?? ApiKeyPermission.ALL;
 
   const newKey: ApiKey = {
     key: generateApiKey(),

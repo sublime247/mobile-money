@@ -5,14 +5,12 @@ import { Request, Response, NextFunction, RequestHandler } from "express";
  * Supports multiple API versions with backward compatibility
  */
 
-export const setApiVersion = (version: string): RequestHandler => (
-  req,
-  _res,
-  next,
-) => {
-  (req as VersionedRequest).apiVersion = version;
-  next();
-};
+export const setApiVersion =
+  (version: string): RequestHandler =>
+  (req, _res, next) => {
+    (req as VersionedRequest).apiVersion = version;
+    next();
+  };
 
 export interface VersionedRequest extends Request {
   apiVersion?: string;

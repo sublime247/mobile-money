@@ -5,7 +5,7 @@ import { config } from "../config/env";
 export const verifySignature = (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   const signature = req.headers["x-bridge-signature"] as string;
 

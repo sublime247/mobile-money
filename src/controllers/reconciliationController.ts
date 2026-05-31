@@ -30,12 +30,12 @@ export class ReconciliationController {
 
       const { provider, date } = ManualReconSchema.parse(req.body);
       const reportDate = date ? new Date(date) : new Date();
-      
+
       const reportId = await this.reconService.runReconciliation(
         provider,
         reportDate,
         req.file.buffer,
-        req.file.originalname
+        req.file.originalname,
       );
 
       res.status(201).json({
@@ -44,7 +44,9 @@ export class ReconciliationController {
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: "Validation error", details: error.issues });
+        return res
+          .status(400)
+          .json({ error: "Validation error", details: error.issues });
       }
       logger.error("Manual reconciliation upload failed:", error);
       res.status(500).json({ error: "Failed to run reconciliation" });
@@ -59,7 +61,7 @@ export class ReconciliationController {
     try {
       const limit = parseInt(req.query.limit as string) || 10;
       const offset = parseInt(req.query.offset as string) || 0;
-      
+
       const reports = await this.reconModel.getReports(limit, offset);
       res.json({ success: true, data: reports });
     } catch (error) {
@@ -76,13 +78,14 @@ export class ReconciliationController {
     try {
       const { id } = req.params;
       const report = await this.reconModel.getReportById(id);
-      
+
       if (!report) {
         return res.status(404).json({ error: "Report not found" });
       }
 
-      const discrepancies = await this.reconModel.getDiscrepanciesByReportId(id);
-      
+      const discrepancies =
+        await this.reconModel.getDiscrepanciesByReportId(id);
+
       res.json({
         success: true,
         data: {

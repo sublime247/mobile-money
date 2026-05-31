@@ -1,5 +1,9 @@
 import { pool } from "../config/database";
-import { cachedQueryManager, CacheTags, QUERY_TTL_POLICIES } from "./cachedQueryManager";
+import {
+  cachedQueryManager,
+  CacheTags,
+  QUERY_TTL_POLICIES,
+} from "./cachedQueryManager";
 import { CacheKeyGenerators } from "./cacheAside";
 import { logger } from "./logger";
 
@@ -14,7 +18,7 @@ import { logger } from "./logger";
 export async function getCachedGeneralStats(startDate?: Date, endDate?: Date) {
   const cacheKey = CacheKeyGenerators.generalStats();
   const tags = [CacheTags.generalStats()];
-  
+
   return cachedQueryManager.getOrFetch(
     cacheKey,
     async () => {
@@ -53,13 +57,16 @@ export async function getCachedGeneralStats(startDate?: Date, endDate?: Date) {
 /**
  * Get volume by provider with caching
  */
-export async function getCachedVolumeByProvider(startDate?: Date, endDate?: Date) {
+export async function getCachedVolumeByProvider(
+  startDate?: Date,
+  endDate?: Date,
+) {
   const cacheKey = CacheKeyGenerators.volumeByProvider(
     startDate?.toISOString() || "all",
     endDate?.toISOString() || "all",
   );
   const tags = [CacheTags.provider("*"), CacheTags.generalStats()];
-  
+
   return cachedQueryManager.getOrFetch(
     cacheKey,
     async () => {
@@ -98,13 +105,16 @@ export async function getCachedVolumeByProvider(startDate?: Date, endDate?: Date
 /**
  * Get active users count with caching
  */
-export async function getCachedActiveUsersCount(startDate?: Date, endDate?: Date) {
+export async function getCachedActiveUsersCount(
+  startDate?: Date,
+  endDate?: Date,
+) {
   const cacheKey = CacheKeyGenerators.activeUsersCount(
     startDate?.toISOString() || "all",
     endDate?.toISOString() || "all",
   );
   const tags = [CacheTags.generalStats()];
-  
+
   return cachedQueryManager.getOrFetch(
     cacheKey,
     async () => {
@@ -141,13 +151,10 @@ export async function getCachedVolumeByPeriod(
 ) {
   const cacheKey = `volume-by-${period}:${startDate?.toISOString() || "all"}:${endDate?.toISOString() || "all"}`;
   const tags = [CacheTags.generalStats()];
-  
-  const dateFormat = period === "day"
-    ? "YYYY-MM-DD"
-    : period === "week"
-      ? "IYYY-IW"
-      : "YYYY-MM";
-  
+
+  const dateFormat =
+    period === "day" ? "YYYY-MM-DD" : period === "week" ? "IYYY-IW" : "YYYY-MM";
+
   return cachedQueryManager.getOrFetch(
     cacheKey,
     async () => {
@@ -187,7 +194,7 @@ function buildDateWhereClause(startDate?: Date, endDate?: Date): string {
   if (!startDate && !endDate) {
     return "";
   }
-  
+
   const clauses: string[] = [];
   if (startDate) {
     clauses.push("created_at >= $1");
@@ -195,6 +202,6 @@ function buildDateWhereClause(startDate?: Date, endDate?: Date): string {
   if (endDate) {
     clauses.push(`created_at <= $${startDate ? 2 : 1}`);
   }
-  
+
   return `WHERE ${clauses.join(" AND ")}`;
 }

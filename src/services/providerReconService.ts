@@ -1,12 +1,12 @@
-import { 
-  ReconciliationModel, 
-  ReconciliationStatus, 
-  DiscrepancyType 
+import {
+  ReconciliationModel,
+  ReconciliationStatus,
+  DiscrepancyType,
 } from "../models/reconciliation";
-import { 
-  parseCSV, 
-  reconcileTransactions, 
-  ProviderCSVRow 
+import {
+  parseCSV,
+  reconcileTransactions,
+  ProviderCSVRow,
 } from "./csvReconciliation";
 import { logger } from "./logger";
 
@@ -24,9 +24,11 @@ export class ProviderReconService {
     provider: string,
     reportDate: Date,
     csvBuffer: Buffer,
-    fileName?: string
+    fileName?: string,
   ) {
-    logger.info(`Starting reconciliation for ${provider} on ${reportDate.toISOString()}`);
+    logger.info(
+      `Starting reconciliation for ${provider} on ${reportDate.toISOString()}`,
+    );
 
     // 1. Create initial report record
     const report = await this.reconModel.createReport({
@@ -39,7 +41,7 @@ export class ProviderReconService {
     try {
       // 2. Parse CSV
       const rows = await parseCSV(csvBuffer);
-      
+
       // 3. Reconcile
       // We fetch transactions for the report date +/- 1 day to catch edge cases
       const start = new Date(reportDate);
@@ -67,7 +69,8 @@ export class ProviderReconService {
       for (const orphan of result.orphaned_provider) {
         await this.reconModel.createDiscrepancy({
           reportId: report.id,
-          referenceNumber: orphan.reference_number || orphan.reference_id || "UNKNOWN",
+          referenceNumber:
+            orphan.reference_number || orphan.reference_id || "UNKNOWN",
           type: DiscrepancyType.OrphanedProvider,
           actualValue: JSON.stringify(orphan),
         });
@@ -89,9 +92,10 @@ export class ProviderReconService {
         summary: result.summary,
       });
 
-      logger.info(`Reconciliation completed for ${report.id}. Match rate: ${result.summary.match_rate}`);
+      logger.info(
+        `Reconciliation completed for ${report.id}. Match rate: ${result.summary.match_rate}`,
+      );
       return report.id;
-
     } catch (error) {
       logger.error(`Reconciliation failed for ${report.id}:`, error);
       await this.reconModel.updateReport(report.id, {
@@ -106,7 +110,10 @@ export class ProviderReconService {
    * Mock function to "fetch" a report from a provider.
    * In a real implementation, this would connect to SFTP, S3, or an API.
    */
-  async fetchProviderReport(provider: string, date: Date): Promise<Buffer | null> {
+  async fetchProviderReport(
+    provider: string,
+    date: Date,
+  ): Promise<Buffer | null> {
     // For now, return null as we don't have real provider credentials/URLs
     // This will be triggered by the manual upload or a scheduled job that is currently mocked
     logger.warn(`Fetch provider report not implemented for ${provider}`);

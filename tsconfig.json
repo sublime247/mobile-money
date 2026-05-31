@@ -19,6 +19,13 @@
     "types": ["node", "jest"]
   },
   "include": ["src/**/*", "scripts/**/*"],
-  "exclude": ["node_modules", "dist", "src/utils/currency/examples/react-usage.tsx", "**/*.test.ts", "**/*.spec.ts", "**/__tests__/**", "tests/**"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/utils/currency/examples/react-usage.tsx",
+    "**/*.test.ts",
+    "**/*.spec.ts",
+    "**/__tests__/**",
+    "tests/**"
+  ]
 }
-

@@ -16,7 +16,12 @@
  *   // applicant.name, .address, .id_number are now plaintext
  */
 
-import { encryptField, decryptField, encryptFieldForUser, decryptFieldForUser } from "../utils/encryption";
+import {
+  encryptField,
+  decryptField,
+  encryptFieldForUser,
+  decryptFieldForUser,
+} from "../utils/encryption";
 
 /** Fields that carry PII and must be encrypted at rest */
 export const PII_FIELDS = ["name", "address", "id_number"] as const;
@@ -32,11 +37,15 @@ export type WithPii<T> = T & Partial<Record<PiiField, string | null>>;
  * Returns a shallow copy of `row` with PII fields encrypted.
  * Non-PII fields are passed through unchanged.
  */
-export function encryptPiiFields<T extends object>(row: WithPii<T>): WithPii<T> {
+export function encryptPiiFields<T extends object>(
+  row: WithPii<T>,
+): WithPii<T> {
   const out = { ...row } as WithPii<T>;
   for (const field of PII_FIELDS) {
     if (field in out) {
-      (out as Record<string, unknown>)[field] = encryptField((out as Record<string, unknown>)[field] as string | null | undefined);
+      (out as Record<string, unknown>)[field] = encryptField(
+        (out as Record<string, unknown>)[field] as string | null | undefined,
+      );
     }
   }
   return out;
@@ -46,18 +55,24 @@ export function encryptPiiFields<T extends object>(row: WithPii<T>): WithPii<T> 
  * Returns a shallow copy of `row` with PII fields decrypted.
  * Throws if any encrypted value fails authentication (wrong key / tampered data).
  */
-export function decryptPiiFields<T extends object>(row: WithPii<T>): WithPii<T> {
+export function decryptPiiFields<T extends object>(
+  row: WithPii<T>,
+): WithPii<T> {
   const out = { ...row } as WithPii<T>;
   for (const field of PII_FIELDS) {
     if (field in out) {
-      (out as Record<string, unknown>)[field] = decryptField((out as Record<string, unknown>)[field] as string | null | undefined);
+      (out as Record<string, unknown>)[field] = decryptField(
+        (out as Record<string, unknown>)[field] as string | null | undefined,
+      );
     }
   }
   return out;
 }
 
 /** Decrypt an array of rows (e.g. the result of a SELECT *) */
-export function decryptPiiRows<T extends object>(rows: WithPii<T>[]): WithPii<T>[] {
+export function decryptPiiRows<T extends object>(
+  rows: WithPii<T>[],
+): WithPii<T>[] {
   return rows.map(decryptPiiFields);
 }
 
@@ -65,7 +80,10 @@ export function decryptPiiRows<T extends object>(rows: WithPii<T>[]): WithPii<T>
 // Per-user-key variants (preferred — isolates breach impact per user)
 // ---------------------------------------------------------------------------
 
-export function encryptPiiFieldsForUser<T extends object>(row: WithPii<T>, userId: string): WithPii<T> {
+export function encryptPiiFieldsForUser<T extends object>(
+  row: WithPii<T>,
+  userId: string,
+): WithPii<T> {
   const out = { ...row } as WithPii<T>;
   for (const field of PII_FIELDS) {
     if (field in out) {
@@ -78,7 +96,10 @@ export function encryptPiiFieldsForUser<T extends object>(row: WithPii<T>, userI
   return out;
 }
 
-export function decryptPiiFieldsForUser<T extends object>(row: WithPii<T>, userId: string): WithPii<T> {
+export function decryptPiiFieldsForUser<T extends object>(
+  row: WithPii<T>,
+  userId: string,
+): WithPii<T> {
   const out = { ...row } as WithPii<T>;
   for (const field of PII_FIELDS) {
     if (field in out) {
@@ -91,6 +112,9 @@ export function decryptPiiFieldsForUser<T extends object>(row: WithPii<T>, userI
   return out;
 }
 
-export function decryptPiiRowsForUser<T extends object>(rows: WithPii<T>[], userId: string): WithPii<T>[] {
+export function decryptPiiRowsForUser<T extends object>(
+  rows: WithPii<T>[],
+  userId: string,
+): WithPii<T>[] {
   return rows.map((row) => decryptPiiFieldsForUser(row, userId));
 }

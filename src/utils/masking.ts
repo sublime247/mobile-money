@@ -21,9 +21,8 @@ export function maskEmail(email: string): string {
   if (!email) return "";
   const [localPart, domain] = email.split("@");
   if (!domain) return email;
-  const maskedLocal = localPart.length <= 2 
-    ? `${localPart}***` 
-    : `${localPart.slice(0, 2)}***`;
+  const maskedLocal =
+    localPart.length <= 2 ? `${localPart}***` : `${localPart.slice(0, 2)}***`;
   return `${maskedLocal}@${domain}`;
 }
 
@@ -40,7 +39,10 @@ export function maskStellarAddress(address: string): string {
 /**
  * General purpose masking utility.
  */
-export function maskSensitiveData(data: string, type: "phone" | "email" | "stellar"): string {
+export function maskSensitiveData(
+  data: string,
+  type: "phone" | "email" | "stellar",
+): string {
   if (!data) return "";
   switch (type) {
     case "phone":

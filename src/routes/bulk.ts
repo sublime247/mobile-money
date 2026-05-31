@@ -9,8 +9,9 @@ import { MobileMoneyService } from "../services/mobilemoney/mobileMoneyService";
 import { StellarService } from "../services/stellar/stellarService";
 import { notifyTransactionWebhook, WebhookService } from "../services/webhook";
 import { checkAccountStatusStrict } from "../middleware/checkAccountStatus";
-import highThroughputService, { PaymentOptions } from "../services/stellar/highThroughputService";
-
+import highThroughputService, {
+  PaymentOptions,
+} from "../services/stellar/highThroughputService";
 
 interface CsvRow {
   amount: string;
@@ -140,9 +141,16 @@ async function processJob(jobId: string, rows: CsvRow[]): Promise<void> {
       let failedAlreadyHandled = false;
 
       try {
-        const CORE_FIELDS = new Set(["amount", "phoneNumber", "provider", "stellarAddress"]);
+        const CORE_FIELDS = new Set([
+          "amount",
+          "phoneNumber",
+          "provider",
+          "stellarAddress",
+        ]);
         const metadata = Object.fromEntries(
-          Object.entries(row).filter(([k]) => !CORE_FIELDS.has(k) && row[k] !== ""),
+          Object.entries(row).filter(
+            ([k]) => !CORE_FIELDS.has(k) && row[k] !== "",
+          ),
         );
         const transaction = await transactionModel.create({
           type: "deposit",

@@ -144,7 +144,10 @@ export class PagerDutyService {
       const errorRate = this.calculateErrorRate(provider);
       const isIncidentActive = this.activeIncidents.has(`incident_${provider}`);
 
-      if (errorRate > PagerDutyService.ERROR_RATE_THRESHOLD && !isIncidentActive) {
+      if (
+        errorRate > PagerDutyService.ERROR_RATE_THRESHOLD &&
+        !isIncidentActive
+      ) {
         // Trigger new incident
         await this.triggerIncident(provider, errorRate);
       } else if (
@@ -206,7 +209,10 @@ export class PagerDutyService {
   /**
    * Trigger a CRITICAL incident in PagerDuty
    */
-  private async triggerIncident(provider: string, errorRate: number): Promise<void> {
+  private async triggerIncident(
+    provider: string,
+    errorRate: number,
+  ): Promise<void> {
     try {
       const event = this.buildIncidentEvent(provider, errorRate, "trigger");
 
@@ -245,7 +251,10 @@ export class PagerDutyService {
   /**
    * Resolve an active incident in PagerDuty
    */
-  private async resolveIncident(provider: string, errorRate: number): Promise<void> {
+  private async resolveIncident(
+    provider: string,
+    errorRate: number,
+  ): Promise<void> {
     try {
       const event = this.buildIncidentEvent(provider, errorRate, "resolve");
 

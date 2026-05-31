@@ -41,11 +41,11 @@ expect.extend({
    */
   toBeValidCurrencyFormat(received: string) {
     const currencyRegex = /^[^\d]*[\d,]+\.?\d*[^\d]*$/;
-    const pass = typeof received === 'string' && currencyRegex.test(received);
-    
+    const pass = typeof received === "string" && currencyRegex.test(received);
+
     return {
-      message: () => 
-        pass 
+      message: () =>
+        pass
           ? `Expected ${received} not to be a valid currency format`
           : `Expected ${received} to be a valid currency format`,
       pass,
@@ -56,32 +56,40 @@ expect.extend({
    * Matcher to validate correct decimal places for currency
    */
   toHaveCorrectDecimalPlaces(received: string, currency: string) {
-    const expectedDecimals = currency === 'XAF' ? 0 : 2;
-    
+    const expectedDecimals = currency === "XAF" ? 0 : 2;
+
     // Extract decimal part
     const decimalMatch = received.match(/\.(\d+)/);
     const actualDecimals = decimalMatch ? decimalMatch[1].length : 0;
-    
+
     const pass = actualDecimals === expectedDecimals;
-    
+
     return {
-      message: () => 
-        pass 
+      message: () =>
+        pass
           ? `Expected ${received} not to have ${expectedDecimals} decimal places for ${currency}`
           : `Expected ${received} to have ${expectedDecimals} decimal places for ${currency}, but got ${actualDecimals}`,
       pass,
     };
-  }
+  },
 });
 
 // Test data generators for consistent test data
 export const TEST_DATA = {
-  VALID_AMOUNTS: [0, 0.01, 1, 10.50, 100, 1000.99, 999999999.99],
-  INVALID_AMOUNTS: [NaN, Infinity, -Infinity, 'not a number', null, undefined, {}],
-  SUPPORTED_CURRENCIES: ['XAF', 'GHS', 'NGN', 'USD'],
-  INVALID_CURRENCIES: ['', 'XX', 'INVALID', 'EUR', 'GBP', null, undefined, 123],
-  VALID_LOCALES: ['en-US', 'en-GH', 'en-NG', 'fr-CM', 'en-GB', 'fr-FR'],
-  INVALID_LOCALES: ['', 'invalid', 'en', 'en-', '-US', null, undefined]
+  VALID_AMOUNTS: [0, 0.01, 1, 10.5, 100, 1000.99, 999999999.99],
+  INVALID_AMOUNTS: [
+    NaN,
+    Infinity,
+    -Infinity,
+    "not a number",
+    null,
+    undefined,
+    {},
+  ],
+  SUPPORTED_CURRENCIES: ["XAF", "GHS", "NGN", "USD"],
+  INVALID_CURRENCIES: ["", "XX", "INVALID", "EUR", "GBP", null, undefined, 123],
+  VALID_LOCALES: ["en-US", "en-GH", "en-NG", "fr-CM", "en-GB", "fr-FR"],
+  INVALID_LOCALES: ["", "invalid", "en", "en-", "-US", null, undefined],
 };
 
 // Performance testing utilities
@@ -89,7 +97,9 @@ export const PERFORMANCE_HELPERS = {
   /**
    * Measure execution time of a function
    */
-  measureTime: async <T>(fn: () => T | Promise<T>): Promise<{ result: T; time: number }> => {
+  measureTime: async <T>(
+    fn: () => T | Promise<T>,
+  ): Promise<{ result: T; time: number }> => {
     const start = performance.now();
     const result = await fn();
     const time = performance.now() - start;
@@ -100,8 +110,8 @@ export const PERFORMANCE_HELPERS = {
    * Run a function multiple times and get average execution time
    */
   measureAverageTime: async <T>(
-    fn: () => T | Promise<T>, 
-    iterations: number = 100
+    fn: () => T | Promise<T>,
+    iterations: number = 100,
   ): Promise<{ averageTime: number; results: T[] }> => {
     const results: T[] = [];
     const times: number[] = [];
@@ -112,7 +122,8 @@ export const PERFORMANCE_HELPERS = {
       times.push(time);
     }
 
-    const averageTime = times.reduce((sum, time) => sum + time, 0) / times.length;
+    const averageTime =
+      times.reduce((sum, time) => sum + time, 0) / times.length;
     return { averageTime, results };
-  }
+  },
 };

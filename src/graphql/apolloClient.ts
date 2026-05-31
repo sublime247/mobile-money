@@ -43,7 +43,8 @@ export interface ApolloClientOptions {
  *  3. Caches the hash locally so subsequent requests skip step 2
  */
 export function createApolloClient(options: ApolloClientOptions = {}) {
-  const uri = options.uri || process.env.GRAPHQL_URI || "http://localhost:3000/graphql";
+  const uri =
+    options.uri || process.env.GRAPHQL_URI || "http://localhost:3000/graphql";
 
   // APQ link — handles the hash-first / fallback-to-full-query protocol
   const persistedQueryLink = createPersistedQueryLink({
@@ -53,9 +54,8 @@ export function createApolloClient(options: ApolloClientOptions = {}) {
 
   // Auth link — attaches the API key header when available
   const authLink = new ApolloLink((operation, forward) => {
-    const apiKey = typeof process !== "undefined"
-      ? process.env.GRAPHQL_API_KEY
-      : undefined;
+    const apiKey =
+      typeof process !== "undefined" ? process.env.GRAPHQL_API_KEY : undefined;
 
     if (apiKey) {
       operation.setContext(({ headers = {} }) => ({

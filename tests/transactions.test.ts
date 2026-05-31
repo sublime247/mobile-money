@@ -79,30 +79,30 @@ describe("Transaction History Integration Tests", () => {
   });
 });
 
-describe('Minimum Withdrawal Threshold', () => {
-    it('should reject withdrawals smaller than $1 to save on fees', async () => {
-      const microTransactionAmount = 0.50; // $0.50
-      
-      // Note: Adjust the method name/payload to match your actual service signature
-      await expect(
-        TransactionService.withdraw({
-          userId: 'test-user-123',
-          amount: microTransactionAmount,
-          currency: 'USD'
-        })
-      ).rejects.toThrow('Amount too small');
+describe("Minimum Withdrawal Threshold", () => {
+  it("should reject withdrawals smaller than $1 to save on fees", async () => {
+    const microTransactionAmount = 0.5; // $0.50
+
+    // Note: Adjust the method name/payload to match your actual service signature
+    await expect(
+      TransactionService.withdraw({
+        userId: "test-user-123",
+        amount: microTransactionAmount,
+        currency: "USD",
+      }),
+    ).rejects.toThrow("Amount too small");
+  });
+
+  it("should allow withdrawals of exactly $1 or more", async () => {
+    const validAmount = 1.0;
+
+    // Mock the successful execution if necessary, then call the service
+    const result = await TransactionService.withdraw({
+      userId: "test-user-123",
+      amount: validAmount,
+      currency: "USD",
     });
 
-    it('should allow withdrawals of exactly $1 or more', async () => {
-       const validAmount = 1.00;
-       
-       // Mock the successful execution if necessary, then call the service
-       const result = await TransactionService.withdraw({
-          userId: 'test-user-123',
-          amount: validAmount,
-          currency: 'USD'
-       });
-       
-       expect(result).toBeDefined(); // Or check status === 'PENDING'/'SUCCESS'
-    });
+    expect(result).toBeDefined(); // Or check status === 'PENDING'/'SUCCESS'
   });
+});

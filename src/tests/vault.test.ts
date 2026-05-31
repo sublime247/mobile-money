@@ -7,22 +7,26 @@ describe("Vault System", () => {
 
   beforeAll(async () => {
     vaultModel = new VaultModel();
-    
+
     // Create a test user
     const userResult = await pool.query(
       `INSERT INTO users (phone_number, kyc_level) 
        VALUES ($1, $2) 
        RETURNING id`,
-      ["+1234567890", "basic"]
+      ["+1234567890", "basic"],
     );
     testUserId = userResult.rows[0].id;
   });
 
   afterAll(async () => {
     // Clean up test data
-    await pool.query("DELETE FROM vault_transactions WHERE user_id = $1", [testUserId]);
+    await pool.query("DELETE FROM vault_transactions WHERE user_id = $1", [
+      testUserId,
+    ]);
     await pool.query("DELETE FROM vaults WHERE user_id = $1", [testUserId]);
-    await pool.query("DELETE FROM transactions WHERE user_id = $1", [testUserId]);
+    await pool.query("DELETE FROM transactions WHERE user_id = $1", [
+      testUserId,
+    ]);
     await pool.query("DELETE FROM users WHERE id = $1", [testUserId]);
   });
 
@@ -61,7 +65,9 @@ describe("Vault System", () => {
         description: "Invalid name test",
       };
 
-      await expect(vaultModel.create(invalidVaultData)).rejects.toThrow("Vault name is required");
+      await expect(vaultModel.create(invalidVaultData)).rejects.toThrow(
+        "Vault name is required",
+      );
     });
   });
 
@@ -82,15 +88,15 @@ describe("Vault System", () => {
           "GTEST123",
           "completed",
           testUserId,
-        ]
+        ],
       );
 
       const summary = await vaultModel.getUserBalanceSummary(testUserId);
 
       expect(summary).toBeDefined();
-      expect(parseFloat(summary.mainBalance)).toBe(10000.00);
+      expect(parseFloat(summary.mainBalance)).toBe(10000.0);
       expect(summary.vaultBalances).toHaveLength(1); // Emergency Fund from previous test
-      expect(parseFloat(summary.totalBalance)).toBe(10000.00); // Main balance + vault balance (0)
+      expect(parseFloat(summary.totalBalance)).toBe(10000.0); // Main balance + vault balance (0)
     });
   });
 
@@ -108,7 +114,7 @@ describe("Vault System", () => {
         vaultId,
         "1000.00",
         "deposit",
-        "Test deposit"
+        "Test deposit",
       );
 
       expect(result.vault.balance).toBe("1000.00");
@@ -122,7 +128,7 @@ describe("Vault System", () => {
         vaultId,
         "500.00",
         "withdraw",
-        "Test withdrawal"
+        "Test withdrawal",
       );
 
       expect(result.vault.balance).toBe("500.00");
@@ -137,20 +143,20 @@ describe("Vault System", () => {
           vaultId,
           "1000.00", // More than current vault balance (500)
           "withdraw",
-          "Overdraft test"
-        )
+          "Overdraft test",
+        ),
       ).rejects.toThrow("Insufficient vault balance");
     });
 
     it("should maintain ledger accuracy after transfers", async () => {
       const summary = await vaultModel.getUserBalanceSummary(testUserId);
-      
+
       // Should have: 10000 initial - 1000 to vault + 500 from vault = 9500 main
       // Vault should have: 1000 - 500 = 500
       // Total: 9500 + 500 = 10000
-      expect(parseFloat(summary.mainBalance)).toBe(9500.00);
-      expect(parseFloat(summary.vaultBalances[0].balance)).toBe(500.00);
-      expect(parseFloat(summary.totalBalance)).toBe(10000.00);
+      expect(parseFloat(summary.mainBalance)).toBe(9500.0);
+      expect(parseFloat(summary.vaultBalances[0].balance)).toBe(500.0);
+      expect(parseFloat(summary.totalBalance)).toBe(10000.0);
     });
   });
 
@@ -184,7 +190,7 @@ describe("Vault System", () => {
 
     it("should prevent deletion of vault with balance", async () => {
       await expect(vaultModel.delete(vaultId)).rejects.toThrow(
-        "Cannot delete vault with non-zero balance"
+        "Cannot delete vault with non-zero balance",
       );
     });
   });

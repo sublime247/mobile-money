@@ -37,9 +37,7 @@ export function recordProviderSuccess(
   provider: string,
   transactionType: string,
 ): void {
-  transactionTotal
-    .labels(transactionType, provider, "completed")
-    .inc();
+  transactionTotal.labels(transactionType, provider, "completed").inc();
 }
 
 /**
@@ -51,13 +49,9 @@ export function recordProviderError(
   transactionType: string,
   errorType: string,
 ): void {
-  transactionErrorsTotal
-    .labels(transactionType, provider, errorType)
-    .inc();
+  transactionErrorsTotal.labels(transactionType, provider, errorType).inc();
 
-  transactionTotal
-    .labels(transactionType, provider, "failed")
-    .inc();
+  transactionTotal.labels(transactionType, provider, "failed").inc();
 }
 
 /**

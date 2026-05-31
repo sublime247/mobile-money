@@ -1,5 +1,5 @@
 // Initialize centralized configuration first
-import './config/init';
+import "./config/init";
 
 import "./tracer";
 import path from "path";
@@ -32,6 +32,7 @@ import {
 import { transactionRoutes } from "./routes/transactions";
 import { authRoutes } from "./routes/auth";
 import { bulkRoutes } from "./routes/bulk";
+import { merchantRoutes } from "./routes/merchants";
 import { transactionDisputeRoutes, disputeRoutes } from "./routes/disputes";
 import { statsRoutes } from "./routes/stats";
 import { contactsRoutes } from "./routes/contacts";
@@ -89,8 +90,6 @@ import reconciliationRoutes from "./routes/reconciliation";
 import exchangeRateBufferRoutes from "./routes/exchangeRateBuffers";
 import adminAssetRoutes from "./routes/admin/assets";
 import settingsRoutes from "./routes/settings";
-
-
 
 // 1. Import Sentry Middleware
 import { initSentry, sentryBreadcrumbMiddleware } from "./middleware/sentry";
@@ -363,6 +362,7 @@ const deprecatedApiV1Handler: express.RequestHandler = (req, res, next) => {
 app.use("/api/transactions", deprecatedApiV1Handler, transactionRoutes);
 app.use("/api/transactions", transactionDisputeRoutes);
 app.use("/api/transactions/bulk", bulkRoutes);
+app.use("/api/merchants", merchantRoutes);
 app.use("/api/disputes", disputeRoutes);
 app.use("/api/stats", statsRoutes);
 app.use("/api/contacts", contactsRoutes);
@@ -378,8 +378,6 @@ app.use("/api/reconciliation", reconciliationRoutes);
 app.use("/api/exchange-rate-buffers", exchangeRateBufferRoutes);
 app.use("/api/admin/assets", adminAssetRoutes);
 app.use("/api/settings", settingsRoutes);
-
-
 
 // GDPR
 app.use("/api/gdpr", privacyRoutes);

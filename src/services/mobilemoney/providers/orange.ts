@@ -118,7 +118,12 @@ export class OrangeProvider {
     amount: string | number,
     requestId?: string,
   ): Promise<OrangeResult> {
-    return this.executeOperation("payment", phoneNumber, String(amount), requestId);
+    return this.executeOperation(
+      "payment",
+      phoneNumber,
+      String(amount),
+      requestId,
+    );
   }
 
   async sendPayout(
@@ -126,7 +131,12 @@ export class OrangeProvider {
     amount: string | number,
     requestId?: string,
   ): Promise<OrangeResult> {
-    return this.executeOperation("payout", phoneNumber, String(amount), requestId);
+    return this.executeOperation(
+      "payout",
+      phoneNumber,
+      String(amount),
+      requestId,
+    );
   }
 
   async checkStatus(reference: string): Promise<OrangeResult> {
@@ -168,9 +178,7 @@ export class OrangeProvider {
 
   private buildConfig(options: OrangeProviderOptions): OrangeProviderConfig {
     return {
-      mode:
-        options.mode ??
-        (process.env.ORANGE_MODE as OrangeMode | undefined),
+      mode: options.mode ?? (process.env.ORANGE_MODE as OrangeMode | undefined),
       webBaseUrl:
         options.webBaseUrl ??
         options.baseUrl ??
@@ -224,14 +232,8 @@ export class OrangeProvider {
         process.env.ORANGE_PASSWORD ??
         process.env.ORANGE_API_SECRET ??
         "",
-      apiKey:
-        options.apiKey ??
-        process.env.ORANGE_API_KEY ??
-        "",
-      apiSecret:
-        options.apiSecret ??
-        process.env.ORANGE_API_SECRET ??
-        "",
+      apiKey: options.apiKey ?? process.env.ORANGE_API_KEY ?? "",
+      apiSecret: options.apiSecret ?? process.env.ORANGE_API_SECRET ?? "",
       usernameField:
         options.usernameField ??
         process.env.ORANGE_USERNAME_FIELD ??
@@ -323,7 +325,10 @@ export class OrangeProvider {
     requestId?: string,
   ): Promise<OrangeResult> {
     const log = requestId ? logger.child({ requestId }) : logger;
-    log.info({ phoneNumber, amount, operation, mode: this.mode }, "Orange: Executing operation");
+    log.info(
+      { phoneNumber, amount, operation, mode: this.mode },
+      "Orange: Executing operation",
+    );
     const startTime = Date.now();
     try {
       const response = await (async () => {
@@ -357,7 +362,10 @@ export class OrangeProvider {
       })();
 
       const duration = Date.now() - startTime;
-      log.info({ duration, success: response.success !== false }, "Orange: Operation completed");
+      log.info(
+        { duration, success: response.success !== false },
+        "Orange: Operation completed",
+      );
       return response as OrangeResult;
     } catch (error: any) {
       const duration = Date.now() - startTime;
@@ -430,20 +438,26 @@ export class OrangeProvider {
     return this.toProviderResult(response, reference);
   }
 
-  private async requestDirect(request: AxiosRequestConfig): Promise<AxiosResponse> {
+  private async requestDirect(
+    request: AxiosRequestConfig,
+  ): Promise<AxiosResponse> {
     let lastResponse: AxiosResponse | null = null;
     let lastError: unknown;
 
     for (let attempt = 1; attempt <= this.config.maxAttempts; attempt++) {
       try {
         const token = await this.authenticateDirect();
-        const requestHeaders = (request.headers ?? {}) as Record<string, string>;
+        const requestHeaders = (request.headers ?? {}) as Record<
+          string,
+          string
+        >;
         const response = await this.sendRequest(this.directClient, {
           ...request,
           headers: {
             ...requestHeaders,
             Authorization: `Bearer ${token}`,
-            "Content-Type": requestHeaders["Content-Type"] ?? "application/json",
+            "Content-Type":
+              requestHeaders["Content-Type"] ?? "application/json",
           },
         });
 
@@ -501,10 +515,15 @@ export class OrangeProvider {
     });
 
     if (response.status < 200 || response.status >= 300) {
-      throw new Error(`Orange direct auth failed with status ${response.status}`);
+      throw new Error(
+        `Orange direct auth failed with status ${response.status}`,
+      );
     }
 
-    const data = response.data as { access_token?: string; expires_in?: number };
+    const data = response.data as {
+      access_token?: string;
+      expires_in?: number;
+    };
     if (!data.access_token) {
       throw new Error("Orange direct auth did not return access_token");
     }
@@ -626,7 +645,9 @@ export class OrangeProvider {
     });
 
     if (loginResponse.status < 200 || loginResponse.status >= 300) {
-      throw new Error(`Orange login failed with status ${loginResponse.status}`);
+      throw new Error(
+        `Orange login failed with status ${loginResponse.status}`,
+      );
     }
 
     const session = this.captureSession(loginResponse, initialSession);

@@ -175,7 +175,8 @@ export function sessionAnomalyLogger(
     if (!previousFingerprint) {
       req.session.sessionFingerprint = currentFingerprint;
     } else if (previousFingerprint !== currentFingerprint) {
-      const mismatchCount = (req.session.sessionFingerprintMismatchCount ?? 0) + 1;
+      const mismatchCount =
+        (req.session.sessionFingerprintMismatchCount ?? 0) + 1;
       req.session.sessionFingerprintMismatchCount = mismatchCount;
       req.session.suspicious = true;
       req.session.suspiciousReason = "session_fingerprint_mismatch";
@@ -196,7 +197,12 @@ export function sessionAnomalyLogger(
           console.error("Failed to destroy hijacked session:", err);
         }
       });
-      res.status(401).json({ error: "Session invalidated due to suspicious activity. Please log in again." });
+      res
+        .status(401)
+        .json({
+          error:
+            "Session invalidated due to suspicious activity. Please log in again.",
+        });
       return;
     }
   }

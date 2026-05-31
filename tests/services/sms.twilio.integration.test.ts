@@ -33,7 +33,10 @@ describe("SmsService Twilio integration (mocked SDK)", () => {
     const svc = new SmsService();
     expect(svc.shouldSend()).toBe(true);
 
-    const result = await svc.sendToPhone("+14155552671", "integration test body");
+    const result = await svc.sendToPhone(
+      "+14155552671",
+      "integration test body",
+    );
 
     expect(result.sent).toBe(true);
     expect(result.messageSid).toBe("SM_integration_test");

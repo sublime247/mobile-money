@@ -77,8 +77,12 @@ function connectClient(client: MockClient, token = "test-token"): void {
 }
 
 describe("WebSocketManager", () => {
-  const mockVerifyToken = verifyToken as jest.MockedFunction<typeof verifyToken>;
-  const mockCreateClient = createClient as jest.MockedFunction<typeof createClient>;
+  const mockVerifyToken = verifyToken as jest.MockedFunction<
+    typeof verifyToken
+  >;
+  const mockCreateClient = createClient as jest.MockedFunction<
+    typeof createClient
+  >;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -162,8 +166,12 @@ describe("WebSocketManager", () => {
     };
 
     mockCreateClient
-      .mockImplementationOnce(() => pubClient as unknown as ReturnType<typeof createClient>)
-      .mockImplementationOnce(() => subClient as unknown as ReturnType<typeof createClient>);
+      .mockImplementationOnce(
+        () => pubClient as unknown as ReturnType<typeof createClient>,
+      )
+      .mockImplementationOnce(
+        () => subClient as unknown as ReturnType<typeof createClient>,
+      );
 
     const manager = new WebSocketManager({} as Server);
     const client = createMockClient();

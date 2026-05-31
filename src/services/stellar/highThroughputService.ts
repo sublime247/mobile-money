@@ -89,7 +89,7 @@ export async function initialize(): Promise<void> {
 
   if (config.accounts.length === 0) {
     console.warn(
-      "[HighThroughput] No channel accounts configured. Service will operate in single-account mode."
+      "[HighThroughput] No channel accounts configured. Service will operate in single-account mode.",
     );
     isInitialized = true;
     return;
@@ -99,7 +99,7 @@ export async function initialize(): Promise<void> {
     pool = await initializeDefaultPool();
     isInitialized = true;
     console.log(
-      `[HighThroughput] Initialized with ${config.accounts.length} channel accounts`
+      `[HighThroughput] Initialized with ${config.accounts.length} channel accounts`,
     );
   } catch (error) {
     console.error("[HighThroughput] Failed to initialize pool:", error);
@@ -130,7 +130,7 @@ export function getPoolStats(): PoolStats | null {
  * This is the recommended method for high-throughput payment submission
  */
 export async function submitPayment(
-  options: PaymentOptions
+  options: PaymentOptions,
 ): Promise<TransactionResult> {
   if (!pool) {
     // Fallback to single-account mode
@@ -227,7 +227,7 @@ export async function submitPayment(
  */
 export async function submitBatchPayments(
   payments: PaymentOptions[],
-  options?: { dryRun?: boolean }
+  options?: { dryRun?: boolean },
 ): Promise<BatchPaymentResult> {
   const startTime = Date.now();
   const isDryRun = options?.dryRun === true;
@@ -238,7 +238,12 @@ export async function submitBatchPayments(
       let error: string | undefined;
 
       try {
-        if (!payment.sourceAccount || !payment.destination || !payment.amount || !payment.sourceSecret) {
+        if (
+          !payment.sourceAccount ||
+          !payment.destination ||
+          !payment.amount ||
+          !payment.sourceSecret
+        ) {
           throw new Error("Missing required fields");
         }
 
@@ -311,10 +316,12 @@ export async function submitBatchPayments(
 
         const channelAccount = new StellarSdk.Account(
           channelPublicKey,
-          (sequence - BigInt(1)).toString()
+          (sequence - BigInt(1)).toString(),
         );
 
-        const sourceKeypair = StellarSdk.Keypair.fromSecret(payment.sourceSecret);
+        const sourceKeypair = StellarSdk.Keypair.fromSecret(
+          payment.sourceSecret,
+        );
         const asset =
           payment.asset === "native"
             ? StellarSdk.Asset.native()
@@ -331,7 +338,7 @@ export async function submitBatchPayments(
             asset,
             amount: payment.amount,
             source: payment.sourceAccount,
-          })
+          }),
         );
 
         if (payment.memo) {
@@ -360,7 +367,7 @@ export async function submitBatchPayments(
           ledger: response.ledger,
         };
       },
-    }))
+    })),
   );
 
   const results = batchResults.map((r, i) => ({
@@ -386,12 +393,12 @@ export async function submitCustomTransaction<T>(
   buildTransaction: (
     channelPublicKey: string,
     sequence: bigint,
-    channelKeypair: StellarSdk.Keypair
-  ) => Promise<T>
+    channelKeypair: StellarSdk.Keypair,
+  ) => Promise<T>,
 ): Promise<T> {
   if (!pool) {
     throw new Error(
-      "Pool not initialized. Use direct transaction submission methods instead."
+      "Pool not initialized. Use direct transaction submission methods instead.",
     );
   }
 
@@ -406,7 +413,7 @@ export async function submitCustomTransaction<T>(
  * Submit a payment without using the pool (single-account mode)
  */
 async function submitPaymentDirect(
-  options: PaymentOptions
+  options: PaymentOptions,
 ): Promise<TransactionResult> {
   const server = getStellarServer();
   const networkPassphrase = getNetworkPassphrase();
@@ -430,7 +437,7 @@ async function submitPaymentDirect(
         destination: options.destination,
         asset,
         amount: options.amount,
-      })
+      }),
     );
 
     if (options.memo) {
@@ -446,7 +453,7 @@ async function submitPaymentDirect(
       success: true,
       hash: response.hash,
       ledger: response.ledger,
-      fee: parseInt(response.successful ? '100' : '0'),
+      fee: parseInt(response.successful ? "100" : "0"),
     };
   } catch (error: unknown) {
     const err = error as Error;
@@ -484,7 +491,8 @@ export function getServiceHealth(): {
       status: "degraded",
       poolActive: false,
       stats: null,
-      message: "Running in single-account mode (no channel accounts configured)",
+      message:
+        "Running in single-account mode (no channel accounts configured)",
     };
   }
 
