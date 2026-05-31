@@ -1,3 +1,6 @@
+/* ========================================
+   Light Mode (default)
+   ======================================== */
 :root {
   --ifm-color-primary: #2e8555;
   --ifm-color-primary-dark: #29784c;
@@ -6,14 +9,223 @@
   --ifm-color-primary-light: #33925e;
   --ifm-color-primary-lighter: #359962;
   --ifm-color-primary-lightest: #3cad6e;
+
+  /* Custom variables for light mode */
+  --card-bg: #ffffff;
+  --card-border: #e0e0e0;
+  --card-shadow: rgba(0, 0, 0, 0.08);
+  --text-primary: #1a1a2e;
+  --text-secondary: #4a4a6a;
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8f9fa;
+  --code-bg: #f5f5f5;
+  --table-stripe: #f8f9fa;
+  --table-border: #e0e0e0;
+  --input-bg: #ffffff;
+  --input-border: #d0d0d0;
+  --navbar-bg: #ffffff;
+  --navbar-shadow: rgba(0, 0, 0, 0.1);
+  --footer-bg: #f8f9fa;
+  --footer-text: #6c757d;
+  --link-hover: #1a6b3a;
+  --success-bg: #d4edda;
+  --success-text: #155724;
+  --warning-bg: #fff3cd;
+  --warning-text: #856404;
+  --error-bg: #f8d7da;
+  --error-text: #721c24;
+  --info-bg: #d1ecf1;
+  --info-text: #0c5460;
+}
+
+/* ========================================
+   Dark Mode
+   ======================================== */
+[data-theme='dark'] {
+  --ifm-color-primary: #4ecdc4;
+  --ifm-color-primary-dark: #3dbfb6;
+  --ifm-color-primary-darker: #35b5ac;
+  --ifm-color-primary-darkest: #2a948d;
+  --ifm-color-primary-light: #5fd7ce;
+  --ifm-color-primary-lighter: #67dbd2;
+  --ifm-color-primary-lightest: #88e4dc;
+
+  /* Custom variables for dark mode */
+  --card-bg: #1e1e2e;
+  --card-border: #3a3a4a;
+  --card-shadow: rgba(0, 0, 0, 0.3);
+  --text-primary: #e0e0e0;
+  --text-secondary: #a0a0b0;
+  --bg-primary: #121220;
+  --bg-secondary: #1a1a2e;
+  --code-bg: #2a2a3a;
+  --table-stripe: #1e1e2e;
+  --table-border: #3a3a4a;
+  --input-bg: #1e1e2e;
+  --input-border: #3a3a4a;
+  --navbar-bg: #1a1a2e;
+  --navbar-shadow: rgba(0, 0, 0, 0.4);
+  --footer-bg: #1a1a2e;
+  --footer-text: #a0a0b0;
+  --link-hover: #6ee7b7;
+  --success-bg: #0f3d1e;
+  --success-text: #6ee7b7;
+  --warning-bg: #3d2e0f;
+  --warning-text: #fbbf24;
+  --error-bg: #3d0f0f;
+  --error-text: #f87171;
+  --info-bg: #0f2d3d;
+  --info-text: #67e8f9;
+}
+
+/* ========================================
+   Global Styles
+   ======================================== */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+  line-height: 1.6;
+  color: var(--text-primary);
+  background-color: var(--bg-primary);
+}
+
+/* ========================================
+   Typography
+   ======================================== */
+h1, h2, h3, h4, h5, h6 {
+  color: var(--text-primary);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+h1 {
+  font-size: 2.5rem;
+  margin-bottom: 1rem;
+}
+
+h2 {
+  font-size: 2rem;
+  margin-top: 2rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 2px solid var(--ifm-color-primary);
+  padding-bottom: 0.5rem;
+}
+
+h3 {
+  font-size: 1.5rem;
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+}
+
+p {
+  margin-bottom: 1rem;
+  color: var(--text-secondary);
+}
+
+a {
+  color: var(--ifm-color-primary);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+a:hover {
+  color: var(--link-hover);
+  text-decoration: underline;
+}
+
+/* ========================================
+   Cards
+   ======================================== */
+.card, .feature-card, .api-card {
+  background-color: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-bottom: 1rem;
+  box-shadow: 0 2px 8px var(--card-shadow);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card:hover, .feature-card:hover, .api-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px var(--card-shadow);
+}
+
+/* ========================================
+   Tables
+   ======================================== */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 1.5rem;
+  background-color: var(--card-bg);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+table th {
+  background-color: var(--ifm-color-primary);
+  color: #ffffff;
+  font-weight: 600;
+  padding: 12px 16px;
+  text-align: left;
+}
+
+table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--table-border);
+  color: var(--text-secondary);
+}
+
+table tr:nth-child(even) {
+  background-color: var(--table-stripe);
+}
+
+table tr:hover {
+  background-color: var(--ifm-color-primary-lightest);
+  background-opacity: 0.1;
+}
+
+/* ========================================
+   Code Blocks
+   ======================================== */
+code {
+  background-color: var(--code-bg);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.9em;
+  color: var(--ifm-color-primary);
+}
+
+pre {
+  background-color: var(--code-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  padding: 1rem;
+  overflow-x: auto;
+}
+
+pre code {
+  background-color: transparent;
+  padding: 0;
+  color: var(--text-primary);
 }
 
 /* Code block copy button styling */
-div.codeBlockContainer_node_modules-\@docusaurus-theme-classic-src-theme-CodeBlock-styles-module:hover .copyButton_node_modules-\@docusaurus-theme-classic-src-theme-CodeBlock-styles-module {
+div.codeBlockContainer_node_modules-\\@docusaurus-theme-classic-src-theme-CodeBlock-styles-module:hover .copyButton_node_modules-\\@docusaurus-theme-classic-src-theme-CodeBlock-styles-module {
   opacity: 1;
 }
 
-button.copyButton_node_modules-\@docusaurus-theme-classic-src-theme-CodeBlock-styles-module {
+button.copyButton_node_modules-\\@docusaurus-theme-classic-src-theme-CodeBlock-styles-module {
   transition: opacity 0.2s ease-in-out;
 }
 
@@ -25,4 +237,394 @@ button.copyButton_node_modules-\@docusaurus-theme-classic-src-theme-CodeBlock-st
 /* Ensure code blocks have visible copy buttons */
 pre code {
   position: relative;
+}
+
+/* ========================================
+   Forms & Inputs
+   ======================================== */
+input, select, textarea {
+  background-color: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: 6px;
+  padding: 8px 12px;
+  color: var(--text-primary);
+  font-size: 1rem;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--ifm-color-primary);
+  box-shadow: 0 0 0 3px rgba(46, 133, 85, 0.15);
+}
+
+[data-theme='dark'] input:focus,
+[data-theme='dark'] select:focus,
+[data-theme='dark'] textarea:focus {
+  box-shadow: 0 0 0 3px rgba(78, 205, 196, 0.2);
+}
+
+input::placeholder, textarea::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.7;
+}
+
+/* ========================================
+   Buttons
+   ======================================== */
+button, .button {
+  background-color: var(--ifm-color-primary);
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  padding: 10px 20px;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
+button:hover, .button:hover {
+  background-color: var(--ifm-color-primary-dark);
+  transform: translateY(-1px);
+}
+
+button:active, .button:active {
+  transform: translateY(0);
+}
+
+button.secondary, .button.secondary {
+  background-color: transparent;
+  color: var(--ifm-color-primary);
+  border: 2px solid var(--ifm-color-primary);
+}
+
+button.secondary:hover, .button.secondary:hover {
+  background-color: var(--ifm-color-primary);
+  color: #ffffff;
+}
+
+/* ========================================
+   Alerts & Messages
+   ======================================== */
+.alert, .callout {
+  padding: 1rem 1.25rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  border-left: 4px solid;
+}
+
+.alert--success, .callout.success {
+  background-color: var(--success-bg);
+  color: var(--success-text);
+  border-left-color: var(--success-text);
+}
+
+.alert--warning, .callout.warning {
+  background-color: var(--warning-bg);
+  color: var(--warning-text);
+  border-left-color: var(--warning-text);
+}
+
+.alert--danger, .callout.error {
+  background-color: var(--error-bg);
+  color: var(--error-text);
+  border-left-color: var(--error-text);
+}
+
+.alert--info, .callout.info {
+  background-color: var(--info-bg);
+  color: var(--info-text);
+  border-left-color: var(--info-text);
+}
+
+/* ========================================
+   Navbar
+   ======================================== */
+.navbar {
+  background-color: var(--navbar-bg);
+  box-shadow: 0 2px 8px var(--navbar-shadow);
+  border-bottom: 1px solid var(--card-border);
+}
+
+.navbar__title, .navbar__link {
+  color: var(--text-primary);
+}
+
+.navbar__link:hover {
+  color: var(--ifm-color-primary);
+}
+
+/* ========================================
+   Footer
+   ======================================== */
+.footer {
+  background-color: var(--footer-bg);
+  border-top: 1px solid var(--card-border);
+  padding: 2rem 0;
+}
+
+.footer__text, .footer__link {
+  color: var(--footer-text);
+}
+
+.footer__link:hover {
+  color: var(--ifm-color-primary);
+}
+
+/* ========================================
+   Sidebar (Docs)
+   ======================================== */
+.menu__link {
+  color: var(--text-secondary);
+  border-radius: 6px;
+  padding: 8px 12px;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.menu__link:hover {
+  background-color: var(--bg-secondary);
+  color: var(--ifm-color-primary);
+}
+
+.menu__link--active {
+  color: var(--ifm-color-primary);
+  font-weight: 600;
+  background-color: rgba(46, 133, 85, 0.1);
+}
+
+[data-theme='dark'] .menu__link--active {
+  background-color: rgba(78, 205, 196, 0.1);
+}
+
+/* ========================================
+   API Documentation (Redoc)
+   ======================================== */
+.redoc-wrap {
+  background-color: var(--bg-primary) !important;
+}
+
+.redoc-wrap h1, .redoc-wrap h2, .redoc-wrap h3 {
+  color: var(--text-primary) !important;
+}
+
+.redoc-wrap p, .redoc-wrap li, .redoc-wrap td {
+  color: var(--text-secondary) !important;
+}
+
+.redoc-wrap .menu-content {
+  background-color: var(--bg-secondary) !important;
+}
+
+.redoc-wrap .operation-type {
+  color: var(--ifm-color-primary) !important;
+}
+
+/* ========================================
+   Scrollbar Styling
+   ======================================== */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--text-secondary);
+  border-radius: 4px;
+  opacity: 0.5;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ifm-color-primary);
+}
+
+/* ========================================
+   Selection
+   ======================================== */
+::selection {
+  background-color: var(--ifm-color-primary);
+  color: #ffffff;
+}
+
+[data-theme='dark'] ::selection {
+  background-color: var(--ifm-color-primary);
+  color: #121220;
+}
+
+/* ========================================
+   Responsive Utilities
+   ======================================== */
+@media (max-width: 768px) {
+  h1 {
+    font-size: 2rem;
+  }
+  
+  h2 {
+    font-size: 1.5rem;
+  }
+  
+  .card, .feature-card, .api-card {
+    padding: 1rem;
+  }
+}
+
+/* ========================================
+   Animations
+   ======================================== */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+/* ========================================
+   Utility Classes
+   ======================================== */
+.text-center {
+  text-align: center;
+}
+
+.text-primary {
+  color: var(--ifm-color-primary);
+}
+
+.text-secondary {
+  color: var(--text-secondary);
+}
+
+.bg-primary {
+  background-color: var(--bg-primary);
+}
+
+.bg-secondary {
+  background-color: var(--bg-secondary);
+}
+
+.mt-1 { margin-top: 0.5rem; }
+.mt-2 { margin-top: 1rem; }
+.mt-3 { margin-top: 1.5rem; }
+.mt-4 { margin-top: 2rem; }
+
+.mb-1 { margin-bottom: 0.5rem; }
+.mb-2 { margin-bottom: 1rem; }
+.mb-3 { margin-bottom: 1.5rem; }
+.mb-4 { margin-bottom: 2rem; }
+
+.p-1 { padding: 0.5rem; }
+.p-2 { padding: 1rem; }
+.p-3 { padding: 1.5rem; }
+.p-4 { padding: 2rem; }
+
+/* ========================================
+   Badge / Tag Styles
+   ======================================== */
+.badge, .tag {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.badge--get {
+  background-color: #61affe;
+  color: #ffffff;
+}
+
+.badge--post {
+  background-color: #49cc90;
+  color: #ffffff;
+}
+
+.badge--put {
+  background-color: #fca130;
+  color: #ffffff;
+}
+
+.badge--delete {
+  background-color: #f93e3e;
+  color: #ffffff;
+}
+
+.badge--patch {
+  background-color: #50e3c2;
+  color: #ffffff;
+}
+
+/* ========================================
+   Loading States
+   ======================================== */
+.loading {
+  position: relative;
+  overflow: hidden;
+}
+
+.loading::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.2),
+    transparent
+  );
+  animation: shimmer 1.5s infinite;
+}
+
+[data-theme='dark'] .loading::after {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.05),
+    transparent
+  );
+}
+
+@keyframes shimmer {
+  100% {
+    left: 100%;
+  }
+}
+
+/* ========================================
+   Print Styles
+   ======================================== */
+@media print {
+  body {
+    background-color: #ffffff;
+    color: #000000;
+  }
+  
+  .navbar, .footer, .sidebar {
+    display: none;
+  }
+  
+  a {
+    color: #000000;
+    text-decoration: underline;
+  }
+  
+  .card, .feature-card, .api-card {
+    box-shadow: none;
+    border: 1px solid #000000;
+  }
 }
