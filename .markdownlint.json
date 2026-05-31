@@ -1,0 +1,37 @@
+{
+  "default": true,
+  "MD013": {
+    "line_length": 150,
+    "heading_line_length": 120,
+    "code_block_line_length": 120,
+    "strict": false
+  },
+  "MD033": {
+    "allowed_elements": [
+      "br", "details", "summary", "sub", "sup",
+      "img", "a", "table", "thead", "tbody", "tr", "th", "td",
+      "div", "span", "p"
+    ]
+  },
+  "MD041": false,
+  "MD024": {
+    "siblings_only": true
+  },
+  "MD046": {
+    "style": "fenced"
+  },
+  "MD048": {
+    "style": "backtick"
+  },
+  "MD034": false,
+  "MD004": {
+    "style": "dash"
+  },
+  "MD029": {
+    "style": "one"
+  },
+  "MD026": {
+    "punctuation": ".,;:!"
+  },
+  "MD051": false
+}

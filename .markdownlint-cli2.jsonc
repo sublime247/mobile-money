@@ -1,0 +1,91 @@
+{
+  // markdownlint-cli2 configuration for mobile-money documentation
+  // See https://github.com/DavidAnson/markdownlint-cli2 for details
+
+  "config": {
+    // Default state for all rules
+    "default": true,
+
+    // Line length — relaxed for docs with long URLs and tables
+    "MD013": {
+      "line_length": 150,
+      "heading_line_length": 120,
+      "code_block_line_length": 120,
+      "strict": false,
+      "stern": false
+    },
+
+    // Allow inline HTML (needed for Mermaid diagrams, badges, tables)
+    "MD033": {
+      "allowed_elements": [
+        "br", "details", "summary", "sub", "sup",
+        "img", "a", "table", "thead", "tbody", "tr", "th", "td",
+        "div", "span", "p", "mermaid"
+      ]
+    },
+
+    // First heading should be h1 (allow for frontmatter)
+    "MD041": false,
+
+    // Allow duplicate headings in different sections
+    "MD024": {
+      "siblings_only": true
+    },
+
+    // Code block style — allow fenced (```) and indented
+    "MD046": {
+      "style": "fenced"
+    },
+
+    // Code fence style — consistent backtick fences
+    "MD048": {
+      "style": "backtick"
+    },
+
+    // Allow bare URLs (common in API docs)
+    "MD034": false,
+
+    // Emphasis style — allow both **bold** and __bold__
+    "MD049": {
+      "style": "consistent"
+    },
+
+    // Unordered list style — consistent dash
+    "MD004": {
+      "style": "dash"
+    },
+
+    // Ordered list style — consistent one-ordered (1. 2. 3.)
+    "MD029": {
+      "style": "one"
+    },
+
+    // Allow trailing punctuation in headings (e.g., "## What is this?")
+    "MD026": {
+      "punctuation": ".,;:!"
+    },
+
+    // Link fragments — don't require anchors for auto-generated headings
+    "MD051": false
+  },
+
+  // Globs of files to lint
+  "globs": [
+    "docs/**/*.md",
+    "docs-portal/**/*.md",
+    "docs-portal/**/*.mdx",
+    "*.md"
+  ],
+
+  // Ignore node_modules, build artifacts, and generated files
+  "ignores": [
+    "**/node_modules/**",
+    "**/build/**",
+    "**/.docusaurus/**",
+    "**/dist/**",
+    "**/coverage/**",
+    "**/CHANGELOG.md",
+    "pnpm-lock.yaml",
+    "package-lock.json"
+  ]
+}

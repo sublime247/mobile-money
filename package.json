@@ -55,6 +55,8 @@
     "sdk:build:ts": "cd sdk-ts && npm install && npm run build",
     "docs:dev": "npm --prefix docs-portal run start",
     "docs:build": "npm --prefix docs-portal run build",
+    "lint:docs": "markdownlint-cli2 \"docs/**/*.md\" \"docs-portal/**/*.md\" \"docs-portal/**/*.mdx\" \"*.md\"",
+    "lint:docs:fix": "markdownlint-cli2 --fix \"docs/**/*.md\" \"docs-portal/**/*.md\" \"docs-portal/**/*.mdx\" \"*.md\"",
     "test:load:ingestion-10k": "k6 run --vus-max 12000 -e SCENARIO=ingestion_10k tests/load/api.js",
     "test:load:spike-10k": "k6 run --vus-max 12000 -e SCENARIO=spike_10k tests/load/api.js",
     "test:load:traffic-spike": "k6 run --vus-max 6000 -e SCENARIO=traffic_spike tests/load/api.js",
@@ -65,7 +67,11 @@
       "eslint --fix",
       "jest --bail --findRelatedTests"
     ],
-    "*.{js,cjs,mjs,json,md,yml,yaml}": "prettier --write"
+    "*.{js,cjs,mjs,json,yml,yaml}": "prettier --write",
+    "*.md": [
+      "prettier --write",
+      "markdownlint-cli2 --fix"
+    ]
   },
   "keywords": [],
   "author": "",
@@ -204,6 +210,7 @@
     "jest": "^29.7.0",
     "js-yaml": "^4.1.1",
     "lint-staged": "^16.4.0",
+    "markdownlint-cli2": "^0.17.2",
     "playwright": "^1.60.0",
     "prettier": "^3.8.3",
     "supertest": "^7.2.2",
