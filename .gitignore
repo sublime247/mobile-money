@@ -50,3 +50,7 @@ benchmarks/results/*.json
 .cache/
 
 secret.yaml
+
+# Worker build output
+workers/well-known-cache/dist/
+workers/well-known-cache/node_modules/
