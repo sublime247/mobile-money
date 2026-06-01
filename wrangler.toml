@@ -14,3 +14,5 @@ STELLAR_TOML_STALE_WHILE_REVALIDATE = "86400"
 # Cache TTL for other .well-known paths (seconds)
 DEFAULT_MAX_AGE = "300"
 DEFAULT_STALE_WHILE_REVALIDATE = "3600"
+# Comma-separated list of allowed CORS origins (empty = wildcard "*" for backward compat)
+ALLOWED_ORIGINS = ""
