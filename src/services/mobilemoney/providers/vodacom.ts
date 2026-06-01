@@ -24,6 +24,20 @@ function encrypt(data: string, publicKeyPem: string): string {
   return encrypted.toString("base64");
 }
 
+type CircuitState = "closed" | "open" | "half-open";
+
+interface CircuitBreakerConfig {
+  failureThreshold: number;
+  resetTimeoutMs: number;
+  halfOpenMaxAttempts: number;
+}
+
+const DEFAULT_CIRCUIT_BREAKER_CONFIG: CircuitBreakerConfig = {
+  failureThreshold: parseInt(process.env.VODACOM_CB_FAILURE_THRESHOLD || "5", 10),
+  resetTimeoutMs: parseInt(process.env.VODACOM_CB_RESET_TIMEOUT_MS || "60000", 10),
+  halfOpenMaxAttempts: parseInt(process.env.VODACOM_CB_HALF_OPEN_MAX || "3", 10),
+};
+
 export class VodacomProvider {
   private apiKey: string;
   private publicKey: string;
@@ -36,6 +50,13 @@ export class VodacomProvider {
   private sessionToken: string | null = null;
   private sessionTokenExpiry = 0;
 
+  // Circuit breaker state
+  private circuitState: CircuitState = "closed";
+  private failureCount = 0;
+  private lastFailureTime = 0;
+  private halfOpenAttempts = 0;
+  private circuitConfig: CircuitBreakerConfig;
+
   constructor() {
     this.apiKey = process.env.VODACOM_API_KEY || "";
     this.publicKey = process.env.VODACOM_PUBLIC_KEY || "";
@@ -45,6 +66,7 @@ export class VodacomProvider {
       process.env.VODACOM_BASE_URL || "https://sandbox.openapi.m-pesa.com";
     this.market = process.env.VODACOM_MARKET || "vodacomTZN";
     this.currency = process.env.VODACOM_CURRENCY || "TZS";
+    this.circuitConfig = DEFAULT_CIRCUIT_BREAKER_CONFIG;
 
     this.client = axios.create({
       baseURL: this.baseUrl,
@@ -55,6 +77,74 @@ export class VodacomProvider {
         Origin: "*",
       },
     });
+  }
+
+  /**
+   * Check if circuit breaker allows the request.
+   * Transitions: closed → open (on threshold), open → half-open (on timeout),
+   * half-open → closed (on success) or half-open → open (on failure).
+   */
+  private isCircuitOpen(): boolean {
+    if (this.circuitState === "open") {
+      const elapsed = Date.now() - this.lastFailureTime;
+      if (elapsed >= this.circuitConfig.resetTimeoutMs) {
+        this.circuitState = "half-open";
+        this.halfOpenAttempts = 0;
+        logger.info("Vodacom circuit breaker: open → half-open (timeout elapsed)");
+        return false;
+      }
+      return true;
+    }
+    if (this.circuitState === "half-open") {
+      return this.halfOpenAttempts >= this.circuitConfig.halfOpenMaxAttempts;
+    }
+    return false;
+  }
+
+  private recordSuccess(): void {
+    if (this.circuitState === "half-open") {
+      logger.info("Vodacom circuit breaker: half-open → closed (success)");
+    }
+    this.circuitState = "closed";
+    this.failureCount = 0;
+    this.halfOpenAttempts = 0;
+  }
+
+  private recordFailure(): void {
+    this.failureCount++;
+    this.lastFailureTime = Date.now();
+
+    if (this.circuitState === "half-open") {
+      this.circuitState = "open";
+      logger.warn(
+        { failures: this.failureCount },
+        "Vodacom circuit breaker: half-open → open (failure in half-open state)",
+      );
+      return;
+    }
+
+    if (this.failureCount >= this.circuitConfig.failureThreshold) {
+      this.circuitState = "open";
+      logger.warn(
+        { failures: this.failureCount, threshold: this.circuitConfig.failureThreshold },
+        "Vodacom circuit breaker: closed → open (threshold reached)",
+      );
+    }
+  }
+
+  /**
+   * Get current circuit breaker status for monitoring/health checks.
+   */
+  getCircuitBreakerStatus(): {
+    state: CircuitState;
+    failureCount: number;
+    config: CircuitBreakerConfig;
+  } {
+    return {
+      state: this.circuitState,
+      failureCount: this.failureCount,
+      config: this.circuitConfig,
+    };
   }
 
   private async getAccessToken(): Promise<string> {
@@ -100,6 +190,15 @@ export class VodacomProvider {
     log.info(maskPII({ phoneNumber, amount }), "Vodacom: Requesting payment");
     const startTime = Date.now();
 
+    if (this.isCircuitOpen()) {
+      log.warn("Vodacom: Circuit breaker open — rejecting request");
+      return {
+        success: false,
+        error: new Error("Circuit breaker open: Vodacom provider temporarily unavailable"),
+        providerResponseTimeMs: 0,
+      };
+    }
+
     try {
       const token = await this.getAccessToken();
       const encryptedToken = encrypt(token, this.publicKey);
@@ -128,6 +227,7 @@ export class VodacomProvider {
       const code = response.data?.output_ResponseCode;
 
       if (code === "INS-0") {
+        this.recordSuccess();
         log.info(
           maskPII({
             duration,
@@ -141,12 +241,14 @@ export class VodacomProvider {
           providerResponseTimeMs: duration,
         };
       } else {
+        this.recordFailure();
         throw new Error(
           `C2B failed with code ${code}: ${response.data?.output_ResponseDesc || "Unknown error"}`,
         );
       }
     } catch (error: any) {
       const duration = Date.now() - startTime;
+      this.recordFailure();
       log.error(
         maskPII({ duration, error: error.message }),
         "Vodacom: Payment request failed",
@@ -163,6 +265,15 @@ export class VodacomProvider {
     const log = requestId ? logger.child({ requestId }) : logger;
     log.info(maskPII({ phoneNumber, amount }), "Vodacom: Sending payout");
     const startTime = Date.now();
+
+    if (this.isCircuitOpen()) {
+      log.warn("Vodacom: Circuit breaker open — rejecting payout");
+      return {
+        success: false,
+        error: new Error("Circuit breaker open: Vodacom provider temporarily unavailable"),
+        providerResponseTimeMs: 0,
+      };
+    }
 
     try {
       const token = await this.getAccessToken();
@@ -192,6 +303,7 @@ export class VodacomProvider {
       const code = response.data?.output_ResponseCode;
 
       if (code === "INS-0") {
+        this.recordSuccess();
         log.info(
           maskPII({
             duration,
@@ -205,12 +317,14 @@ export class VodacomProvider {
           providerResponseTimeMs: duration,
         };
       } else {
+        this.recordFailure();
         throw new Error(
           `B2C failed with code ${code}: ${response.data?.output_ResponseDesc || "Unknown error"}`,
         );
       }
     } catch (error: any) {
       const duration = Date.now() - startTime;
+      this.recordFailure();
       log.error(
         maskPII({ duration, error: error.message }),
         "Vodacom: Payout request failed",

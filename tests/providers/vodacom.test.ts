@@ -222,4 +222,81 @@ describe("VodacomProvider", () => {
       expect(result.data.output_TransactionID).toBe("TXN-LAZY");
     });
   });
+
+  describe("Circuit Breaker", () => {
+    it("should start in closed state", () => {
+      const status = provider.getCircuitBreakerStatus();
+      expect(status.state).toBe("closed");
+      expect(status.failureCount).toBe(0);
+    });
+
+    it("should open circuit after failure threshold", async () => {
+      const mockClient = {
+        get: jest.fn().mockResolvedValue({
+          data: {
+            output_ResponseCode: "INS-0",
+            output_ResponseDesc: "Success",
+            output_SessionID: "mock-session",
+          },
+        }),
+        post: jest.fn().mockRejectedValue(new Error("Network error")),
+      };
+      mockedAxios.create.mockReturnValue(mockClient as any);
+      provider = new VodacomProvider();
+
+      // Trigger failures up to threshold (default 5)
+      for (let i = 0; i < 5; i++) {
+        await provider.requestPayment("255750000000", "1000");
+      }
+
+      const status = provider.getCircuitBreakerStatus();
+      expect(status.state).toBe("open");
+      expect(status.failureCount).toBe(5);
+    });
+
+    it("should reject requests when circuit is open", async () => {
+      const mockClient = {
+        get: jest.fn().mockResolvedValue({
+          data: {
+            output_ResponseCode: "INS-0",
+            output_ResponseDesc: "Success",
+            output_SessionID: "mock-session",
+          },
+        }),
+        post: jest.fn().mockRejectedValue(new Error("Network error")),
+      };
+      mockedAxios.create.mockReturnValue(mockClient as any);
+      provider = new VodacomProvider();
+
+      // Open the circuit
+      for (let i = 0; i < 5; i++) {
+        await provider.requestPayment("255750000000", "1000");
+      }
+
+      // Next request should be rejected without calling API
+      mockClient.post.mockClear();
+      const result = await provider.requestPayment("255750000000", "1000");
+
+      expect(result.success).toBe(false);
+      expect(result.error?.message).toContain("Circuit breaker open");
+      expect(mockClient.post).not.toHaveBeenCalled();
+    });
+
+    it("should expose circuit breaker config from env vars", () => {
+      process.env.VODACOM_CB_FAILURE_THRESHOLD = "3";
+      process.env.VODACOM_CB_RESET_TIMEOUT_MS = "30000";
+      process.env.VODACOM_CB_HALF_OPEN_MAX = "2";
+
+      const customProvider = new VodacomProvider();
+      const status = customProvider.getCircuitBreakerStatus();
+
+      expect(status.config.failureThreshold).toBe(3);
+      expect(status.config.resetTimeoutMs).toBe(30000);
+      expect(status.config.halfOpenMaxAttempts).toBe(2);
+
+      delete process.env.VODACOM_CB_FAILURE_THRESHOLD;
+      delete process.env.VODACOM_CB_RESET_TIMEOUT_MS;
+      delete process.env.VODACOM_CB_HALF_OPEN_MAX;
+    });
+  });
 });
