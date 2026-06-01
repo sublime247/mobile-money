@@ -1,6 +1,6 @@
 import { parsePhoneNumberFromString, type CountryCode } from "libphonenumber-js";
 
-export type MobileProvider = "mtn" | "airtel" | "orange";
+export type MobileProvider = "mtn" | "airtel" | "orange" | "tigo" | "vodacom";
 type PhoneOutputFormat = "e164" | "national";
 
 interface ProviderPhoneFormatConfig {
@@ -16,6 +16,8 @@ const PROVIDER_PREFIXES: Record<MobileProvider, string[]> = {
   mtn: ["23767", "23768", "25677", "25678", "23324", "23354", "23355", "23359"],
   airtel: ["23766", "25670", "25675", "23326", "23356", "23357"],
   orange: ["23765", "23769", "22507", "22177"],
+  tigo: ["25565", "25566", "25567", "25571"],
+  vodacom: ["25575", "25576", "25561", "25562", "25574"],
 };
 
 const PROVIDER_PHONE_FORMATS: Record<MobileProvider, ProviderPhoneFormatConfig> = {
@@ -29,6 +31,14 @@ const PROVIDER_PHONE_FORMATS: Record<MobileProvider, ProviderPhoneFormatConfig> 
   },
   orange: {
     defaultRegion: "CM",
+    output: "e164",
+  },
+  tigo: {
+    defaultRegion: "TZ",
+    output: "e164",
+  },
+  vodacom: {
+    defaultRegion: "TZ",
     output: "e164",
   },
 };
