@@ -3,6 +3,10 @@ import { pool } from "../config/database";
 import { newEnforcer, Enforcer } from "casbin";
 import path from "path";
 
+// Re-export permission constants so routes can do:
+//   import { ApiKeyScope, checkApiKeyScope } from "../middleware/rbac";
+export { ApiKeyScope, ApiKeyPermission, ScopeGroup, describeScopes } from "../auth/apikeys";
+
 export interface RBACRequest extends Request {
   user?: {
     id: string;

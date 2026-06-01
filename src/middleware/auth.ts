@@ -5,6 +5,7 @@ import { ADMIN_API_KEY } from "../config/env";
 import { redisClient } from "../config/redis";
 import { getAdminSep10Service } from "../stellar/adminSep10";
 import { evaluateGeoLoginAccess } from "../auth/geo";
+import { pool } from "../config/database";
 
 type RequestUser = {
   id: string;
@@ -72,24 +73,89 @@ declare module "express-serve-static-core" {
 
 /**
  * Middleware to require a valid administrative API key, OAuth token, or admin SEP-10 token.
+ *
+ * API key resolution order:
+ *  1. Static ADMIN_API_KEY env var → full permissions (0xFF…)
+ *  2. DB-stored key in `api_keys` table → scoped permissions from `permissions` column
+ *  3. Bearer token (OAuth or SEP-10)
  */
-export const requireAuth = (
+export const requireAuth = async (
   req: Request,
   res: Response,
   next: NextFunction,
-) => {
+): Promise<void> => {
   const apiKey = req.header("X-API-Key");
   const adminKey = ADMIN_API_KEY;
 
-  if (apiKey && apiKey === adminKey) {
-    (req as AuthRequest).user = {
-      id: "admin-system",
-      role: "admin",
-    };
-    // Issue #518: Admin keys get full permissions
-    (req as any).apiKeyPermissions = 0x0f; // ApiKeyPermission.ALL
+  if (apiKey) {
+    // 1. Static admin key – full permissions, no DB round-trip needed
+    if (apiKey === adminKey) {
+      (req as AuthRequest).user = { id: "admin-system", role: "admin" };
+      // ScopeGroup.FULL_ACCESS equivalent – all bits set
+      (req as any).apiKeyPermissions = 0x0007ffff;
+      return next();
+    }
 
-    return next();
+    // 2. DB-stored API key – look up permissions bitmask
+    try {
+      const result = await pool.query<{
+        id: string;
+        user_id: string | null;
+        permissions: number;
+        is_active: boolean;
+        expires_at: Date | null;
+        label: string | null;
+      }>(
+        `SELECT id, user_id, permissions, is_active, expires_at, label
+           FROM api_keys
+          WHERE key = $1
+          LIMIT 1`,
+        [apiKey],
+      );
+
+      if (result.rows.length === 0) {
+        res.status(401).json({
+          error: "Unauthorized",
+          message: "Invalid API key",
+        });
+        return;
+      }
+
+      const row = result.rows[0];
+
+      if (!row.is_active) {
+        res.status(401).json({
+          error: "Unauthorized",
+          message: "API key has been revoked",
+        });
+        return;
+      }
+
+      if (row.expires_at && new Date(row.expires_at) < new Date()) {
+        res.status(401).json({
+          error: "Unauthorized",
+          message: "API key has expired",
+        });
+        return;
+      }
+
+      // Determine role from permissions – ADMIN bit (0x00040000) → admin, else api
+      const isAdminKey = (row.permissions & 0x00040000) !== 0;
+      (req as AuthRequest).user = {
+        id: row.user_id ?? "api-key-system",
+        role: isAdminKey ? "admin" : "api",
+        ...(row.label ? { apiKeyLabel: row.label } : {}),
+      };
+      (req as any).apiKeyPermissions = row.permissions;
+      return next();
+    } catch (err) {
+      console.error("[requireAuth] DB API key lookup failed:", err);
+      res.status(500).json({
+        error: "Internal server error",
+        message: "Failed to validate API key",
+      });
+      return;
+    }
   }
 
   const authorization = req.header("Authorization");
@@ -113,10 +179,9 @@ export const requireAuth = (
         const adminSep10Service = getAdminSep10Service();
         const decoded = adminSep10Service.verifyToken(bearerToken);
 
-        // Verify this is an admin token (should have isAdmin flag, but we'll check the key)
         if (decoded.sub) {
           (req as AuthRequest).user = {
-            id: decoded.sub, // Stellar public key
+            id: decoded.sub,
             role: "admin",
             stellarPublicKey: decoded.sub,
           };
@@ -127,13 +192,14 @@ export const requireAuth = (
       }
     }
 
-    return res.status(401).json({
+    res.status(401).json({
       error: "Unauthorized",
       message: "Invalid or expired bearer token",
     });
+    return;
   }
 
-  return res.status(401).json({
+  res.status(401).json({
     error: "Unauthorized",
     message: "Valid administrative API key or bearer token required",
   });
