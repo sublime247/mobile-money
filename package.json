@@ -83,6 +83,7 @@
     "@types/passport": "^1.0.17",
     "@types/speakeasy": "^2.0.10",
     "@types/swagger-ui-express": "4.1.8",
+    "africastalking": "^0.7.9",
     "amqp-connection-manager": "^5.0.0",
     "amqplib": "^0.10.9",
     "apollo-server-core": "^3.13.0",

@@ -187,14 +187,9 @@ export class FraudService {
   }
 
   private async getIPLocation(ipAddress: string): Promise<{ lat: number; lng: number; country: string } | null> {
-    try {
-      // In production, use a geolocation service like MaxMind or IP-API
-      // For now, return null to disable this check
-      return null;
-    } catch (error) {
-      console.error('Failed to get IP location:', error);
-      return null;
-    }
+    // In production, use a geolocation service like MaxMind or IP-API
+    // For now, return null to disable this check
+    return null;
   }
 
   private isLocationMismatch(

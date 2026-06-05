@@ -491,7 +491,14 @@ export class AccountingService {
       [connectionId],
     );
 
-    return result.rows;
+    return result.rows.map((row) => ({
+      id: row.id,
+      connectionId: row.connection_id,
+      mobileMoneyCategory: row.mobile_money_category,
+      accountingCategoryId: row.accounting_category_id,
+      accountingCategoryName: row.accounting_category_name,
+      createdAt: new Date(row.created_at),
+    }));
   }
 
   async getAccountingCategories(
@@ -713,6 +720,10 @@ export class AccountingService {
     const row = result.rows[0];
     return {
       ...row,
+      userId: row.user_id,
+      realmId: row.realm_id,
+      tenantId: row.tenant_id,
+      tenantName: row.tenant_name,
       accessToken: decryptField(row.access_token) || row.access_token,
       refreshToken: decryptField(row.refresh_token) || row.refresh_token,
       expiresAt: new Date(row.expires_at),
@@ -730,6 +741,10 @@ export class AccountingService {
 
     return result.rows.map((row) => ({
       ...row,
+      userId: row.user_id,
+      realmId: row.realm_id,
+      tenantId: row.tenant_id,
+      tenantName: row.tenant_name,
       accessToken: decryptField(row.access_token) || row.access_token,
       refreshToken: decryptField(row.refresh_token) || row.refresh_token,
       expiresAt: new Date(row.expires_at),
@@ -746,6 +761,10 @@ export class AccountingService {
 
     return result.rows.map((row) => ({
       ...row,
+      userId: row.user_id,
+      realmId: row.realm_id,
+      tenantId: row.tenant_id,
+      tenantName: row.tenant_name,
       accessToken: decryptField(row.access_token) || row.access_token,
       refreshToken: decryptField(row.refresh_token) || row.refresh_token,
       expiresAt: new Date(row.expires_at),
@@ -799,7 +818,17 @@ export class AccountingService {
       [connectionId, limit],
     );
 
-    return result.rows;
+    return result.rows.map((row) => ({
+      id: row.id,
+      connectionId: row.connection_id,
+      syncType: row.sync_type,
+      status: row.status,
+      recordsProcessed: row.records_processed,
+      recordsSucceeded: row.records_succeeded,
+      recordsFailed: row.records_failed,
+      errorMessage: row.error_message,
+      syncedAt: new Date(row.synced_at),
+    }));
   }
 
   /**

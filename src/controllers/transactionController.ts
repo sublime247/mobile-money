@@ -723,6 +723,7 @@ export const getTransactionHandler = async (req: Request, res: Response) => {
 
     return res.json(body);
   } catch (err) {
+    if (err && (err as any).code) throw err;
     console.error("Failed to fetch transaction:", err);
     throw createError(
       ERROR_CODES.INTERNAL_ERROR,
@@ -790,6 +791,7 @@ export const cancelTransactionHandler = async (req: Request, res: Response) => {
 
     return res.json(body);
   } catch (err) {
+    if (err && (err as any).code) throw err;
     console.error("Failed to cancel transaction:", err);
     throw createError(ERROR_CODES.INTERNAL_ERROR, null, {
       error: "Failed to cancel transaction",
@@ -816,6 +818,7 @@ export const updateNotesHandler = async (req: Request, res: Response) => {
 
     return res.json(transaction);
   } catch (err) {
+    if (err && (err as any).code) throw err;
     const message =
       err instanceof Error ? err.message : "Failed to update notes";
 
@@ -883,6 +886,7 @@ export const refundTransactionHandler = async (req: Request, res: Response) => {
       refundAmount,
     });
   } catch (err) {
+    if (err && (err as any).code) throw err;
     console.error("Refund error:", err);
     throw createError(ERROR_CODES.INTERNAL_ERROR, "Failed to process refund", {
       error: "Failed to process refund",
@@ -910,6 +914,7 @@ export const updateAdminNotesHandler = async (req: Request, res: Response) => {
 
     return res.json(transaction);
   } catch (err) {
+    if (err && (err as any).code) throw err;
     const message =
       err instanceof Error ? err.message : "Failed to update admin notes";
 
@@ -979,6 +984,7 @@ export const searchTransactionsHandler = async (
 
     return res.json(body);
   } catch (error) {
+    if (error && (error as any).code) throw error;
     console.error("Phone number search error:", error);
     throw createError(ERROR_CODES.INTERNAL_ERROR, null, {
       error: "Failed to search transactions",
@@ -1170,6 +1176,7 @@ export const updateMetadataHandler = async (req: Request, res: Response) => {
 
     return res.json(transaction);
   } catch (err) {
+    if (err && (err as any).code) throw err;
     const message =
       err instanceof Error ? err.message : "Failed to update metadata";
 
@@ -1223,6 +1230,7 @@ export const patchMetadataHandler = async (req: Request, res: Response) => {
 
     return res.json(transaction);
   } catch (err) {
+    if (err && (err as any).code) throw err;
     const message =
       err instanceof Error ? err.message : "Failed to patch metadata";
 
@@ -1265,6 +1273,7 @@ export const deleteMetadataKeysHandler = async (
 
     return res.json(transaction);
   } catch (err) {
+    if (err && (err as any).code) throw err;
     console.error("Failed to delete metadata keys:", err);
 
     throw createError(
@@ -1299,6 +1308,7 @@ export const searchByMetadataHandler = async (req: Request, res: Response) => {
     const transactions = await transactionModel.findByMetadata(filter);
     return res.json({ data: transactions, total: transactions.length });
   } catch (err) {
+    if (err && (err as any).code) throw err;
     console.error("Metadata search error:", err);
     throw createError(
       ERROR_CODES.INTERNAL_ERROR,

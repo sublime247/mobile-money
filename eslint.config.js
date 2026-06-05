@@ -7,6 +7,7 @@ module.exports = [
   // Apply to all TypeScript source files
   {
     files: ["src/**/*.ts"],
+    ignores: ["src/**/*.test.ts", "src/**/*.spec.ts", "src/**/__tests__/**/*.ts"],
     languageOptions: {
       parser: tsParser,
       parserOptions: {

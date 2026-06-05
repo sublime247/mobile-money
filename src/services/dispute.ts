@@ -72,9 +72,41 @@ interface NotificationPayload {
   metadata?: Record<string, unknown>;
 }
 
-function sendNotification(payload: NotificationPayload): void {
-  // TODO: replace with real delivery (email, SMS, webhook, etc.)
-  console.log("[DisputeNotification]", JSON.stringify(payload));
+async function sendNotification(payload: NotificationPayload): Promise<void> {
+  // Import notification router service for proper multi-channel delivery
+  const { notificationRouter } = await import("./notificationRouter");
+  const logger = await import("../utils/logger").then(m => m.default);
+  
+  try {
+    // Use notification router to send via email, SMS, webhook as configured
+    await notificationRouter.sendDisputeNotification({
+      disputeId: payload.disputeId,
+      transactionId: payload.transactionId,
+      event: payload.event,
+      status: payload.status,
+      message: payload.message,
+      metadata: payload.metadata,
+    });
+    
+    logger.info(
+      {
+        event: payload.event,
+        disputeId: payload.disputeId,
+        transactionId: payload.transactionId,
+        status: payload.status,
+      },
+      'Dispute notification sent'
+    );
+  } catch (error) {
+    logger.error(
+      {
+        error,
+        disputeId: payload.disputeId,
+        event: payload.event,
+      },
+      'Failed to send dispute notification'
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------

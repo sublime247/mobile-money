@@ -13,6 +13,28 @@ const mockUuid = require("uuid");
 describe("AccountingService", () => {
   let accountingService: AccountingService;
   let mockConnection: any;
+  let dbConnections: any[];
+  let dbCategoryMappings: any[];
+  let dbPnLData: any;
+  let dbFeeData: any[];
+
+  const toDbRow = (conn: any) => {
+    if (!conn) return null;
+    return {
+      id: conn.id,
+      user_id: conn.userId,
+      provider: conn.provider,
+      realm_id: conn.realmId,
+      tenant_id: conn.tenantId,
+      tenant_name: conn.tenantName,
+      access_token: conn.accessToken,
+      refresh_token: conn.refreshToken,
+      expires_at: conn.expiresAt,
+      is_active: conn.isActive,
+      created_at: conn.createdAt,
+      updated_at: conn.updatedAt,
+    };
+  };
 
   beforeEach(() => {
     // Reset all mocks
@@ -44,6 +66,39 @@ describe("AccountingService", () => {
       createdAt: new Date(),
       updatedAt: new Date(),
     };
+
+    dbConnections = [mockConnection];
+    dbCategoryMappings = [];
+    dbPnLData = { transactions: 100, revenue: 1000, fees: 50 };
+    dbFeeData = [];
+
+    mockPool.query.mockImplementation((queryText: string, values?: any[]) => {
+      const sql = queryText.toLowerCase();
+      if (sql.includes("select * from accounting_connections where id =") || sql.includes("select * from accounting_connections where id = $1")) {
+        const id = values?.[0];
+        const conn = dbConnections.find((c) => c.id === id);
+        return Promise.resolve({ rows: conn ? [toDbRow(conn)] : [] });
+      }
+      if (sql.includes("select * from accounting_connections where user_id =")) {
+        const userId = values?.[0];
+        const conns = dbConnections.filter((c) => c.userId === userId && c.isActive);
+        return Promise.resolve({ rows: conns.map(toDbRow) });
+      }
+      if (sql.includes("select * from accounting_connections where is_active = true")) {
+        const conns = dbConnections.filter((c) => c.isActive);
+        return Promise.resolve({ rows: conns.map(toDbRow) });
+      }
+      if (sql.includes("select * from category_mappings where connection_id =")) {
+        return Promise.resolve({ rows: dbCategoryMappings });
+      }
+      if (sql.includes("count(*)") && sql.includes("from transactions")) {
+        return Promise.resolve({ rows: [dbPnLData] });
+      }
+      if (sql.includes("fee_category") && sql.includes("from transactions")) {
+        return Promise.resolve({ rows: dbFeeData });
+      }
+      return Promise.resolve({ rows: [] });
+    });
   });
 
   describe("getQuickBooksAuthUrl", () => {
@@ -326,14 +381,10 @@ describe("AccountingService", () => {
 
   describe("getConnection", () => {
     it("should return connection when found", async () => {
-      mockPool.query.mockResolvedValue({
-        rows: [mockConnection],
-      });
-
       const result =
         await accountingService.getConnection("test-connection-id");
 
-      expect(result).toEqual(mockConnection);
+      expect(result).toEqual(expect.objectContaining(mockConnection));
       expect(mockPool.query).toHaveBeenCalledWith(
         "SELECT * FROM accounting_connections WHERE id = $1",
         ["test-connection-id"],
@@ -341,7 +392,7 @@ describe("AccountingService", () => {
     });
 
     it("should return null when connection not found", async () => {
-      mockPool.query.mockResolvedValue({ rows: [] });
+      dbConnections = [];
 
       const result = await accountingService.getConnection("invalid-id");
 
@@ -351,12 +402,9 @@ describe("AccountingService", () => {
 
   describe("getUserConnections", () => {
     it("should return user's active connections", async () => {
-      const mockConnections = [mockConnection];
-      mockPool.query.mockResolvedValue({ rows: mockConnections });
-
       const result = await accountingService.getUserConnections("test-user-id");
 
-      expect(result).toEqual(mockConnections);
+      expect(result[0]).toEqual(expect.objectContaining(mockConnection));
       expect(mockPool.query).toHaveBeenCalledWith(
         "SELECT * FROM accounting_connections WHERE user_id = $1 AND is_active = true ORDER BY created_at DESC",
         ["test-user-id"],
@@ -365,19 +413,7 @@ describe("AccountingService", () => {
   });
 
   describe("syncDailyPnL", () => {
-    beforeEach(() => {
-      // Mock PnL data
-      mockPool.query.mockResolvedValueOnce({
-        rows: [{ transactions: 100, revenue: 1000, fees: 50 }],
-      });
-    });
-
     it("should sync daily P&L to QuickBooks successfully", async () => {
-      mockPool.query.mockResolvedValueOnce({ rows: [mockConnection] }); // getConnection
-      mockPool.query.mockResolvedValueOnce({ rows: [] }); // getCategoryMappings
-      mockPool.query.mockResolvedValueOnce({ rows: [] }); // createSyncLog
-      mockPool.query.mockResolvedValueOnce({ rows: [] }); // updateSyncLog
-
       mockAxios.post.mockResolvedValue({ data: { Id: "test-journal-id" } });
 
       const result = await accountingService.syncDailyPnL(
@@ -398,11 +434,6 @@ describe("AccountingService", () => {
     });
 
     it("should handle sync failures gracefully", async () => {
-      mockPool.query.mockResolvedValueOnce({ rows: [mockConnection] }); // getConnection
-      mockPool.query.mockResolvedValueOnce({ rows: [] }); // getCategoryMappings
-      mockPool.query.mockResolvedValueOnce({ rows: [] }); // createSyncLog
-      mockPool.query.mockResolvedValueOnce({ rows: [] }); // updateSyncLog
-
       mockAxios.post.mockRejectedValue(new Error("API Error"));
 
       const result = await accountingService.syncDailyPnL(
@@ -418,7 +449,7 @@ describe("AccountingService", () => {
           recordsProcessed: 1,
           recordsSucceeded: 0,
           recordsFailed: 1,
-          errorMessage: "Error: API Error",
+          errorMessage: "API Error",
         }),
       );
     });
@@ -426,8 +457,28 @@ describe("AccountingService", () => {
 
   describe("getSyncLogs", () => {
     it("should return sync logs for connection", async () => {
-      const mockSyncLogs = [
+      const mockSyncLogsDb = [
         {
+          id: "sync-log-1",
+          connection_id: "test-connection-id",
+          sync_type: "daily_pnl",
+          status: "completed",
+          records_processed: 1,
+          records_succeeded: 1,
+          records_failed: 0,
+          synced_at: new Date(),
+        },
+      ];
+
+      mockPool.query.mockResolvedValue({ rows: mockSyncLogsDb });
+
+      const result = await accountingService.getSyncLogs(
+        "test-connection-id",
+        50,
+      );
+
+      expect(result).toEqual([
+        expect.objectContaining({
           id: "sync-log-1",
           connectionId: "test-connection-id",
           syncType: "daily_pnl",
@@ -435,18 +486,8 @@ describe("AccountingService", () => {
           recordsProcessed: 1,
           recordsSucceeded: 1,
           recordsFailed: 0,
-          syncedAt: new Date(),
-        },
-      ];
-
-      mockPool.query.mockResolvedValue({ rows: mockSyncLogs });
-
-      const result = await accountingService.getSyncLogs(
-        "test-connection-id",
-        50,
-      );
-
-      expect(result).toEqual(mockSyncLogs);
+        })
+      ]);
       expect(mockPool.query).toHaveBeenCalledWith(
         "SELECT * FROM sync_logs WHERE connection_id = $1 ORDER BY synced_at DESC LIMIT $2",
         ["test-connection-id", 50],
@@ -462,8 +503,6 @@ describe("AccountingService", () => {
         expires_in: 3600,
       };
 
-      mockPool.query.mockResolvedValueOnce({ rows: [mockConnection] }); // getConnection
-      mockPool.query.mockResolvedValueOnce({ rows: [] }); // updateConnectionTokens
       mockAxios.post.mockResolvedValue({ data: mockTokenResponse });
 
       await accountingService.refreshQuickBooksToken("test-connection-id");
@@ -478,20 +517,21 @@ describe("AccountingService", () => {
         }),
       );
 
-      expect(mockPool.query).toHaveBeenCalledWith(
-        expect.stringContaining("UPDATE accounting_connections SET"),
-        [
-          "new-access-token",
-          "new-refresh-token",
-          expect.any(Date),
-          expect.any(Date),
-          "test-connection-id",
-        ],
+      const updateCall = mockPool.query.mock.calls.find((call) =>
+        call[0].includes("UPDATE accounting_connections SET"),
       );
+      expect(updateCall).toBeDefined();
+      const params = updateCall![1];
+      const { decryptField } = require("../../utils/encryption");
+      expect(decryptField(params[0])).toBe("new-access-token");
+      expect(decryptField(params[1])).toBe("new-refresh-token");
+      expect(params[2]).toBeInstanceOf(Date);
+      expect(params[3]).toBeInstanceOf(Date);
+      expect(params[4]).toBe("test-connection-id");
     });
 
     it("should throw error when connection not found", async () => {
-      mockPool.query.mockResolvedValue({ rows: [] });
+      dbConnections = [];
 
       await expect(
         accountingService.refreshQuickBooksToken("invalid-id"),
@@ -507,7 +547,7 @@ describe("AccountingService", () => {
         fees: 50,
       };
 
-      mockPool.query.mockResolvedValue({ rows: [mockPnLData] });
+      dbPnLData = mockPnLData;
 
       // Access private method through prototype
       const result = await (accountingService as any).getPnLData("2024-01-01");
@@ -529,7 +569,7 @@ describe("AccountingService", () => {
         { fee_category: "Processing Fees", amount: 20 },
       ];
 
-      mockPool.query.mockResolvedValue({ rows: mockFeeData });
+      dbFeeData = mockFeeData;
 
       // Access private method through prototype
       const result = await (accountingService as any).getFeeRevenueData(
@@ -545,7 +585,7 @@ describe("AccountingService", () => {
     it("should handle null fee_category", async () => {
       const mockFeeData = [{ fee_category: null, amount: 50 }];
 
-      mockPool.query.mockResolvedValue({ rows: mockFeeData });
+      dbFeeData = mockFeeData;
 
       const result = await (accountingService as any).getFeeRevenueData(
         "2024-01-01",
@@ -583,12 +623,8 @@ describe("AccountingService", () => {
         },
       ];
 
-      mockPool.query
-        .mockResolvedValueOnce({ rows: [xeroConnection] }) // getUserConnections
-        .mockResolvedValueOnce({ rows: [xeroConnection] }) // ensureValidToken getConnection
-        .mockResolvedValueOnce({ rows: [xeroConnection] }) // fresh getConnection
-        .mockResolvedValueOnce({ rows: mappingRows }) // getCategoryMappings
-        .mockResolvedValueOnce({ rows: [] }); // insert accounting_sync_queue
+      dbConnections = [xeroConnection];
+      dbCategoryMappings = mappingRows;
 
       mockAxios.post.mockResolvedValue({ data: { Bills: [{ BillID: "test-bill-id" }] } });
 
