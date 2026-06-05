@@ -143,7 +143,7 @@
     "prom-client": "^15.1.3",
     "qrcode": "^1.5.3",
     "rate-limiter-flexible": "^11.0.1",
-    "redis": "^5.11.0",
+    "redis": "^6.0.0",
     "redlock": "^5.0.0-beta.2",
     "sharp": "^0.34.5",
     "spdy": "^4.0.2",
