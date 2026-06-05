@@ -85,7 +85,7 @@
     "@types/swagger-ui-express": "4.1.8",
     "africastalking": "^0.7.9",
     "amqp-connection-manager": "^5.0.0",
-    "amqplib": "^0.10.9",
+    "amqplib": "^2.0.1",
     "apollo-server-core": "^3.13.0",
     "apollo-server-express": "^3.13.0",
     "archiver": "^7.0.1",
