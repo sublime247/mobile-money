@@ -87,14 +87,12 @@ ALTER TABLE transactions RENAME TO transactions_legacy;
 CREATE TABLE transactions (
   id                       UUID           NOT NULL DEFAULT gen_random_uuid(),
   reference_number         VARCHAR(25)    NOT NULL,
-  type                     VARCHAR(10)    NOT NULL
-                             CHECK (type IN ('deposit', 'withdraw')),
+  type                     VARCHAR(10)    NOT NULL,
   amount                   DECIMAL(20, 7) NOT NULL,
   phone_number             TEXT           NOT NULL,
   provider                 VARCHAR(20)    NOT NULL,
   stellar_address          TEXT           NOT NULL,
-  status                   VARCHAR(20)    NOT NULL
-                             CHECK (status IN ('pending', 'completed', 'failed', 'cancelled')),
+  status                   VARCHAR(20)    NOT NULL,
   user_id                  UUID           REFERENCES users(id),
   tags                     TEXT[]         DEFAULT '{}',
   created_at               TIMESTAMP      NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -103,8 +101,7 @@ CREATE TABLE transactions (
   metadata                 JSONB          DEFAULT '{}',
   notes                    TEXT,
   admin_notes              TEXT,
-  webhook_delivery_status  VARCHAR(20)    NOT NULL DEFAULT 'pending'
-                             CHECK (webhook_delivery_status IN ('pending', 'delivered', 'failed', 'skipped')),
+  webhook_delivery_status  VARCHAR(20)    NOT NULL DEFAULT 'pending',
   webhook_last_attempt_at  TIMESTAMP,
   webhook_delivered_at     TIMESTAMP,
   webhook_last_error       TEXT,
@@ -116,7 +113,10 @@ CREATE TABLE transactions (
   idempotency_expires_at   TIMESTAMP,
   vault_id                 UUID,
   fee_category             VARCHAR(100)   DEFAULT 'General Fees',
-  location_metadata        JSONB          DEFAULT NULL
+  location_metadata        JSONB          DEFAULT NULL,
+  CONSTRAINT transactions_type_check CHECK (type IN ('deposit', 'withdraw')),
+  CONSTRAINT transactions_status_check CHECK (status IN ('pending', 'completed', 'failed', 'cancelled')),
+  CONSTRAINT transactions_webhook_delivery_status_check CHECK (webhook_delivery_status IN ('pending', 'delivered', 'failed', 'skipped'))
 ) PARTITION BY RANGE (created_at);
 
 -- ─────────────────────────────────────────────────────────────────────────────

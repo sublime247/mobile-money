@@ -3,8 +3,8 @@ import { queryRead, queryWrite } from "../../config/database";
 
 // Mock database functions
 jest.mock("../../config/database", () => ({
-  queryRead: jest.fn(),
-  queryWrite: jest.fn(),
+  queryRead: jest.fn().mockResolvedValue({ rows: [], rowCount: 0 }),
+  queryWrite: jest.fn().mockResolvedValue({ rows: [], rowCount: 0 }),
 }));
 
 describe("HighThroughputReconciliationService", () => {

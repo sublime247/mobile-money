@@ -158,9 +158,9 @@ export class HighThroughputReconciliationService {
           }
 
           const dbRecord = dbByReference.get(refNum);
-          matchedProviderRefs.add(refNum);
 
           if (dbRecord) {
+            matchedProviderRefs.add(refNum);
             const isMatch = this.checkMatch(dbRecord, normalized);
 
             if (isMatch) {
@@ -207,12 +207,22 @@ export class HighThroughputReconciliationService {
 
       csvStream
         .pipe(csvParser())
-        .pipe(transformStream)
+        .pipe(transformStream);
+
+      transformStream.resume();
+
+      transformStream
         .on("end", async () => {
           try {
             // Process remaining chunk
             if (chunk.length > 0) {
               chunk.length = 0;
+            }
+
+            // Flush remaining discrepancies
+            if (discrepancies.length > 0) {
+              await this.createAlertsForDiscrepancies(runId, discrepancies);
+              discrepancies.length = 0;
             }
 
             // Wait for all batch operations to complete
