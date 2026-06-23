@@ -1,6 +1,37 @@
 process.env.NODE_ENV = "test";
 process.env.DATABASE_URL ??= "postgresql://test_user:test_password@localhost:5432/test_db";
 process.env.REDIS_URL ??= "redis://localhost:6379";
+
+// Mock redis globally to prevent connection attempts in all test suites
+jest.mock("redis", () => ({
+  createClient: jest.fn(() => ({
+    on: jest.fn(),
+    connect: jest.fn().mockResolvedValue(undefined),
+    disconnect: jest.fn().mockResolvedValue(undefined),
+    quit: jest.fn().mockResolvedValue(undefined),
+    get: jest.fn(),
+    set: jest.fn(),
+    del: jest.fn(),
+    keys: jest.fn().mockResolvedValue([]),
+    ping: jest.fn().mockResolvedValue("PONG"),
+  })),
+}));
+
+// Mock ioredis used by bullmq
+jest.mock("ioredis", () => {
+  const EventEmitter = require("events");
+  const mockRedis = new EventEmitter();
+  mockRedis.connect = jest.fn().mockResolvedValue(undefined);
+  mockRedis.disconnect = jest.fn().mockResolvedValue(undefined);
+  mockRedis.quit = jest.fn().mockResolvedValue(undefined);
+  mockRedis.status = "close";
+  return {
+    __esModule: true,
+    default: jest.fn(() => mockRedis),
+    Redis: jest.fn(() => mockRedis),
+    Cluster: jest.fn(() => mockRedis),
+  };
+});
 process.env.STELLAR_ISSUER_SECRET ??=
   "SDUHELR2QJTQH24GZKNCT5NBWJ2FCGMPRGKED5Y4REUZK4XCM73JMM4V";
 process.env.JWT_SECRET ??= "test-jwt-secret";
@@ -99,14 +130,23 @@ try {
   console.error("Failed to patch Express for async errors in tests:", e);
 }
 
-import { connectRedis, disconnectRedis } from "../src/config/redis";
+let redisConnected = false;
 
 beforeAll(async () => {
-  await connectRedis();
+  try {
+    const { connectRedis } = await import("../src/config/redis");
+    await connectRedis();
+    redisConnected = true;
+  } catch {
+    console.warn("Redis unavailable — skipping Redis connection in tests");
+  }
 });
 
 afterAll(async () => {
-  await disconnectRedis();
+  if (redisConnected) {
+    const { disconnectRedis } = await import("../src/config/redis");
+    await disconnectRedis();
+  }
 });
 
 

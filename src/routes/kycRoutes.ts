@@ -7,6 +7,9 @@ import { uploadToS3 } from "../services/s3Upload";
 import { Request, Response } from "express";
 import { ERROR_CODES } from "../constants/errorCodes";
 import { createError } from "../middleware/errorHandler";
+import { createFileSignerFromEnv, KmsFileSigner, FileSignature } from "../services/stellar/hsmService";
+import { GetObjectCommand } from "@aws-sdk/client-s3";
+import { getS3Client, s3Config } from "../config/s3";
 
 const COMPLIANCE_OFFICER_ROLE = "compliance_officer";
 const REDACTED_FILE_URL = "[REDACTED]";
@@ -255,6 +258,7 @@ export const createKYCRoutes = (db: Pool): Router => {
           document_type,
           document_side,
           file_url,
+          s3_key,
           original_filename,
           file_size,
           mime_type,
@@ -266,8 +270,26 @@ export const createKYCRoutes = (db: Pool): Router => {
 
       const result = await db.query(query, [userId]);
       const canViewRaw = Boolean(res.locals.canViewRawKycUploads);
-      const documents = result.rows.map((row) =>
-        maskFileUrl(row, canViewRaw),
+      const documents = await Promise.all(
+        result.rows.map(async (row) => {
+          const doc = maskFileUrl(row, canViewRaw);
+          let hsmSigned = false;
+          if (row.s3_key) {
+            try {
+              const s3Client = getS3Client();
+              const head = await s3Client.send(
+                new GetObjectCommand({
+                  Bucket: s3Config.bucket,
+                  Key: row.s3_key,
+                }),
+              );
+              hsmSigned = !!head.Metadata?.["hsm-signature"];
+            } catch {
+              // S3 object not accessible — skip verification status
+            }
+          }
+          return { ...doc, hsm_signed: hsmSigned };
+        }),
       );
 
       res.json({
@@ -280,6 +302,114 @@ export const createKYCRoutes = (db: Pool): Router => {
         throw error;
       }
       throw createError(ERROR_CODES.INTERNAL_ERROR, "Failed to retrieve documents", {
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  },
+);
+
+  // Verify HSM signature for a specific document
+ router.get(
+  "/documents/:id/verify",
+  async (req: Request, res: Response) => {
+    try {
+      const userId = req.jwtUser?.userId;
+      if (!userId) {
+        throw createError(ERROR_CODES.UNAUTHORIZED, "User not authenticated", {
+          error: "User not authenticated",
+        });
+      }
+
+      const { id } = req.params;
+
+      const docQuery = `
+        SELECT s3_key, original_filename, file_size
+        FROM kyc_documents
+        WHERE id = $1 AND user_id = $2
+      `;
+      const docResult = await db.query(docQuery, [id, userId]);
+      if (docResult.rows.length === 0) {
+        throw createError(ERROR_CODES.NOT_FOUND, "Document not found", {
+          error: "Document not found",
+        });
+      }
+
+      const s3Key = docResult.rows[0].s3_key;
+      if (!s3Key) {
+        return res.json({ success: true, data: { verified: false, reason: "No S3 key stored" } });
+      }
+
+      // Fetch the file and its metadata from S3
+      const s3Client = getS3Client();
+      const s3Object = await s3Client.send(
+        new GetObjectCommand({
+          Bucket: s3Config.bucket,
+          Key: s3Key,
+        }),
+      );
+
+      const meta = s3Object.Metadata ?? {};
+      const storedSignature = meta["hsm-signature"];
+      const storedKeyId = meta["hsm-key-id"];
+      const storedAlgorithm = meta["hsm-algorithm"];
+      const storedDigest = meta["hsm-digest"];
+      const storedSignedAt = meta["hsm-signed-at"];
+
+      if (!storedSignature || !storedKeyId || !storedAlgorithm) {
+        return res.json({
+          success: true,
+          data: { verified: false, reason: "No HSM signature found on stored object" },
+        });
+      }
+
+      // Read the full file body
+      const bodyStream = s3Object.Body;
+      if (!bodyStream) {
+        return res.json({ success: true, data: { verified: false, reason: "Unable to read file content" } });
+      }
+      const chunks: Buffer[] = [];
+      for await (const chunk of bodyStream as AsyncIterable<Buffer>) {
+        chunks.push(chunk);
+      }
+      const fileBuffer = Buffer.concat(chunks);
+
+      // Build FileSignature from stored metadata
+      const fileSignature: FileSignature = {
+        signature: storedSignature,
+        keyId: storedKeyId,
+        algorithm: storedAlgorithm,
+        digest: storedDigest || "",
+        signedAt: storedSignedAt || "",
+      };
+
+      // Verify using KMS
+      const fileSigner = createFileSignerFromEnv();
+      if (!fileSigner) {
+        return res.json({
+          success: true,
+          data: { verified: false, reason: "HSM file signer not configured (HSM_FILE_KMS_KEY_ID)" },
+        });
+      }
+
+      const { valid, digestMatch } = await fileSigner.verifyWithDigestCheck(fileBuffer, fileSignature);
+
+      res.json({
+        success: true,
+        data: {
+          verified: valid,
+          digest_match: digestMatch,
+          algorithm: storedAlgorithm,
+          key_id: storedKeyId,
+          signed_at: storedSignedAt,
+          document_id: id,
+        },
+      });
+    } catch (error) {
+      console.error("Document verification error:", error);
+      if ((error as any).statusCode) {
+        throw error;
+      }
+      throw createError(ERROR_CODES.INTERNAL_ERROR, "Failed to verify document signature", {
         message: error instanceof Error ? error.message : "Unknown error",
       });
     }
