@@ -18,7 +18,7 @@
     "figlet": "^1.7.0"
   },
   "devDependencies": {
-    "@types/cli-table3": "^3.0.1",
+    "@types/cli-table": "^0.3.4",
     "@types/figlet": "^1.5.8",
     "@types/node": "^20.0.0",
     "tsx": "^4.0.0",

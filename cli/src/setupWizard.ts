@@ -6,6 +6,7 @@ import { CliConfig } from "./config";
 export interface SetupAnswers {
   apiUrl: string;
   apiKey: string;
+  telemetry: boolean;
   overwrite: boolean;
 }
 
@@ -13,6 +14,7 @@ export function buildMomorcContent(config: CliConfig): string {
   return [
     `MOMO_API_URL=${config.apiUrl}`,
     `MOMO_API_KEY=${config.apiKey}`,
+    `MOMO_TELEMETRY=${config.telemetry}`,
     "",
   ].join("\n");
 }
@@ -66,6 +68,12 @@ export async function runSetupWizard(): Promise<CliConfig> {
     },
     {
       type: "confirm",
+      name: "telemetry",
+      message: "Enable anonymous telemetry collection?",
+      default: process.env.MOMO_TELEMETRY !== "false",
+    },
+    {
+      type: "confirm",
       name: "overwrite",
       message: exists
         ? `cli/.momorc already exists. Overwrite it?`
@@ -82,6 +90,7 @@ export async function runSetupWizard(): Promise<CliConfig> {
   const config: CliConfig = {
     apiUrl: answers.apiUrl,
     apiKey: answers.apiKey,
+    telemetry: answers.telemetry,
   };
 
   await fs.writeFile(momorcPath, buildMomorcContent(config), "utf8");

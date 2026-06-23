@@ -89,5 +89,22 @@ npm run dev -- profile delete staging
 The CLI uses credentials in the following order of priority:
 
 1. Active profile (set via `profile use`)
-2. Environment variables (`MOMO_API_KEY`, `MOMO_API_URL`)
+2. Environment variables (`MOMO_API_KEY`, `MOMO_API_URL`, `MOMO_TELEMETRY`)
 3. `.momorc` file
+
+### Telemetry Configuration
+
+You can enable or disable anonymous CLI telemetry collection using:
+
+```bash
+npm run dev -- config telemetry on
+npm run dev -- config telemetry off
+npm run dev -- config telemetry status
+```
+
+If you prefer to configure it manually, add one of the following lines to `cli/.momorc`:
+
+```bash
+MOMO_TELEMETRY=true
+MOMO_TELEMETRY=false
+```
