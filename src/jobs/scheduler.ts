@@ -15,6 +15,7 @@ import { runProviderHealthCheckJob } from "./providerHealthCheck";
 import { runKycTierUpgradeJob } from "./kycTierUpgradeJob";
 import { runLiquidityRebalanceJob } from "./liquidityRebalanceJob";
 import { runCrossChainMonitorJob } from "./crossChainMonitorJob";
+import { runDailySettlementJob } from "./dailySettlementJob";
 
 interface JobConfig {
   name: string;
@@ -76,6 +77,12 @@ const JOBS: JobConfig[] = [
     // Every 5 minutes - polls provider APIs for uptime and alerts on outages
     schedule: process.env.PROVIDER_HEALTH_CHECK_CRON || "*/5 * * * *",
     handler: runProviderHealthCheckJob,
+  },
+  {
+    name: "daily-settlement",
+    // Daily at 01:00 AM UTC — sweeps merchant fees and settles provider balances
+    schedule: process.env.DAILY_SETTLEMENT_CRON || "0 1 * * *",
+    handler: runDailySettlementJob,
   },
   {
     name: "monthly-invoice",
