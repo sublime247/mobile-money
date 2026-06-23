@@ -78,6 +78,7 @@
     "@bull-board/api": "^6.20.6",
     "@bull-board/express": "^6.20.6",
     "@node-saml/passport-saml": "^5.1.0",
+    "@opentelemetry/api": "^1.9.1",
     "@sendgrid/mail": "^8.1.6",
     "@sentry/node": "^10.47.0",
     "@types/passport": "^1.0.17",

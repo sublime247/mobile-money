@@ -2,6 +2,7 @@
 import { Command } from "commander";
 import { registerAuthCommand } from "./commands/auth";
 import { registerConfigCommand } from "./commands/config";
+import { registerProfileCommand } from "./commands/profile";
 import { registerRetryCommand } from "./commands/retry";
 import { registerStatusCommand } from "./commands/status";
 import { registerDashboardCommand } from "./commands/dashboard";
@@ -15,6 +16,7 @@ registerAuthCommand(program);
 registerStatusCommand(program);
 registerRetryCommand(program);
 registerConfigCommand(program);
+registerProfileCommand(program);
 registerDashboardCommand(program);
 
 program.parseAsync(process.argv).catch((err: unknown) => {
