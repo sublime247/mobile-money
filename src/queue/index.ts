@@ -3,6 +3,8 @@ import { transactionQueue } from "./transactionQueue";
 import { transactionWorker, closeWorker } from "./worker";
 import { syncQueue } from "./syncQueue";
 import { syncWorker, closeSyncWorker } from "./syncWorker";
+import { accountingRetryQueue, closeAccountingRetryQueue } from "./accountingRetryQueue";
+import { accountingRetryWorker, closeAccountingRetryWorker } from "./accountingRetryWorker";
 import { connection } from "./config";
 import { startProviderBalanceAlertWorker } from "./providerBalanceAlertWorker";
 import { scheduleProviderBalanceAlertJob } from "./providerBalanceAlertQueue";
@@ -12,8 +14,10 @@ export async function shutdownQueue(): Promise<void> {
   await Promise.all([
     closeWorker().catch(() => undefined),
     closeSyncWorker().catch(() => undefined),
+    closeAccountingRetryWorker().catch(() => undefined),
     transactionQueue.close().catch(() => undefined),
     syncQueue.close().catch(() => undefined),
+    accountingRetryQueue.close().catch(() => undefined),
   ]);
 }
 
@@ -57,6 +61,24 @@ export {
 export { queueOptions } from "./config";
 export { deadLetterQueue, DLQ_NAME, capturePersistentFailure } from "./dlq";
 export { startProviderBalanceAlertWorker, scheduleProviderBalanceAlertJob };
+
+// Accounting Retry Queue Exports
+export {
+  accountingRetryQueue,
+  addAccountingRetryJob,
+  getAccountingRetryJobById,
+  getAccountingRetryQueueStats,
+  retryAccountingOperation,
+  closeAccountingRetryQueue,
+} from "./accountingRetryQueue";
+export type {
+  AccountingRetryJobData,
+  AccountingRetryJobResult,
+} from "./accountingRetryQueue";
+export {
+  accountingRetryWorker,
+  closeAccountingRetryWorker,
+} from "./accountingRetryWorker";
 
 // Account Merge Queue Exports
 export {
