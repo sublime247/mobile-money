@@ -58,21 +58,6 @@ echo "  All benchmarks complete."
 echo "  Results in: $RESULTS_DIR"
 echo "========================================"
 
-# Print summary table
+# Format results into a clean Markdown report
 echo ""
-echo "| Service | RPS Target | Throughput | P50 (ms) | P95 (ms) | P99 (ms) | Errors |"
-echo "|---------|-----------|------------|----------|----------|----------|--------|"
-
-for label in node go; do
-  for rps in "${RPS_LEVELS[@]}"; do
-    f="$RESULTS_DIR/${label}-${rps}rps.json"
-    if [ -f "$f" ]; then
-      throughput=$(jq -r '.metrics.http_reqs.values.rate // "N/A"' "$f" 2>/dev/null | xargs printf "%.1f")
-      p50=$(jq -r '.metrics.http_req_duration.values["p(50)"] // "N/A"' "$f" 2>/dev/null | xargs printf "%.2f")
-      p95=$(jq -r '.metrics.http_req_duration.values["p(95)"] // "N/A"' "$f" 2>/dev/null | xargs printf "%.2f")
-      p99=$(jq -r '.metrics.http_req_duration.values["p(99)"] // "N/A"' "$f" 2>/dev/null | xargs printf "%.2f")
-      err=$(jq -r '.metrics.error_rate.values.rate // 0' "$f" 2>/dev/null | awk '{printf "%.2f%%", $1*100}')
-      echo "| $label | $rps | $throughput | $p50 | $p95 | $p99 | $err |"
-    fi
-  done
-done
+node "$SCRIPT_DIR/format-results.js"
