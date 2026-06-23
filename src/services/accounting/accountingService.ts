@@ -26,6 +26,50 @@ export class ValidationError extends Error {
   }
 }
 
+export interface DepositSalesReceiptPayload {
+  transactionId: string;
+  status: string;
+  amount: number | string;
+  currency?: string;
+  customerName?: string;
+  customerId?: string;
+  referenceNumber?: string;
+  completedAt?: string | Date;
+  memo?: string;
+  lineDescription?: string;
+}
+
+export interface QuickBooksSalesReceiptLine {
+  Description: string;
+  Amount: number;
+  DetailType: "SalesItemLineDetail";
+  SalesItemLineDetail: {
+    Qty: number;
+    UnitPrice: number;
+    ItemRef: { value: string; name: string };
+  };
+}
+
+export interface QuickBooksSalesReceipt {
+  CustomerRef: { value: string; name?: string };
+  Line: QuickBooksSalesReceiptLine[];
+  TotalAmt: number;
+  CurrencyRef?: { value: string };
+  TxnDate?: string;
+  PrivateNote?: string;
+  PaymentRefNum?: string;
+}
+
+export interface SalesReceiptSyncResult {
+  transactionId: string;
+  synced: boolean;
+  skipped: boolean;
+  provider: "quickbooks";
+  receiptId?: string;
+  receipt: QuickBooksSalesReceipt | null;
+  reason?: string;
+}
+
 export class AccountingService {
   private qboFailAttempts = 0;
   private xeroFailAttempts = 0;
@@ -91,6 +135,105 @@ export class AccountingService {
     console.log(
       `[QuickBooksService] Successfully synced transaction ${transactionId} to QuickBooks.`,
     );
+  }
+
+  private buildQuickBooksSalesReceipt(
+    payload: DepositSalesReceiptPayload,
+  ): QuickBooksSalesReceipt {
+    const amount = Number(payload.amount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new ValidationError(
+        "QuickBooks sales receipt amount must be greater than zero.",
+      );
+    }
+
+    const customerName = payload.customerName || "Mobile Money Customer";
+    const receipt: QuickBooksSalesReceipt = {
+      CustomerRef: {
+        value:
+          payload.customerId ||
+          process.env.QUICKBOOKS_DEFAULT_CUSTOMER_ID ||
+          "mobile-money-customer",
+        name: customerName,
+      },
+      Line: [
+        {
+          Description:
+            payload.lineDescription || "Completed mobile money deposit",
+          Amount: amount,
+          DetailType: "SalesItemLineDetail",
+          SalesItemLineDetail: {
+            Qty: 1,
+            UnitPrice: amount,
+            ItemRef: {
+              value:
+                process.env.QUICKBOOKS_DEPOSIT_ITEM_ID ||
+                "mobile-money-deposit",
+              name:
+                process.env.QUICKBOOKS_DEPOSIT_ITEM_NAME ||
+                "Mobile Money Deposit",
+            },
+          },
+        },
+      ],
+      TotalAmt: amount,
+      PrivateNote:
+        payload.memo || `Deposit transaction ${payload.transactionId}`,
+      PaymentRefNum: payload.referenceNumber || payload.transactionId,
+    };
+
+    if (payload.currency) {
+      receipt.CurrencyRef = { value: payload.currency };
+    }
+
+    if (payload.completedAt) {
+      receipt.TxnDate = new Date(payload.completedAt)
+        .toISOString()
+        .slice(0, 10);
+    }
+
+    return receipt;
+  }
+
+  /**
+   * Creates a QuickBooks sales receipt once a deposit transaction reaches
+   * COMPLETED. Non-completed transactions are deliberately skipped so retry
+   * workers can call this method idempotently during status transitions.
+   */
+  async syncCompletedDepositSalesReceipt(
+    payload: DepositSalesReceiptPayload,
+  ): Promise<SalesReceiptSyncResult> {
+    if (payload.status !== "COMPLETED") {
+      return {
+        transactionId: payload.transactionId,
+        provider: "quickbooks",
+        synced: false,
+        skipped: true,
+        receipt: null,
+        reason: `transaction status ${payload.status} is not COMPLETED`,
+      };
+    }
+
+    const receipt = this.buildQuickBooksSalesReceipt(payload);
+    await this.syncToQuickBooks(payload.transactionId, {
+      ...payload,
+      salesReceipt: receipt,
+      quickBooksEntity: "SalesReceipt",
+    });
+
+    const receiptId = `qbo-sales-receipt-${payload.transactionId}`;
+    console.log(
+      `[QuickBooksService] Logged sales receipt ${receiptId} for completed deposit ${payload.transactionId}.`,
+    );
+
+    return {
+      transactionId: payload.transactionId,
+      provider: "quickbooks",
+      synced: true,
+      skipped: false,
+      receiptId,
+      receipt,
+    };
   }
 
   /**
