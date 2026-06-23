@@ -93,4 +93,29 @@ class MemoryCacheInterceptorTest {
 
         server.shutdown()
     }
+
+    @Test
+    fun `test offline cache fallback`() {
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setBody("{\"status\":\"ok\"}").addHeader("Content-Type", "application/json"))
+        server.start()
+
+        val client = OkHttpClient.Builder()
+            .addInterceptor(MemoryCacheInterceptor())
+            .build()
+
+        val request = Request.Builder().url(server.url("/offline-test")).build()
+
+        // First call - should go to server and be cached
+        val response1 = client.newCall(request).execute()
+        assertEquals("{\"status\":\"ok\"}", response1.body?.string())
+        assertEquals(1, server.requestCount)
+
+        // Shutdown server to simulate offline / network unreachable
+        server.shutdown()
+
+        // Second call - should return cached response because server is offline
+        val response2 = client.newCall(request).execute()
+        assertEquals("{\"status\":\"ok\"}", response2.body?.string())
+    }
 }
