@@ -19,8 +19,14 @@ jest.mock("../../src/config/redis", () => ({
   },
 }));
 
+jest.mock("../../src/utils/fees", () => ({
+  getThirtyDayVolume: jest.fn().mockResolvedValue(0),
+  mapVolumeToTier: jest.fn().mockReturnValue({ discountPercent: 0 }),
+}));
+
 import { pool } from "../../src/config/database";
 import { redisClient } from "../../src/config/redis";
+import { getThirtyDayVolume, mapVolumeToTier } from "../../src/utils/fees";
 import {
   FeeStrategyEngine,
   FeeStrategy,
@@ -29,6 +35,8 @@ import {
 
 const mockPool = pool as jest.Mocked<typeof pool>;
 const mockRedis = redisClient as jest.Mocked<typeof redisClient>;
+const mockGetThirtyDayVolume = getThirtyDayVolume as jest.Mock;
+const mockMapVolumeToTier = mapVolumeToTier as jest.Mock;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -511,4 +519,58 @@ describe("FeeStrategyEngine", () => {
       expect(mockRedis.del).toHaveBeenCalled();
     });
   });
+
+  // ── VIP Fee Discounts ──────────────────────────────────────────────────────
+
+  describe("VIP Fee Discounts", () => {
+    it("applies VIP discount to strategy fee when user has volume", async () => {
+      const strategy = makeStrategy({
+        name: "Standard 2%",
+        scope: "global",
+        priority: 100,
+        feePercentage: 2.0,
+        feeMinimum: 50,
+        feeMaximum: 5000,
+      });
+
+      mockPool.query.mockResolvedValueOnce(pgResult([strategy]) as any);
+      mockGetThirtyDayVolume.mockResolvedValueOnce(1500); // qualifies for tier/discount
+      mockMapVolumeToTier.mockReturnValueOnce({ discountPercent: 10 }); // 10% discount
+
+      // 10,000 * 2% = 200 fee. With 10% discount, 200 * 0.9 = 180 fee.
+      const result = await engine.calculateFee({ amount: 10_000, userId: USER_ID });
+
+      expect(result.fee).toBe(180);
+      expect(result.total).toBe(10180);
+      expect(result.breakdown.clampedFee).toBe(180);
+      expect(result.breakdown.rawFee).toBe(180);
+    });
+
+    it("applies VIP discount to minimum fee if minimum is triggered", async () => {
+      const strategy = makeStrategy({
+        name: "Standard 2% with Min 100",
+        scope: "global",
+        priority: 100,
+        feePercentage: 2.0,
+        feeMinimum: 100,
+        feeMaximum: 5000,
+      });
+
+      mockPool.query.mockResolvedValueOnce(pgResult([strategy]) as any);
+      mockGetThirtyDayVolume.mockResolvedValueOnce(1500);
+      mockMapVolumeToTier.mockReturnValueOnce({ discountPercent: 10 });
+
+      // Amount: 1,000. 1,000 * 2% = 20 (raw). Min: 100.
+      // With 10% discount:
+      // Discounted raw: 20 * 0.9 = 18.
+      // Discounted min: 100 * 0.9 = 90.
+      // Since discounted raw (18) < discounted min (90), final fee is 90.
+      const result = await engine.calculateFee({ amount: 1000, userId: USER_ID });
+
+      expect(result.fee).toBe(90);
+      expect(result.total).toBe(1090);
+      expect(result.breakdown.appliedMinimum).toBe(90);
+    });
+  });
 });
+
