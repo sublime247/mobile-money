@@ -15,6 +15,56 @@ import { addTransactionJob } from "../queue/index.js";
 
 dotenv.config();
 
+const hashRegex = /\b([0-9a-fA-F]{64})\b/g;
+
+function formatTransactionHashes(text: string): string {
+  const network =
+    process.env.STELLAR_NETWORK === "mainnet" ||
+    process.env.STELLAR_NETWORK === "public"
+      ? "public"
+      : "testnet";
+
+  return text.replace(hashRegex, (match) => {
+    const url = `https://stellar.expert/explorer/${network}/tx/${match}`;
+    return `\x1b]8;;${url}\x1b\\\x1b[36m\x1b[1m${match}\x1b[0m\x1b]8;;\x1b\\`;
+  });
+}
+
+// Intercept process.stdout.write and process.stderr.write to automatically format hashes
+const originalStdoutWrite = process.stdout.write;
+const originalStderrWrite = process.stderr.write;
+
+process.stdout.write = function (
+  chunk: any,
+  encodingOrCb?: any,
+  cb?: any
+): boolean {
+  if (typeof chunk === "string") {
+    chunk = formatTransactionHashes(chunk);
+  } else if (chunk instanceof Uint8Array) {
+    const text = new TextDecoder().decode(chunk);
+    const formatted = formatTransactionHashes(text);
+    chunk = new TextEncoder().encode(formatted);
+  }
+  return originalStdoutWrite.call(process.stdout, chunk, encodingOrCb, cb);
+};
+
+process.stderr.write = function (
+  chunk: any,
+  encodingOrCb?: any,
+  cb?: any
+): boolean {
+  if (typeof chunk === "string") {
+    chunk = formatTransactionHashes(chunk);
+  } else if (chunk instanceof Uint8Array) {
+    const text = new TextDecoder().decode(chunk);
+    const formatted = formatTransactionHashes(text);
+    chunk = new TextEncoder().encode(formatted);
+  }
+  return originalStderrWrite.call(process.stderr, chunk, encodingOrCb, cb);
+};
+
+
 const isTest = process.env.NODE_ENV === "test";
 const colors = {
   reset: isTest ? "" : "\x1b[0m",

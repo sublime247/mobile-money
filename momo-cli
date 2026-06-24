@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Mobile Money Admin CLI Wrapper
 # Usage: ./momo-cli retry-batch <batch_id>
+# Note: Automatically wraps transaction hashes in clickable StellarExpert links.
 
 # Set current working directory to project root
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
