@@ -536,3 +536,11 @@ export class StellarService {
     }
   }
 }
+
+// Added startEventSubscription to initialize Horizon event subscription
+import { startEventSubscription } from "./escrowEventSubscriber";
+
+// Export function to start event subscription (called from application bootstrap)
+export function initializeEscrowEventProcessing() {
+  startEventSubscription();
+}

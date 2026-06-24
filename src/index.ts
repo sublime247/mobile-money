@@ -29,6 +29,7 @@ import {
   vaultRoutesV1,
 } from "./routes/v1";
 import { transactionRoutes } from "./routes/transactions";
+import { initializeEscrowEventProcessing } from "./services/stellar/stellarService";
 import { authRoutes } from "./routes/auth";
 import { bulkRoutes } from "./routes/bulk";
 import { transactionDisputeRoutes, disputeRoutes } from "./routes/disputes";
@@ -631,6 +632,7 @@ async function initializeRuntime(): Promise<void> {
 
 if (process.env.NODE_ENV !== "test") {
   void initializeRuntime();
+  initializeEscrowEventProcessing();
 }
 
 export default app;
