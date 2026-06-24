@@ -140,6 +140,20 @@ export const configSchema = convict({
         env: "ORANGE_MADAGASCAR_CALLBACK_SIGNATURE_HEADER",
       },
     },
+    smsPortal: {
+      minAmount: {
+        doc: "Minimum transaction amount for SMS Portal (various currencies)",
+        format: "nat",
+        default: 100,
+        env: "SMS_PORTAL_MIN_AMOUNT",
+      },
+      maxAmount: {
+        doc: "Maximum transaction amount for SMS Portal (various currencies)",
+        format: "nat",
+        default: 5000000,
+        env: "SMS_PORTAL_MAX_AMOUNT",
+      },
+    },
   },
 
   // Transaction Limits by KYC Level

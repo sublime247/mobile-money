@@ -4,7 +4,7 @@ import { getConfigValue } from "../../../config/appConfig";
 
 // ─── Public types ─────────────────────────────────────────────────────────────
 
-export type ProviderName = "mtn" | "airtel" | "orange" | "orange_madagascar";
+export type ProviderName = "mtn" | "airtel" | "orange" | "orange_madagascar" | "sms_portal";
 export type ProviderStatus = "up" | "down";
 
 export interface ProviderHealth {
