@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import crypto from 'crypto';
 import { Pool } from 'pg';
 import KYCService, { KYCLevel, DocumentType } from '../services/kyc';
 import { z } from 'zod';
@@ -434,21 +435,14 @@ export class KYCController {
   handleWebhook = async (req: Request, res: Response) => {
     try {
       const webhookSecret = process.env.KYC_WEBHOOK_SECRET;
+      const signature = req.headers["x-onfido-signature"] as string | undefined;
 
-      // Verify webhook signature if secret is configured
-      if (webhookSecret && req.headers["x-onfido-signature"]) {
-        const signature = req.headers["x-onfido-signature"] as string;
-        const isValid = this.verifyWebhookSignature(
-          JSON.stringify(req.body),
-          signature,
-          webhookSecret
-        );
-        
+      if (webhookSecret && signature) {
+        const payload = this.getRawBody(req);
+        const isValid = this.verifyWebhookSignature(payload, signature, webhookSecret);
+
         if (!isValid) {
-          logger.warn(
-            { signature, headers: req.headers },
-            'Invalid webhook signature'
-          );
+          logger.warn({ signature, headers: req.headers }, 'Invalid webhook signature');
           throw createError(
             ERROR_CODES.UNAUTHORIZED,
             "Invalid webhook signature"
@@ -462,6 +456,9 @@ export class KYCController {
       res.status(200).json({ success: true });
     } catch (error) {
       logger.error({ error }, 'Handle webhook error');
+      if ((error as any)?.statusCode) {
+        throw error;
+      }
       throw createError(ERROR_CODES.INTERNAL_ERROR, "Failed to handle webhook", {
         message: error instanceof Error ? error.message : "Unknown error",
       });
@@ -481,13 +478,15 @@ export class KYCController {
     secret: string
   ): boolean {
     try {
-      const crypto = require('crypto');
       const expectedSignature = crypto
         .createHmac('sha256', secret)
         .update(payload)
         .digest('hex');
-      
-      // Use timing-safe comparison to prevent timing attacks
+
+      if (signature.length !== expectedSignature.length) {
+        return false;
+      }
+
       return crypto.timingSafeEqual(
         Buffer.from(signature),
         Buffer.from(expectedSignature)
@@ -496,6 +495,11 @@ export class KYCController {
       logger.error({ error }, 'Error verifying webhook signature');
       return false;
     }
+  }
+
+  private getRawBody(req: Request): string {
+    const rawBody = (req as Request & { rawBody?: Buffer }).rawBody;
+    return rawBody?.toString('utf8') ?? JSON.stringify(req.body ?? {});
   }
 
   // Private helper methods
@@ -508,6 +512,7 @@ export class KYCController {
       const query = `
         INSERT INTO kyc_applicants (user_id, applicant_id, provider, verification_status, kyc_level)
         VALUES ($1, $2, 'entrust', 'pending', 'none')
+        ON CONFLICT (user_id, applicant_id) DO NOTHING
       `;
 
       await this.db.query(query, [userId, applicantId]);

@@ -65,12 +65,12 @@ async function addTransactionJob(
     jobId?: string;
   },
 ) {
-  const queue = await import("../queue/transactionQueue.js");
+  const queue = require("../queue/transactionQueue.js");
   return queue.addTransactionJob(data, options);
 }
 
 async function getJobProgress(jobId: string) {
-  const queue = await import("../queue/transactionQueue.js");
+  const queue = require("../queue/transactionQueue.js");
   return queue.getJobProgress(jobId);
 }
 
@@ -300,6 +300,60 @@ function buildTransactionResponse(
     status: transaction.status,
     jobId: transaction.id,
   };
+}
+
+async function applyPreDispatchAMLProfile(
+  transaction: Transaction,
+): Promise<void> {
+  if (!transaction.userId) return;
+
+  const amount = Number(transaction.amount);
+  if (!Number.isFinite(amount) || amount < 0) return;
+
+  try {
+    const result = await amlService.profileTransaction({
+      id: transaction.id,
+      userId: transaction.userId,
+      type: transaction.type as import("../services/aml").AMLTransactionType,
+      amount,
+      createdAt:
+        transaction.createdAt instanceof Date
+          ? transaction.createdAt
+          : new Date(transaction.createdAt),
+      status: transaction.status,
+      locationMetadata: transaction.locationMetadata ?? null,
+    });
+
+    if (!result.flagged) {
+      return;
+    }
+
+    await Promise.all([
+      transactionModel.addTags(transaction.id, ["aml-flagged", "aml-review"]),
+      transactionModel.patchMetadata(transaction.id, {
+        amlProfile: {
+          riskScore: result.riskScore,
+          scoreThreshold: result.scoreThreshold,
+          recommendedAction: result.recommendedAction,
+          reasons: result.reasons,
+          profile: result.profile ?? null,
+          flaggedAt: new Date().toISOString(),
+        },
+      }),
+      transactionModel.updateAdminNotes(
+        transaction.id,
+        `[AML-PROFILE:${result.riskScore}/${result.scoreThreshold}] ${result.reasons.join(" | ")}`.slice(
+          0,
+          1000,
+        ),
+      ),
+    ]);
+  } catch (error) {
+    console.error(
+      `Pre-dispatch AML profiling failed for transaction ${transaction.id}:`,
+      error,
+    );
+  }
 }
 
 async function monitorTransactionForAML(
@@ -599,8 +653,10 @@ async function processTransactionRequest(
               idempotencyExpiresAt: idempotencyKey
                 ? buildIdempotencyExpiry()
                 : null,
-              locationMetadata: (req as any).geoLocation ?? null,
+              locationMetadata: req.geoLocation ?? null,
             });
+
+            await applyPreDispatchAMLProfile(transaction);
             void monitorTransactionForAML(transaction);
             void applyTravelRule(transaction);
 
@@ -650,6 +706,10 @@ async function processTransactionRequest(
 
     return res.status(200).json(result);
   } catch (error) {
+    if (error && typeof error === "object" && "code" in error) {
+      throw error;
+    }
+
     if (
       error instanceof Error &&
       error.message.includes("Idempotency-Key must be")

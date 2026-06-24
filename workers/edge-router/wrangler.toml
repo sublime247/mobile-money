@@ -6,3 +6,16 @@ compatibility_date = "2024-05-12"
 PRIMARY_ORIGIN = "https://api.primary.example.com"
 BACKUP_ORIGIN = "https://api.backup.example.com"
 HEALTH_CHECK_PATH = "/health"
+
+# Geo-routing: route requests to the nearest regional hosting node.
+# Set to "false" to disable and fall back to PRIMARY_ORIGIN only.
+GEO_ROUTING_ENABLED = "true"
+
+# Regional origin nodes. Each request is routed to the nearest region
+# based on Cloudflare edge geolocation data (request.cf.country).
+# If a regional origin is unhealthy, the worker falls back to PRIMARY_ORIGIN.
+REGION_NA_ORIGIN = "https://api-na.example.com"
+REGION_EU_ORIGIN = "https://api-eu.example.com"
+REGION_APAC_ORIGIN = "https://api-apac.example.com"
+REGION_AF_ORIGIN = "https://api-af.example.com"
+REGION_SA_ORIGIN = "https://api-sa.example.com"

@@ -449,6 +449,39 @@ app.get("/metrics", async (_req, reply) => {
 });
 
 // ---------------------------------------------------------------------------
+// Readiness endpoint – verifies underlying message queues before reporting ready
+// ---------------------------------------------------------------------------
+
+async function checkDependencies(): Promise<boolean> {
+  // Verify Redis connection if enabled
+  if (REDIS_ENABLED && redisPool) {
+    try {
+      await redisPool.executeCommand(async (client) => client.ping());
+    } catch (err) {
+      console.error('[ready] Redis ping failed', err);
+      return false;
+    }
+  }
+  // Verify NATS connection if enabled
+  if (NATS_ENABLED && nats) {
+    if (nats.isClosed()) {
+      console.error('[ready] NATS connection closed');
+      return false;
+    }
+  }
+  return true;
+}
+
+app.get("/ready", async (_req, reply) => {
+  const healthy = await checkDependencies();
+  if (healthy) {
+    return reply.status(200).send({ status: "ready" });
+  } else {
+    return reply.status(503).send({ status: "unavailable" });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Boot
 // ---------------------------------------------------------------------------
 

@@ -96,11 +96,14 @@ async function performSep31FeeBump(
     const account = await server.loadAccount(keypair.publicKey());
     const paymentAsset = getConfiguredPaymentAsset();
 
-    // Calculate new fee (double previous, max 1 XLM in stroops)
+    // Fetch current network base fee and adjust dynamically
+    const baseFee = await server.feeStats().then(res => Number(res.last_ledger_base_fee));
     const previousFee = sep31Meta.feeBumps?.length > 0
       ? sep31Meta.feeBumps[sep31Meta.feeBumps.length - 1].fee
-      : StellarSdk.BASE_FEE;
-    const newFee = Math.min(previousFee * 2, 100000);
+      : baseFee;
+    // Increase fee by a multiplier; use 2x if network fee increased, else 1.5x
+    const multiplier = baseFee > previousFee ? 2 : 1.5;
+    const newFee = Math.min(Math.ceil(previousFee * multiplier), 100000);
 
     // Rebuild original transaction (assume payment)
     const txBuilder = new StellarSdk.TransactionBuilder(account, {

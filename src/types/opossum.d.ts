@@ -34,5 +34,12 @@ declare module "opossum" {
     readonly closed: boolean;
     readonly halfOpen: boolean;
     readonly open: boolean;
+
+    // Runtime properties exposed by opossum but not in its shipped types
+    // (opossum <=9.x ships only *.js with no .d.ts)
+    readonly opened: boolean;
+    readonly name: string;
+    close(): void;
+    toJSON(): Record<string, unknown>;
   }
 }

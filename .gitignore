@@ -5,6 +5,7 @@ node_modules/
 dist/
 contracts/target/
 *.tsbuildinfo
+.docusaurus/
 
 # Kotlin SDK build artifacts
 sdk/build/

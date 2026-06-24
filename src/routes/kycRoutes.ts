@@ -4,6 +4,7 @@ import { KYCController } from "../controllers/kycController";
 import { authenticateToken } from "../middleware/auth";
 import { upload, uploadErrorMessages } from "../middleware/upload";
 import { uploadToS3 } from "../services/s3Upload";
+import KYCService, { DocumentType } from "../services/kyc";
 import { Request, Response } from "express";
 import { ERROR_CODES } from "../constants/errorCodes";
 import { createError } from "../middleware/errorHandler";
@@ -77,8 +78,12 @@ function annotateDocumentVisibility(
 export const createKYCRoutes = (db: Pool): Router => {
   const router = Router();
   const kycController = new KYCController(db);
+  const kycService = new KYCService(db);
 
-  // All KYC routes require authentication
+  // Webhook endpoint (no auth required - verified by signature)
+  router.post("/webhooks", kycController.handleWebhook);
+
+  // All remaining KYC routes require authentication
   router.use(authenticateToken);
 
   // Applicant management
@@ -194,12 +199,22 @@ export const createKYCRoutes = (db: Pool): Router => {
         req.file.mimetype,
       ]);
 
+      const providerDocument = await kycService.uploadDocumentBinary({
+        applicant_id,
+        type: (document_type || "passport") as DocumentType,
+        side: document_side === "back" ? "back" : "front",
+        filename: req.file.originalname,
+        mimeType: req.file.mimetype,
+        fileBuffer: req.file.buffer,
+      });
+
       const canViewRaw = Boolean(res.locals.canViewRawKycUploads);
 
       res.status(201).json({
         success: true,
         data: {
           document_id: documentResult.rows[0].id,
+          provider_document_id: providerDocument?.id,
           file_url: canViewRaw
             ? documentResult.rows[0].file_url
             : REDACTED_FILE_URL,
@@ -294,9 +309,6 @@ export const createKYCRoutes = (db: Pool): Router => {
 
   // User KYC status
   router.get("/status", kycController.getUserKYCStatus);
-
-  // Webhook endpoint (no auth required - verified by signature)
-  router.post("/webhooks", kycController.handleWebhook);
 
   return router;
 };

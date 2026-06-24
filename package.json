@@ -86,6 +86,7 @@
     "@node-saml/passport-saml": "^5.1.0",
     "@sendgrid/mail": "^8.1.6",
     "@sentry/node": "^10.47.0",
+    "@stellar/stellar-sdk": "^15.1.0",
     "@types/passport": "^1.0.17",
     "@types/speakeasy": "^2.0.10",
     "@types/swagger-ui-express": "4.1.8",

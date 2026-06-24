@@ -113,7 +113,7 @@ export interface FraudResult {
   recommendedAction: 'allow' | 'review' | 'block';
 }
 
-function getDistanceKm(
+export function getDistanceKm(
   loc1: { lat: number; lng: number },
   loc2: { lat: number; lng: number }
 ): number {

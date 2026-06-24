@@ -4,6 +4,7 @@ import {
   providerCircuitBreakerTransitionsTotal,
 } from "./metrics";
 import { checkMobileMoneyHealth } from "../services/mobilemoney/providers/healthCheck";
+import { providerSettingsService } from "../services/providerSettingsService";
 
 export interface CircuitBreakerActionResult<T> {
   success: boolean;
@@ -43,12 +44,39 @@ function getCircuitKey(provider: string, operation: string): string {
   return `${provider}:${operation}`;
 }
 
-async function getBreakerOptions(name: string, provider: string): Promise<CircuitBreakerOptions> {
-  const { providerSettingsService } = await import("../services/providerSettingsService.js");
-  const settings = await providerSettingsService.getProviderSettings(provider);
+// Exported for testing only — callers should use getBreakerOptions()
+export function _resolveFailureThreshold(provider: string): number | null {
+  const providerEnv = `${provider.toUpperCase()}_CIRCUIT_BREAKER_FAILURE_THRESHOLD`;
+  const globalEnv = "PROVIDER_CIRCUIT_BREAKER_VOLUME_THRESHOLD";
+  const raw = process.env[providerEnv] ?? process.env[globalEnv];
+  return raw !== undefined ? Number(raw) : null;
+}
 
-  const timeoutMs = settings ? settings.timeout_ms : Number(process.env.PROVIDER_CIRCUIT_BREAKER_TIMEOUT_MS ?? 5_000);
-  const volumeThreshold = settings ? settings.failure_threshold : Number(process.env.PROVIDER_CIRCUIT_BREAKER_VOLUME_THRESHOLD ?? 3);
+// Exported for testing only — callers should use getBreakerOptions()
+export function _resolveTimeoutMs(provider: string): number | null {
+  const providerEnv = `${provider.toUpperCase()}_CIRCUIT_BREAKER_TIMEOUT_MS`;
+  const globalEnv = "PROVIDER_CIRCUIT_BREAKER_TIMEOUT_MS";
+  const raw = process.env[providerEnv] ?? process.env[globalEnv];
+  return raw !== undefined ? Number(raw) : null;
+}
+
+async function getBreakerOptions(name: string, provider: string): Promise<CircuitBreakerOptions> {
+  let settings: import("../services/providerSettingsService").ProviderSettings | null = null;
+  try {
+    settings = await providerSettingsService.getProviderSettings(provider);
+  } catch {
+    // DB unavailable — fall back to env vars / defaults
+  }
+
+  const providerThreshold = _resolveFailureThreshold(provider);
+  const volumeThreshold = settings
+    ? settings.failure_threshold
+    : (providerThreshold ?? Number(process.env.PROVIDER_CIRCUIT_BREAKER_VOLUME_THRESHOLD ?? 3));
+
+  const providerTimeout = _resolveTimeoutMs(provider);
+  const timeoutMs = settings
+    ? settings.timeout_ms
+    : (providerTimeout ?? Number(process.env.PROVIDER_CIRCUIT_BREAKER_TIMEOUT_MS ?? 5_000));
 
   return {
     name,
@@ -62,7 +90,7 @@ async function getBreakerOptions(name: string, provider: string): Promise<Circui
     rollingCountBuckets: Number(
       process.env.PROVIDER_CIRCUIT_BREAKER_ROLLING_BUCKETS ?? 10,
     ),
-    volumeThreshold: volumeThreshold,
+    volumeThreshold,
     errorThresholdPercentage: Number(
       process.env.PROVIDER_CIRCUIT_BREAKER_ERROR_THRESHOLD_PERCENTAGE ?? 50,
     ),
@@ -173,7 +201,11 @@ export function isCircuitBreakerOpenError(error: unknown): boolean {
 
 export function resetCircuitBreakers(): void {
   for (const breaker of circuitBreakers.values()) {
-    breaker.shutdown();
+    try {
+      breaker.shutdown();
+    } catch {
+      // ignore individual shutdown failures
+    }
   }
   circuitBreakers.clear();
 }
@@ -194,19 +226,22 @@ export async function checkAndResetCircuitBreaker(provider: string, operation: s
     return false;
   }
 
-  // Only reset if open
-  if ((breaker as any).opened) {
-    try {
-      const healthResult = await checkMobileMoneyHealth();
-      const providerHealth = healthResult.providers[provider as keyof typeof healthResult.providers];
-      if (providerHealth && providerHealth.status === "up") {
-        (breaker as any).close();
-        console.log(`Circuit breaker for ${provider}:${operation} reset due to health check`);
-        return true;
-      }
-    } catch (error) {
-      console.error(`Failed to check health for ${provider}: ${error}`);
+  // Only attempt to reset if the circuit is open or half-open
+  const state = breaker.toJSON().state as { open: boolean; halfOpen: boolean };
+  if (!state?.open && !state?.halfOpen) {
+    return false;
+  }
+
+  try {
+    const healthResult = await checkMobileMoneyHealth();
+    const providerHealth = healthResult.providers[provider as keyof typeof healthResult.providers];
+    if (providerHealth && providerHealth.status === "up") {
+      breaker.close();
+      console.log(`Circuit breaker for ${provider}:${operation} reset due to health check`);
+      return true;
     }
+  } catch (error) {
+    console.error(`Failed to check health for ${provider}: ${error}`);
   }
   return false;
 }

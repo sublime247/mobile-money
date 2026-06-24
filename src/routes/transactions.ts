@@ -23,6 +23,7 @@ import { cancelTransactionRateLimiter } from "../middleware/rateLimit";
 import { checkAccountStatusStrict } from "../middleware/checkAccountStatus";
 import { geolocateMiddleware } from "../middleware/geolocate";
 import { geoFencingMiddleware } from "../middleware/geoFencing";
+import { validate2FAForWithdrawal } from "../services/twoFactorWithdrawalService";
 import { TransactionModel, TransactionStatus } from "../models/transaction";
 import { generateTransactionPdfBuffer } from "../services/pdfReceipt";
 import { generateShareToken, verifyShareToken } from "../utils/share";
@@ -249,6 +250,7 @@ transactionRoutes.post(
   validateTransaction,
   validateNetworkMiddleware,
   geolocateMiddleware,
+  validate2FAForWithdrawal,
   withdrawHandler,
 );
 

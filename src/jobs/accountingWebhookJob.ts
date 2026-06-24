@@ -4,6 +4,35 @@ import { AccountingService } from "../services/accounting";
 const accountingService = new AccountingService();
 
 /**
+ * Determine provider type from user's active accounting connections
+ */
+async function getProviderTypeForUser(userId: string): Promise<'quickbooks' | 'xero' | null> {
+  const result = await pool.query(
+    'SELECT provider FROM accounting_connections WHERE user_id = $1 AND is_active = true LIMIT 1',
+    [userId]
+  );
+  if (result.rows.length === 0) return null;
+  return result.rows[0].provider as 'quickbooks' | 'xero';
+}
+
+/**
+ * Log accounting sync error to dedicated table
+ */
+async function logAccountingSyncError(
+  transactionId: string,
+  providerType: 'quickbooks' | 'xero',
+  errorMessage: string,
+): Promise<void> {
+  await pool.query(
+    `INSERT INTO accounting_sync_errors
+       (transaction_id, provider_type, error_message, status)
+     VALUES ($1, $2, $3, 'pending')
+     ON CONFLICT DO NOTHING`,
+    [transactionId, providerType, errorMessage.slice(0, 500)],
+  );
+}
+
+/**
  * Accounting Webhook Job
  * Schedule: Every minute
  * Picks up completed transactions that haven't been synced to accounting yet
@@ -59,6 +88,11 @@ export async function runAccountingWebhookJob(): Promise<void> {
       });
     } catch (err) {
       console.error(`[accounting-webhook] Failed to sync transaction ${row.id}:`, err);
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      const providerType = await getProviderTypeForUser(row.user_id);
+      if (providerType) {
+        await logAccountingSyncError(row.id, providerType, errorMessage);
+      }
     }
   }
 }

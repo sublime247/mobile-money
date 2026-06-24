@@ -3,6 +3,7 @@ import { Pool } from "pg";
 import express from "express";
 import { createKYCRoutes } from "../kycRoutes";
 import * as s3Upload from "../../services/s3Upload";
+import KYCService from "../../services/kyc";
 import { errorHandler } from "../../middleware/errorHandler";
 
 const { validateFile: realValidateFile } = jest.requireActual(
@@ -11,6 +12,7 @@ const { validateFile: realValidateFile } = jest.requireActual(
 
 // Mock dependencies
 jest.mock("../../services/s3Upload");
+jest.mock("../../services/kyc");
 jest.mock("../../middleware/auth", () => ({
   authenticateToken: (
     req: express.Request,
@@ -27,8 +29,15 @@ jest.mock("../../middleware/auth", () => ({
 describe("KYC Document Upload", () => {
   let app: express.Application;
   let mockPool: any;
+  let mockKycService: { uploadDocumentBinary: jest.Mock };
 
   beforeEach(() => {
+     mockKycService = {
+      uploadDocumentBinary: jest.fn().mockResolvedValue({ id: "provider-doc-id" }),
+    };
+    (KYCService as jest.MockedClass<typeof KYCService>).mockImplementation(
+      () => mockKycService as any,
+    );
     // Create mock pool
     mockPool = {
       query: jest.fn(),
@@ -79,6 +88,16 @@ describe("KYC Document Upload", () => {
       expect(response.body.success).toBe(true);
       expect(response.body.data.file_url).toBe("[REDACTED]");
       expect(response.body.data.document_id).toBeDefined();
+      expect(response.body.data.provider_document_id).toBe("provider-doc-id");
+      expect(mockKycService.uploadDocumentBinary).toHaveBeenCalledWith(
+        expect.objectContaining({
+          applicant_id: "test-applicant-id",
+          type: "passport",
+          side: "front",
+          filename: "test.pdf",
+          mimeType: "application/pdf",
+        }),
+      );
     });
 
     it("should return raw file_url for compliance officers", async () => {
@@ -178,6 +197,40 @@ describe("KYC Document Upload", () => {
 
       expect(response.status).toBe(500);
       expect(response.body.error).toContain("File upload failed");
+      expect(mockKycService.uploadDocumentBinary).not.toHaveBeenCalled();
+    });
+
+    it("should surface provider submission failures after storing the upload", async () => {
+      mockPool.query
+        .mockResolvedValueOnce({ rows: [{ id: 1 }] } as any)
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              id: "doc-id",
+              file_url: "https://bucket.s3.amazonaws.com/file.pdf",
+              created_at: new Date(),
+            },
+          ],
+        } as any);
+
+      (s3Upload.validateFile as jest.Mock).mockReturnValue({ valid: true });
+      (s3Upload.uploadToS3 as jest.Mock).mockResolvedValue({
+        success: true,
+        fileUrl: "https://bucket.s3.amazonaws.com/file.pdf",
+        key: "kyc-documents/2024/03/user-id/file.pdf",
+      });
+      mockKycService.uploadDocumentBinary.mockRejectedValueOnce(
+        new Error("Entrust request failed after a transient network error: socket hang up"),
+      );
+
+      const response = await request(app)
+        .post("/api/kyc/documents/upload")
+        .attach("document", Buffer.from("test pdf content"), "test.pdf")
+        .field("applicant_id", "test-applicant-id")
+        .field("document_type", "passport");
+
+      expect(response.status).toBe(500);
+      expect(response.body.message).toContain("transient network error");
     });
   });
 

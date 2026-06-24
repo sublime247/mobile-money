@@ -1,5 +1,6 @@
 import { createClient, RedisClientType } from "redis";
 import { healthCheckResponseTimeSeconds } from "../../../utils/metrics";
+import { getConfigValue } from "../../../config/appConfig";
 
 // ─── Public types ─────────────────────────────────────────────────────────────
 
@@ -160,10 +161,27 @@ async function setCached(result: MobileMoneyHealthResult): Promise<void> {
 
 // ─── Circuit breaker ──────────────────────────────────────────────────────────
 
-/** Open circuit after this many consecutive failures. */
-const FAILURE_THRESHOLD = 3;
-/** Keep circuit open for this many ms before allowing a retry. */
-const OPEN_DURATION_MS = 60_000;
+function getFailureThreshold(): number {
+  const raw = process.env.PROVIDER_HEALTH_FAILURE_THRESHOLD;
+  if (raw !== undefined && raw !== "") {
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+  return getConfigValue("healthCheck.failureThreshold");
+}
+
+function getOpenDurationMs(): number {
+  const raw = process.env.PROVIDER_HEALTH_OPEN_DURATION_MS;
+  if (raw !== undefined && raw !== "") {
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+  return getConfigValue("healthCheck.openDurationMs");
+}
 
 interface CircuitState {
   failures: number;
@@ -203,8 +221,8 @@ function recordSuccess(provider: string): void {
 function recordFailure(provider: string): void {
   const state = getCircuit(provider);
   state.failures += 1;
-  if (state.failures >= FAILURE_THRESHOLD) {
-    state.openUntil = Date.now() + OPEN_DURATION_MS;
+  if (state.failures >= getFailureThreshold()) {
+    state.openUntil = Date.now() + getOpenDurationMs();
     log("warn", "Circuit opened for provider", {
       provider,
       openUntil: new Date(state.openUntil).toISOString(),

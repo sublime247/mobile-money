@@ -11,9 +11,12 @@ export default function Home(): React.JSX.Element {
           This portal publishes a searchable, first-class API reference for partners using the
           canonical <code>openapi.yaml</code> in this repository.
         </p>
-        <p>
+        <p style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
           <Link className="button button--primary button--lg" to="/api">
             Open API Reference
+          </Link>
+          <Link className="button button--secondary button--lg" to="/graphql">
+            GraphQL Playground
           </Link>
         </p>
       </main>

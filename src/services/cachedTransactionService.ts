@@ -112,7 +112,7 @@ export async function getCachedTransactionCount(
 export async function getCachedUserStats(userId: string) {
   const cacheKey = CacheKeyGenerators.userTransactionStats(userId);
   const tags = [CacheTags.userStats(userId), CacheTags.userTransaction(userId)];
-  
+
   return cachedQueryManager.getOrFetch(
     cacheKey,
     async () => {
@@ -120,7 +120,7 @@ export async function getCachedUserStats(userId: string) {
       try {
         const result = await client.query(
           `
-          SELECT 
+          SELECT
             COUNT(*) as total_transactions,
             SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
             SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
@@ -144,6 +144,113 @@ export async function getCachedUserStats(userId: string) {
       tags,
     },
   );
+}
+
+export interface CachedAmlProfileSnapshot {
+  historicalCount: number;
+  countLastHour: number;
+  countLast24Hours: number;
+  countLast7Days: number;
+  movingAverageAmount: number;
+  lastLocationAt: Date | null;
+  lastLocationMetadata: Record<string, unknown> | null;
+}
+
+export interface CachedAmlProfileOptions {
+  excludeTransactionId?: string;
+  movingAverageWindowDays?: number;
+}
+
+export async function getCachedAmlProfileSnapshot(
+  userId: string,
+  asOf: Date,
+  options: CachedAmlProfileOptions = {},
+): Promise<CachedAmlProfileSnapshot> {
+  const hourStart = new Date(asOf.getTime() - 60 * 60 * 1000);
+  const dayStart = new Date(asOf.getTime() - 24 * 60 * 60 * 1000);
+  const weekStart = new Date(asOf.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const movingAverageWindowDays = Math.max(1, options.movingAverageWindowDays ?? 30);
+  const movingAverageStart = new Date(
+    asOf.getTime() - movingAverageWindowDays * 24 * 60 * 60 * 1000,
+  );
+  const cacheKey = generateTransactionCacheKey(`aml-profile:${userId}`, {
+    asOf: asOf.toISOString(),
+    excludeTransactionId: options.excludeTransactionId ?? null,
+    movingAverageWindowDays,
+  });
+  const tags = [CacheTags.userHistory(userId), CacheTags.userTransaction(userId)];
+
+  const result = await cachedQueryManager.getOrFetch(
+    cacheKey,
+    async () => {
+      const client = await pool.connect();
+      try {
+        const snapshot = await client.query<{
+          historicalCount: number;
+          countLastHour: number;
+          countLast24Hours: number;
+          countLast7Days: number;
+          movingAverageAmount: number | null;
+          lastLocationAt: Date | null;
+          lastLocationMetadata: Record<string, unknown> | null;
+        }>(
+          `
+          WITH scoped AS (
+            SELECT id, amount, created_at, location_metadata
+            FROM transactions
+            WHERE user_id = $1
+              AND created_at <= $2
+              AND ($6::uuid IS NULL OR id <> $6::uuid)
+          )
+          SELECT
+            COALESCE((SELECT COUNT(*)::int FROM scoped), 0) AS "historicalCount",
+            COALESCE((SELECT COUNT(*)::int FROM scoped WHERE created_at >= $3), 0) AS "countLastHour",
+            COALESCE((SELECT COUNT(*)::int FROM scoped WHERE created_at >= $4), 0) AS "countLast24Hours",
+            COALESCE((SELECT COUNT(*)::int FROM scoped WHERE created_at >= $5), 0) AS "countLast7Days",
+            COALESCE((SELECT AVG(amount)::float8 FROM scoped WHERE created_at >= $7), 0) AS "movingAverageAmount",
+            last_loc.created_at AS "lastLocationAt",
+            last_loc.location_metadata AS "lastLocationMetadata"
+          FROM (SELECT 1) seed
+          LEFT JOIN LATERAL (
+            SELECT created_at, location_metadata
+            FROM scoped
+            WHERE location_metadata IS NOT NULL
+            ORDER BY created_at DESC
+            LIMIT 1
+          ) last_loc ON TRUE
+          `,
+          [
+            userId,
+            asOf,
+            hourStart,
+            dayStart,
+            weekStart,
+            options.excludeTransactionId ?? null,
+            movingAverageStart,
+          ],
+        );
+
+        const row = snapshot.rows[0];
+        return {
+          historicalCount: Number(row?.historicalCount ?? 0),
+          countLastHour: Number(row?.countLastHour ?? 0),
+          countLast24Hours: Number(row?.countLast24Hours ?? 0),
+          countLast7Days: Number(row?.countLast7Days ?? 0),
+          movingAverageAmount: Number(row?.movingAverageAmount ?? 0),
+          lastLocationAt: row?.lastLocationAt ? new Date(row.lastLocationAt) : null,
+          lastLocationMetadata: row?.lastLocationMetadata ?? null,
+        };
+      } finally {
+        client.release();
+      }
+    },
+    {
+      ttlSeconds: QUERY_TTL_POLICIES.TRANSACTION_HISTORY,
+      tags,
+    },
+  );
+
+  return result.data;
 }
 
 /**

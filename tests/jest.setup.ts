@@ -8,6 +8,12 @@ process.env.ADMIN_API_KEY ??= "test-admin-key";
 process.env.DB_ENCRYPTION_KEY ??= "development-encryption-key-32-chars-long";
 process.env.KEY_VAULT_MASTER_SECRET ??= "test-key-vault-master-secret-32-chars-long";
 process.env.GEOLOCATION_API_KEY ??= "";
+process.env.SMS_PROVIDER ??= "none";
+process.env.WHATSAPP_ENABLED ??= "false";
+process.env.TWILIO_ACCOUNT_SID ??= "";
+process.env.TWILIO_AUTH_TOKEN ??= "";
+process.env.TWILIO_PHONE_NUMBER ??= "";
+process.env.TWILIO_WHATSAPP_NUMBER ??= "";
 
 // Global mock for axios to prevent real HTTP requests to sanction lists
 jest.mock("axios", () => {
@@ -99,14 +105,19 @@ try {
   console.error("Failed to patch Express for async errors in tests:", e);
 }
 
-import { connectRedis, disconnectRedis } from "../src/config/redis";
-
-beforeAll(async () => {
-  await connectRedis();
-});
-
-afterAll(async () => {
-  await disconnectRedis();
-});
+// Mock Redis module to prevent real connections in test environment
+jest.mock("../src/config/redis", () => ({
+  __esModule: true,
+  connectRedis: jest.fn().mockResolvedValue(undefined),
+  disconnectRedis: jest.fn().mockResolvedValue(undefined),
+  redisClient: {
+    isOpen: false,
+    on: jest.fn(),
+    connect: jest.fn(),
+    quit: jest.fn(),
+    disconnect: jest.fn(),
+  },
+  SESSION_TTL_SECONDS: 86400,
+}));
 
 

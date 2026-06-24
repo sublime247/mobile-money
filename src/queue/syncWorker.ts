@@ -7,9 +7,27 @@ import {
   NetworkError,
   ValidationError,
 } from "../services/accounting/accountingService";
+import { pool } from "../config/database";
 
 // Create instance of our Accounting Service
 export const accountingService = new AccountingService();
+
+/**
+ * Log accounting sync error to dedicated table
+ */
+async function logAccountingSyncError(
+  transactionId: string,
+  providerType: 'quickbooks' | 'xero',
+  errorMessage: string,
+): Promise<void> {
+  await pool.query(
+    `INSERT INTO accounting_sync_errors
+       (transaction_id, provider_type, error_message, status)
+     VALUES ($1, $2, $3, 'pending')
+     ON CONFLICT DO NOTHING`,
+    [transactionId, providerType, errorMessage.slice(0, 500)],
+  );
+}
 
 /**
  * Sync Queue Processor Function
@@ -53,6 +71,7 @@ export async function processSyncJob(
       console.error(
         `[SyncWorker] [Job ${job.id}] Permanent error encountered during ${platform} sync: ${message}. Discarding future attempts.`,
       );
+      await logAccountingSyncError(transactionId, platform, message);
 
       try {
         await job.discard();

@@ -1,6 +1,10 @@
+import { config as dotenvConfig } from 'dotenv';
 import type { Config } from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
 import { themes as prismThemes } from 'prism-react-renderer';
+
+// Load environment variables from .env (local development)
+dotenvConfig({ path: './.env' });
 
 const config: Config = {
   title: 'Mobile Money API Portal',
@@ -22,7 +26,7 @@ const config: Config = {
 
   i18n: {
     defaultLocale: 'en',
-    locales: ['en'],
+    locales: ['en', 'fr'],
   },
 
   presets: [
@@ -39,11 +43,30 @@ const config: Config = {
   ],
 
   themeConfig: {
+    // -------------------------------------------------------------------------
+    // Algolia DocSearch – full-text search for the docs portal
+    // -------------------------------------------------------------------------
+    // The free DocSearch program is available for open‑source projects.
+    // 1. Apply at https://docsearch.algolia.com/apply
+    // 2. Set the three environment variables below once approved.
+    // -------------------------------------------------------------------------
+    ...(process.env.ALGOLIA_APP_ID &&
+      process.env.ALGOLIA_API_KEY &&
+      process.env.ALGOLIA_INDEX_NAME && {
+        algolia: {
+          appId: process.env.ALGOLIA_APP_ID,
+          apiKey: process.env.ALGOLIA_API_KEY,
+          indexName: process.env.ALGOLIA_INDEX_NAME,
+          contextualSearch: true,
+        },
+      }),
+
     navbar: {
       title: 'Mobile Money API',
       items: [
         { to: '/', label: 'Overview', position: 'left' },
         { to: '/api', label: 'Reference', position: 'left' },
+        { to: '/graphql', label: 'GraphQL Playground', position: 'left' },
         {
           href: 'https://github.com/sublime247/mobile-money',
           label: 'GitHub',
@@ -56,7 +79,10 @@ const config: Config = {
       links: [
         {
           title: 'Docs',
-          items: [{ label: 'API Reference', to: '/api' }],
+          items: [
+            { label: 'API Reference', to: '/api' },
+            { label: 'GraphQL Playground', to: '/graphql' },
+          ],
         },
       ],
       copyright: `Copyright © ${new Date().getFullYear()} Mobile Money`,
