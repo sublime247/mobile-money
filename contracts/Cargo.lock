@@ -1198,6 +1198,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "quicklendx-contracts"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk 25.3.0",
+]
+
+[[package]]
 name = "quote"
 version = "1.0.45"
 source = "registry+https://github.com/rust-lang/crates.io-index"
