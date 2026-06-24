@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 /**
  * Travel Rule compliance export routes.
  * All endpoints require admin authentication (X-API-Key or admin-role bearer token).
@@ -84,7 +85,7 @@ travelRuleRoutes.get("/", requireAuth, async (req: Request, res: Response) => {
 
     res.json({ count: records.length, records: records.map(serializeRecord) });
   } catch (err) {
-    console.error("[travel-rule] export error:", err instanceof Error ? err.message : err);
+    logger.error("[travel-rule] export error:", err instanceof Error ? err.message : err);
     throw createError(ERROR_CODES.INTERNAL_ERROR,"Export failed", {error:"Export failed"})
   }
 });
@@ -144,7 +145,7 @@ travelRuleRoutes.get("/export.csv", requireAuth, async (req: Request, res: Respo
 
     res.end();
   } catch (err) {
-    console.error("[travel-rule] csv export error:", err instanceof Error ? err.message : err);
+    logger.error("[travel-rule] csv export error:", err instanceof Error ? err.message : err);
     if (!res.headersSent) {
        throw createError(ERROR_CODES.INTERNAL_ERROR,"CSV export failed", {error:"CSV export failed"})
     }
@@ -165,7 +166,7 @@ travelRuleRoutes.get("/:transactionId", requireAuth, async (req: Request, res: R
     }
     res.json(serializeRecord(record));
   } catch (err) {
-    console.error("[travel-rule] lookup error:", err instanceof Error ? err.message : err);
+    logger.error("[travel-rule] lookup error:", err instanceof Error ? err.message : err);
      throw createError(ERROR_CODES.INTERNAL_ERROR,"Lookup failed", {error:"Lookup failed"})
   }
 });

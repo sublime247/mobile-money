@@ -24,6 +24,42 @@ jest.mock("bullmq", () => {
   };
 });
 
+// Mock the logger to prevent external log sink connections during tests
+jest.mock("../../src/utils/logger", () => ({
+  __esModule: true,
+  default: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+    child: jest.fn(() => ({
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn(),
+      debug: jest.fn(),
+    })),
+  },
+}));
+
+// Mock the accounting retry queue to prevent Redis connections
+jest.mock("../../src/queue/accountingRetryQueue", () => ({
+  __esModule: true,
+  addAccountingRetryJob: jest.fn().mockResolvedValue(undefined),
+  getAccountingRetryJobById: jest.fn(),
+  getAccountingRetryQueueStats: jest.fn().mockResolvedValue({
+    waiting: 0,
+    active: 0,
+    completed: 0,
+    failed: 0,
+    delayed: 0,
+    isPaused: false,
+  }),
+  accountingRetryQueue: {
+    add: jest.fn().mockResolvedValue({ id: "mock-retry-job-id" }),
+    close: jest.fn().mockResolvedValue(undefined),
+  },
+}));
+
 import { processSyncJob, accountingService } from "../../src/queue/syncWorker";
 import { SyncJobData, SyncJobResult } from "../../src/queue/syncQueue";
 import {
@@ -31,6 +67,7 @@ import {
   NetworkError,
   ValidationError,
 } from "../../src/services/accounting/accountingService";
+import logger from "../../src/utils/logger";
 
 describe("Accounting Integration (QuickBooks & Xero Sync Retry Queue)", () => {
   let mockJob: Partial<Job<SyncJobData, SyncJobResult>>;
@@ -45,6 +82,9 @@ describe("Accounting Integration (QuickBooks & Xero Sync Retry Queue)", () => {
       id: "test-sync-job-1",
       attemptsMade: 0,
       discard: jest.fn().mockResolvedValue(undefined),
+      opts: {
+        attempts: 5,
+      },
       data: {
         syncId: "sync-12345",
         transactionId: "tx-67890",
@@ -92,39 +132,38 @@ describe("Accounting Integration (QuickBooks & Xero Sync Retry Queue)", () => {
       // Set QuickBooks mock failure
       accountingService.setMockFailures("quickbooks", 1, "rate-limit");
 
-      // Spy on console.warn to verify transient logging
-      const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
-
       await expect(
         processSyncJob(mockJob as Job<SyncJobData, SyncJobResult>),
       ).rejects.toThrow(RateLimitError);
 
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining(
-          "Transient error encountered during quickbooks sync",
-        ),
+      // Verify logger.warn was called for transient error
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          isTransient: true,
+          platform: "quickbooks",
+        }),
+        expect.stringContaining("Transient error"),
       );
       expect(mockJob.discard).not.toHaveBeenCalled();
-
-      warnSpy.mockRestore();
     });
 
     it("should throw a transient error (NetworkError) when Xero connection fails", async () => {
       mockJob.data!.platform = "xero";
       accountingService.setMockFailures("xero", 1, "network");
 
-      const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
-
       await expect(
         processSyncJob(mockJob as Job<SyncJobData, SyncJobResult>),
       ).rejects.toThrow(NetworkError);
 
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining("Transient error encountered during xero sync"),
+      // Verify logger.warn was called for transient error
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          isTransient: true,
+          platform: "xero",
+        }),
+        expect.stringContaining("Transient error"),
       );
       expect(mockJob.discard).not.toHaveBeenCalled();
-
-      warnSpy.mockRestore();
     });
   });
 
@@ -132,43 +171,41 @@ describe("Accounting Integration (QuickBooks & Xero Sync Retry Queue)", () => {
     it("should discard future attempts and throw ValidationError when amount is zero/negative", async () => {
       mockJob.data!.payload.amount = "0";
 
-      const errorSpy = jest
-        .spyOn(console, "error")
-        .mockImplementation(() => {});
-
       await expect(
         processSyncJob(mockJob as Job<SyncJobData, SyncJobResult>),
       ).rejects.toThrow(ValidationError);
 
       // Verify BullMQ job.discard was invoked to cancel retries permanently
       expect(mockJob.discard).toHaveBeenCalledTimes(1);
-      expect(errorSpy).toHaveBeenCalledWith(
-        expect.stringContaining(
-          "Permanent error encountered during quickbooks sync",
-        ),
+      
+      // Verify logger.error was called for permanent error
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          isPermanent: true,
+          platform: "quickbooks",
+        }),
+        expect.stringContaining("Permanent error"),
       );
-
-      errorSpy.mockRestore();
     });
 
     it("should discard future attempts and throw ValidationError when reference number is missing for Xero", async () => {
       mockJob.data!.platform = "xero";
       mockJob.data!.payload.referenceNumber = "";
 
-      const errorSpy = jest
-        .spyOn(console, "error")
-        .mockImplementation(() => {});
-
       await expect(
         processSyncJob(mockJob as Job<SyncJobData, SyncJobResult>),
       ).rejects.toThrow(ValidationError);
 
       expect(mockJob.discard).toHaveBeenCalledTimes(1);
-      expect(errorSpy).toHaveBeenCalledWith(
-        expect.stringContaining("Permanent error encountered during xero sync"),
+      
+      // Verify logger.error was called for permanent error
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          isPermanent: true,
+          platform: "xero",
+        }),
+        expect.stringContaining("Permanent error"),
       );
-
-      errorSpy.mockRestore();
     });
   });
 });

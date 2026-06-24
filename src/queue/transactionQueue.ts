@@ -12,6 +12,8 @@ export interface TransactionJobData {
   phoneNumber: string;
   provider: string;
   stellarAddress: string;
+  /** IP address of the originating client, forwarded through the queue for blacklist enforcement. */
+  clientIp?: string;
   requestId?: string;
   _traceId?: string;
 }

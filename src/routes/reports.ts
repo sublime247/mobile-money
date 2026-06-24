@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { Router, Request, Response } from "express";
 import { pool, queryRead } from "../config/database";
 import { redisClient } from "../config/redis";
@@ -360,7 +361,7 @@ reportsRoutes.get(
 
       res.json(report);
     } catch (error) {
-      console.error("Error generating reconciliation report:", error);
+      logger.error("Error generating reconciliation report:", error);
       throw createError(
         ERROR_CODES.INTERNAL_ERROR,
         "Failed to generate reconciliation report",
@@ -419,7 +420,7 @@ reportsRoutes.get(
       const report = amlService.generateReport(startDate, endDate);
       return res.json(report);
     } catch (error) {
-      console.error("Error generating AML report:", error);
+      logger.error("Error generating AML report:", error);
       throw createError(
         ERROR_CODES.INTERNAL_ERROR,
         "Failed to generate AML report",

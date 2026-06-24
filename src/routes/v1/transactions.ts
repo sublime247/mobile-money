@@ -1,3 +1,4 @@
+import logger from "../../utils/logger";
 import { Router } from "express";
 import { setApiVersion, VersionedRequest } from "../../middleware/apiVersion";
 import {
@@ -142,7 +143,7 @@ transactionRoutesV1.get(
 
       res.status(200).send(pdf);
     } catch (err) {
-      console.error("Failed to generate invoice PDF:", err);
+      logger.error("Failed to generate invoice PDF:", err);
       res.status(500).json({ error: "Failed to generate invoice PDF" });
     }
   },

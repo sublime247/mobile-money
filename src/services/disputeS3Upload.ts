@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { PutObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
 import { getS3Client, s3Config, getS3ObjectUrl } from '../config/s3';
 import { generateUniqueFilename, generateDisputeS3Key } from '../middleware/disputeUpload';
@@ -61,7 +62,7 @@ export const uploadDisputeEvidenceToS3 = async (
       key,
     };
   } catch (error) {
-    console.error('S3 dispute evidence upload error:', error);
+    logger.error('S3 dispute evidence upload error:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown upload error',

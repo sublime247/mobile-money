@@ -63,3 +63,18 @@ export function childLoggerWithTrace(
   const traceId = traceIdFromJob(data);
   return traceId ? childLogger(traceId) : undefined;
 }
+
+/**
+ * Propagates the trace ID from a parent job's data to a new child job's data.
+ * If the parent job contains a trace ID (via TRACE_ID_KEY), it is copied
+ * into the child data. Otherwise a new UUID is generated ensuring the child
+ * job remains traceable.
+ */
+export function withParentTrace<T extends Record<string, unknown>>(
+  parentData: Record<string, unknown> | undefined,
+  childData: T,
+): T & { [TRACE_ID_KEY]: string } {
+  const existingTraceId = traceIdFromJob(parentData);
+  const traceId = existingTraceId ?? crypto.randomUUID();
+  return { ...childData, [TRACE_ID_KEY]: traceId } as any;
+}

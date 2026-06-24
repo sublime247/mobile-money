@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import axios, { AxiosInstance } from 'axios';
 import { Pool } from 'pg';
 import { z } from 'zod';
@@ -218,10 +219,7 @@ export class KYCService {
         return response;
       },
       (error) => {
-        console.error(
-          `KYC API Error: ${error.response?.status} ${error.config?.url}`,
-          error.response?.data,
-        );
+        logger.error(`KYC API Error: ${error.response?.status} ${error.config?.url}`, error.response?.data);
         return Promise.reject(error);
       },
     );
@@ -373,9 +371,7 @@ export class KYCService {
       const verificationStatus = await this.getVerificationStatus(applicantId);
       await this.persistVerificationStatus(applicantId, verificationStatus, payload.action);
     } catch (error) {
-      console.error(
-        `Failed to handle webhook: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      );
+      logger.error(`Failed to handle webhook: ${error instanceof Error ? error.message : 'Unknown error'}`);
       throw error;
     }
   }
@@ -397,16 +393,10 @@ export class KYCService {
           await accountingSvc.syncContactForUser(userId);
         }
       } catch (err) {
-        console.error(
-          `Failed to sync accounting contact after KYC update for user ${userId}: ${
-            err instanceof Error ? err.message : String(err)
-          }`,
-        );
+        logger.error(`Failed to sync accounting contact after KYC update for user ${userId}: ${err instanceof Error ? err.message : String(err)}`);
       }
     } catch (error) {
-      console.error(
-        `Failed to update user KYC level: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      );
+      logger.error(`Failed to update user KYC level: ${error instanceof Error ? error.message : 'Unknown error'}`);
       throw error;
     }
   }
@@ -669,6 +659,7 @@ export class KYCService {
     try {
       return await withRetry(fn, TRANSIENT_RETRY_OPTIONS);
     } catch (error) {
+      logger.error(`KYC request failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
       if (isTransientError(error, 'entrust')) {
         throw new Error(
           `Entrust request failed after a transient network error: ${

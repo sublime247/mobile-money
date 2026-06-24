@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 /**
  * Example: Integrating Fraud Detection with Transaction Processing
  * 
@@ -66,7 +67,7 @@ export class EnhancedTransactionController {
         }
       });
     } catch (error) {
-      console.error('Transaction creation error:', error);
+      logger.error('Transaction creation error:', error);
       res.status(500).json({ error: 'Failed to create transaction' });
     }
   }
@@ -120,7 +121,7 @@ export class EnhancedTransactionController {
         total: transactions.length
       });
     } catch (error) {
-      console.error('Get transactions error:', error);
+      logger.error('Get transactions error:', error);
       res.status(500).json({ error: 'Failed to get transactions' });
     }
   }
@@ -137,7 +138,7 @@ export class EnhancedTransactionController {
         count: reviewQueue.length
       });
     } catch (error) {
-      console.error('Get review queue error:', error);
+      logger.error('Get review queue error:', error);
       res.status(500).json({ error: 'Failed to get review queue' });
     }
   }
@@ -196,7 +197,7 @@ export class EnhancedTransactionController {
         newStatus
       });
     } catch (error) {
-      console.error('Process review transaction error:', error);
+      logger.error('Process review transaction error:', error);
       res.status(500).json({ error: 'Failed to process review transaction' });
     }
   }
@@ -230,7 +231,7 @@ export class EnhancedTransactionController {
 
       res.json(stats);
     } catch (error) {
-      console.error('Get fraud statistics error:', error);
+      logger.error('Get fraud statistics error:', error);
       res.status(500).json({ error: 'Failed to get fraud statistics' });
     }
   }

@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import type { Application, Request } from "express";
 import { ApolloServer } from "apollo-server-express";
 import {
@@ -138,7 +139,7 @@ export async function startApolloServer(
         console.log("WebSocket subscription disconnected");
       },
       onError: (_ctx: any, err: any) => {
-        console.error("WebSocket subscription error:", err);
+        logger.error("WebSocket subscription error:", err);
       },
     },
     wsServer,

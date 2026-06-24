@@ -108,7 +108,7 @@ export class KYCController {
         });
       }
 
-      console.error("Create applicant error:", error);
+      logger.error("Create applicant error:", error);
       throw createError(
         ERROR_CODES.INTERNAL_ERROR,
         error instanceof Error ? error.message : "Unknown error",
@@ -149,7 +149,7 @@ export class KYCController {
         data: applicant,
       });
     } catch (error) {
-      console.error("Get applicant error:", error);
+      logger.error("Get applicant error:", error);
       throw createError(
         ERROR_CODES.INTERNAL_ERROR,
         error instanceof Error ? error.message : "Unknown error",
@@ -204,7 +204,7 @@ export class KYCController {
         });
       }
 
-      console.error("Upload document error:", error);
+      logger.error("Upload document error:", error);
       throw createError(
         ERROR_CODES.INTERNAL_ERROR,
         error instanceof Error ? error.message : "Unknown error",
@@ -263,7 +263,7 @@ export class KYCController {
         });
       }
 
-      console.error("Create workflow run error:", error);
+      logger.error("Create workflow run error:", error);
       throw createError(
         ERROR_CODES.INTERNAL_ERROR,
         "Failed to create workflow run",
@@ -320,7 +320,7 @@ export class KYCController {
         });
       }
 
-      console.error("Generate SDK token error:", error);
+      logger.error("Generate SDK token error:", error);
       throw createError(
         ERROR_CODES.INTERNAL_ERROR,
         "Failed to generate SDK token",
@@ -362,7 +362,7 @@ export class KYCController {
         data: verificationStatus,
       });
     } catch (error) {
-      console.error("Get verification status error:", error);
+      logger.error("Get verification status error:", error);
       throw createError(
         ERROR_CODES.INTERNAL_ERROR,
         "Failed to get verification status",
@@ -421,7 +421,7 @@ export class KYCController {
       },
     });
   } catch (error) {
-    console.error("Get user KYC status error:", error);
+    logger.error("Get user KYC status error:", error);
     throw createError(ERROR_CODES.INTERNAL_ERROR, "Failed to get KYC status", {
       message: error instanceof Error ? error.message : "Unknown error",
     });
@@ -517,7 +517,7 @@ export class KYCController {
 
       await this.db.query(query, [userId, applicantId]);
     } catch (error) {
-      console.error("Failed to store applicant reference:", error);
+      logger.error("Failed to store applicant reference:", error);
       throw error;
     }
   }
@@ -536,7 +536,7 @@ export class KYCController {
       const result = await this.db.query(query, [userId, applicantId]);
       return result.rows.length > 0;
     } catch (error) {
-      console.error("Failed to verify applicant access:", error);
+      logger.error("Failed to verify applicant access:", error);
       return false;
     }
   }

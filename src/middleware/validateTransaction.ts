@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { resolveToBaseAddress } from "../stellar/muxed";
@@ -53,7 +54,7 @@ export const validateTransaction = (
     }
 
     // Fallback for non-Zod errors
-    console.error("Unexpected validation error:", err);
+    logger.error("Unexpected validation error:", err);
     return res.status(500).json({
       error: "An internal server error occurred during validation",
     });

@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { Pool, PoolClient } from "pg";
 import { pool } from "../config/database";
 import { encrypt, decrypt } from "../utils/encryption";
@@ -247,7 +248,7 @@ export async function updateUserById(
 
     return result.rows[0];
   } catch (err) {
-    console.error("updateUser", err);
+    logger.error("updateUser", err);
     throw err;
   }
 }
@@ -322,7 +323,7 @@ export async function deactivateUserAccount(userId: string, dbPool?: Pool) {
     if (client) {
       await client.query("ROLLBACK");
     }
-    console.error("deactivateUserAccount error:", err);
+    logger.error("deactivateUserAccount error:", err);
     throw err;
   } finally {
     if (client) client.release();
@@ -343,7 +344,7 @@ export async function authenticateUser(
     try {
       return await createUser({ phone_number: phoneNumber });
     } catch (error) {
-      console.error("Failed to create user:", error);
+      logger.error("Failed to create user:", error);
       return null;
     }
   }
@@ -412,7 +413,7 @@ export async function invalidateUserOnPasswordChange(userId: string): Promise<vo
   try {
     await pool.query(`UPDATE refresh_token_families SET is_revoked = true WHERE user_id = $1`, [userId]);
   } catch (error) {
-    console.error("Failed to revoke refresh tokens:", error);
+    logger.error("Failed to revoke refresh tokens:", error);
   }
 
   // 3. Flush Redis express-sessions and flag active stateless JWTs

@@ -1,3 +1,4 @@
+import logger from "../../utils/logger";
 import * as StellarSdk from "stellar-sdk";
 import { getStellarServer, getNetworkPassphrase } from "../../config/stellar";
 import dotenv from "dotenv";
@@ -5,6 +6,7 @@ import { transactionTotal, transactionErrorsTotal } from "../../utils/metrics";
 import { AssetService, getConfiguredPaymentAsset } from "./assetService";
 import { sanctionService } from "../sanctionService";
 import { resolveToBaseAddress } from "../../stellar/muxed";
+import { assertStrictStellarGAddress } from "../../utils/stellarAddressValidator";
 
 dotenv.config();
 
@@ -74,6 +76,29 @@ export class StellarService {
   }
 
   /**
+   * Ping the configured Horizon server to verify reachability.
+   * Throws if the server cannot be reached within the timeout.
+   */
+  async pingHorizon(timeoutMs: number = 5000): Promise<void> {
+    if (this.isMockMode) {
+      console.log("Mock mode: skipping Horizon ping");
+      return;
+    }
+
+    try {
+      const callPromise = this.server.root().call();
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Horizon ping timeout")), timeoutMs),
+      );
+
+      await Promise.race([callPromise, timeoutPromise]);
+    } catch (err) {
+      console.error("Horizon server unreachable:", err instanceof Error ? err.message : err);
+      throw err;
+    }
+  }
+
+  /**
    * Submits a transaction wrapped in a FeeBumpTransaction.
    * This allows the fee payer account to cover network fees for the transaction.
    *
@@ -111,7 +136,7 @@ export class StellarService {
 
       return response;
     } catch (error) {
-      console.error("Stellar fee-bump submission failed:", error);
+      logger.error("Stellar fee-bump submission failed:", error);
       throw error;
     }
   }
@@ -255,6 +280,8 @@ export class StellarService {
   }
 
   async getBalance(address: string): Promise<string> {
+    assertStrictStellarGAddress(address, "address");
+
     try {
       const asset = getConfiguredPaymentAsset();
       // MOCK MODE
@@ -265,7 +292,7 @@ export class StellarService {
 
       return this.assetService.getAssetBalance(address, asset);
     } catch (error) {
-      console.error("Balance fetch failed", error);
+      logger.error("Balance fetch failed", error);
       return "0";
     }
   }
@@ -370,7 +397,7 @@ export class StellarService {
 
       return result;
     } catch (error) {
-      console.error("Failed to fetch transaction history:", error);
+      logger.error("Failed to fetch transaction history:", error);
       throw error;
     }
   }
@@ -405,7 +432,7 @@ export class StellarService {
       await this.server.submitTransaction(transaction);
       console.log("Clawback capability enabled on issuance account");
     } catch (error) {
-      console.error("Failed to enable clawback capability:", error);
+      logger.error("Failed to enable clawback capability:", error);
       throw error;
     }
   }
@@ -419,9 +446,7 @@ export class StellarService {
     adminId?: string,
   ): Promise<{ hash?: string }> {
     // Validate inputs
-    if (!fromAddress || fromAddress.length < 56) {
-      throw new Error("Invalid destination address format");
-    }
+    assertStrictStellarGAddress(fromAddress, "fromAddress");
     if (parseFloat(amount) <= 0) {
       throw new Error("Clawback amount must be positive");
     }
@@ -465,7 +490,7 @@ export class StellarService {
 
       return { hash: response.hash };
     } catch (error) {
-      console.error("Stellar clawback failed:", error);
+      logger.error("Stellar clawback failed:", error);
       // Log failed attempt
       await this.logClawbackToAudit(null, fromAddress, amount, adminId, false, error);
       throw error;
@@ -506,8 +531,16 @@ export class StellarService {
         ]
       );
     } catch (auditError) {
-      console.error("Failed to write clawback audit log:", auditError);
+      logger.error("Failed to write clawback audit log:", auditError);
       // Don't throw - audit logging failure shouldn't break the operation
     }
   }
+}
+
+// Added startEventSubscription to initialize Horizon event subscription
+import { startEventSubscription } from "./escrowEventSubscriber";
+
+// Export function to start event subscription (called from application bootstrap)
+export function initializeEscrowEventProcessing() {
+  startEventSubscription();
 }

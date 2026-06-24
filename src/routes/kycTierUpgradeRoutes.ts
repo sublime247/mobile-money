@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 /**
  * KYC Tier Upgrade Admin Routes
  *
@@ -55,7 +56,7 @@ router.get("/", async (req: Request, res: Response) => {
     const requests = await listUpgradeRequests({ status, limit, offset });
     res.json({ data: requests, count: requests.length });
   } catch (err) {
-    console.error("[kyc-upgrades] list error:", err);
+    logger.error("[kyc-upgrades] list error:", err);
     throw createError(
       ERROR_CODES.INTERNAL_ERROR,
       "Failed to list KYC upgrade requests",
@@ -216,7 +217,7 @@ router.post("/bulk/approve", async (req: Request, res: Response) => {
       results,
     });
   } catch (err) {
-    console.error("[kyc-upgrades] bulk approve error:", err);
+    logger.error("[kyc-upgrades] bulk approve error:", err);
     throw createError(
       ERROR_CODES.INTERNAL_ERROR,
       "Failed to bulk approve requests",
@@ -309,7 +310,7 @@ router.post("/bulk/reject", async (req: Request, res: Response) => {
       results,
     });
   } catch (err) {
-    console.error("[kyc-upgrades] bulk reject error:", err);
+    logger.error("[kyc-upgrades] bulk reject error:", err);
     throw createError(
       ERROR_CODES.INTERNAL_ERROR,
       "Failed to bulk reject requests",

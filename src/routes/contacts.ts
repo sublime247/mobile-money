@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { ContactModel } from "../models/contact";
@@ -140,7 +141,7 @@ contactsRoutes.post(
         );
       }
 
-      console.error("Create contact error:", error);
+      logger.error("Create contact error:", error);
       throw createError(
         ERROR_CODES.INTERNAL_ERROR,
         "Failed to create contact",
@@ -172,7 +173,7 @@ contactsRoutes.get(
       const contacts = await contactModel.listByUser(userId);
       return res.json(contacts);
     } catch (error) {
-      console.error("List contacts error:", error);
+      logger.error("List contacts error:", error);
       throw createError(
         ERROR_CODES.INTERNAL_ERROR,
         "Failed to fetch contacts",
@@ -206,7 +207,7 @@ contactsRoutes.get(
 
       return res.json(contact);
     } catch (error) {
-      console.error("Get contact error:", error);
+      logger.error("Get contact error:", error);
       throw createError(ERROR_CODES.INTERNAL_ERROR, "Failed to fetch contact", {
         error: "Failed to fetch contact",
       });
@@ -309,7 +310,7 @@ contactsRoutes.patch(
         );
       }
 
-      console.error("Update contact error:", error);
+      logger.error("Update contact error:", error);
       throw createError(
         ERROR_CODES.INTERNAL_ERROR,
         "Failed to update contact",
@@ -346,7 +347,7 @@ contactsRoutes.delete(
 
       return res.status(204).send();
     } catch (error) {
-      console.error("Delete contact error:", error);
+      logger.error("Delete contact error:", error);
       throw createError(
         ERROR_CODES.INTERNAL_ERROR,
         "Failed to delete contact",

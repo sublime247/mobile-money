@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import crypto from "crypto";
 import PDFDocument from "pdfkit";
 import { create as createXml } from "xmlbuilder2";
@@ -296,7 +297,7 @@ export async function generateSAR(userId: string, alertId?: string): Promise<{ p
     console.log(`SAR reports generated for user ${userId}. PDF: ${pdfUrl}, XML: ${xmlUrl}`);
     return { pdfUrl, xmlUrl };
   } catch (error) {
-    console.error(`Error generating SAR for user ${userId}:`, error);
+    logger.error(`Error generating SAR for user ${userId}:`, error);
     throw error;
   }
 }

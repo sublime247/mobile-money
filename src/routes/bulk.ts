@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { Router, Request, Response, NextFunction } from "express";
 import { authenticateToken } from "../middleware/auth";
 import multer, { MulterError } from "multer";
@@ -222,7 +223,7 @@ async function processJob(jobId: string, rows: CsvRow[]): Promise<void> {
       }
     }
   } catch (error) {
-    console.error("[BulkImport] Fatal error in processJob:", error);
+    logger.error("[BulkImport] Fatal error in processJob:", error);
   } finally {
     job.status = "completed";
     job.completedAt = new Date();

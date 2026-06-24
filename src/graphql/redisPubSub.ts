@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 /**
  * Redis-backed PubSub for GraphQL Subscriptions
  *
@@ -35,7 +36,7 @@ function makeRedisClient(role: "publisher" | "subscriber"): IORedis {
 
   client.on("error", (err) => {
     if (process.env.NODE_ENV !== "test") {
-      console.error(`[RedisPubSub:${role}] error:`, err.message);
+      logger.error(`[RedisPubSub:${role}] error:`, err.message);
     }
   });
 

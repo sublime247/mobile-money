@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { NextFunction, Request, Response } from "express";
 import ipaddr from "ipaddr.js";
 import { geolocationService } from "../services/geolocation";
@@ -102,7 +103,7 @@ export const ipWhitelist = async (
 
           // Speed > 1000 km/h is physically impossible via standard commercial travel
           if (speedKmph > 1000) {
-            console.error(`[GEOFENCE] Impossible travel blocked for provider ${providerId}. Speed: ${speedKmph.toFixed(2)} km/h.`);
+            logger.error(`[GEOFENCE] Impossible travel blocked for provider ${providerId}. Speed: ${speedKmph.toFixed(2)} km/h.`);
             res.status(403).json({ error: "Forbidden", message: "Impossible travel detected. Provider credentials may be compromised." });
             return;
           }
@@ -120,7 +121,7 @@ export const ipWhitelist = async (
 
     next();
   } catch (error) {
-    console.error("[GEOFENCE] Error in IP Whitelist/Geofence middleware:", error);
+    logger.error("[GEOFENCE] Error in IP Whitelist/Geofence middleware:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 };

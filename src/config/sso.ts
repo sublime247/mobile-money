@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { SSOConfig } from "../auth/sso.js";
 
 /**
@@ -177,7 +178,7 @@ export async function initializeSSOProviders(): Promise<void> {
   const errors = validateSSOConfig(config);
 
   if (errors.length > 0) {
-    console.error("[SSO] Configuration errors:", errors);
+    logger.error("[SSO] Configuration errors:", errors);
     throw new Error(`SSO configuration invalid: ${errors.join(", ")}`);
   }
 
@@ -195,7 +196,7 @@ export async function initializeSSOProviders(): Promise<void> {
         `[SSO] Initialized provider: ${providerConfig.providerName}`
       );
     } catch (error) {
-      console.error(
+      logger.error(
         `[SSO] Failed to initialize provider ${providerConfig.providerName}:`,
         error
       );

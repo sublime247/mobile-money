@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { SnapshotService } from "../services/snapshotService";
 
 /**
@@ -13,7 +14,7 @@ export async function runSnapshotJob(): Promise<void> {
     console.log(`[snapshot]   Total Balance: ${snapshot.totalBalance}`);
     console.log(`[snapshot]   Daily Volume: ${snapshot.dailyVolume} (${snapshot.transactionCount} txns)`);
   } catch (error) {
-    console.error("[snapshot] Failed to perform daily snapshot:", error);
+    logger.error("[snapshot] Failed to perform daily snapshot:", error);
     throw error;
   }
 }

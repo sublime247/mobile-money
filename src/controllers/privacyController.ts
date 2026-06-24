@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { Request, Response } from "express";
 import { GDPRService } from "../services/gdprService";
 import { logAuditEvent } from "../utils/log-audit-event";
@@ -27,7 +28,7 @@ const privacyController = {
       res.setHeader("Content-Length", zipBuffer.length);
       res.send(zipBuffer);
     } catch (err) {
-      console.error("Export error: ", err);
+      logger.error("Export error: ", err);
       throw createError(ERROR_CODES.INTERNAL_ERROR, "Failed to export data.");
     }
   },
@@ -60,7 +61,7 @@ const privacyController = {
         },
       });
     } catch (err) {
-      console.error("Right to be forgotten error:", err);
+      logger.error("Right to be forgotten error:", err);
       throw createError(ERROR_CODES.INTERNAL_ERROR, "Failed to process erasure request");
     }
   },

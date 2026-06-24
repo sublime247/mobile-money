@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { createClient } from "redis";
 import RedisStore from "connect-redis";
 
@@ -34,7 +35,7 @@ const redisClient = createClient({
       }
 
       if (retries > 100) {
-        console.error("Redis: Max reconnection attempts reached", { cause });
+        logger.error("Redis: Max reconnection attempts reached", { cause });
         return new Error("Max reconnection attempts reached");
       }
       return Math.min(100 + retries * 200, 3000);
@@ -141,7 +142,7 @@ async function refreshMasterEndpoint(
       redisClient.disconnect();
       await redisClient.connect();
     } catch (error) {
-      console.error("Redis: reconnect after master endpoint update failed", error);
+      logger.error("Redis: reconnect after master endpoint update failed", error);
     }
   }
 
@@ -231,7 +232,7 @@ async function setupSentinelSwitchMasterListener(): Promise<void> {
 }
 
 redisClient.on("error", (err) => {
-  console.error("Redis Client Error:", err);
+  logger.error("Redis Client Error:", err);
   if (SENTINEL_ENABLED && /READONLY/i.test(String(err?.message || ""))) {
     void forceFailoverReconnect("redis:readonly");
   }
@@ -311,6 +312,6 @@ export async function flushUserSessions(userId: string): Promise<void> {
       }
     } while (cursor !== "0");
   } catch (error) {
-    console.error(`Redis: Failed to flush sessions for user ${userId}`, error);
+    logger.error(`Redis: Failed to flush sessions for user ${userId}`, error);
   }
 }

@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { pool } from "../config/database";
 import {
   APP_MAINTENANCE_MODE,
@@ -127,7 +128,7 @@ export async function runIndexReindexJob(): Promise<void> {
 
     console.info("[index-reindex] Completed reindex maintenance job");
   } catch (error) {
-    console.error("[index-reindex] Failed to complete reindex maintenance:", error);
+    logger.error("[index-reindex] Failed to complete reindex maintenance:", error);
     throw error;
   }
 }

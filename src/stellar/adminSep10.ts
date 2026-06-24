@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { Router, Request, Response } from "express";
 import { Sep10Service, getSep10Config, Sep10ChallengeResponse, Sep10TokenResponse } from "./sep10";
 import { adminStellarKeyModel } from "../models/adminStellarKey";
@@ -94,7 +95,7 @@ router.get("/challenge", (req: Request, res: Response) => {
 
     return res.json(challenge);
   } catch (error) {
-    console.error("[Admin SEP-10] Error generating challenge:", error);
+    logger.error("[Admin SEP-10] Error generating challenge:", error);
 
     if (error instanceof Error) {
       throw createError(ERROR_CODES.INVALID_INPUT, error.message, {
@@ -133,7 +134,7 @@ router.get("/challenge", (req: Request, res: Response) => {
 
     return res.json(tokenResponse);
   } catch (error) {
-    console.error("[Admin SEP-10] Error verifying challenge:", error);
+    logger.error("[Admin SEP-10] Error verifying challenge:", error);
 
     if (error instanceof Error) {
       throw createError(ERROR_CODES.INVALID_INPUT, error.message, {

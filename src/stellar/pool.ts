@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 /**
  * Stellar Channel Accounts Pool (DB-Backed)
  *
@@ -228,7 +229,7 @@ export class ChannelAccountsPool {
               `[Pool] Seeded account ${cfg.publicKey.substring(0, 8)}... seq=${seq}`,
             );
           } catch (err) {
-            console.error(
+            logger.error(
               `[Pool] Failed to seed account ${cfg.publicKey}:`,
               err,
             );
@@ -551,7 +552,7 @@ export class ChannelAccountsPool {
 
       return newSequence;
     } catch (error) {
-      console.error(
+      logger.error(
         `[Pool] Failed to resync sequence for ${publicKey}:`,
         error,
       );
@@ -568,7 +569,7 @@ export class ChannelAccountsPool {
     const accounts = await this.model.findAll();
     const promises = accounts.map((row) =>
       this.resyncSequence(row.publicKey).catch((err) => {
-        console.error(`[Pool] Failed to resync ${row.publicKey}:`, err);
+        logger.error(`[Pool] Failed to resync ${row.publicKey}:`, err);
       }),
     );
 
@@ -654,7 +655,7 @@ export class ChannelAccountsPool {
           newSequence: newSequence?.toString(),
           maxErrors: this.config.maxConsecutiveErrors,
         })
-        .catch((err) => console.error(`[Pool] Failed to release account:`, err))
+        .catch((err) => logger.error(`[Pool] Failed to release account:`, err))
         .finally(() => this.processQueue()); // Always process the next queue item
     };
 
@@ -685,7 +686,7 @@ export class ChannelAccountsPool {
     // Run maintenance every 5 seconds
     this.maintenanceInterval = setInterval(() => {
       this.performMaintenance().catch((err) =>
-        console.error("[Pool] Maintenance error:", err),
+        logger.error("[Pool] Maintenance error:", err),
       );
     }, 5000);
   }
@@ -826,7 +827,7 @@ export async function generateTestChannelAccounts(
         `[Pool] Created channel account ${i + 1}/${count}: ${newKeypair.publicKey().substring(0, 8)}...`,
       );
     } catch (error) {
-      console.error(`[Pool] Failed to create account ${i + 1}:`, error);
+      logger.error(`[Pool] Failed to create account ${i + 1}:`, error);
       throw error;
     }
   }

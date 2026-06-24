@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import * as StellarSdk from "stellar-sdk";
 import { getStellarServer } from "../config/stellar";
 import { notifySlackAlert } from "../services/loggers";
@@ -88,7 +89,7 @@ async function getWalletBalances(publicKey: string): Promise<WalletBalance> {
 
     return { publicKey, balances };
   } catch (error) {
-    console.error(`[balance-monitor] Failed to load account ${publicKey}:`, error);
+    logger.error(`[balance-monitor] Failed to load account ${publicKey}:`, error);
     throw error;
   }
 }
@@ -169,7 +170,7 @@ async function checkBalancesAndAlert(): Promise<void> {
         );
       }
     } catch (error) {
-      console.error(`[balance-monitor] Error checking wallet ${walletKey}:`, error);
+      logger.error(`[balance-monitor] Error checking wallet ${walletKey}:`, error);
       // Send alert for monitoring failure
       await notifySlackAlert({
         statusCode: 500,

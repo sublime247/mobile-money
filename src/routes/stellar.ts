@@ -1,8 +1,9 @@
+import logger from "../utils/logger";
 import { Router, Request, Response } from "express";
 import { sep24RateLimiter as stellarRateLimiter } from "../middleware/rateLimit";
 import NodeCache from "node-cache";
-import { StrKey } from "stellar-sdk";
 import { getStellarServer } from "../config/stellar";
+import { validateStellarAddressMiddleware } from "../middleware/validateStellarAddress";
 
 const router = Router();
 
@@ -18,16 +19,9 @@ const server = getStellarServer();
 router.get(
   "/balance/:address",
   limiter,
+  validateStellarAddressMiddleware,
   async (req: Request, res: Response) => {
     const { address } = req.params;
-
-    // Validate obvious invalid values early.
-    const looksLikeAddress = /^G[A-Z0-9]{20,60}$/.test(address);
-    if (!looksLikeAddress) {
-      return res.status(400).json({
-        error: "Invalid Stellar address",
-      });
-    }
 
     //Check cache
     const cached = cache.get(address);
@@ -85,7 +79,7 @@ router.get(
         });
       }
 
-      console.error(error);
+      logger.error(error);
 
       return res.status(500).json({
         error: "Failed to fetch account balance",

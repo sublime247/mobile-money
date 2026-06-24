@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { sanctionService } from "../services/sanctionService";
 
 /**
@@ -14,7 +15,7 @@ export async function runSanctionSyncJob(): Promise<void> {
     await sanctionService.updateSanctionList(updates);
     console.log("[sanction-sync] Successfully updated internal sanction blacklist.");
   } catch (error) {
-    console.error("[sanction-sync] Critical failure during sanction sync:", error);
+    logger.error("[sanction-sync] Critical failure during sanction sync:", error);
     throw error;
   }
 }

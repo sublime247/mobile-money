@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { Router, Request, Response } from 'express';
 import { Transform } from 'stream';
 import { pipeline } from 'stream/promises';
@@ -162,7 +163,7 @@ export function createExportRoutes(options?: {
 
       await pipeline(rowStream, transform, res);
     } catch (error) {
-      console.error("Transaction export failed:", error);
+      logger.error("Transaction export failed:", error);
       releaseClient();
       if (!res.headersSent) {
         res.status(500).json({ error: "Export failed" });

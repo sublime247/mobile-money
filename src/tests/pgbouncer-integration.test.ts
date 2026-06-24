@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { pool, getPgBouncerStats, queryRead, queryWrite } from "../config/database";
 import { describe, it, expect, beforeAll, afterAll } from "@jest/globals";
 
@@ -211,7 +212,7 @@ describe("PgBouncer Integration Tests", () => {
             const result = await pool.query("SELECT 1");
             results.push(result);
           } catch (err) {
-            console.error("Query failed:", err);
+            logger.error("Query failed:", err);
             throw err;
           }
         }
@@ -228,7 +229,7 @@ describe("PgBouncer Integration Tests", () => {
       try {
         await pool.query("SELECT 1");
       } catch (err) {
-        console.error("Unexpected error:", err);
+        logger.error("Unexpected error:", err);
       }
 
       const statsAfter = await getPgBouncerStats();

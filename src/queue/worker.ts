@@ -20,6 +20,7 @@ import { smsService } from "../services/sms";
 import { notificationRouter } from "../services/notificationRouter";
 import { pushNotificationService } from "../services/push";
 import { capturePersistentFailure } from "./dlq";
+import { isBlacklisted } from "../middleware/ipBlacklist";
 import { queryRead, queryWrite } from "../config/database";
 import subscriptionModel from "../models/subscription";
 import logger from "../utils/logger";
@@ -173,7 +174,7 @@ async function sendTransactionPush(
       });
     }
   } catch (pushError) {
-    console.error(`[${transactionId}] Push notification failed:`, pushError);
+    logger.error(`[${transactionId}] Push notification failed:`, pushError);
   }
 }
 
@@ -212,6 +213,37 @@ async function processTransaction(
     phoneNumber,
     provider,
     stellarAddress,
+    clientIp,
+  } = data;
+
+  // ── IP Blacklist check ──────────────────────────────────────────────────────
+  // Reject jobs whose originating IP is blacklisted before any provider I/O.
+  if (clientIp) {
+    const blocked = await isBlacklisted(clientIp);
+    if (blocked) {
+      console.warn(
+        `[ipBlacklist] Worker rejected job ${transactionId} — originating IP is blacklisted: ${clientIp}`,
+      );
+      await transactionModel.updateStatus(transactionId, TransactionStatus.Failed);
+      await notifyTransactionWebhook(transactionId, "transaction.failed", {
+        transactionModel,
+        webhookService,
+      });
+      await rabbitMQManager.publish(EXCHANGES.TRANSACTIONS, ROUTING_KEYS.TRANSACTION_FAILED, {
+        transactionId,
+        status: "failed",
+        error: "Request originated from a blacklisted IP address",
+      });
+      return {
+        success: false,
+        transactionId,
+        error: "Request originated from a blacklisted IP address",
+      };
+    }
+  }
+  // ───────────────────────────────────────────────────────────────────────────
+
+  console.log(`[RabbitMQ] Processing ${type} transaction: ${transactionId}`);
     requestId,
     _traceId,
   } = data;
@@ -537,7 +569,7 @@ async function processTransaction(
 
     // TODO: commented out because I couldn't find the job variable so to clear `rebase/merge` error
     // if (job) {
-    //   capturePersistentFailure(job).catch(err => console.error('[DLQ] Error capturing failure:', err));
+    //   capturePersistentFailure(job).catch(err => logger.error('[DLQ] Error capturing failure:', err));
     // }
   }
   // );

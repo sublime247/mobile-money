@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { Request, Response, NextFunction } from "express";
 
 // Define valid providers in uppercase
@@ -49,7 +50,7 @@ export const normalizeProvider = (
 
     next();
   } catch (error) {
-    console.error("Error in normalizeProvider middleware:", error);
+    logger.error("Error in normalizeProvider middleware:", error);
     return res.status(500).json({
       error: "An internal server error occurred during provider normalization",
     });

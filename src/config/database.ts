@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { Pool, QueryConfig, QueryResult, QueryResultRow, PoolClient } from "pg";
 import { auditService } from "../services/auditlogService";
 import { isReadOnlyQuery } from "../utils/readOnlyDetector";
@@ -195,7 +196,7 @@ const originalPoolQuery = pool.query.bind(pool);
               query: sanitizeQuery(queryString),
               isUpdate,
             }
-          }).catch(err => console.error("[PII Audit Interceptor] Failed:", err));
+          }).catch(err => logger.error("[PII Audit Interceptor] Failed:", err));
         });
       }
     }

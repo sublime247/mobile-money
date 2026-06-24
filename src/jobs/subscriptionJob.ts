@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import subscriptionModel from "../models/subscription";
 import { TransactionModel } from "../models/transaction";
 import { addTransactionJob } from "../queue/transactionQueue";
@@ -57,7 +58,7 @@ export async function runSubscriptionJob(): Promise<void> {
       await queryWrite(`UPDATE subscriptions SET last_run_at = NOW(), next_run_at = ${computeNextRun(s.interval)}, updated_at = NOW() WHERE id = $1`, [s.id]);
       console.log(`[subscriptions] Scheduled transaction ${tx.id} for subscription ${s.id}`);
     } catch (err) {
-      console.error(`[subscriptions] Error processing subscription ${s.id}:`, err);
+      logger.error(`[subscriptions] Error processing subscription ${s.id}:`, err);
     }
   }
 }

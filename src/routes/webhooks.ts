@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { Router, Request, Response } from "express";
 import { createHmac, timingSafeEqual } from "crypto";
 import { TransactionModel, TransactionStatus } from "../models/transaction";
@@ -133,7 +134,7 @@ router.get("/sample", (req: Request, res: Response) => res.json(SAMPLE_WEBHOOK_P
 router.post("/", async (req: Request, res: Response) => {
   const webhookSecret = process.env.WEBHOOK_SECRET;
   if (!webhookSecret) {
-    console.error("[webhook] WEBHOOK_SECRET not configured");
+    logger.error("[webhook] WEBHOOK_SECRET not configured");
     return res.status(500).json({ error: "Webhook processing not configured" });
   }
   const signature = req.headers["x-webhook-signature"] as string | undefined;
@@ -158,7 +159,7 @@ router.post("/", async (req: Request, res: Response) => {
     console.log(`[webhook] Processed event ${payload.event_id} for transaction ${payload.transaction_id}`);
     return res.status(200).json({ success: true, event_id: payload.event_id, transaction_id: payload.transaction_id, processed_at: new Date().toISOString() });
   } catch (error) {
-    console.error("[webhook] Processing error", error);
+    logger.error("[webhook] Processing error", error);
     return res.status(500).json({ error: "Internal server error" });
   }
 });

@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { TransactionModel, TransactionStatus } from "../models/transaction";
 import { MobileMoneyService, BatchPayoutItem, BatchPayoutResult } from "../services/mobilemoney/mobileMoneyService";
 import { rabbitMQManager, EXCHANGES, ROUTING_KEYS } from "./rabbitmq";
@@ -96,7 +97,7 @@ async function sendTransactionPush(
       });
     }
   } catch (pushError) {
-    console.error(`[${transactionId}] Push notification failed:`, pushError);
+    logger.error(`[${transactionId}] Push notification failed:`, pushError);
   }
 }
 
@@ -128,7 +129,7 @@ async function sendTxnSms(
       errorMessage,
     });
   } catch (smsErr) {
-    console.error(`[${transactionId}] SMS notification error`, smsErr);
+    logger.error(`[${transactionId}] SMS notification error`, smsErr);
   }
 }
 
@@ -164,7 +165,7 @@ async function processBatchResults(
     const result = resultMap.get(payout.transactionId);
 
     if (!result) {
-      console.error(`[${payout.transactionId}] No result returned from batch`);
+      logger.error(`[${payout.transactionId}] No result returned from batch`);
       await transactionModel.updateStatus(
         payout.transactionId,
         TransactionStatus.Failed,
@@ -302,7 +303,7 @@ async function runBatchCycle(): Promise<void> {
       await processBatch(provider);
     }
   } catch (error) {
-    console.error("[BatchPayoutWorker] Error in batch cycle:", error);
+    logger.error("[BatchPayoutWorker] Error in batch cycle:", error);
   } finally {
     isRunning = false;
   }
@@ -318,13 +319,13 @@ export function startBatchPayoutWorker(): void {
   
   // Run immediately on start
   runBatchCycle().catch(err => 
-    console.error("[BatchPayoutWorker] Initial cycle error:", err)
+    logger.error("[BatchPayoutWorker] Initial cycle error:", err)
   );
 
   // Then run on interval
   intervalId = setInterval(() => {
     runBatchCycle().catch(err =>
-      console.error("[BatchPayoutWorker] Interval cycle error:", err)
+      logger.error("[BatchPayoutWorker] Interval cycle error:", err)
     );
   }, BATCH_INTERVAL_MS);
 }

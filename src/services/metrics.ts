@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { queryRead } from "../config/database";
 import { redisClient } from "../config/redis";
 
@@ -145,7 +146,7 @@ export async function getTransactionResolutionPercentiles(
 
     return metrics;
   } catch (error) {
-    console.error("Error calculating transaction percentiles:", error);
+    logger.error("Error calculating transaction percentiles:", error);
     return createEmptyMetrics();
   }
 }
@@ -204,7 +205,7 @@ export async function getTransactionResolutionTrends(
 
     return trends;
   } catch (error) {
-    console.error("Error calculating transaction trends:", error);
+    logger.error("Error calculating transaction trends:", error);
     return [];
   }
 }
@@ -286,7 +287,7 @@ export async function getDisputeResolutionPercentiles(
 
     return metrics;
   } catch (error) {
-    console.error("Error calculating dispute percentiles:", error);
+    logger.error("Error calculating dispute percentiles:", error);
     return createEmptyMetrics();
   }
 }
@@ -345,7 +346,7 @@ export async function getDisputeResolutionTrends(
 
     return trends;
   } catch (error) {
-    console.error("Error calculating dispute trends:", error);
+    logger.error("Error calculating dispute trends:", error);
     return [];
   }
 }

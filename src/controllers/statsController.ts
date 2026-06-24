@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { Request, Response } from "express";
 import { StatsService } from "../services/statsService";
 import { Cache } from "../services/cache";
@@ -56,7 +57,7 @@ export class StatsController {
       };
       return res.json(response);
     } catch (error) {
-      console.error("Error fetching stats:", error);
+      logger.error("Error fetching stats:", error);
       throw createError(
         ERROR_CODES.INTERNAL_ERROR,
         "Failed to calculate statistics",

@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { Job, Worker } from "bullmq";
 import { runProviderBalanceAlertJob } from "../jobs/balances";
 import { queueOptions } from "./config";
@@ -33,7 +34,7 @@ export function startProviderBalanceAlertWorker(): void {
   });
 
   providerBalanceAlertWorker.on("failed", (job, error) => {
-    console.error(
+    logger.error(
       `[${PROVIDER_BALANCE_ALERT_JOB_NAME}] Failed job ${job?.id}:`,
       error.message,
     );

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { printError } from "./momo-cli";
 /**
  * Database Backup Script (Issue #553)
  * 
@@ -39,9 +40,9 @@ async function main() {
       console.log(`   Duration: ${result.duration_ms}ms`);
       console.log(`   Checksum: ${result.metadata?.checksum.substring(0, 16)}...`);
     } else {
-      console.error("");
-      console.error("❌ Backup Failed!");
-      console.error(`   Error: ${result.error}`);
+      printError("");
+      printError("❌ Backup Failed!");
+      printError(`   Error: ${result.error}`);
       process.exit(1);
     }
 
@@ -62,7 +63,7 @@ async function main() {
     console.log(`Completed: ${new Date().toISOString()}`);
     console.log("================================================");
   } catch (error) {
-    console.error("Fatal error:", error);
+    printError("Fatal error:", error);
     process.exit(1);
   }
 }

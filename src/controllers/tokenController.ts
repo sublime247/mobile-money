@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { Request, Response } from "express";
 import { redisClient } from "../config/redis";
 import { RefreshTokenFamilyModel } from "../models/refreshTokenFamily";
@@ -24,7 +25,7 @@ export const tokenController = {
         data: { tokens: rows },
       });
     } catch (err: any) {
-      console.error(err);
+      logger.error(err);
 
       res.status(500).json({ success: false, error: err.message });
     }
@@ -49,7 +50,7 @@ export const tokenController = {
         message: "Token revoked successfully",
       });
     } catch (err: any) {
-      console.error(err);
+      logger.error(err);
       res.status(500).json({ success: false, error: err.message });
     }
   },
@@ -75,7 +76,7 @@ export const tokenController = {
         revokedCount: data.tokenResult.rows.length,
       });
     } catch (err: any) {
-      console.error("Error revoking all tokens:", err);
+      logger.error("Error revoking all tokens:", err);
 
       res.status(500).json({ success: false, error: err.message });
     }
@@ -96,7 +97,7 @@ export const tokenController = {
         purgedCount: data.purgedCount,
       });
     } catch (err: any) {
-      console.error("Error purging tokens:", err);
+      logger.error("Error purging tokens:", err);
 
       res.status(500).json({
         success: false,

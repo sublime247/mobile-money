@@ -1,3 +1,4 @@
+import logger from "../logger";
 /**
  * Integration smoke-tests for the redaction layer.
  *
@@ -221,7 +222,7 @@ describe("smoke — error objects with sensitive content are scrubbed", () => {
   });
 
   it("mirrors the errorHandler console.error call shape", () => {
-    // errorHandler calls: console.error({ timestamp, requestId, code, message, stack, statusCode })
+    // errorHandler calls: logger.error({ timestamp, requestId, code, message, stack, statusCode })
     // When installGlobalLogger is active, console.error → writeEntry("error", args)
     // which calls buildStructuredLogEntry then redact.
     // We simulate that exact call shape here.

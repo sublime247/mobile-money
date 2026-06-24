@@ -1,4 +1,5 @@
 #!/usr/bin/env tsx
+import { printError } from "./momo-cli";
 /**
  * Automated Index Defragmentation Script
  *
@@ -29,7 +30,7 @@ async function main() {
     console.log("");
     console.log("✅ Index maintenance script completed");
   } catch (error) {
-    console.error("❌ Index maintenance script failed:", error);
+    printError("❌ Index maintenance script failed:", error);
     process.exit(1);
   }
 }

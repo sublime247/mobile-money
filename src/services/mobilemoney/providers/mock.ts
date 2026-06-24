@@ -22,6 +22,7 @@ export class MockProvider implements MobileMoneyProvider {
         transactionId: `mock-pay-${Date.now()}`,
         status: "PENDING",
       },
+      providerResponseTimeMs: 0,
     };
   }
 
@@ -34,6 +35,7 @@ export class MockProvider implements MobileMoneyProvider {
         transactionId: `mock-payout-${Date.now()}`,
         status: "SUCCESSFUL",
       },
+      providerResponseTimeMs: 0,
     };
   }
 

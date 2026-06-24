@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { Router, Request, Response } from "express";
 import { pool } from "../config/database";
 import { requireAuth, AuthRequest } from "../middleware/auth";
@@ -87,7 +88,7 @@ statementsRoutes.get(
 
       res.send(pdfBuffer);
     } catch (error) {
-      console.error("Error generating monthly statement:", error);
+      logger.error("Error generating monthly statement:", error);
       res.status(500).json({ error: "Failed to generate statement" });
     }
   }

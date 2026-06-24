@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 /**
  * APQ Redis Cache Adapter
  *
@@ -99,7 +100,7 @@ export function createAPQCache(): RedisAPQCache {
   client.on("error", (err) => {
     // Suppress noisy repeated errors — the cache adapter already logs once
     if (process.env.NODE_ENV !== "test") {
-      console.error("[APQ] ioredis error:", err.message);
+      logger.error("[APQ] ioredis error:", err.message);
     }
   });
 

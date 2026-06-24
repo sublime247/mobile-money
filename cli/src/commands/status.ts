@@ -1,5 +1,7 @@
 import { Command } from "commander";
+import chalk from "chalk";
 import { getTransaction } from "../api";
+import { printError } from "../dashboard";
 
 export function registerStatusCommand(program: Command): void {
   program
@@ -8,18 +10,31 @@ export function registerStatusCommand(program: Command): void {
     .action(async (transactionId: string) => {
       try {
         const tx = await getTransaction(transactionId);
-        console.log(`Transaction: ${tx.id}`);
-        console.log(`Reference:   ${tx.referenceNumber}`);
-        console.log(`Type:        ${tx.type}`);
-        console.log(`Amount:      ${tx.amount}`);
-        console.log(`Phone:       ${tx.phoneNumber}`);
-        console.log(`Provider:    ${tx.provider}`);
-        console.log(`Status:      ${tx.status}`);
-        console.log(`Retries:     ${tx.retryCount}`);
-        console.log(`Created:     ${tx.createdAt}`);
+        const statusColor =
+          tx.status === "completed"
+            ? chalk.green
+            : tx.status === "failed"
+              ? chalk.red
+              : tx.status === "pending"
+                ? chalk.yellow
+                : chalk.gray;
+        console.log(`${chalk.bold("Transaction:")} ${chalk.cyan(tx.id)}`);
+        console.log(`${chalk.bold("Reference:  ")} ${tx.referenceNumber}`);
+        console.log(`${chalk.bold("Type:       ")} ${tx.type}`);
+        console.log(`${chalk.bold("Amount:     ")} ${chalk.cyan(tx.amount)}`);
+        console.log(`${chalk.bold("Phone:      ")} ${tx.phoneNumber}`);
+        console.log(`${chalk.bold("Provider:   ")} ${tx.provider}`);
+        console.log(`${chalk.bold("Status:     ")} ${statusColor(tx.status)}`);
+        console.log(`${chalk.bold("Retries:    ")} ${tx.retryCount}`);
+        console.log(
+          `${chalk.bold("Created:    ")} ${chalk.gray(tx.createdAt)}`,
+        );
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error(`✗ ${msg}`);
+        printError(
+          `Failed to fetch transaction ${transactionId}`,
+          err instanceof Error ? err : undefined,
+          "ERR_STATUS",
+        );
         process.exit(1);
       }
     });

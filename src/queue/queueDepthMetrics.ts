@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { Request, Response } from "express";
 import { providerBalanceAlertQueue } from "./providerBalanceAlertQueue";
 import { accountMergeQueue } from "./accountMergeQueue";
@@ -104,7 +105,7 @@ export async function queueDepthHandler(req: Request, res: Response) {
     const metrics = await getQueueStatsAggregate();
     res.json(metrics);
   } catch (err) {
-    console.error("Failed to fetch queue depth:", err);
+    logger.error("Failed to fetch queue depth:", err);
     throw createError(
       ERROR_CODES.INTERNAL_ERROR,
       "Failed to fetch queue depth",
@@ -155,7 +156,7 @@ export async function queueDepthPrometheusHandler(req: Request, res: Response) {
       .set("Content-Type", "text/plain; version=0.0.4")
       .send(lines.join("\n") + "\n");
   } catch (err) {
-    console.error("Failed to expose queue depth metrics:", err);
+    logger.error("Failed to expose queue depth metrics:", err);
     res.status(500).send("# error fetching queue depth\n");
   }
 }

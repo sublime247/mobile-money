@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { Request, Response } from "express";
 import { AMLAlertModel, AMLAlertFilter } from "../models/amlAlert";
 import { TransactionModel } from "../models/transaction";
@@ -139,7 +140,7 @@ export const listAmlAlertsForAudit = async (
       },
     });
   } catch (error) {
-    console.error("Failed to list AML alerts for audit:", error);
+    logger.error("Failed to list AML alerts for audit:", error);
     res.status(500).json({ error: "Failed to list AML alerts" });
   }
 };
@@ -198,7 +199,7 @@ export const getAmlAlertDetails = async (
       reviewHistory,
     });
   } catch (error) {
-    console.error("Failed to get AML alert details:", error);
+    logger.error("Failed to get AML alert details:", error);
     res.status(500).json({ error: "Failed to get AML alert details" });
   }
 };
@@ -258,7 +259,7 @@ export const reviewAmlAlert = async (
       alert: updated,
     });
   } catch (error) {
-    console.error("Failed to review AML alert:", error);
+    logger.error("Failed to review AML alert:", error);
     res.status(500).json({ error: "Failed to review AML alert" });
   }
 };
@@ -356,7 +357,7 @@ export const searchAmlAlertsByUser = async (
       pendingReview: result.pendingReview,
     });
   } catch (error) {
-    console.error("Failed to search AML alerts by user:", error);
+    logger.error("Failed to search AML alerts by user:", error);
     res.status(500).json({ error: "Failed to search AML alerts" });
   }
 };
@@ -424,7 +425,7 @@ export const getAmlDashboardStats = async (
       },
     });
   } catch (error) {
-    console.error("Failed to get AML dashboard stats:", error);
+    logger.error("Failed to get AML dashboard stats:", error);
     res.status(500).json({ error: "Failed to get AML dashboard stats" });
   }
 };
@@ -466,7 +467,7 @@ export const markAlertForSAR = async (
       xmlUrl,
     });
   } catch (error) {
-    console.error("Failed to mark alert for SAR:", error);
+    logger.error("Failed to mark alert for SAR:", error);
     res.status(500).json({ error: "Failed to generate SAR reports" });
   }
 };

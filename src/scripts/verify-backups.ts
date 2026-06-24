@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { printError } from "./momo-cli";
 /**
  * Database Backup Verification Script (Issue #553)
  * 
@@ -39,7 +40,7 @@ async function main() {
     }
     
     if (!safety.safe) {
-      console.error("❌ Data safety check did not pass! General health is bad.");
+      printError("❌ Data safety check did not pass! General health is bad.");
       process.exit(1);
     }
 
@@ -68,12 +69,12 @@ async function main() {
       console.log("================================================");
       process.exit(0);
     } else {
-      console.error("\n❌ Backup Integrity Verification FAILED!");
-      console.error("   The latest backup file or metadata is corrupted.");
+      printError("\n❌ Backup Integrity Verification FAILED!");
+      printError("   The latest backup file or metadata is corrupted.");
       process.exit(1);
     }
   } catch (error) {
-    console.error("\nFatal error during verification:", error);
+    printError("\nFatal error during verification:", error);
     process.exit(1);
   }
 }

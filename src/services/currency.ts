@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import axios from "axios";
 import { exchangeRateBufferService, BufferedRate } from "./exchangeRateBufferService";
 
@@ -95,7 +96,7 @@ export class CurrencyService {
 
     this.refreshTimer = setInterval(() => {
       this.fetchRates().catch((err: Error) => {
-        console.error(
+        logger.error(
           "[CurrencyService] Scheduled rate refresh failed:",
           err.message,
         );
@@ -286,12 +287,12 @@ export class CurrencyService {
       const message = (err as Error).message;
       if (this.cache) {
         // Stale cache is better than fallback — keep it and warn
-        console.error(
+        logger.error(
           `[CurrencyService] Rate refresh failed (keeping cached rates): ${message}`,
         );
       } else {
         // First load failed — use static fallbacks so the service stays usable
-        console.error(
+        logger.error(
           `[CurrencyService] Initial rate fetch failed (using fallback rates): ${message}`,
         );
         this.cache = { rates: FALLBACK_RATES, fetchedAt: new Date() };

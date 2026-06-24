@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { Router, Request, Response } from "express";
 import { z } from "zod";
 import {
@@ -49,7 +50,7 @@ priceHistoryRoutes.get("/latest", async (req: Request, res: Response) => {
     }
     return res.json(snapshot);
   } catch (err) {
-    console.error("[priceHistory] /latest failed:", err);
+    logger.error("[priceHistory] /latest failed:", err);
     return res.status(500).json({ error: "Failed to fetch latest price" });
   }
 });
@@ -103,7 +104,7 @@ priceHistoryRoutes.get("/history", async (req: Request, res: Response) => {
       snapshots: rows,
     });
   } catch (err) {
-    console.error("[priceHistory] /history failed:", err);
+    logger.error("[priceHistory] /history failed:", err);
     return res.status(500).json({ error: "Failed to fetch price history" });
   }
 });
@@ -146,7 +147,7 @@ priceHistoryRoutes.get("/at", async (req: Request, res: Response) => {
     }
     return res.json(result);
   } catch (err) {
-    console.error("[priceHistory] /at failed:", err);
+    logger.error("[priceHistory] /at failed:", err);
     return res.status(500).json({ error: "Failed to compute historical value" });
   }
 });
@@ -212,7 +213,7 @@ priceHistoryRoutes.get(
         ...result,
       });
     } catch (err) {
-      console.error("[priceHistory] /transaction/:id/valuation failed:", err);
+      logger.error("[priceHistory] /transaction/:id/valuation failed:", err);
       return res
         .status(500)
         .json({ error: "Failed to compute transaction valuation" });

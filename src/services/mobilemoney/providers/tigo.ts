@@ -1,6 +1,7 @@
 import axios from "axios";
 import { randomUUID } from "crypto";
 import logger from "../../../utils/logger";
+import { resolveTigoHttpError, resolveTigoTransactionStatus } from "./errors/tigoErrorMatrix";
 
 interface TigoBalanceResponse {
   availableBalance?: string | number;
@@ -79,11 +80,21 @@ export class TigoProvider {
         },
       );
       const duration = Date.now() - start;
+      const httpErr = resolveTigoHttpError(response.status);
+      if (httpErr) {
+        log.error({ duration, status: response.status, errorCode: httpErr.errorCode }, "Tigo: payment request failed");
+        return Object.assign({ success: false, providerResponseTimeMs: duration }, { error: Object.assign(new Error(httpErr.message), { errorCode: httpErr.errorCode, retryable: httpErr.retryable }) });
+      }
       log.info({ duration, status: response.status }, "Tigo: payment request succeeded");
       return { success: true, data: response.data, providerResponseTimeMs: duration };
     } catch (err: any) {
       const duration = Date.now() - start;
-      log.error({ duration, error: err.message }, "Tigo: payment request failed");
+      const httpStatus = err?.response?.status;
+      const mapped = httpStatus ? resolveTigoHttpError(httpStatus) : undefined;
+      if (mapped) {
+        Object.assign(err, { errorCode: mapped.errorCode, retryable: mapped.retryable });
+      }
+      log.error({ duration, error: err.message, errorCode: mapped?.errorCode }, "Tigo: payment request failed");
       return { success: false, error: err, providerResponseTimeMs: duration };
     }
   }
@@ -111,11 +122,21 @@ export class TigoProvider {
         },
       );
       const duration = Date.now() - start;
+      const httpErr = resolveTigoHttpError(response.status);
+      if (httpErr) {
+        log.error({ duration, status: response.status, errorCode: httpErr.errorCode }, "Tigo: payout failed");
+        return Object.assign({ success: false, providerResponseTimeMs: duration }, { error: Object.assign(new Error(httpErr.message), { errorCode: httpErr.errorCode, retryable: httpErr.retryable }) });
+      }
       log.info({ duration, status: response.status }, "Tigo: payout succeeded");
       return { success: true, data: response.data, providerResponseTimeMs: duration };
     } catch (err: any) {
       const duration = Date.now() - start;
-      log.error({ duration, error: err.message }, "Tigo: payout failed");
+      const httpStatus = err?.response?.status;
+      const mapped = httpStatus ? resolveTigoHttpError(httpStatus) : undefined;
+      if (mapped) {
+        Object.assign(err, { errorCode: mapped.errorCode, retryable: mapped.retryable });
+      }
+      log.error({ duration, error: err.message, errorCode: mapped?.errorCode }, "Tigo: payout failed");
       return { success: false, error: err, providerResponseTimeMs: duration };
     }
   }
@@ -129,11 +150,8 @@ export class TigoProvider {
           "X-Target-Environment": this.environment,
         },
       });
-      const status = String(response.data?.status ?? "").toUpperCase();
-      if (status === "SUCCESSFUL" || status === "SUCCESS") return { status: "completed" };
-      if (status === "FAILED") return { status: "failed" };
-      if (status === "PENDING") return { status: "pending" };
-      return { status: "unknown" };
+      const rawStatus = String(response.data?.status ?? "");
+      return resolveTigoTransactionStatus(rawStatus);
     } catch {
       return { status: "unknown" };
     }

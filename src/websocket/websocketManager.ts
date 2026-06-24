@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { WebSocketServer, WebSocket } from "ws";
 import { IncomingMessage, Server } from "http";
 import { createClient, RedisClientType } from "redis";
@@ -127,7 +128,7 @@ export class WebSocketManager {
       });
 
       client.on("error", (err) => {
-        console.error(`WebSocket client error (${clientId}):`, err);
+        logger.error(`WebSocket client error (${clientId}):`, err);
       });
 
       // Acknowledge connection
@@ -394,7 +395,7 @@ export class WebSocketManager {
         // Only broadcast locally – the publishing instance already did so
         this.broadcastLocally(transactionId, message);
       } catch (err) {
-        console.error("Failed to handle Redis message:", err);
+        logger.error("Failed to handle Redis message:", err);
       }
     });
 

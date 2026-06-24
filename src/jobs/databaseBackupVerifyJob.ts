@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import {
   listBackups,
   getBackupMetadata,
@@ -35,7 +36,7 @@ export async function runDatabaseBackupVerifyJob(): Promise<void> {
 
     console.log(`[backup-verify-job] Database backup verification successful for ${latest.backupId}`);
   } catch (error) {
-    console.error("[backup-verify-job] Unhandled error during backup verification:", error);
+    logger.error("[backup-verify-job] Unhandled error during backup verification:", error);
     throw error;
   }
 }

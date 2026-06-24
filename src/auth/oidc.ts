@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import axios from "axios";
 import passport from "passport";
 import { Strategy as GoogleStrategy, Profile as GoogleProfile, VerifyCallback as GoogleVerifyCallback } from "passport-google-oauth20";
@@ -304,7 +305,7 @@ async function processOIDCProfile(
     } as Express.User;
   } catch (error) {
     await client.query("ROLLBACK");
-    console.error("[OIDC] Error processing profile:", error);
+    logger.error("[OIDC] Error processing profile:", error);
     throw error;
   } finally {
     client.release();

@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { Request, Response, Router } from "express";
 import { z } from "zod";
 import { requireAuth } from "../middleware/auth";
@@ -67,7 +68,7 @@ router.post(
         data: { url: avatarUrl },
       });
     } catch (error) {
-      console.error("Controller upload error:", error);
+      logger.error("Controller upload error:", error);
       throw createError(
         ERROR_CODES.INTERNAL_ERROR,
         "Internal server error during upload",
@@ -107,7 +108,7 @@ router.put(
         data: { displayName: parsed.data.displayName },
       });
     } catch (error) {
-      console.error("Controller display-name update error:", error);
+      logger.error("Controller display-name update error:", error);
       throw error;
     }
   },

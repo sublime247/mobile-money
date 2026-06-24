@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { connect, StringCodec, consumerOpts, type NatsConnection, type JsMsg } from "nats";
 
 const NATS_URL = process.env.NATS_URL || "nats://localhost:4222";
@@ -66,7 +67,7 @@ class NatsManager {
         try {
           payload = JSON.parse(this.sc.decode(msg.data)) as T;
         } catch (error) {
-          console.error("[NATS] Failed to parse message payload", error);
+          logger.error("[NATS] Failed to parse message payload", error);
           msg.term();
           return;
         }
@@ -75,7 +76,7 @@ class NatsManager {
           await onMessage(payload, msg);
           msg.ack();
         } catch (error) {
-          console.error("[NATS] Error processing message", error);
+          logger.error("[NATS] Error processing message", error);
           msg.nak();
         }
       })();
@@ -96,7 +97,7 @@ class NatsManager {
       await this.connection.close();
       console.log("[NATS] connection closed");
     } catch (error) {
-      console.error("[NATS] failed to close connection", error);
+      logger.error("[NATS] failed to close connection", error);
     } finally {
       this.connection = null;
     }

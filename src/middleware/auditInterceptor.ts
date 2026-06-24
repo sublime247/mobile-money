@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { Request, Response, NextFunction } from 'express';
 import { Pool } from 'pg';
 
@@ -48,7 +49,7 @@ export const auditInterceptor = (db: Pool) => {
             req.get('user-agent') || null
           ]);
         } catch (error) {
-          console.error('[Audit Log] Failed to save admin audit log event:', error);
+          logger.error('[Audit Log] Failed to save admin audit log event:', error);
         }
       });
       

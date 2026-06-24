@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { Router, Request, Response } from "express";
 import { sep31RateLimiter } from "../middleware/rateLimit";
 import crypto from "crypto";
@@ -168,7 +169,7 @@ router.get("/info", sep31ReadLimiter, async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error("SEP-31 /info error:", error);
+    logger.error("SEP-31 /info error:", error);
     throw createError(ERROR_CODES.INTERNAL_ERROR, "Internal server error");
   }
 });
@@ -255,7 +256,7 @@ router.post("/transactions", sep31WriteLimiter, async (req: Request, res: Respon
   }
 
   if (!SEP31_CONFIG.receivingAccount) {
-    console.error("SEP-31: STELLAR_RECEIVING_ACCOUNT not configured");
+    logger.error("SEP-31: STELLAR_RECEIVING_ACCOUNT not configured");
     throw createError(ERROR_CODES.INTERNAL_ERROR, "Anchor receiving account not configured", {
       error: "server_error",
       message: "Anchor receiving account not configured",
@@ -314,7 +315,7 @@ router.post("/transactions", sep31WriteLimiter, async (req: Request, res: Respon
       amount_fee_asset: getAssetString(),
     });
   } catch (error: any) {
-    console.error("SEP-31 POST /transactions error:", error);
+    logger.error("SEP-31 POST /transactions error:", error);
     throw createError(ERROR_CODES.INTERNAL_ERROR, "Internal server error");
   }
 });
@@ -381,7 +382,7 @@ router.get("/transactions/:id", sep31ReadLimiter, async (req: Request, res: Resp
       },
     });
   } catch (error: any) {
-    console.error("SEP-31 GET /transactions/:id error:", error);
+    logger.error("SEP-31 GET /transactions/:id error:", error);
     throw createError(ERROR_CODES.INTERNAL_ERROR, "Internal server error");
   }
 });
@@ -455,7 +456,7 @@ router.patch("/transactions/:id", sep31WriteLimiter, async (req: Request, res: R
 
     return res.json({ status: "updated" });
   } catch (error: any) {
-    console.error("SEP-31 PATCH /transactions/:id error:", error);
+    logger.error("SEP-31 PATCH /transactions/:id error:", error);
     throw createError(ERROR_CODES.INTERNAL_ERROR, "Internal server error");
   }
 });

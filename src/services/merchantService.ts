@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import crypto from "crypto";
 import { MerchantModel, CreateMerchantInput, Merchant } from "../models/merchant";
 import { EmailService } from "./email";
@@ -113,7 +114,7 @@ export class MerchantService {
             await this.sendInvitationEmail(merchant);
             await this.merchantModel.markInvitationSent(merchant.id);
           } catch (emailError) {
-            console.error(`[MerchantService] Failed to send invitation email to ${merchant.email}:`, emailError);
+            logger.error(`[MerchantService] Failed to send invitation email to ${merchant.email}:`, emailError);
           }
         }
       }
@@ -130,7 +131,7 @@ export class MerchantService {
           await this.sendInvitationEmail(merchant);
           await this.merchantModel.markInvitationSent(merchant.id);
         } catch (emailError) {
-          console.error(`[MerchantService] Failed to send invitation email to ${merchant.email}:`, emailError);
+          logger.error(`[MerchantService] Failed to send invitation email to ${merchant.email}:`, emailError);
         }
       }
     }
@@ -263,7 +264,7 @@ export class MerchantService {
           text: this.buildInvitationEmailText(emailData, resolvedLocale),
         });
       } catch (error) {
-        console.error("[MerchantService] Invitation email delivery failed:", error);
+        logger.error("[MerchantService] Invitation email delivery failed:", error);
       }
     }
   }

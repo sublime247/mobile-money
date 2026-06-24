@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import * as crypto from "crypto";
 import { pool } from "../config/database";
 import {
@@ -280,7 +281,7 @@ export class AMLService {
       const { firstName, lastName } = result.rows[0];
       return `${firstName || ""} ${lastName || ""}`.trim();
     } catch (error) {
-      console.error(`Failed to fetch user name for AML: ${error}`);
+      logger.error(`Failed to fetch user name for AML: ${error}`);
       return null;
     }
   }
@@ -696,20 +697,14 @@ export class AMLService {
         try {
           const { generateSAR } = require("../compliance/sar");
           generateSAR(alert.userId, alert.id).catch((err: any) => {
-            console.error(
-              `[SAR AUTO-PREPARE ERROR] Failed for alert ${alert.id}:`,
-              err,
-            );
+            logger.error(`[SAR AUTO-PREPARE ERROR] Failed for alert ${alert.id}:`, err);
           });
         } catch (err) {
-          console.error(
-            `[SAR AUTO-PREPARE ERROR] Failed to load sar service:`,
-            err,
-          );
+          logger.error(`[SAR AUTO-PREPARE ERROR] Failed to load sar service:`, err);
         }
       }
     } catch (error) {
-      console.error("Failed to persist AML alert to database:", error);
+      logger.error("Failed to persist AML alert to database:", error);
       this.alerts.unshift(alert);
       if (this.alerts.length > this.config.alertBufferSize) {
         this.alerts = this.alerts.slice(0, this.config.alertBufferSize);

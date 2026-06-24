@@ -1,7 +1,6 @@
 import dotenv from "dotenv";
 import fs from "fs";
 import path from "path";
-import fs from "fs";
 
 // Load .momorc from the cli/ directory, fall back to process.env
 const MOMORC_PATH = path.resolve(__dirname, "..", ".momorc");
@@ -10,7 +9,7 @@ dotenv.config({ path: MOMORC_PATH });
 export interface CliConfig {
   apiUrl: string;
   apiKey: string;
-  telemetry: boolean;
+  telemetry?: boolean;
 }
 
 export interface Profile {
@@ -120,4 +119,66 @@ export function setTelemetryEnabled(enabled: boolean): void {
 
   // Keep the current process in sync without a restart
   process.env[key] = value;
+}
+
+// ---------------------------------------------------------------------------
+// Profile management
+// ---------------------------------------------------------------------------
+
+/**
+ * Save (or overwrite) a named profile.
+ */
+export function saveProfile(
+  name: string,
+  apiUrl: string,
+  apiKey: string,
+): void {
+  const data = loadProfiles();
+  const existing = data.profiles.findIndex((p) => p.name === name);
+  const profile: Profile = { name, apiUrl, apiKey };
+  if (existing !== -1) {
+    data.profiles[existing] = profile;
+  } else {
+    data.profiles.push(profile);
+  }
+  saveProfiles(data);
+}
+
+/**
+ * Switch the active profile by name. Throws if the profile does not exist.
+ */
+export function useProfile(name: string): Profile {
+  const data = loadProfiles();
+  const profile = data.profiles.find((p) => p.name === name);
+  if (!profile) {
+    throw new Error(
+      `Profile "${name}" not found. Use 'momo-cli profile list' to see available profiles.`,
+    );
+  }
+  data.activeProfile = name;
+  saveProfiles(data);
+  return profile;
+}
+
+/**
+ * Delete a named profile. Throws if the profile does not exist.
+ */
+export function deleteProfile(name: string): void {
+  const data = loadProfiles();
+  const idx = data.profiles.findIndex((p) => p.name === name);
+  if (idx === -1) {
+    throw new Error(`Profile "${name}" not found.`);
+  }
+  data.profiles.splice(idx, 1);
+  if (data.activeProfile === name) {
+    delete data.activeProfile;
+  }
+  saveProfiles(data);
+}
+
+/**
+ * Return all profiles and the currently active profile name.
+ */
+export function listProfiles(): ProfilesFile {
+  return loadProfiles();
 }

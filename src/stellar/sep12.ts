@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { Router, Request, Response } from "express";
 import { Pool } from "pg";
 import { sep12RateLimiter } from "../middleware/rateLimit";
@@ -355,7 +356,7 @@ export class Sep12Service {
             };
           }
         } catch (error) {
-          console.error("Error fetching applicant:", error);
+          logger.error("Error fetching applicant:", error);
         }
       }
 
@@ -381,7 +382,7 @@ export class Sep12Service {
 
       return response;
     } catch (error) {
-      console.error("Error getting customer:", error);
+      logger.error("Error getting customer:", error);
       throw new Error(`Failed to get customer: ${error instanceof Error ? error.message : "Unknown error"}`);
     }
   }
@@ -543,7 +544,7 @@ export class Sep12Service {
       if (error instanceof z.ZodError) {
         throw new Error(`Validation error: ${error.message}`);
       }
-      console.error("Error putting customer:", error);
+      logger.error("Error putting customer:", error);
       throw new Error(`Failed to update customer: ${error instanceof Error ? error.message : "Unknown error"}`);
     }
   }
@@ -562,7 +563,7 @@ export class Sep12Service {
       
       await this.db.query(deleteQuery, [account]);
     } catch (error) {
-      console.error("Error deleting customer:", error);
+      logger.error("Error deleting customer:", error);
       throw new Error(`Failed to delete customer: ${error instanceof Error ? error.message : "Unknown error"}`);
     }
   }
@@ -622,7 +623,7 @@ export const createSep12Router = (db: Pool): Router => {
 
       res.json(customer);
     } catch (error: any) {
-      console.error("[SEP-12] Error getting customer:", error);
+      logger.error("[SEP-12] Error getting customer:", error);
       throw createError(ERROR_CODES.INTERNAL_ERROR, error.message || "Failed to get customer information", {
         error: error.message || "Failed to get customer information",
       });
@@ -647,7 +648,7 @@ export const createSep12Router = (db: Pool): Router => {
       const customer = await sep12Service.putCustomer(customerData);
       res.json(customer);
     } catch (error: any) {
-      console.error("[SEP-12] Error putting customer:", error);
+      logger.error("[SEP-12] Error putting customer:", error);
       throw createError(ERROR_CODES.INVALID_INPUT, error.message || "Failed to update customer information", {
         error: error.message || "Failed to update customer information",
       });
@@ -672,7 +673,7 @@ export const createSep12Router = (db: Pool): Router => {
       
       res.status(204).send();
     } catch (error: any) {
-      console.error("[SEP-12] Error deleting customer:", error);
+      logger.error("[SEP-12] Error deleting customer:", error);
       throw createError(ERROR_CODES.INTERNAL_ERROR, error.message || "Failed to delete customer information", {
         error: error.message || "Failed to delete customer information",
       });

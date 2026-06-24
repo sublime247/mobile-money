@@ -12,6 +12,7 @@ import {
   printLoading,
   DashboardData,
   printSuccess,
+  printWarn,
 } from "../dashboard";
 
 interface DashboardOptions {
@@ -35,7 +36,10 @@ export function registerDashboardCommand(program: Command): void {
       "5000",
     )
     .action(async (opts: DashboardOptions) => {
-      const interval = Math.max(1000, parseInt(opts.interval || "5000"));
+      const interval = Math.max(
+        1000,
+        parseInt(String(opts.interval ?? "5000")),
+      );
 
       try {
         // First load: show loading spinner
@@ -50,7 +54,9 @@ export function registerDashboardCommand(program: Command): void {
 
         // Watch mode: continuously refresh
         if (opts.watch) {
-          console.log(`Watching for updates every ${interval}ms. Press Ctrl+C to exit.\n`);
+          console.log(
+            `Watching for updates every ${interval}ms. Press Ctrl+C to exit.\n`,
+          );
 
           const refreshInterval = setInterval(async () => {
             try {
@@ -61,8 +67,11 @@ export function registerDashboardCommand(program: Command): void {
                 `ℹ Auto-refreshed at ${new Date().toLocaleTimeString()}`,
               );
             } catch (err) {
-              const msg = err instanceof Error ? err.message : String(err);
-              console.error(`Failed to refresh: ${msg}`);
+              printError(
+                "Failed to refresh dashboard",
+                err instanceof Error ? err : undefined,
+                "ERR_REFRESH",
+              );
             }
           }, interval);
 
@@ -74,8 +83,11 @@ export function registerDashboardCommand(program: Command): void {
           });
         }
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        printError("Failed to load dashboard", err as Error);
+        printError(
+          "Failed to load dashboard",
+          err instanceof Error ? err : undefined,
+          "ERR_DASHBOARD",
+        );
         process.exit(1);
       }
     });
@@ -90,7 +102,10 @@ export function registerDashboardCommand(program: Command): void {
       "2000",
     )
     .action(async (opts: DashboardOptions) => {
-      const interval = Math.max(1000, parseInt(opts.interval || "2000"));
+      const interval = Math.max(
+        1000,
+        parseInt(String(opts.interval ?? "2000")),
+      );
 
       try {
         const stopLoading = printLoading("Starting live monitor");
@@ -102,8 +117,11 @@ export function registerDashboardCommand(program: Command): void {
             const data = await fetchDashboardData();
             printStatusLine(data);
           } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err);
-            console.error(`Monitor error: ${msg}`);
+            printError(
+              "Monitor refresh error",
+              err instanceof Error ? err : undefined,
+              "ERR_MONITOR",
+            );
           }
         }, interval);
 
@@ -117,8 +135,11 @@ export function registerDashboardCommand(program: Command): void {
           process.exit(0);
         });
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        printError("Failed to start live monitor", err as Error);
+        printError(
+          "Failed to start live monitor",
+          err instanceof Error ? err : undefined,
+          "ERR_MONITOR",
+        );
         process.exit(1);
       }
     });
@@ -132,8 +153,11 @@ export function registerDashboardCommand(program: Command): void {
         const data = await fetchDashboardData();
         console.log(JSON.stringify(data, null, 2));
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        printError("Failed to export metrics", err as Error);
+        printError(
+          "Failed to export metrics",
+          err instanceof Error ? err : undefined,
+          "ERR_EXPORT",
+        );
         process.exit(1);
       }
     });
@@ -149,7 +173,9 @@ async function fetchDashboardData(): Promise<DashboardData> {
     return stats as DashboardData;
   } catch (err) {
     // Fallback: fetch individual components
-    console.warn("Falling back to individual API calls...");
+    printWarn(
+      "Primary dashboard endpoint unavailable — falling back to individual API calls",
+    );
     return await fetchDashboardDataFallback();
   }
 }

@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 /**
  * Merchant Webhook Management — self-serve CRUD + test + delivery history.
  *
@@ -76,7 +77,7 @@ router.get("/", async (req: Request, res: Response) => {
     const safe = webhooks.map(({ secret: _s, ...w }) => w);
     return res.json({ webhooks: safe, total: safe.length });
   } catch (err) {
-    console.error("[merchant-webhooks] list error", err);
+    logger.error("[merchant-webhooks] list error", err);
     return res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -113,7 +114,7 @@ router.get("/:id", async (req: Request, res: Response) => {
     const { secret: _s, ...safe } = webhook;
     return res.json({ webhook: safe });
   } catch (err) {
-    console.error("[merchant-webhooks] get error", err);
+    logger.error("[merchant-webhooks] get error", err);
     return res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -175,7 +176,7 @@ router.delete("/:id", async (req: Request, res: Response) => {
     if (!deleted) return res.status(404).json({ error: "Webhook not found" });
     return res.json({ deleted: true });
   } catch (err) {
-    console.error("[merchant-webhooks] delete error", err);
+    logger.error("[merchant-webhooks] delete error", err);
     return res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -225,7 +226,7 @@ router.get("/:id/deliveries", async (req: Request, res: Response) => {
     );
     return res.json({ deliveries: logs, total, limit, offset });
   } catch (err) {
-    console.error("[merchant-webhooks] delivery history error", err);
+    logger.error("[merchant-webhooks] delivery history error", err);
     return res.status(500).json({ error: "Internal server error" });
   }
 });

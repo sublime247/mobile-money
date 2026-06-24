@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { Router, Request, Response } from "express";
 import { createHmac, timingSafeEqual } from "crypto";
 import { z } from "zod";
@@ -68,7 +69,7 @@ router.post("/webhook", async (req: RawBodyRequest, res: Response) => {
   const webhookSecret = process.env.STELLAR_WEBHOOK_SECRET;
 
   if (!webhookSecret) {
-    console.error("[stellar-webhook] STELLAR_WEBHOOK_SECRET not configured");
+    logger.error("[stellar-webhook] STELLAR_WEBHOOK_SECRET not configured");
     return res.status(500).json({ error: "Webhook processing not configured" });
   }
 
@@ -175,7 +176,7 @@ router.post("/webhook", async (req: RawBodyRequest, res: Response) => {
               stellar_memo_type: sep31Meta.memo_type,
             }
           ).catch((err) =>
-            console.error(`[sep31-webhook] Error enqueuing webhook:`, err)
+            logger.error(`[sep31-webhook] Error enqueuing webhook:`, err)
           );
         }
       }
@@ -192,7 +193,7 @@ router.post("/webhook", async (req: RawBodyRequest, res: Response) => {
       updated,
     });
   } catch (error) {
-    console.error("[stellar-webhook] Processing error", error);
+    logger.error("[stellar-webhook] Processing error", error);
     return res.status(500).json({ error: "Internal server error" });
   }
 });

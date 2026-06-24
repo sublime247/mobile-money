@@ -1,3 +1,4 @@
+import { printError } from "./momo-cli";
 /**
  * Provision Channel Accounts Script (Optimized Batching)
  * Issue: #843
@@ -28,12 +29,12 @@ function parseArgs(): { count: number; balance: string } {
   }
 
   if (isNaN(count) || count < 1) {
-    console.error("--count must be a positive integer");
+    printError("--count must be a positive integer");
     process.exit(1);
   }
 
   if (isNaN(parseFloat(balance)) || parseFloat(balance) <= 0) {
-    console.error("--balance must be a positive number");
+    printError("--balance must be a positive number");
     process.exit(1);
   }
 
@@ -45,7 +46,7 @@ async function main() {
 
   const issuerSecret = process.env.STELLAR_ISSUER_SECRET?.trim();
   if (!issuerSecret) {
-    console.error(
+    printError(
       "Error: STELLAR_ISSUER_SECRET environment variable is required.",
     );
     process.exit(1);
@@ -122,7 +123,7 @@ async function main() {
         storedRows.push({ publicKey: pair.publicKey, id: row.id });
       }
     } catch (error) {
-      console.error(
+      printError(
         `  ✗ Failed to process batch starting at index ${i}:`,
         error,
       );
@@ -151,6 +152,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error("Fatal error:", err);
+  printError("Fatal error:", err);
   process.exit(1);
 });

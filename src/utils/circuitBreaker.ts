@@ -1,3 +1,4 @@
+import logger from "./logger";
 import CircuitBreaker, { CircuitBreakerOptions } from "opossum";
 import {
   providerCircuitBreakerState,
@@ -163,7 +164,7 @@ async function getOrCreateCircuitBreaker<T>(
   });
 
   breaker.on("open", () => {
-    console.error(`Circuit breaker opened for ${provider}:${operation} due to high error rate`);
+    logger.error(`Circuit breaker opened for ${provider}:${operation} due to high error rate`);
     emitStateTransitionMetric(provider, operation, "open");
   });
   breaker.on("halfOpen", () => {
@@ -227,7 +228,7 @@ export async function checkAndResetCircuitBreaker(provider: string, operation: s
   }
 
   // Only attempt to reset if the circuit is open or half-open
-  const state = breaker.toJSON().state as { open: boolean; halfOpen: boolean };
+  const state = (breaker as any).toJSON().state as { open: boolean; halfOpen: boolean };
   if (!state?.open && !state?.halfOpen) {
     return false;
   }
@@ -241,11 +242,30 @@ export async function checkAndResetCircuitBreaker(provider: string, operation: s
       return true;
     }
   } catch (error) {
-    console.error(`Failed to check health for ${provider}: ${error}`);
+    logger.error(`Failed to check health for ${provider}: ${error}`);
   }
   return false;
 }
 
 export function getCircuitBreakerCount(): number {
   return circuitBreakers.size;
+}
+
+/**
+ * Programmatically open (trip) the circuit breaker for a provider+operation.
+ * Creates the breaker if it doesn't exist yet.
+ */
+export async function tripCircuitBreaker(
+  provider: string,
+  operation: string,
+): Promise<void> {
+  const breaker = await getOrCreateCircuitBreaker(provider, operation);
+  // opossum exposes open() on its prototype; use the internal flag as fallback
+  if (typeof (breaker as any).open === "function") {
+    (breaker as any).open();
+  } else {
+    // Force-open by marking the breaker via its internal state setter
+    (breaker as any).forcedOpen = true;
+  }
+  emitStateTransitionMetric(provider, operation, "open");
 }

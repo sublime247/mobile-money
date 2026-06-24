@@ -1,5 +1,7 @@
-import pino, { Logger, TransportTargetOptions } from 'pino';
+import fs from 'fs';
+import path from 'path';
 import os from 'os';
+import pino, { DestinationStream, Level, Logger, StreamEntry } from 'pino';
 import { REDACT_KEYS } from './redact';
 
 /**
@@ -26,20 +28,71 @@ import { REDACT_KEYS } from './redact';
 
 const SERVICE_NAME = process.env.SERVICE_NAME ?? 'mobile-money-api';
 const INSTANCE_ID = `${os.hostname()}:${process.pid}`;
-const LOG_LEVEL = process.env.LOG_LEVEL ?? 'info';
+type RotatingStreamFactory = (
+  filename: string | ((time: number | Date, index?: number) => string),
+  options?: {
+    compress?: 'gzip';
+    history?: string;
+    maxFiles?: number;
+    path?: string;
+    size?: string;
+  },
+) => DestinationStream;
+
+const { createStream } = require('rotating-file-stream') as {
+  createStream: RotatingStreamFactory;
+};
+
+const LOG_LEVEL = (process.env.LOG_LEVEL ?? 'info') as Level;
+const LOG_DIR = process.env.LOG_DIR ?? path.join(process.cwd(), 'logs');
+const LOG_FILE_SIZE = process.env.LOG_FILE_SIZE ?? '10M';
+const configuredRetention = Number(process.env.LOG_FILE_RETENTION ?? 14);
+const LOG_FILE_RETENTION = Number.isFinite(configuredRetention) ? configuredRetention : 14;
 
 // ---------------------------------------------------------------------------
 // Transport configuration
 // ---------------------------------------------------------------------------
 
+function formatShardDate(date: Date): string {
+  return date.toISOString().replace(/[:.]/g, '-');
+}
+
+function logFileName(time: number | Date, index?: number): string {
+  if (!time) {
+    return 'app.log';
+  }
+
+  const shardDate = formatShardDate(time instanceof Date ? time : new Date(time));
+  const shardIndex = index ? `.${index}` : '';
+
+  return `app-${shardDate}${shardIndex}.log`;
+}
+
+function ensureLogDirectory(): void {
+  fs.mkdirSync(LOG_DIR, { recursive: true });
+}
+
+function buildFileStream(): DestinationStream {
+  ensureLogDirectory();
+
+  return createStream(logFileName, {
+    path: LOG_DIR,
+    size: LOG_FILE_SIZE,
+    compress: 'gzip',
+    maxFiles: LOG_FILE_RETENTION,
+    history: 'app.log.history',
+  });
+}
+
 /**
- * Build the pino transport targets array.
+ * Build the pino output stream array.
  *
- * stdout is always included.  The Loki target is added only when LOKI_HOST
- * is present in the environment, keeping CI and local dev working without
- * any external sink.
+ * stdout is always included. The local file stream rotates by size and gzip
+ * compresses old shards. The Loki target is added only when LOKI_HOST is
+ * present in the environment, keeping CI and local dev working without any
+ * external sink.
  */
-function buildTransports(): pino.TransportMultiOptions | undefined {
+function buildStreams(): StreamEntry[] | undefined {
   const lokiHost = process.env.LOKI_HOST;
 
   // In test environments skip all transports — tests use the raw pino
@@ -48,49 +101,47 @@ function buildTransports(): pino.TransportMultiOptions | undefined {
     return undefined;
   }
 
-  const targets: TransportTargetOptions[] = [
+  const streams: StreamEntry[] = [
     {
-      target: 'pino/file',
       level: LOG_LEVEL,
-      options: { destination: 1 }, // fd 1 = stdout
+      stream: process.stdout,
+    },
+    {
+      level: LOG_LEVEL,
+      stream: buildFileStream(),
     },
   ];
 
   if (lokiHost) {
-    targets.push({
+    streams.push({
       // pino-loki runs in a worker thread — fully async, non-blocking
-      target: 'pino-loki',
       level: LOG_LEVEL,
-      options: {
-        host: lokiHost,
-        // Gracefully handle connection failures — never throw into the app
-        silenceErrors: true,
-        labels: {
-          service: SERVICE_NAME,
-          env: process.env.NODE_ENV ?? 'development',
+      stream: pino.transport({
+        target: 'pino-loki',
+        options: {
+          host: lokiHost,
+          // Gracefully handle connection failures — never throw into the app
+          silenceErrors: true,
+          labels: {
+            service: SERVICE_NAME,
+            env: process.env.NODE_ENV ?? 'development',
+          },
+          // Batch up to 10 log lines or flush every 5 s, whichever comes first
+          batching: true,
+          interval: 5,
         },
-        // Batch up to 10 log lines or flush every 5 s, whichever comes first
-        batching: true,
-        interval: 5,
-      },
+      }),
     });
   }
 
-  // Only wrap in multi-transport when we have more than one target
-  if (targets.length === 1) {
-    return undefined; // let pino default to stdout
-  }
-
-  return {
-    targets,
-  };
+  return streams;
 }
 
 // ---------------------------------------------------------------------------
 // Logger instance
 // ---------------------------------------------------------------------------
 
-const transport = buildTransports();
+const streams = buildStreams();
 
 const logger: Logger = pino(
   {
@@ -128,7 +179,7 @@ const logger: Logger = pino(
     // ISO-8601 timestamps
     timestamp: pino.stdTimeFunctions.isoTime,
   },
-  transport ? pino.transport(transport) : undefined,
+  streams ? pino.multistream(streams, { dedupe: true }) : undefined,
 );
 
 export default logger;

@@ -14,6 +14,7 @@
 
 import axios from "axios";
 import { config } from "../config/env";
+import logger from "../logger";
 import type {
   LocalPayoutRecord,
   RemotePayoutRecord,
@@ -30,7 +31,9 @@ import type {
  */
 export async function fetchLocalPayouts(): Promise<LocalPayoutRecord[]> {
   // TODO: Replace with your actual local data source (database, CSV, etc.)
-  console.log("[reconciler] Fetching local payout records …");
+  logger.info(
+    "Fetching local payout records …"
+  );
   return [];
 }
 
@@ -42,11 +45,11 @@ export async function fetchLocalPayouts(): Promise<LocalPayoutRecord[]> {
  * your provider.
  */
 export async function fetchRemotePayouts(): Promise<RemotePayoutRecord[]> {
-  console.log("[reconciler] Fetching remote payout records …");
+  logger.info("Fetching remote payout records …");
 
   if (!config.bridgeApiUrl) {
-    console.warn(
-      "[reconciler] BRIDGE_API_URL is not set — returning empty remote list."
+    logger.warn(
+      "BRIDGE_API_URL is not set — returning empty remote list."
     );
     return [];
   }
@@ -63,9 +66,15 @@ export async function fetchRemotePayouts(): Promise<RemotePayoutRecord[]> {
     );
     return response.data;
   } catch (error: any) {
-    console.error(
-      "[reconciler] Failed to fetch remote payouts:",
-      error.response?.data || error.message
+    logger.error(
+      {
+        err: {
+          message: error.message,
+          status: error.response?.status,
+          responseData: error.response?.data,
+        },
+      },
+      "Failed to fetch remote payouts"
     );
     return [];
   }

@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { Router, Request, Response } from "express";
 import * as StellarSdk from "stellar-sdk";
 import jwt from "jsonwebtoken";
@@ -179,7 +180,7 @@ export class Sep10Service {
 
       return { signers, thresholds, masterWeight };
     } catch (error) {
-      console.error(`[SEP-10] Failed to fetch account signers for ${accountId}:`, error);
+      logger.error(`[SEP-10] Failed to fetch account signers for ${accountId}:`, error);
       throw new Error(`Unable to fetch account information from Horizon: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
@@ -526,7 +527,7 @@ export function createSep10Router(service?: Sep10Service): Router {
 
       return res.json(challenge);
     } catch (error) {
-      console.error("[SEP-10] Error generating challenge:", error);
+      logger.error("[SEP-10] Error generating challenge:", error);
       
       if (error instanceof Error) {
         throw createError(ERROR_CODES.INVALID_INPUT, error.message, {
@@ -566,7 +567,7 @@ export function createSep10Router(service?: Sep10Service): Router {
 
       return res.json(tokenResponse);
     } catch (error) {
-      console.error("[SEP-10] Error verifying challenge:", error);
+      logger.error("[SEP-10] Error verifying challenge:", error);
       
       if (error instanceof Error) {
         throw createError(ERROR_CODES.INVALID_INPUT, error.message, {

@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { NextFunction, Request, Response } from "express";
 import { extractFingerprint, hashString } from "../middleware/fingerprint";
 
@@ -211,7 +212,7 @@ export function sessionAnomalyLogger(
 
       req.session.destroy((err) => {
         if (err) {
-          console.error("Failed to destroy hijacked session:", err);
+          logger.error("Failed to destroy hijacked session:", err);
         }
       });
       res

@@ -1,3 +1,4 @@
+import logger from "./logger";
 import crypto from "crypto";
 import { env } from "../config/env";
 
@@ -144,7 +145,7 @@ export function getEncryptionKeys(): Map<string, string> {
         keys.set(ver.toLowerCase(), val as string);
       }
     } catch (err) {
-      console.error("Failed to parse DB_ENCRYPTION_KEYS JSON:", err);
+      logger.error("Failed to parse DB_ENCRYPTION_KEYS JSON:", err);
     }
   }
 

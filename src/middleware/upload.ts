@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import multer from "multer";
 import { Request, Response, NextFunction } from "express";
 import crypto from "crypto";
@@ -128,7 +129,7 @@ export const optimizeProfileImage = async (
 
     next();
   } catch (error) {
-    console.error("Image optimization error:", error);
+    logger.error("Image optimization error:", error);
     res.status(500).json({ error: "Failed to optimize image before upload" });
   }
 };

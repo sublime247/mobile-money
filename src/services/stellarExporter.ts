@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { Gauge, register } from 'prom-client';
 import { getStellarServer } from '../config/stellar';
 
@@ -36,7 +37,7 @@ export async function scrapeStellarBalances(): Promise<void> {
     });
 
   } catch (error) {
-    console.error('[Stellar Exporter] Failed to scrape Horizon balances:', error);
+    logger.error('[Stellar Exporter] Failed to scrape Horizon balances:', error);
   }
 }
 

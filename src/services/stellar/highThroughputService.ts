@@ -1,3 +1,4 @@
+import logger from "../../utils/logger";
 /**
  * High-Throughput Stellar Transaction Service
  *
@@ -102,7 +103,7 @@ export async function initialize(): Promise<void> {
       `[HighThroughput] Initialized with ${config.accounts.length} channel accounts`
     );
   } catch (error) {
-    console.error("[HighThroughput] Failed to initialize pool:", error);
+    logger.error("[HighThroughput] Failed to initialize pool:", error);
     throw error;
   }
 }

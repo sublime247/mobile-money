@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { Router, Request, Response } from "express";
 import { Pool } from "pg";
 import { z } from "zod";
@@ -56,7 +57,7 @@ export class FederationService {
         };
       }
     } catch (err) {
-      console.error("Federation username lookup error:", err);
+      logger.error("Federation username lookup error:", err);
     }
 
     // 2. Phone hash lookup
@@ -74,7 +75,7 @@ export class FederationService {
         };
       }
     } catch (err) {
-      console.error("Federation phone hash lookup error:", err);
+      logger.error("Federation phone hash lookup error:", err);
     }
 
     // 3. Email hash lookup
@@ -91,7 +92,7 @@ export class FederationService {
         };
       }
     } catch (err) {
-      console.error("Federation email hash lookup error:", err);
+      logger.error("Federation email hash lookup error:", err);
     }
 
     return null;
@@ -113,7 +114,7 @@ export class FederationService {
         };
       }
     } catch (err) {
-      console.error("Federation lookupById error:", err);
+      logger.error("Federation lookupById error:", err);
     }
     return null;
   }

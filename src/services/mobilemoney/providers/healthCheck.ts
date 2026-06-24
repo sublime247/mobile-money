@@ -1,3 +1,4 @@
+import logger from "../../../utils/logger";
 import { createClient, RedisClientType } from "redis";
 import { healthCheckResponseTimeSeconds } from "../../../utils/metrics";
 import { getConfigValue } from "../../../config/appConfig";
@@ -84,7 +85,7 @@ function log(
     ...meta,
   });
   if (level === "error") {
-    console.error(line);
+    logger.error(line);
   } else if (level === "warn") {
     console.warn(line);
   } else {

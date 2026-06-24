@@ -1,4 +1,5 @@
 #!/usr/bin/env tsx
+import { printError } from "./momo-cli";
 /**
  * Ledger Reconciliation Script
  * 
@@ -233,7 +234,7 @@ async function reconcileLedger(asOfDate?: Date): Promise<ReconciliationReport> {
     }
 
   } catch (error) {
-    console.error('❌ Reconciliation failed:', error);
+    printError('❌ Reconciliation failed:', error);
     report.issues.push(`Fatal error: ${error instanceof Error ? error.message : String(error)}`);
     report.summary = '❌ Reconciliation failed due to error';
   }
@@ -252,7 +253,7 @@ async function main() {
         const dateStr = arg.split('=')[1];
         asOfDate = new Date(dateStr);
         if (isNaN(asOfDate.getTime())) {
-          console.error('❌ Invalid date format. Use YYYY-MM-DD');
+          printError('❌ Invalid date format. Use YYYY-MM-DD');
           process.exit(1);
         }
       }
@@ -292,7 +293,7 @@ async function main() {
       process.exit(0);
     }
   } catch (error) {
-    console.error('Fatal error:', error);
+    printError('Fatal error:', error);
     process.exit(1);
   } finally {
     await pool.end();

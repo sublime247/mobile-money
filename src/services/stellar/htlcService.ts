@@ -9,12 +9,15 @@ export interface HtlcLockParams {
   hashlock: string;
   timelock: number;
   contractId: string;
+  approvedSigners?: string[];
+  requiredSignatures?: number;
 }
 
 export interface HtlcClaimParams {
   claimerAddress: string;
   preimage: string;
   contractId: string;
+  signers?: string[];
 }
 
 export interface HtlcRefundParams {
@@ -42,8 +45,32 @@ export class HtlcService {
     this.networkPassphrase = getNetworkPassphrase();
   }
 
+  private addressToScVal(address: string) {
+    return StellarSdk.nativeToScVal(address, { type: "address" });
+  }
+
+  private bytesNToScVal(hex: string) {
+    return StellarSdk.nativeToScVal(Buffer.from(hex, "hex"), { type: "bytesN" });
+  }
+
+  private u64ToScVal(value: bigint | number) {
+    return StellarSdk.nativeToScVal(BigInt(value), { type: "u64" });
+  }
+
+  private u32ToScVal(value: number) {
+    return StellarSdk.nativeToScVal(value, { type: "u32" });
+  }
+
+  private addressArrayToScVal(addresses: string[]) {
+    const converted = addresses.map((address) => this.addressToScVal(address));
+    return StellarSdk.nativeToScVal(converted, { type: "vec" });
+  }
+
   async buildLockTx(params: HtlcLockParams): Promise<StellarSdk.Transaction> {
     const senderAccount = await this.server.loadAccount(params.senderAddress);
+
+    const approvedSigners = params.approvedSigners ?? [];
+    const requiredSignatures = params.requiredSignatures ?? 0;
 
     const contract = new StellarSdk.Contract(params.contractId);
     const tx = new StellarSdk.TransactionBuilder(senderAccount, {
@@ -53,12 +80,14 @@ export class HtlcService {
       .addOperation(
         contract.call(
           "initialize",
-          StellarSdk.nativeToScVal(params.senderAddress, { type: "address" }),
-          StellarSdk.nativeToScVal(params.receiverAddress, { type: "address" }),
-          StellarSdk.nativeToScVal(params.tokenAddress, { type: "address" }),
-          StellarSdk.nativeToScVal(BigInt(params.amount), { type: "u64" }),
-          StellarSdk.nativeToScVal(Buffer.from(params.hashlock, "hex"), { type: "bytesN" }),
-          StellarSdk.nativeToScVal(params.timelock, { type: "u32" })
+          this.addressToScVal(params.senderAddress),
+          this.addressToScVal(params.receiverAddress),
+          this.addressToScVal(params.tokenAddress),
+          this.u64ToScVal(BigInt(params.amount)),
+          this.bytesNToScVal(params.hashlock),
+          this.u64ToScVal(params.timelock),
+          this.addressArrayToScVal(approvedSigners),
+          this.u32ToScVal(requiredSignatures),
         )
       )
       .setTimeout(30)
@@ -70,6 +99,7 @@ export class HtlcService {
   async buildClaimTx(params: HtlcClaimParams): Promise<StellarSdk.Transaction> {
     const claimerAccount = await this.server.loadAccount(params.claimerAddress);
 
+    const signers = params.signers ?? [];
     const contract = new StellarSdk.Contract(params.contractId);
     const tx = new StellarSdk.TransactionBuilder(claimerAccount, {
       fee: StellarSdk.BASE_FEE,
@@ -78,7 +108,8 @@ export class HtlcService {
       .addOperation(
         contract.call(
           "claim",
-          StellarSdk.nativeToScVal(Buffer.from(params.preimage, "hex"), { type: "bytesN" })
+          this.bytesNToScVal(params.preimage),
+          this.addressArrayToScVal(signers),
         )
       )
       .setTimeout(30)
@@ -106,12 +137,32 @@ export class HtlcService {
 
   async getHtlcState(contractId: string): Promise<HtlcState> {
     const contract = new StellarSdk.Contract(contractId);
-    
-    // Query the contract state
-    // This would need proper implementation based on your contract's state structure
-    // For now, returning a placeholder that matches the interface
-    // In a real implementation, you would call contract.call("get_state") or similar
-    
-    throw new Error("getHtlcState not yet implemented - requires contract state query");
+    const response = await contract.call("get_state");
+
+    if (!response || typeof response !== "object") {
+      throw new Error("Unable to fetch HTLC state from contract");
+    }
+
+    const state = response as {
+      sender: string;
+      receiver: string;
+      token: string;
+      amount: string | number;
+      hashlock: string;
+      timelock: number;
+      claimed: boolean;
+      refunded: boolean;
+    };
+
+    return {
+      sender: state.sender,
+      receiver: state.receiver,
+      token: state.token,
+      amount: String(state.amount),
+      hashlock: state.hashlock,
+      timelock: Number(state.timelock),
+      claimed: Boolean(state.claimed),
+      refunded: Boolean(state.refunded),
+    };
   }
 }

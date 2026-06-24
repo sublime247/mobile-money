@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 /**
  * Token-bucket rate limiter for ingest streams (webhooks / callbacks).
  *
@@ -189,7 +190,7 @@ async function consumeToken(
     const tokensRemaining = parseFloat(String(result[1]));
     return { allowed, tokensRemaining };
   } catch (err) {
-    console.error("[ingest-rate-limit] Redis eval failed, using fallback", err);
+    logger.error("[ingest-rate-limit] Redis eval failed, using fallback", err);
     const allowed = fallbackConsume(key, cfg);
     return { allowed, tokensRemaining: allowed ? cfg.capacity - 1 : 0 };
   }

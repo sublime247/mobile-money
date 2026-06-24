@@ -315,6 +315,12 @@ export const configSchema = convict({
       format: "nat",
       default: 60000, // 1 minute
     },
+    requestTimeoutMs: {
+      doc: 'Orange API request timeout in milliseconds',
+      format: 'nat',
+      default: 30000,
+      env: 'ORANGE_REQUEST_TIMEOUT_MS',
+    },
   },
 
   // SEP-38 (Rate Provider)
