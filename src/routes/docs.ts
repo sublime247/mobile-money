@@ -44,21 +44,33 @@ docsRouter.get('/openapi.json', devOnly, (_req: Request, res: Response) => {
 // generated — satisfying the "auto-update on server restart" requirement.
 
 if (isDev) {
-  const spec = generateOpenAPIDocument();
+  // Generate spec for local use; can be overridden by external URL via SWAGGER_SPEC_URL
+  const localSpec = generateOpenAPIDocument();
+
+  // Determine whether to serve Swagger UI assets via CDN or locally based on environment variable
+  // Use CDN for Swagger UI assets unless explicitly disabled via SWAGGER_CDN='false'
+  const useCdn = process.env.SWAGGER_CDN !== 'false';
+
+  const swaggerOptions = {
+    customSiteTitle: 'Mobile Money Bridge — API Docs',
+    ...(useCdn && {
+      customCssUrl: 'https://cdn.jsdelivr.net/npm/swagger-ui-dist/swagger-ui.css',
+      customJs: 'https://cdn.jsdelivr.net/npm/swagger-ui-dist/swagger-ui-bundle.js',
+    }),
+    swaggerOptions: {
+      persistAuthorization: true,
+      displayRequestDuration: true,
+      filter: true,
+      tryItOutEnabled: true,
+    },
+  };
 
   docsRouter.use(
     '/',
     devOnly,
     swaggerUi.serve,
-    swaggerUi.setup(spec, {
-      customSiteTitle: 'Mobile Money Bridge — API Docs',
-      swaggerOptions: {
-        persistAuthorization: true,
-        displayRequestDuration: true,
-        filter: true,
-        tryItOutEnabled: true,
-      },
-    }),
+    // Use external spec URL if provided, otherwise fallback to generated spec
+    swaggerUi.setup(process.env.SWAGGER_SPEC_URL ? { url: process.env.SWAGGER_SPEC_URL } : localSpec, swaggerOptions)
   );
 } else {
   // In non-dev environments the route still exists but devOnly will 404 it.

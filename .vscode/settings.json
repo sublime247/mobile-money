@@ -1,4 +1,6 @@
 {
   "kiroAgent.configureMCP": "Disabled",
   "codium.codeCompletion.enable": false
+  ,"typescript.tsdk": "./node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true
 }

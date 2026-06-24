@@ -4,6 +4,12 @@
 
 This implementation provides SEP-10 authentication for the mobile-money platform, allowing users to authenticate using their Stellar accounts. SEP-10 is a Stellar Ecosystem Proposal that defines a standard way to authenticate users using their Stellar account addresses.
 
+## Multi-Signature Support
+
+As of the latest update, the SEP-10 implementation supports **multi-signature Stellar accounts**. This allows accounts with multiple signers to authenticate successfully when the combined weight of their signatures meets the account's medium threshold.
+
+For detailed information about the multi-signature implementation, see [SEP10_MULTISIG_IMPLEMENTATION.md](./SEP10_MULTISIG_IMPLEMENTATION.md).
+
 ## Specification
 
 - **SEP-10**: https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0010.md

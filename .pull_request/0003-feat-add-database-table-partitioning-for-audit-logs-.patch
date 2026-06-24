@@ -1,0 +1,176 @@
+From b6811bae4d109ce6910cf39ad208c194197eab97 Mon Sep 17 00:00:00 2001
+From: Martin <martinngutswen02@gmail.com>
+Date: Fri, 29 May 2026 21:22:31 +0100
+Subject: [PATCH 3/4] feat: add database table partitioning for audit logs and
+ update related middleware
+
+---
+ .pull_request/PR.md                           | 21 -------
+ .vscode/settings.json                         |  2 +
+ .../migrations/20260424_create_audit_logs.sql | 55 +++++++++++++++----
+ src/middleware/auditInterceptor.ts            |  9 +--
+ tsconfig.json                                 |  3 +-
+ tsconfig.test.json                            |  7 +++
+ 6 files changed, 60 insertions(+), 37 deletions(-)
+ create mode 100644 tsconfig.test.json
+
+diff --git a/.pull_request/PR.md b/.pull_request/PR.md
+index bc020e1..e69de29 100644
+--- a/.pull_request/PR.md
++++ b/.pull_request/PR.md
+@@ -1,21 +0,0 @@
+-# Implement Redis Pub/Sub real-time notification worker
+-
+-Adds a Redis-backed notification worker that subscribes to transaction update channels and routes user notifications via the existing NotificationRouter. Wires the worker into the job scheduler and fixes a bug in TransactionModel.updateStatus.
+-
+-## Files changed
+-- src/workers/notificationWorker.ts (new)
+-- src/jobs/scheduler.ts (start worker)
+-- src/models/transaction.ts (bugfix)
+-
+-## Testing notes
+-1. Ensure `REDIS_URL` points to a running Redis instance.
+-2. Start the app: `npm run dev`
+-3. Publish test messages to Redis, e.g.:
+-   `redis-cli PUBLISH transaction.updated '{"id":"<txId>","status":"completed"}'`
+-
+-## Acceptance criteria
+-- Worker subscribes to transaction channels and routes notifications via `NotificationRouter`.
+-- Replaces DB polling for notifications, lowers DB load, and enables sub-second notifications.
+-
+-## Patch apply (git)
+-Apply the patch locally: `git apply .pull_request/changes.patch`
+diff --git a/.vscode/settings.json b/.vscode/settings.json
+index 4b852bb..6eaf0c5 100644
+--- a/.vscode/settings.json
++++ b/.vscode/settings.json
+@@ -1,4 +1,6 @@
+ {
+   "kiroAgent.configureMCP": "Disabled",
+   "codium.codeCompletion.enable": false
++  ,"typescript.tsdk": "./node_modules/typescript/lib",
++  "typescript.enablePromptUseWorkspaceTsdk": true
+ }
+diff --git a/database/migrations/20260424_create_audit_logs.sql b/database/migrations/20260424_create_audit_logs.sql
+index 9bac8db..e553f42 100644
+--- a/database/migrations/20260424_create_audit_logs.sql
++++ b/database/migrations/20260424_create_audit_logs.sql
+@@ -1,14 +1,47 @@
++-- Parent partitioned table: partitioned by month on created_at
+ CREATE TABLE audit_logs (
+-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+-    admin_id UUID NOT NULL REFERENCES users(id),
+-    action VARCHAR(255) NOT NULL,
+-    resource VARCHAR(255) NOT NULL,
+-    resource_id VARCHAR(255),
+-    diff JSONB NOT NULL,
+-    ip_address VARCHAR(45),
+-    user_agent TEXT,
+-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+-);
++        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
++        admin_id UUID NOT NULL REFERENCES users(id),
++        action VARCHAR(255) NOT NULL,
++        resource VARCHAR(255) NOT NULL,
++        resource_id VARCHAR(255),
++        diff JSONB NOT NULL,
++        ip_address VARCHAR(45),
++        user_agent TEXT,
++        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
++) PARTITION BY RANGE (created_at);
+ 
++-- Create indexes on the partitioned parent (propagates to partitions)
+ CREATE INDEX idx_audit_logs_admin_id ON audit_logs(admin_id);
+-CREATE INDEX idx_audit_logs_resource ON audit_logs(resource, resource_id);
+\ No newline at end of file
++CREATE INDEX idx_audit_logs_resource ON audit_logs(resource, resource_id);
++
++-- Helper function: create monthly partition if it does not exist
++CREATE OR REPLACE FUNCTION audit_logs_create_monthly_partition()
++RETURNS TRIGGER AS $$
++DECLARE
++    partition_name TEXT;
++    start_month TIMESTAMP WITH TIME ZONE;
++    end_month TIMESTAMP WITH TIME ZONE;
++    sql TEXT;
++BEGIN
++    start_month := date_trunc('month', NEW.created_at);
++    end_month := (start_month + INTERVAL '1 month');
++    partition_name := format('audit_logs_%s', to_char(start_month, 'YYYYMM'));
++
++    sql := format(
++        'CREATE TABLE IF NOT EXISTS %I PARTITION OF audit_logs FOR VALUES FROM (''%s'') TO (''%s'')',
++        partition_name,
++        start_month,
++        end_month
++    );
++
++    EXECUTE sql;
++    RETURN NEW;
++END;
++$$ LANGUAGE plpgsql;
++
++-- Trigger: ensures appropriate monthly partition exists before insert
++DROP TRIGGER IF EXISTS trg_audit_logs_create_partition ON audit_logs;
++CREATE TRIGGER trg_audit_logs_create_partition
++BEFORE INSERT ON audit_logs
++FOR EACH ROW EXECUTE FUNCTION audit_logs_create_monthly_partition();
+\ No newline at end of file
+diff --git a/src/middleware/auditInterceptor.ts b/src/middleware/auditInterceptor.ts
+index 20cf701..b2d9ccc 100644
+--- a/src/middleware/auditInterceptor.ts
++++ b/src/middleware/auditInterceptor.ts
+@@ -34,10 +34,10 @@ export const auditInterceptor = (db: Pool) => {
+           };
+           
+           const query = `
+-            INSERT INTO audit_logs (admin_id, action, resource, resource_id, diff, ip_address, user_agent)
+-            VALUES ($1, $2, $3, $4, $5, $6, $7)
++            INSERT INTO audit_logs (admin_id, action, resource, resource_id, diff, ip_address, user_agent, created_at)
++            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+           `;
+-          
++
+           await db.query(query, [
+             adminId,
+             action,
+@@ -45,7 +45,8 @@ export const auditInterceptor = (db: Pool) => {
+             resourceId,
+             JSON.stringify(diff),
+             req.ip,
+-            req.get('user-agent') || null
++            req.get('user-agent') || null,
++            new Date().toISOString()
+           ]);
+         } catch (error) {
+           console.error('[Audit Log] Failed to save admin audit log event:', error);
+diff --git a/tsconfig.json b/tsconfig.json
+index f531b27..5c26e8f 100644
+--- a/tsconfig.json
++++ b/tsconfig.json
+@@ -16,7 +16,8 @@
+     "forceConsistentCasingInFileNames": true,
+     "resolveJsonModule": true,
+     "moduleResolution": "node",
+-    "types": ["node", "jest"]
++    "types": ["node"],
++    "typeRoots": ["./node_modules/@types"]
+   },
+   "include": ["src/**/*", "scripts/**/*"],
+   "exclude": ["node_modules", "dist", "src/utils/currency/examples/react-usage.tsx", "**/*.test.ts", "**/*.spec.ts", "**/__tests__/**", "tests/**"]
+diff --git a/tsconfig.test.json b/tsconfig.test.json
+new file mode 100644
+index 0000000..79750a1
+--- /dev/null
++++ b/tsconfig.test.json
+@@ -0,0 +1,7 @@
++{
++  "extends": "./tsconfig.json",
++  "compilerOptions": {
++    "types": ["node", "jest"]
++  },
++  "include": ["src/**/*.test.ts", "src/**/*.spec.ts", "tests/**/*.ts", "src/**/__tests__/**"]
++}
+-- 
+2.45.1.windows.1
+

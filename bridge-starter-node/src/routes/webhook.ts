@@ -1,32 +1,55 @@
 import { Router, Request, Response } from "express";
-import { verifySignature } from "../middleware/verifySignature";
+import { verifyWebhookSignature } from "../middleware/verifySignature";
 import { WebhookEvent, PaymentData } from "../types/webhook";
+import logger from "../logger";
 
 const router = Router();
 
 router.post(
   "/webhook",
-  verifySignature,
+  verifyWebhookSignature,
   (req: Request, res: Response) => {
     const event = req.body as WebhookEvent<PaymentData>;
 
-    console.log("Received webhook:", event);
+    logger.info(
+      { eventType: event.type },
+      "Webhook received",
+    );
 
     switch (event.type) {
       case "payment.success":
-        console.log("Payment successful:", event.data);
+        logger.info(
+          {
+            eventType: event.type,
+            paymentId: event.data?.id,
+            amount: event.data?.amount,
+            status: event.data?.status,
+          },
+          "Payment succeeded",
+        );
         break;
 
       case "payment.failed":
-        console.log("Payment failed:", event.data);
+        logger.warn(
+          {
+            eventType: event.type,
+            paymentId: event.data?.id,
+            amount: event.data?.amount,
+            status: event.data?.status,
+          },
+          "Payment failed",
+        );
         break;
 
       default:
-        console.log("Unhandled event:", event.type);
+        logger.warn(
+          { eventType: event.type },
+          "Unhandled webhook event type",
+        );
     }
 
     res.status(200).json({ received: true });
-  }
+  },
 );
 
 export default router;

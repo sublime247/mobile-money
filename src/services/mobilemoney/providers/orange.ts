@@ -1,8 +1,8 @@
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from "axios";
-import * as fs from "fs";
-import * as path from "path";
-import { getConfigValue } from "../../../config/appConfig";
+
 import logger from "../../../utils/logger";
+import { maskPII } from "../../../utils/masking";
+import { Browser, BrowserContext, Page, chromium } from "playwright";
 
 type OrangeOperation = "payment" | "payout";
 type OrangeMode = "web" | "direct" | "proxy";
@@ -58,6 +58,14 @@ type OrangeProviderConfig = {
   maxAttempts: number;
   proxyBaseUrl?: string;
   proxySecret?: string;
+  // Headless browser options for web session mode
+  useHeadlessBrowser?: boolean;
+  headless?: boolean;
+  viewportWidth?: number;
+  viewportHeight?: number;
+  userAgent?: string;
+  browserTimeoutMs?: number;
+  navigationTimeoutMs?: number;
 };
 
 export type OrangeProviderOptions = Partial<OrangeProviderConfig> & {
@@ -82,6 +90,9 @@ export class OrangeProvider {
   private sessionPromise: Promise<OrangeSessionState> | null = null;
   private apiToken: string | null = null;
   private apiTokenExpiry = 0;
+  private directAuthPromise: Promise<string> | null = null;
+  private prefetchTimer: NodeJS.Timeout | null = null;
+  private destroyed = false;
 
   constructor(options: OrangeProviderOptions = {}) {
     this.clock = options.clock ?? Date.now;
@@ -119,7 +130,12 @@ export class OrangeProvider {
     amount: string | number,
     requestId?: string,
   ): Promise<OrangeResult> {
-    return this.executeOperation("payment", phoneNumber, String(amount), requestId);
+    return this.executeOperation(
+      "payment",
+      phoneNumber,
+      String(amount),
+      requestId,
+    );
   }
 
   async sendPayout(
@@ -127,7 +143,12 @@ export class OrangeProvider {
     amount: string | number,
     requestId?: string,
   ): Promise<OrangeResult> {
-    return this.executeOperation("payout", phoneNumber, String(amount), requestId);
+    return this.executeOperation(
+      "payout",
+      phoneNumber,
+      String(amount),
+      requestId,
+    );
   }
 
   async checkStatus(reference: string): Promise<OrangeResult> {
@@ -169,9 +190,7 @@ export class OrangeProvider {
 
   private buildConfig(options: OrangeProviderOptions): OrangeProviderConfig {
     return {
-      mode:
-        options.mode ??
-        (process.env.ORANGE_MODE as OrangeMode | undefined),
+      mode: options.mode ?? (process.env.ORANGE_MODE as OrangeMode | undefined),
       webBaseUrl:
         options.webBaseUrl ??
         options.baseUrl ??
@@ -225,14 +244,8 @@ export class OrangeProvider {
         process.env.ORANGE_PASSWORD ??
         process.env.ORANGE_API_SECRET ??
         "",
-      apiKey:
-        options.apiKey ??
-        process.env.ORANGE_API_KEY ??
-        "",
-      apiSecret:
-        options.apiSecret ??
-        process.env.ORANGE_API_SECRET ??
-        "",
+      apiKey: options.apiKey ?? process.env.ORANGE_API_KEY ?? "",
+      apiSecret: options.apiSecret ?? process.env.ORANGE_API_SECRET ?? "",
       usernameField:
         options.usernameField ??
         process.env.ORANGE_USERNAME_FIELD ??
@@ -267,6 +280,28 @@ export class OrangeProvider {
       ),
       proxyBaseUrl: options.proxyBaseUrl ?? process.env.ORANGE_PROXY_URL,
       proxySecret: options.proxySecret ?? process.env.ORANGE_PROXY_SECRET,
+      // Headless browser options
+      useHeadlessBrowser:
+        options.useHeadlessBrowser ??
+        process.env.ORANGE_USE_HEADLESS_BROWSER === "true",
+      headless: options.headless ?? process.env.ORANGE_HEADLESS !== "false", // default to true
+      viewportWidth: Number(
+        options.viewportWidth ?? process.env.ORANGE_VIEWPORT_WIDTH ?? 1280,
+      ),
+      viewportHeight: Number(
+        options.viewportHeight ?? process.env.ORANGE_VIEWPORT_HEIGHT ?? 800,
+      ),
+      userAgent: options.userAgent ?? process.env.ORANGE_USER_AGENT ?? "",
+      browserTimeoutMs: Number(
+        options.browserTimeoutMs ??
+          process.env.ORANGE_BROWSER_TIMEOUT_MS ??
+          30000,
+      ),
+      navigationTimeoutMs: Number(
+        options.navigationTimeoutMs ??
+          process.env.ORANGE_NAVIGATION_TIMEOUT_MS ??
+          30000,
+      ),
     };
   }
 
@@ -331,7 +366,10 @@ export class OrangeProvider {
     requestId?: string,
   ): Promise<OrangeResult> {
     const log = requestId ? logger.child({ requestId }) : logger;
-    log.info({ phoneNumber, amount, operation, mode: this.mode }, "Orange: Executing operation");
+    log.info(
+      maskPII({ phoneNumber, amount, operation, mode: this.mode }),
+      "Orange: Executing operation",
+    );
     const startTime = Date.now();
     try {
       const response = await (async () => {
@@ -361,12 +399,15 @@ export class OrangeProvider {
           },
           operation,
         );
-        return resp;
+        return this.toProviderResult(resp, reference);
       })();
 
       const duration = Date.now() - startTime;
-      log.info({ duration, success: response.success !== false }, "Orange: Operation completed");
-      return response as OrangeResult;
+      log.info(
+        maskPII({ duration, success: response.success !== false }),
+        "Orange: Operation completed",
+      );
+      return response;
     } catch (error: any) {
       const duration = Date.now() - startTime;
       log.error({ duration, error: error.message }, "Orange: Operation failed");
@@ -438,20 +479,26 @@ export class OrangeProvider {
     return this.toProviderResult(response, reference);
   }
 
-  private async requestDirect(request: AxiosRequestConfig): Promise<AxiosResponse> {
+  private async requestDirect(
+    request: AxiosRequestConfig,
+  ): Promise<AxiosResponse> {
     let lastResponse: AxiosResponse | null = null;
     let lastError: unknown;
 
     for (let attempt = 1; attempt <= this.config.maxAttempts; attempt++) {
       try {
         const token = await this.authenticateDirect();
-        const requestHeaders = (request.headers ?? {}) as Record<string, string>;
+        const requestHeaders = (request.headers ?? {}) as Record<
+          string,
+          string
+        >;
         const response = await this.sendRequest(this.directClient, {
           ...request,
           headers: {
             ...requestHeaders,
             Authorization: `Bearer ${token}`,
-            "Content-Type": requestHeaders["Content-Type"] ?? "application/json",
+            "Content-Type":
+              requestHeaders["Content-Type"] ?? "application/json",
           },
         });
 
@@ -484,44 +531,107 @@ export class OrangeProvider {
     throw lastError ?? new Error("Orange direct API request failed");
   }
 
-  private async authenticateDirect(): Promise<string> {
-    if (this.apiToken && this.clock() < this.apiTokenExpiry) {
+  private async authenticateDirect(forceRefresh = false): Promise<string> {
+    const now = this.clock();
+    if (!forceRefresh && this.apiToken && now < this.apiTokenExpiry - this.config.refreshSkewMs) {
       return this.apiToken;
     }
 
-    if (this.config.mode === "direct") {
-      this.assertDirectConfig();
+    if (this.directAuthPromise) {
+      return this.directAuthPromise;
     }
 
-    const authHeader =
-      "Basic " +
-      Buffer.from(`${this.config.apiKey}:${this.config.apiSecret}`).toString(
-        "base64",
-      );
-    const response = await this.sendRequest(this.directClient, {
-      method: "POST",
-      url: this.config.directAuthPath,
-      headers: {
-        Authorization: authHeader,
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      data: "grant_type=client_credentials",
-    });
+    this.directAuthPromise = (async () => {
+      try {
+        if (this.config.mode === "direct") {
+          this.assertDirectConfig();
+        }
 
-    if (response.status < 200 || response.status >= 300) {
-      throw new Error(`Orange direct auth failed with status ${response.status}`);
+        const authHeader =
+          "Basic " +
+          Buffer.from(`${this.config.apiKey}:${this.config.apiSecret}`).toString(
+            "base64",
+          );
+        const response = await this.sendRequest(this.directClient, {
+          method: "POST",
+          url: this.config.directAuthPath,
+          headers: {
+            Authorization: authHeader,
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          data: "grant_type=client_credentials",
+        });
+
+        if (response.status < 200 || response.status >= 300) {
+          throw new Error(
+            `Orange direct auth failed with status ${response.status}`,
+          );
+        }
+
+        const data = response.data as {
+          access_token?: string;
+          expires_in?: number;
+        };
+        if (!data.access_token) {
+          throw new Error("Orange direct auth did not return access_token");
+        }
+
+        this.apiToken = data.access_token;
+        const expires_in = data.expires_in ?? 3600;
+        this.apiTokenExpiry = now + expires_in * 1000;
+
+        this.startPrefetchDaemon(expires_in * 1000);
+
+        return this.apiToken;
+      } finally {
+        this.directAuthPromise = null;
+      }
+    })();
+
+    return this.directAuthPromise;
+  }
+
+  private startPrefetchDaemon(ttlMs: number, isRetry = false): void {
+    if (this.destroyed) {
+      return;
     }
 
-    const data = response.data as { access_token?: string; expires_in?: number };
-    if (!data.access_token) {
-      throw new Error("Orange direct auth did not return access_token");
+    if (this.prefetchTimer) {
+      clearTimeout(this.prefetchTimer);
+      this.prefetchTimer = null;
     }
 
-    this.apiToken = data.access_token;
-    this.apiTokenExpiry =
-      this.clock() + (data.expires_in ?? 3600) * 1000 - 5000;
+    const refreshDelay = isRetry
+      ? ttlMs
+      : Math.max(1000, ttlMs - this.config.refreshSkewMs);
 
-    return this.apiToken;
+    this.prefetchTimer = setTimeout(async () => {
+      if (this.destroyed) {
+        return;
+      }
+      try {
+        logger.info("Orange: Proactively pre-fetching direct auth token");
+        await this.authenticateDirect(true);
+      } catch (error: any) {
+        if (this.destroyed) {
+          return;
+        }
+        logger.error({ error: error.message }, "Orange: Failed to pre-fetch direct auth token");
+        this.startPrefetchDaemon(5000, true);
+      }
+    }, refreshDelay);
+
+    if (this.prefetchTimer && typeof this.prefetchTimer.unref === "function") {
+      this.prefetchTimer.unref();
+    }
+  }
+
+  destroy(): void {
+    this.destroyed = true;
+    if (this.prefetchTimer) {
+      clearTimeout(this.prefetchTimer);
+      this.prefetchTimer = null;
+    }
   }
 
   private async requestWithSession(
@@ -605,7 +715,113 @@ export class OrangeProvider {
     }
   }
 
+  private async loginWithPlaywright(): Promise<OrangeSessionState> {
+    let browser: Browser | null = null;
+    let context: BrowserContext | null = null;
+    try {
+      browser = await chromium.launch({
+        headless: this.config.headless ?? true,
+        timeout: this.config.browserTimeoutMs ?? 30000,
+        args: [
+          `--window-size=${this.config.viewportWidth ?? 1280},${this.config.viewportHeight ?? 800}`,
+          // Add any other useful args for handling challenges
+          "--disable-blink-features=AutomationControlled",
+        ],
+      });
+
+      context = await browser.newContext({
+        viewport: {
+          width: this.config.viewportWidth ?? 1280,
+          height: this.config.viewportHeight ?? 800,
+        },
+        userAgent:
+          this.config.userAgent ??
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      });
+
+      const page = await context.newPage();
+      page.setDefaultTimeout(this.config.navigationTimeoutMs ?? 30000);
+
+      // Navigate to login page
+      await page.goto(`${this.config.webBaseUrl}${this.config.loginPath}`, {
+        waitUntil: "networkidle",
+      });
+
+      // Handle potential challenges here - for now we just proceed with login
+      // In a real implementation, we would detect and solve CAPTCHAs, JS challenges, etc.
+
+      // Fill in login form
+      await page.fill(
+        `[name="${this.config.usernameField}"]`,
+        this.config.username,
+      );
+      await page.fill(
+        `[name="${this.config.passwordField}"]`,
+        this.config.password,
+      );
+
+      // Handle CSRF token if needed
+      const csrfToken = await page.evaluate(() => {
+        const meta = document.querySelector('meta[name="csrf-token"]');
+        return meta ? meta.getAttribute("content") : null;
+      });
+      if (csrfToken) {
+        await page.fill(`[name="${this.config.csrfField}"]`, csrfToken);
+      }
+
+      // Submit form
+      await page.click('button[type="submit"], input[type="submit"]');
+      await page.waitForNavigation({ waitUntil: "networkidle" });
+
+      // Check if login was successful (simple check - in reality we'd check for success indicators)
+      const url = page.url();
+      if (url.includes("login") || url.includes("error")) {
+        throw new Error(
+          "Login failed - possible challenge or invalid credentials",
+        );
+      }
+
+      // Extract session from browser context
+      const cookies = await context.cookies();
+      const session: OrangeSessionState = {
+        cookies: Object.fromEntries(
+          cookies.map((c) => [
+            c.name,
+            {
+              value: c.value,
+              expiresAt: c.expires ? c.expires * 1000 : undefined,
+            },
+          ]),
+        ),
+        csrfToken: await page.evaluate(() => {
+          const token = document
+            .querySelector('meta[name="csrf-token"]')
+            ?.getAttribute("content");
+          return token ?? null;
+        }),
+        expiresAt:
+          Date.now() + (this.config.sessionTtlMs ?? DEFAULT_SESSION_TTL_MS),
+        authenticatedAt: Date.now(),
+      };
+
+      return this.ensureExpiresAt(session);
+    } finally {
+      if (context) {
+        await context.close();
+      }
+      if (browser) {
+        await browser.close();
+      }
+    }
+  }
+
   private async login(): Promise<OrangeSessionState> {
+    // Use Playwright for login if headless browser is enabled
+    if (this.config.useHeadlessBrowser) {
+      return await this.loginWithPlaywright();
+    }
+
+    // Original axios-based login
     const loginPage = await this.sendRequest(this.client, {
       method: "GET",
       url: this.config.loginPath,
@@ -634,7 +850,9 @@ export class OrangeProvider {
     });
 
     if (loginResponse.status < 200 || loginResponse.status >= 300) {
-      throw new Error(`Orange login failed with status ${loginResponse.status}`);
+      throw new Error(
+        `Orange login failed with status ${loginResponse.status}`,
+      );
     }
 
     const session = this.captureSession(loginResponse, initialSession);
@@ -704,38 +922,18 @@ export class OrangeProvider {
   }
 
   private loadSession(): OrangeSessionState | null {
-    if (!this.config.sessionStorePath) {
-      return null;
-    }
-
-    try {
-      if (!fs.existsSync(this.config.sessionStorePath)) {
-        return null;
-      }
-
-      const raw = fs.readFileSync(this.config.sessionStorePath, "utf8");
-      const parsed = JSON.parse(raw) as OrangeSessionState;
-
-      if (!parsed.cookies || !parsed.expiresAt || this.isExpired(parsed)) {
-        return null;
-      }
-
-      return parsed;
-    } catch {
-      return null;
-    }
+    // Session tokens must not be read from the local filesystem.
+    // The in-memory this.session is the authoritative cache; a fresh
+    // login will be performed when it is absent or expired.
+    return null;
   }
 
-  private persistSession(session: OrangeSessionState): void {
-    if (!this.config.sessionStorePath) {
-      return;
-    }
-
-    const dir = path.dirname(this.config.sessionStorePath);
-    fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(this.config.sessionStorePath, JSON.stringify(session), {
-      mode: 0o600,
-    });
+  private persistSession(_session: OrangeSessionState): void {
+    // Session tokens contain sensitive authentication credentials.
+    // Writing them to the local filesystem (sessionStorePath) would create
+    // unencrypted secrets on disk, violating the memory-only security policy.
+    // The session is already held in memory via this.session; for cross-process
+    // persistence use an encrypted store such as Redis instead.
   }
 
   private serializeCookies(session: OrangeSessionState): string {

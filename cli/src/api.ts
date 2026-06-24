@@ -66,3 +66,66 @@ export async function checkAuth(): Promise<{ status: string }> {
     throw new Error(extractMessage(err));
   }
 }
+
+export interface HealthStatus {
+  database: "healthy" | "degraded" | "unhealthy";
+  redis: "healthy" | "degraded" | "unhealthy";
+  stellar: "healthy" | "degraded" | "unhealthy";
+  responseTime?: number;
+}
+
+export interface DashboardStats {
+  health: HealthStatus;
+  queue: {
+    totalJobs: number;
+    pendingJobs: number;
+    activeJobs: number;
+    completedJobs: number;
+    failedJobs: number;
+    dlqSize: number;
+  };
+  transactions?: {
+    totalCount: number;
+    successRate: number;
+    totalVolume: number;
+    activeUsers: number;
+  };
+  providers?: {
+    [key: string]: {
+      status: "online" | "offline" | "degraded";
+      failureRate: number;
+      lastChecked: string;
+    };
+  };
+}
+
+export async function getDashboardStats(): Promise<DashboardStats> {
+  try {
+    const { data } = await buildClient().get<DashboardStats>(
+      "/api/admin/dashboard/stats",
+    );
+    return data;
+  } catch (err) {
+    throw new Error(extractMessage(err));
+  }
+}
+
+export async function getSystemHealth(): Promise<HealthStatus> {
+  try {
+    const { data } = await buildClient().get<HealthStatus>(
+      "/api/admin/health",
+    );
+    return data;
+  } catch (err) {
+    throw new Error(extractMessage(err));
+  }
+}
+
+export async function getQueueMetrics() {
+  try {
+    const { data } = await buildClient().get("/api/admin/queue/stats");
+    return data;
+  } catch (err) {
+    throw new Error(extractMessage(err));
+  }
+}

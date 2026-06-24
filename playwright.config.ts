@@ -1,13 +1,26 @@
 import { defineConfig, devices } from "@playwright/test";
+import path from "node:path";
+
+const repoRoot = __dirname;
 
 export default defineConfig({
-  testDir: "./tests/e2e",
+  testDir: path.join(repoRoot, "tests", "e2e"),
+  outputDir: path.join(repoRoot, "test-results", "e2e"),
   timeout: 30_000,
   expect: {
     timeout: 5000,
   },
   fullyParallel: true,
-  reporter: [["list"], ["html", { open: "never" }]],
+  reporter: [
+    ["list"],
+    [
+      "html",
+      {
+        open: "never",
+        outputFolder: path.join(repoRoot, "playwright-report"),
+      },
+    ],
+  ],
   projects: [
     {
       name: "chromium",

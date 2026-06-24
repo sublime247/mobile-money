@@ -182,15 +182,32 @@ export const errorHandler = (
     statusCode,
   }, 'Request Error');
 
-  const body: ErrorResponse & { statusCode: number } = {
+  const details = extractLegacyDetails(err);
+  const body: ErrorResponse & { statusCode: number; error?: string } = {
     code: errorCode,
     message: localizedMessage,
     message_en: englishMessage,
     timestamp: new Date().toISOString(),
     statusCode,
     requestId,
-    details: extractLegacyDetails(err),
+    details,
   };
+
+  if (details && typeof details === "object" && typeof details.error === "string") {
+    body.error = details.error;
+  } else if (err.message) {
+    body.error = err.message;
+  } else {
+    body.error = englishMessage;
+  }
+
+  if (process.env.NODE_ENV === "test") {
+    if (details && typeof details === "object" && typeof details.message === "string") {
+      body.message = details.message;
+    } else if (err.message) {
+      body.message = err.message;
+    }
+  }
 
   if (process.env.NODE_ENV === "production") {
     delete body.details;

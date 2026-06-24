@@ -437,9 +437,9 @@ async function runAudit() {
     }
 
     // Output results
-    if (output_format === 'json') {
+    if ((output_format as string) === 'json') {
       console.log(JSON.stringify(report, null, 2));
-    } else if (output_format === 'sql') {
+    } else if ((output_format as string) === 'sql') {
       if (dropSql.length > 0) {
         console.log('-- Generated DROP statements (review carefully before executing)\n');
         dropSql.forEach((sql) => console.log(sql + '\n'));

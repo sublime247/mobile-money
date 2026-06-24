@@ -5,7 +5,13 @@ import { encrypt, decrypt } from "../utils/encryption";
 // Types
 // ---------------------------------------------------------------------------
 
-export type DisputeStatus = "open" | "investigating" | "resolved" | "rejected";
+export type DisputeStatus =
+  | "open"
+  | "investigating"
+  | "resolved"
+  | "rejected"
+  | "reversed"
+  | "upheld";
 export type DisputePriority = "low" | "medium" | "high" | "critical";
 
 export interface Dispute {
@@ -565,7 +571,7 @@ export class DisputeModel {
          COUNT(*)::text                                              AS count,
          ROUND(
            AVG(
-             CASE WHEN status IN ('resolved','rejected')
+             CASE WHEN status IN ('resolved','rejected','reversed','upheld')
                THEN EXTRACT(EPOCH FROM (updated_at - created_at)) / 3600
              END
            )::NUMERIC, 2

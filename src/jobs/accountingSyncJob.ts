@@ -106,7 +106,7 @@ export class AccountingSyncJob {
   }
 
   private async getAllActiveConnections(): Promise<Array<{ id: string; provider: string }>> {
-    const { pool } = await import("../config/database");
+    const { pool } = await import("../config/database.js");
     const result = await pool.query(
       "SELECT id, provider FROM accounting_connections WHERE is_active = true"
     );

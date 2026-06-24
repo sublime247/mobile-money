@@ -113,6 +113,35 @@ registry.registerPath({
   },
 });
 
+registry.registerPath({
+  method: 'get',
+  path: '/api/v1/transactions/{id}/invoice',
+  tags: [TAG],
+  summary: 'Download a completed transaction invoice as a PDF',
+  security: SECURITY,
+  request: {
+    params: z.object({
+      id: z.string().uuid().openapi({ example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890' }),
+    }),
+    query: z.object({
+      download: z.string().optional().openapi({ description: 'Set to 0 to display inline instead of downloading' }),
+    }),
+  },
+  responses: {
+    200: {
+      description: 'PDF invoice generated',
+      content: {
+        'application/pdf': {
+          schema: z.string().openapi({ type: 'string', format: 'binary' }),
+        },
+      },
+    },
+    400: { description: 'Invoice download only available for completed transactions', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    401: { description: 'Unauthorized', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    404: { description: 'Transaction not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
+  },
+});
+
 // ─── Cancel transaction ───────────────────────────────────────────────────────
 
 registry.registerPath({

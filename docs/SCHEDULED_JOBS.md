@@ -9,6 +9,7 @@ Scheduled background jobs run automatically when the server starts, powered by [
 | `cleanup`      | `0 2 * * *` (daily 2 AM) | Deletes completed/failed transactions older than `LOG_RETENTION_DAYS`          |
 | `report`       | `0 6 * * *` (daily 6 AM) | Logs a summary of the previous day's transactions                              |
 | `status-check` | `0 * * * *` (every hour) | Warns about pending transactions stuck longer than `STUCK_TRANSACTION_MINUTES` |
+| `index-reindex`| `0 3 * * *` (daily 3 AM) | Reindexes bloated indexes using `REINDEX INDEX CONCURRENTLY` during low traffic |
 
 ## Configuration
 
@@ -19,6 +20,7 @@ All jobs are configurable via environment variables:
 CLEANUP_CRON=0 2 * * *
 REPORT_CRON=0 6 * * *
 STATUS_CHECK_CRON=0 * * * *
+INDEX_REINDEX_CRON=0 3 * * *
 
 # Cleanup retention period in days (default: 90)
 LOG_RETENTION_DAYS=90

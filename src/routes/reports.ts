@@ -10,7 +10,7 @@ export const reportsRoutes = Router();
 interface ReconciliationQuery {
   startDate: string;
   endDate: string;
-  format?: 'json' | 'csv';
+  format?: "json" | "csv";
 }
 
 interface ReconciliationReport {
@@ -43,6 +43,8 @@ interface ReconciliationReport {
 }
 
 import { feeService } from "../services/feeService";
+import { ERROR_CODES } from "../constants/errorCodes";
+import { createError } from "../middleware/errorHandler";
 
 // Helper function to calculate fees using dynamic configuration
 const calculateFee = async (amount: number): Promise<number> => {
@@ -58,62 +60,70 @@ const calculateFee = async (amount: number): Promise<number> => {
 // Helper function to format CSV
 const formatCSV = async (report: ReconciliationReport): Promise<string> => {
   const headers = [
-    'Date',
-    'Provider',
-    'Total Transactions',
-    'Successful Transactions',
-    'Failed Transactions',
-    'Success Rate (%)',
-    'Total Volume',
-    'Total Fees'
+    "Date",
+    "Provider",
+    "Total Transactions",
+    "Successful Transactions",
+    "Failed Transactions",
+    "Success Rate (%)",
+    "Total Volume",
+    "Total Fees",
   ];
 
-  const rows = [headers.join(',')];
+  const rows = [headers.join(",")];
 
   // Add summary row
-  rows.push([
-    report.period.start + ' to ' + report.period.end,
-    'ALL',
-    report.summary.totalTransactions.toString(),
-    report.summary.successfulTransactions.toString(),
-    report.summary.failedTransactions.toString(),
-    report.summary.successRate.toString(),
-    report.summary.totalVolume.toString(),
-    report.summary.totalFees.toString()
-  ].join(','));
+  rows.push(
+    [
+      report.period.start + " to " + report.period.end,
+      "ALL",
+      report.summary.totalTransactions.toString(),
+      report.summary.successfulTransactions.toString(),
+      report.summary.failedTransactions.toString(),
+      report.summary.successRate.toString(),
+      report.summary.totalVolume.toString(),
+      report.summary.totalFees.toString(),
+    ].join(","),
+  );
 
   // Add provider breakdown
   for (const [provider, data] of Object.entries(report.byProvider)) {
     const providerFee = await calculateFee(data.volume);
-    rows.push([
-      report.period.start + ' to ' + report.period.end,
-      provider,
-      data.count.toString(),
-      '',
-      '',
-      '',
-      data.volume.toString(),
-      providerFee.toString()
-    ].join(','));
+    rows.push(
+      [
+        report.period.start + " to " + report.period.end,
+        provider,
+        data.count.toString(),
+        "",
+        "",
+        "",
+        data.volume.toString(),
+        providerFee.toString(),
+      ].join(","),
+    );
   }
 
   // Add daily breakdown if available
   if (report.dailyBreakdown) {
-    report.dailyBreakdown.forEach(day => {
-      rows.push([
-        day.date,
-        'ALL',
-        day.totalTransactions.toString(),
-        day.successfulTransactions.toString(),
-        day.failedTransactions.toString(),
-        ((day.successfulTransactions / day.totalTransactions) * 100).toFixed(1),
-        day.totalVolume.toString(),
-        day.totalFees.toString()
-      ].join(','));
+    report.dailyBreakdown.forEach((day) => {
+      rows.push(
+        [
+          day.date,
+          "ALL",
+          day.totalTransactions.toString(),
+          day.successfulTransactions.toString(),
+          day.failedTransactions.toString(),
+          ((day.successfulTransactions / day.totalTransactions) * 100).toFixed(
+            1,
+          ),
+          day.totalVolume.toString(),
+          day.totalFees.toString(),
+        ].join(","),
+      );
     });
   }
 
-  return rows.join('\n');
+  return rows.join("\n");
 };
 
 // GET /api/reports/reconciliation
@@ -123,46 +133,60 @@ reportsRoutes.get(
   requireAuth,
   async (req: AuthRequest, res: Response) => {
     try {
-      const { startDate, endDate, format = 'json' } = req.query as unknown as ReconciliationQuery;
+      const {
+        startDate,
+        endDate,
+        format = "json",
+      } = req.query as unknown as ReconciliationQuery;
 
       // Validate required parameters
       if (!startDate || !endDate) {
-        return res.status(400).json({
-          error: "Bad Request",
-          message: "startDate and endDate query parameters are required"
-        });
+        throw createError(
+          ERROR_CODES.INVALID_INPUT,
+          "startDate and endDate query parameters are required",
+          {
+            error: "Bad Request",
+          },
+        );
       }
 
       // Validate date format
       const start = new Date(startDate);
       const end = new Date(endDate);
-      
+
       if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-        return res.status(400).json({
-          error: "Bad Request",
-          message: "Invalid date format. Use YYYY-MM-DD format"
-        });
+        throw createError(
+          ERROR_CODES.INVALID_INPUT,
+          "Invalid date format. Use YYYY-MM-DD format",
+          {
+            error: "Bad Request",
+          },
+        );
       }
 
       if (start > end) {
-        return res.status(400).json({
-          error: "Bad Request",
-          message: "startDate must be before or equal to endDate"
-        });
+        throw createError(
+          ERROR_CODES.INVALID_INPUT,
+          "startDate must be before or equal to endDate",
+          {
+            error: "Bad Request",
+          },
+        );
       }
 
       // Create cache key
       const cacheKey = `reconciliation_report:${startDate}:${endDate}:${format}`;
-      
+
       // Try to get from cache first
       if (redisClient?.isOpen) {
         try {
           const cached = await redisClient.get(cacheKey);
           if (cached) {
             console.log(`Cache hit for ${cacheKey}`);
-            const cachedStr = typeof cached === 'string' ? cached : cached.toString();
-            return format === 'csv' 
-              ? res.header('Content-Type', 'text/csv').send(cachedStr)
+            const cachedStr =
+              typeof cached === "string" ? cached : cached.toString();
+            return format === "csv"
+              ? res.header("Content-Type", "text/csv").send(cachedStr)
               : res.json(JSON.parse(cachedStr));
           }
         } catch (cacheError) {
@@ -185,25 +209,44 @@ reportsRoutes.get(
         ORDER BY date DESC, provider
       `;
 
-       const result = await queryRead(query, [startDate, endDate]);
+      const result = await queryRead(query, [startDate, endDate]);
 
       // Process results
-      const providerData: { [key: string]: { count: number; volume: number; successful: number; failed: number } } = {};
-      const dailyData: { [date: string]: { total: number; successful: number; failed: number; volume: number } } = {};
-      
+      const providerData: {
+        [key: string]: {
+          count: number;
+          volume: number;
+          successful: number;
+          failed: number;
+        };
+      } = {};
+      const dailyData: {
+        [date: string]: {
+          total: number;
+          successful: number;
+          failed: number;
+          volume: number;
+        };
+      } = {};
+
       let totalTransactions = 0;
       let successfulTransactions = 0;
       let failedTransactions = 0;
       let totalVolume = 0;
 
-      result.rows.forEach(row => {
+      result.rows.forEach((row) => {
         const { provider, status, date, count, volume } = row;
-        
+
         // Initialize provider data if not exists
         if (!providerData[provider]) {
-          providerData[provider] = { count: 0, volume: 0, successful: 0, failed: 0 };
+          providerData[provider] = {
+            count: 0,
+            volume: 0,
+            successful: 0,
+            failed: 0,
+          };
         }
-        
+
         // Initialize daily data if not exists
         if (!dailyData[date]) {
           dailyData[date] = { total: 0, successful: 0, failed: 0, volume: 0 };
@@ -215,44 +258,49 @@ reportsRoutes.get(
         // Update provider totals
         providerData[provider].count += countNum;
         providerData[provider].volume += volumeNum;
-        
-        if (status === 'completed') {
+
+        if (status === "completed") {
           providerData[provider].successful += countNum;
-        } else if (status === 'failed') {
+        } else if (status === "failed") {
           providerData[provider].failed += countNum;
         }
 
         // Update daily totals
         dailyData[date].total += countNum;
         dailyData[date].volume += volumeNum;
-        
-        if (status === 'completed') {
+
+        if (status === "completed") {
           dailyData[date].successful += countNum;
-        } else if (status === 'failed') {
+        } else if (status === "failed") {
           dailyData[date].failed += countNum;
         }
 
         // Update grand totals
         totalTransactions += countNum;
         totalVolume += volumeNum;
-        
-        if (status === 'completed') {
+
+        if (status === "completed") {
           successfulTransactions += countNum;
-        } else if (status === 'failed') {
+        } else if (status === "failed") {
           failedTransactions += countNum;
         }
       });
 
       // Calculate success rate
-      const successRate = totalTransactions > 0 ? (successfulTransactions / totalTransactions) * 100 : 0;
+      const successRate =
+        totalTransactions > 0
+          ? (successfulTransactions / totalTransactions) * 100
+          : 0;
       const totalFees = await calculateFee(totalVolume);
 
       // Build provider breakdown
-      const byProvider: { [provider: string]: { count: number; volume: number } } = {};
+      const byProvider: {
+        [provider: string]: { count: number; volume: number };
+      } = {};
       Object.entries(providerData).forEach(([provider, data]) => {
         byProvider[provider] = {
           count: data.count,
-          volume: data.volume
+          volume: data.volume,
         };
       });
 
@@ -264,8 +312,8 @@ reportsRoutes.get(
           successfulTransactions: data.successful,
           failedTransactions: data.failed,
           totalVolume: data.volume,
-          totalFees: await calculateFee(data.volume)
-        }))
+          totalFees: await calculateFee(data.volume),
+        })),
       );
       dailyBreakdown.sort((a, b) => a.date.localeCompare(b.date));
 
@@ -273,7 +321,7 @@ reportsRoutes.get(
       const report: ReconciliationReport = {
         period: {
           start: startDate,
-          end: endDate
+          end: endDate,
         },
         summary: {
           totalTransactions,
@@ -281,16 +329,17 @@ reportsRoutes.get(
           failedTransactions,
           successRate: Math.round(successRate * 10) / 10, // Round to 1 decimal place
           totalVolume: Math.round(totalVolume * 100) / 100, // Round to 2 decimal places
-          totalFees: Math.round(totalFees * 100) / 100
+          totalFees: Math.round(totalFees * 100) / 100,
         },
         byProvider,
-        dailyBreakdown
+        dailyBreakdown,
       };
 
       // Cache the result for 1 hour (3600 seconds)
       if (redisClient?.isOpen) {
         try {
-          const cacheValue = format === 'csv' ? await formatCSV(report) : JSON.stringify(report);
+          const cacheValue =
+            format === "csv" ? await formatCSV(report) : JSON.stringify(report);
           await redisClient.setEx(cacheKey, 3600, cacheValue);
           console.log(`Cached ${cacheKey} for 1 hour`);
         } catch (cacheError) {
@@ -299,23 +348,28 @@ reportsRoutes.get(
       }
 
       // Return response
-      if (format === 'csv') {
+      if (format === "csv") {
         const csv = await formatCSV(report);
-        res.header('Content-Type', 'text/csv');
-        res.header('Content-Disposition', `attachment; filename="reconciliation_report_${startDate}_to_${endDate}.csv"`);
+        res.header("Content-Type", "text/csv");
+        res.header(
+          "Content-Disposition",
+          `attachment; filename="reconciliation_report_${startDate}_to_${endDate}.csv"`,
+        );
         return res.send(csv);
       }
 
       res.json(report);
-
     } catch (error) {
       console.error("Error generating reconciliation report:", error);
-      res.status(500).json({
-        error: "Internal Server Error",
-        message: "Failed to generate reconciliation report"
-      });
+      throw createError(
+        ERROR_CODES.INTERNAL_ERROR,
+        "Failed to generate reconciliation report",
+        {
+          error: "Internal Server Error",
+        },
+      );
     }
-  }
+  },
 );
 
 // GET /api/reports/aml
@@ -343,27 +397,36 @@ reportsRoutes.get(
         Number.isNaN(startDate.getTime()) ||
         Number.isNaN(endDate.getTime())
       ) {
-        return res.status(400).json({
-          error: "Bad Request",
-          message: "Invalid date format. Use YYYY-MM-DD format",
-        });
+        throw createError(
+          ERROR_CODES.INVALID_INPUT,
+          "Invalid date format. Use YYYY-MM-DD format",
+          {
+            error: "Bad Request",
+          },
+        );
       }
 
       if (startDate > endDate) {
-        return res.status(400).json({
-          error: "Bad Request",
-          message: "startDate must be before or equal to endDate",
-        });
+        throw createError(
+          ERROR_CODES.INVALID_INPUT,
+          "startDate must be before or equal to endDate",
+          {
+            error: "Bad Request",
+          },
+        );
       }
 
       const report = amlService.generateReport(startDate, endDate);
       return res.json(report);
     } catch (error) {
       console.error("Error generating AML report:", error);
-      return res.status(500).json({
-        error: "Internal Server Error",
-        message: "Failed to generate AML report",
-      });
+      throw createError(
+        ERROR_CODES.INTERNAL_ERROR,
+        "Failed to generate AML report",
+        {
+          error: "Internal Server Error",
+        },
+      );
     }
   },
 );

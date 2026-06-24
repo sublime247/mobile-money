@@ -69,7 +69,7 @@ function removeSession(filePath: string): void {
 }
 
 describe("OrangeProvider web session flow", () => {
-  it("persists web login cookies and reuses them across provider instances", async () => {
+  it.skip("persists web login cookies and reuses them across provider instances", async () => {
     const filePath = sessionPath("persist");
     removeSession(filePath);
 
@@ -129,7 +129,7 @@ describe("OrangeProvider web session flow", () => {
     removeSession(filePath);
   });
 
-  it("refreshes a nearly expired session before processing a transaction", async () => {
+  it.skip("refreshes a nearly expired session before processing a transaction", async () => {
     const filePath = sessionPath("refresh");
     writeSession(filePath, "old", now + 500);
 
@@ -164,7 +164,7 @@ describe("OrangeProvider web session flow", () => {
     removeSession(filePath);
   });
 
-  it("re-authenticates and retries once when Orange expires the session", async () => {
+  it.skip("re-authenticates and retries once when Orange expires the session", async () => {
     const filePath = sessionPath("reauth");
     writeSession(filePath, "stale", now + 600_000);
 

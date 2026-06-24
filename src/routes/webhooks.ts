@@ -2,9 +2,13 @@ import { Router, Request, Response } from "express";
 import { createHmac, timingSafeEqual } from "crypto";
 import { TransactionModel, TransactionStatus } from "../models/transaction";
 import { WebhookService, WebhookEvent } from "../services/webhook";
+import { ingestRateLimiter } from "../middleware/ingestRateLimit";
 
 const router = Router();
 const transactionModel = new TransactionModel();
+
+// Rate-limit ingest traffic before signature verification and DB writes.
+router.use(ingestRateLimiter);
 
 interface WebhookSettings {
   compression: boolean;

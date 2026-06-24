@@ -3,13 +3,24 @@ import { createHmac, timingSafeEqual } from "crypto";
 import { z } from "zod";
 import { TransactionModel, TransactionStatus } from "../models/transaction";
 import { notifyTransactionWebhook, WebhookEvent } from "../services/webhook";
+import { enqueueSepWebhook } from "../services/stellar/webhooks";
+import { ingestRateLimiter } from "../middleware/ingestRateLimit";
 
 const router = Router();
 const transactionModel = new TransactionModel();
 
+// Rate-limit ingest traffic before signature verification and DB writes.
+router.use(ingestRateLimiter);
+
 interface RawBodyRequest extends Request {
   rawBody?: Buffer;
 }
+
+const memoSchema = z.union([
+  z.object({ type: z.literal("text"), value: z.string() }),
+  z.object({ type: z.literal("id"), value: z.string() }),
+  z.object({ type: z.literal("hash"), value: z.string() }),
+]);
 
 const stellarWebhookSchema = z.object({
   transaction_hash: z.string().min(1),
@@ -19,9 +30,15 @@ const stellarWebhookSchema = z.object({
   source_account: z.string().optional(),
   destination_account: z.string().optional(),
   amount: z.string().optional(),
+  memo: memoSchema.optional(),
 });
 
 export type StellarWebhookPayload = z.infer<typeof stellarWebhookSchema>;
+
+/** Extract a plain string reference from any memo type. */
+function parseMemoValue(memo: z.infer<typeof memoSchema>): string {
+  return memo.value;
+}
 
 function verifyWebhookSignature(
   payload: string,
@@ -80,9 +97,22 @@ router.post("/webhook", async (req: RawBodyRequest, res: Response) => {
       : TransactionStatus.Failed;
 
   try {
-    const transactions = await transactionModel.findByMetadata({
+    let transactions = await transactionModel.findByMetadata({
       stellar_hash: payload.transaction_hash,
     });
+
+    // Fall back to memo-based lookup if no match by hash
+    if (transactions.length === 0 && payload.memo) {
+      const memoValue = parseMemoValue(payload.memo);
+      const tx = await transactionModel.findByReferenceNumber(memoValue);
+      transactions = tx ? [tx] : [];
+
+      if (transactions.length === 0) {
+        transactions = await transactionModel.findByMetadata({
+          memo: memoValue,
+        });
+      }
+    }
 
     if (transactions.length === 0) {
       console.warn(
@@ -111,6 +141,7 @@ router.post("/webhook", async (req: RawBodyRequest, res: Response) => {
 
       await transactionModel.patchMetadata(transaction.id, {
         stellar_ledger: payload.ledger,
+        stellar_hash: payload.transaction_hash,
         webhook_processed_at: new Date().toISOString(),
       });
 
@@ -122,6 +153,32 @@ router.post("/webhook", async (req: RawBodyRequest, res: Response) => {
       await notifyTransactionWebhook(transaction.id, webhookEvent, {
         transactionModel,
       });
+
+      // SEP-31 Webhook Integration
+      const sep31Meta = (transaction.metadata as any)?.sep31;
+      if (sep31Meta) {
+        const newSep31Status = newStatus === TransactionStatus.Completed ? "completed" : "failed";
+        const callbackUrl = sep31Meta.callback || process.env.SEP31_WEBHOOK_URL || process.env.WEBHOOK_URL;
+        if (callbackUrl) {
+          await enqueueSepWebhook(
+            transaction.id,
+            newSep31Status,
+            callbackUrl,
+            {
+              id: transaction.id,
+              status: newSep31Status,
+              amount: transaction.amount,
+              stellar_transaction_id: payload.transaction_hash,
+              started_at: transaction.createdAt,
+              completed_at: new Date().toISOString(),
+              stellar_memo: sep31Meta.memo,
+              stellar_memo_type: sep31Meta.memo_type,
+            }
+          ).catch((err) =>
+            console.error(`[sep31-webhook] Error enqueuing webhook:`, err)
+          );
+        }
+      }
 
       console.log(
         `[stellar-webhook] Updated transaction ${transaction.id} to ${newStatus}`,

@@ -3,7 +3,7 @@ import {
   executePathPayment,
   findPaymentPaths,
   SlippageError,
-} from "../../../src/stellar/payments";
+} from "../../src/stellar/payments";
 
 // ── shared fixtures ──────────────────────────────────────────────────────────
 const senderKeypair = StellarSdk.Keypair.random();
@@ -93,6 +93,9 @@ describe("executePathPayment", () => {
   };
 
   beforeEach(() => {
+    mockLoadAccount.mockClear();
+    mockSubmit.mockClear();
+    mockHasTrustline.mockClear();
     mockLoadAccount.mockResolvedValue(makeAccount());
     mockHasTrustline.mockResolvedValue(true);
   });

@@ -1,0 +1,37 @@
+{{- if and .Values.worker.enabled .Values.worker.keda.enabled }}
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "mobile-money.fullname" . }}-worker-scaledobject
+  labels:
+    {{ include "mobile-money.labels" . | indent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "mobile-money.fullname" . }}-worker
+
+  minReplicaCount: {{ .Values.worker.keda.minReplicas }}
+  maxReplicaCount: {{ .Values.worker.keda.maxReplicas }}
+  cooldownPeriod: {{ .Values.worker.keda.cooldownPeriod }}
+  pollingInterval: {{ .Values.worker.keda.pollingInterval }}
+
+  triggers:
+    {{- if .Values.worker.keda.triggers.prometheus.enabled }}
+    - type: prometheus
+      metadata:
+        serverAddress: {{ .Values.worker.keda.triggers.prometheus.serverAddress | quote }}
+        query: {{ .Values.worker.keda.triggers.prometheus.query | quote }}
+        threshold: {{ .Values.worker.keda.triggers.prometheus.threshold | quote }}
+    {{- end }}
+    {{- if .Values.worker.keda.triggers.redis.enabled }}
+    - type: redis
+      metadata:
+        address: {{ .Values.worker.keda.triggers.redis.address | quote }}
+        listName: {{ .Values.worker.keda.triggers.redis.listName | quote }}
+        listLength: {{ .Values.worker.keda.triggers.redis.listLength | quote }}
+        {{- if .Values.worker.keda.triggers.redis.databaseIndex }}
+        databaseIndex: {{ .Values.worker.keda.triggers.redis.databaseIndex | quote }}
+        {{- end }}
+    {{- end }}
+{{- end }}

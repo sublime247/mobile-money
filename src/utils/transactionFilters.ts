@@ -8,6 +8,10 @@ export enum TransactionStatus {
   Completed = "completed",
   Failed = "failed",
   Cancelled = "cancelled",
+  Review = "review",
+  Dispute = "dispute",
+  Reversed = "reversed",
+  ClawedBack = "clawed_back",
 }
 
 /**

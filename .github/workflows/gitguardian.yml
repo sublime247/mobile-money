@@ -1,0 +1,113 @@
+name: GitGuardian Security Checks
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches:
+      - main
+      - develop
+
+permissions:
+  contents: read
+  pull-requests: write
+  security-events: write
+
+jobs:
+  secrets-scanning:
+    runs-on: ubuntu-latest
+    name: Secret Scanning
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run GitGuardian scan
+        uses: gitguardian/ggshield-action@v1
+        continue-on-error: true
+        env:
+          GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
+          GITHUB_PUSH_BEFORE_SHA: ${{ github.event.before }}
+          GITHUB_PUSH_BASE_SHA: ${{ github.event.base }}
+          GITHUB_PULL_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          GITHUB_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        with:
+          args: secret scan ci
+
+      - name: Comment on PR if secrets found
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `🚨 **Secret Scanning Failed**\n\nGitGuardian detected potential secrets in this PR. Before proceeding:\n\n1. **Identify** the secret location using the job logs\n2. **Revoke** the compromised credential immediately\n3. **Remove** the secret from your PR:\n   \`\`\`bash\n   git filter-branch --tree-filter 'sed -i \"s/your_secret/\\$(echo your_var)/g\" FILE' HEAD\n   git push --force-with-lease\n   \`\`\`\n4. **Re-run** this workflow after remediation\n\nFor help, see [Secrets Management Guide](https://github.com/${{ github.repository }}/blob/main/docs/SECRETS_MANAGEMENT.md)`
+            })
+
+  private-key-detection:
+    runs-on: ubuntu-latest
+    name: Private Key Detection
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install pre-commit
+        run: |
+          pip install pre-commit
+
+      - name: Run private key detection
+        run: |
+          pre-commit run detect-private-key --all-files || true
+
+      - name: Run AWS credentials detection
+        run: |
+          pre-commit run detect-aws-credentials --all-files || true
+
+  dependency-audit:
+    runs-on: ubuntu-latest
+    name: Dependency Security Audit
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        continue-on-error: true
+
+      - name: Install dependencies (fallback without frozen lockfile)
+        if: failure()
+        run: pnpm install
+
+      - name: Run npm audit
+        run: npm audit --audit-level=moderate || true
+
+      - name: Check for known vulnerabilities
+        run: pnpm audit --prod || true

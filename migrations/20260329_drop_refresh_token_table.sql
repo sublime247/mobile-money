@@ -2,5 +2,5 @@
 -- Description: Drop refresh_tokens in place of `refresh_token_families`
 -- Down migration
 
-DROP TABLE refresh_tokens;
+DROP TABLE IF EXISTS refresh_tokens;
  

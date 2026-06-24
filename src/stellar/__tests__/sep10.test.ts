@@ -10,13 +10,17 @@ import {
   Operation,
   Transaction,
   TransactionBuilder,
+  Horizon,
 } from "stellar-sdk";
 import { createSep10Router, Sep10Service, getSep10Config } from "../sep10";
 import { Networks } from "stellar-sdk";
+import { errorHandler } from "../../middleware/errorHandler";
 
 // Generate keypairs for testing
 const serverKeypair = Keypair.random();
 const clientKeypair = Keypair.random();
+const signer1Keypair = Keypair.random();
+const signer2Keypair = Keypair.random();
 const otherKeypair = Keypair.random();
 
 const TEST_NETWORK_PASSPHRASE = Networks.TESTNET;
@@ -37,6 +41,91 @@ function createTestService(
     homeDomain: TEST_HOME_DOMAIN,
     ...overrides,
   });
+}
+
+/**
+ * Create a test service with a mocked Horizon server
+ */
+function createTestServiceWithMockedServer(
+  mockServer: any,
+  overrides?: Record<string, string | number>,
+): Sep10Service {
+  return new Sep10Service(
+    {
+      signingKey: serverKeypair.secret(),
+      webAuthDomain: TEST_WEB_AUTH_DOMAIN,
+      networkPassphrase: TEST_NETWORK_PASSPHRASE,
+      jwtSecret: TEST_JWT_SECRET,
+      challengeExpiresIn: 900,
+      jwtExpiresIn: "1h",
+      homeDomain: TEST_HOME_DOMAIN,
+      ...overrides,
+    },
+    mockServer
+  );
+}
+
+/**
+ * Mock account data for Horizon server responses
+ */
+function createMockAccountSingleSig(publicKey: string): any {
+  return {
+    id: publicKey,
+    account_id: publicKey,
+    thresholds: {
+      master_weight: 1,
+      low_threshold: 0,
+      med_threshold: 1,
+      high_threshold: 1,
+    },
+    signers: [
+      {
+        key: publicKey,
+        type: "ed25519_public_key",
+        weight: 1,
+      },
+    ],
+  };
+}
+
+/**
+ * Mock account data for multi-signature accounts
+ */
+function createMockAccountMultiSig(
+  masterPublicKey: string,
+  additionalSigners: Array<{ publicKey: string; weight: number }>
+): any {
+  return {
+    id: masterPublicKey,
+    account_id: masterPublicKey,
+    thresholds: {
+      master_weight: 1,
+      low_threshold: 1,
+      med_threshold: 2, // Requires 2 weight to authorize
+      high_threshold: 3,
+    },
+    signers: [
+      {
+        key: masterPublicKey,
+        type: "ed25519_public_key",
+        weight: 1,
+      },
+      ...additionalSigners.map((signer) => ({
+        key: signer.publicKey,
+        type: "ed25519_public_key",
+        weight: signer.weight,
+      })),
+    ],
+  };
+}
+
+/**
+ * Create a mock Horizon server
+ */
+function createMockHorizonServer(accountData: any): any {
+  return {
+    loadAccount: jest.fn().mockResolvedValue(accountData),
+  };
 }
 
 function createChallengeTransaction(
@@ -226,8 +315,11 @@ describe("SEP-10 Stellar Authentication", () => {
     });
 
     describe("verifyChallenge", () => {
-      it("should issue a valid JWT for a properly signed challenge", () => {
-        const service = createTestService();
+      it("should issue a valid JWT for a properly signed challenge", async () => {
+        const mockAccount = createMockAccountSingleSig(clientKeypair.publicKey());
+        const mockServer = createMockHorizonServer(mockAccount);
+        const service = createTestServiceWithMockedServer(mockServer);
+
         const challenge = service.generateChallenge(clientKeypair.publicKey());
 
         // Client signs the transaction
@@ -237,7 +329,7 @@ describe("SEP-10 Stellar Authentication", () => {
         ) as Transaction;
         tx.sign(clientKeypair);
 
-        const response = service.verifyChallenge(
+        const response = await service.verifyChallenge(
           tx.toXDR(),
           clientKeypair.publicKey(),
         );
@@ -252,8 +344,11 @@ describe("SEP-10 Stellar Authentication", () => {
         expect(decoded.home_domain).toBe(TEST_HOME_DOMAIN);
       });
 
-      it("should work without passing clientAccountID explicitly", () => {
-        const service = createTestService();
+      it("should work without passing clientAccountID explicitly", async () => {
+        const mockAccount = createMockAccountSingleSig(clientKeypair.publicKey());
+        const mockServer = createMockHorizonServer(mockAccount);
+        const service = createTestServiceWithMockedServer(mockServer);
+
         const challenge = service.generateChallenge(clientKeypair.publicKey());
 
         const tx = TransactionBuilder.fromXDR(
@@ -262,19 +357,25 @@ describe("SEP-10 Stellar Authentication", () => {
         ) as Transaction;
         tx.sign(clientKeypair);
 
-        const response = service.verifyChallenge(tx.toXDR());
+        const response = await service.verifyChallenge(tx.toXDR());
         expect(response.token).toBeDefined();
       });
 
-      it("should reject invalid XDR", () => {
-        const service = createTestService();
-        expect(() =>
+      it("should reject invalid XDR", async () => {
+        const mockAccount = createMockAccountSingleSig(clientKeypair.publicKey());
+        const mockServer = createMockHorizonServer(mockAccount);
+        const service = createTestServiceWithMockedServer(mockServer);
+
+        await expect(
           service.verifyChallenge("not-valid-xdr", clientKeypair.publicKey()),
-        ).toThrow("Invalid transaction envelope");
+        ).rejects.toThrow("Invalid transaction envelope");
       });
 
-      it("should reject transactions with non-zero sequence number", () => {
-        const service = createTestService();
+      it("should reject transactions with non-zero sequence number", async () => {
+        const mockAccount = createMockAccountSingleSig(clientKeypair.publicKey());
+        const mockServer = createMockHorizonServer(mockAccount);
+        const service = createTestServiceWithMockedServer(mockServer);
+
         const tx = createChallengeTransaction(
           clientKeypair.publicKey(),
           serverKeypair,
@@ -282,13 +383,16 @@ describe("SEP-10 Stellar Authentication", () => {
         );
         tx.sign(clientKeypair);
 
-        expect(() =>
+        await expect(
           service.verifyChallenge(tx.toXDR(), clientKeypair.publicKey()),
-        ).toThrow("Transaction sequence number must be 0");
+        ).rejects.toThrow("Transaction sequence number must be 0");
       });
 
-      it("should reject expired transactions", () => {
-        const service = createTestService();
+      it("should reject expired transactions", async () => {
+        const mockAccount = createMockAccountSingleSig(clientKeypair.publicKey());
+        const mockServer = createMockHorizonServer(mockAccount);
+        const service = createTestServiceWithMockedServer(mockServer);
+
         const tx = createChallengeTransaction(
           clientKeypair.publicKey(),
           serverKeypair,
@@ -296,13 +400,15 @@ describe("SEP-10 Stellar Authentication", () => {
         );
         tx.sign(clientKeypair);
 
-        expect(() =>
+        await expect(
           service.verifyChallenge(tx.toXDR(), clientKeypair.publicKey()),
-        ).toThrow("Transaction has expired");
+        ).rejects.toThrow("Transaction has expired");
       });
 
-      it("should reject transactions not yet valid", () => {
-        const service = createTestService();
+      it("should reject transactions not yet valid", async () => {
+        const mockAccount = createMockAccountSingleSig(clientKeypair.publicKey());
+        const mockServer = createMockHorizonServer(mockAccount);
+        const service = createTestServiceWithMockedServer(mockServer);
 
         const future = Math.floor(Date.now() / 1000) + 3600; // 1 hour from now
         const sourceAccount = new Account(clientKeypair.publicKey(), "-1");
@@ -339,13 +445,16 @@ describe("SEP-10 Stellar Authentication", () => {
         tx.sign(serverKeypair);
         tx.sign(clientKeypair);
 
-        expect(() =>
+        await expect(
           service.verifyChallenge(tx.toXDR(), clientKeypair.publicKey()),
-        ).toThrow("Transaction is not yet valid");
+        ).rejects.toThrow("Transaction is not yet valid");
       });
 
-      it("should reject transactions not signed by the server", () => {
-        const service = createTestService();
+      it("should reject transactions not signed by the server", async () => {
+        const mockAccount = createMockAccountSingleSig(clientKeypair.publicKey());
+        const mockServer = createMockHorizonServer(mockAccount);
+        const service = createTestServiceWithMockedServer(mockServer);
+
         const tx = createChallengeTransaction(
           clientKeypair.publicKey(),
           serverKeypair,
@@ -353,26 +462,32 @@ describe("SEP-10 Stellar Authentication", () => {
         );
         tx.sign(clientKeypair);
 
-        expect(() =>
+        await expect(
           service.verifyChallenge(tx.toXDR(), clientKeypair.publicKey()),
-        ).toThrow("Transaction is not signed by the server");
+        ).rejects.toThrow("Transaction is not signed by the server");
       });
 
-      it("should reject transactions not signed by the client", () => {
-        const service = createTestService();
+      it("should reject transactions not signed by the client", async () => {
+        const mockAccount = createMockAccountSingleSig(clientKeypair.publicKey());
+        const mockServer = createMockHorizonServer(mockAccount);
+        const service = createTestServiceWithMockedServer(mockServer);
+
         const challenge = service.generateChallenge(clientKeypair.publicKey());
 
         // Server signed, but client did NOT sign
-        expect(() =>
+        await expect(
           service.verifyChallenge(
             challenge.transaction,
             clientKeypair.publicKey(),
           ),
-        ).toThrow("Transaction is not signed by the client account");
+        ).rejects.toThrow("Signing threshold not met");
       });
 
-      it("should reject transactions with non-manageData operations", () => {
-        const service = createTestService();
+      it("should reject transactions with non-manageData operations", async () => {
+        const mockAccount = createMockAccountSingleSig(clientKeypair.publicKey());
+        const mockServer = createMockHorizonServer(mockAccount);
+        const service = createTestServiceWithMockedServer(mockServer);
+
         const tx = createChallengeTransaction(
           clientKeypair.publicKey(),
           serverKeypair,
@@ -380,13 +495,15 @@ describe("SEP-10 Stellar Authentication", () => {
         );
         tx.sign(clientKeypair);
 
-        expect(() =>
+        await expect(
           service.verifyChallenge(tx.toXDR(), clientKeypair.publicKey()),
-        ).toThrow("Transaction must contain only manageData operations");
+        ).rejects.toThrow("Transaction must contain only manageData operations");
       });
 
-      it("should reject when manageData source does not match client account", () => {
-        const service = createTestService();
+      it("should reject when manageData source does not match client account", async () => {
+        const mockAccount = createMockAccountSingleSig(clientKeypair.publicKey());
+        const mockServer = createMockHorizonServer(mockAccount);
+        const service = createTestServiceWithMockedServer(mockServer);
 
         const sourceAccount = new Account(clientKeypair.publicKey(), "-1");
         let builder = new TransactionBuilder(sourceAccount, {
@@ -412,15 +529,18 @@ describe("SEP-10 Stellar Authentication", () => {
         const tx = builder.build();
         tx.sign(serverKeypair);
 
-        expect(() =>
+        await expect(
           service.verifyChallenge(tx.toXDR(), clientKeypair.publicKey()),
-        ).toThrow(
+        ).rejects.toThrow(
           "First manageData operation source must match client account",
         );
       });
 
-      it("should include jti (JWT ID) in the token", () => {
-        const service = createTestService();
+      it("should include jti (JWT ID) in the token", async () => {
+        const mockAccount = createMockAccountSingleSig(clientKeypair.publicKey());
+        const mockServer = createMockHorizonServer(mockAccount);
+        const service = createTestServiceWithMockedServer(mockServer);
+
         const challenge = service.generateChallenge(clientKeypair.publicKey());
 
         const tx = TransactionBuilder.fromXDR(
@@ -429,7 +549,7 @@ describe("SEP-10 Stellar Authentication", () => {
         ) as Transaction;
         tx.sign(clientKeypair);
 
-        const response = service.verifyChallenge(
+        const response = await service.verifyChallenge(
           tx.toXDR(),
           clientKeypair.publicKey(),
         );
@@ -441,8 +561,11 @@ describe("SEP-10 Stellar Authentication", () => {
         );
       });
 
-      it("should include iat and exp claims in the token", () => {
-        const service = createTestService();
+      it("should include iat and exp claims in the token", async () => {
+        const mockAccount = createMockAccountSingleSig(clientKeypair.publicKey());
+        const mockServer = createMockHorizonServer(mockAccount);
+        const service = createTestServiceWithMockedServer(mockServer);
+
         const challenge = service.generateChallenge(clientKeypair.publicKey());
 
         const tx = TransactionBuilder.fromXDR(
@@ -452,7 +575,7 @@ describe("SEP-10 Stellar Authentication", () => {
         tx.sign(clientKeypair);
 
         const before = Math.floor(Date.now() / 1000);
-        const response = service.verifyChallenge(
+        const response = await service.verifyChallenge(
           tx.toXDR(),
           clientKeypair.publicKey(),
         );
@@ -466,8 +589,12 @@ describe("SEP-10 Stellar Authentication", () => {
     });
 
     describe("verifyToken", () => {
-      it("should throw for expired tokens", () => {
-        const service = createTestService({ jwtExpiresIn: "1s" });
+      it("should throw for expired tokens", async () => {
+        const mockAccount = createMockAccountSingleSig(clientKeypair.publicKey());
+        const mockServer = createMockHorizonServer(mockAccount);
+        const service = createTestServiceWithMockedServer(mockServer, {
+          jwtExpiresIn: "1s",
+        });
         const challenge = service.generateChallenge(clientKeypair.publicKey());
 
         const tx = TransactionBuilder.fromXDR(
@@ -476,7 +603,7 @@ describe("SEP-10 Stellar Authentication", () => {
         ) as Transaction;
         tx.sign(clientKeypair);
 
-        const response = service.verifyChallenge(
+        const response = await service.verifyChallenge(
           tx.toXDR(),
           clientKeypair.publicKey(),
         );
@@ -492,9 +619,13 @@ describe("SEP-10 Stellar Authentication", () => {
         );
       });
 
-      it("should throw for tokens signed with different secret", () => {
+      it("should throw for tokens signed with different secret", async () => {
+        const mockAccount = createMockAccountSingleSig(clientKeypair.publicKey());
+        const mockServer = createMockHorizonServer(mockAccount);
         const service = createTestService();
-        const otherService = createTestService({ jwtSecret: "other-secret" });
+        const otherService = createTestServiceWithMockedServer(mockServer, {
+          jwtSecret: "other-secret",
+        });
 
         const challenge = otherService.generateChallenge(
           clientKeypair.publicKey(),
@@ -505,12 +636,179 @@ describe("SEP-10 Stellar Authentication", () => {
         ) as Transaction;
         tx.sign(clientKeypair);
 
-        const response = otherService.verifyChallenge(
+        const response = await otherService.verifyChallenge(
           tx.toXDR(),
           clientKeypair.publicKey(),
         );
 
         expect(() => service.verifyToken(response.token)).toThrow();
+      });
+    });
+
+    describe("Multi-Signature Support", () => {
+      it("should successfully authenticate with multi-signature when threshold is met", async () => {
+        const masterPublicKey = clientKeypair.publicKey();
+        const mockAccount = createMockAccountMultiSig(masterPublicKey, [
+          { publicKey: signer1Keypair.publicKey(), weight: 1 },
+        ]);
+        const mockServer = createMockHorizonServer(mockAccount);
+        const service = createTestServiceWithMockedServer(mockServer);
+
+        const challenge = service.generateChallenge(masterPublicKey);
+        const tx = TransactionBuilder.fromXDR(
+          challenge.transaction,
+          TEST_NETWORK_PASSPHRASE,
+        ) as Transaction;
+
+        // Sign with both master and signer (weight = 2, threshold = 2)
+        tx.sign(masterPublicKey === clientKeypair.publicKey() ? clientKeypair : otherKeypair);
+        tx.sign(signer1Keypair);
+
+        const response = await service.verifyChallenge(tx.toXDR(), masterPublicKey);
+        expect(response.token).toBeDefined();
+        expect(typeof response.token).toBe("string");
+      });
+
+      it("should reject multi-signature when threshold is not met", async () => {
+        const masterPublicKey = clientKeypair.publicKey();
+        const mockAccount = createMockAccountMultiSig(masterPublicKey, [
+          { publicKey: signer1Keypair.publicKey(), weight: 1 },
+        ]);
+        const mockServer = createMockHorizonServer(mockAccount);
+        const service = createTestServiceWithMockedServer(mockServer);
+
+        const challenge = service.generateChallenge(masterPublicKey);
+        const tx = TransactionBuilder.fromXDR(
+          challenge.transaction,
+          TEST_NETWORK_PASSPHRASE,
+        ) as Transaction;
+
+        // Sign with only master (weight = 1, threshold = 2)
+        tx.sign(clientKeypair);
+
+        await expect(
+          service.verifyChallenge(tx.toXDR(), masterPublicKey),
+        ).rejects.toThrow("Signing threshold not met");
+      });
+
+      it("should successfully authenticate with complex multi-signature", async () => {
+        const masterPublicKey = clientKeypair.publicKey();
+        const mockAccount = createMockAccountMultiSig(masterPublicKey, [
+          { publicKey: signer1Keypair.publicKey(), weight: 1 },
+          { publicKey: signer2Keypair.publicKey(), weight: 1 },
+        ]);
+        const mockServer = createMockHorizonServer(mockAccount);
+        const service = createTestServiceWithMockedServer(mockServer);
+
+        const challenge = service.generateChallenge(masterPublicKey);
+        const tx = TransactionBuilder.fromXDR(
+          challenge.transaction,
+          TEST_NETWORK_PASSPHRASE,
+        ) as Transaction;
+
+        // Sign with two signers (weight = 2, threshold = 2)
+        tx.sign(signer1Keypair);
+        tx.sign(signer2Keypair);
+
+        const response = await service.verifyChallenge(tx.toXDR(), masterPublicKey);
+        expect(response.token).toBeDefined();
+      });
+
+      it("should handle weighted signers correctly", async () => {
+        const masterPublicKey = clientKeypair.publicKey();
+        const mockAccount = {
+          id: masterPublicKey,
+          account_id: masterPublicKey,
+          thresholds: {
+            master_weight: 0, // Master key disabled
+            low_threshold: 1,
+            med_threshold: 3, // Requires 3 weight
+            high_threshold: 5,
+          },
+          signers: [
+            {
+              key: masterPublicKey,
+              type: "ed25519_public_key",
+              weight: 0,
+            },
+            {
+              key: signer1Keypair.publicKey(),
+              type: "ed25519_public_key",
+              weight: 2,
+            },
+            {
+              key: signer2Keypair.publicKey(),
+              type: "ed25519_public_key",
+              weight: 2,
+            },
+          ],
+        };
+        const mockServer = createMockHorizonServer(mockAccount);
+        const service = createTestServiceWithMockedServer(mockServer);
+
+        const challenge = service.generateChallenge(masterPublicKey);
+        const tx = TransactionBuilder.fromXDR(
+          challenge.transaction,
+          TEST_NETWORK_PASSPHRASE,
+        ) as Transaction;
+
+        // Sign with signer1 + signer2 (weight = 4, threshold = 3)
+        tx.sign(signer1Keypair);
+        tx.sign(signer2Keypair);
+
+        const response = await service.verifyChallenge(tx.toXDR(), masterPublicKey);
+        expect(response.token).toBeDefined();
+      });
+
+      it("should handle accounts with zero threshold", async () => {
+        const masterPublicKey = clientKeypair.publicKey();
+        const mockAccount = {
+          id: masterPublicKey,
+          account_id: masterPublicKey,
+          thresholds: {
+            master_weight: 1,
+            low_threshold: 0,
+            med_threshold: 0, // No signature required
+            high_threshold: 0,
+          },
+          signers: [
+            {
+              key: masterPublicKey,
+              type: "ed25519_public_key",
+              weight: 1,
+            },
+          ],
+        };
+        const mockServer = createMockHorizonServer(mockAccount);
+        const service = createTestServiceWithMockedServer(mockServer);
+
+        const challenge = service.generateChallenge(masterPublicKey);
+        // Don't sign by client - threshold is 0, so no client signature needed
+        const response = await service.verifyChallenge(
+          challenge.transaction,
+          masterPublicKey,
+        );
+        expect(response.token).toBeDefined();
+      });
+
+      it("should reject when account is not found on Horizon", async () => {
+        const mockServer = {
+          loadAccount: jest.fn().mockRejectedValue(
+            new Error("Account not found")
+          ),
+        };
+        const service = createTestServiceWithMockedServer(mockServer);
+
+        const challenge = service.generateChallenge(clientKeypair.publicKey());
+        const tx = TransactionBuilder.fromXDR(
+          challenge.transaction,
+          TEST_NETWORK_PASSPHRASE,
+        ) as Transaction;
+        tx.sign(clientKeypair);
+
+        await expect(
+          service.verifyChallenge(tx.toXDR(), clientKeypair.publicKey()),
+        ).rejects.toThrow("Failed to verify signing threshold");
       });
     });
 
@@ -558,10 +856,13 @@ describe("SEP-10 Stellar Authentication", () => {
     let service: Sep10Service;
 
     beforeEach(() => {
-      service = createTestService();
+      const mockAccount = createMockAccountSingleSig(clientKeypair.publicKey());
+      const mockServer = createMockHorizonServer(mockAccount);
+      service = createTestServiceWithMockedServer(mockServer);
       app = express();
       app.use(express.json());
       app.use("/auth", createSep10Router(service));
+      app.use(errorHandler);
     });
 
     describe("GET /auth", () => {
@@ -660,7 +961,7 @@ describe("SEP-10 Stellar Authentication", () => {
           .send({ transaction: challengeRes.body.transaction });
 
         expect(response.status).toBe(400);
-        expect(response.body.error).toContain("not signed by the client");
+        expect(response.body.error).toContain("Signing threshold not met");
       });
 
       it("should return 400 for expired challenge", async () => {
@@ -669,6 +970,7 @@ describe("SEP-10 Stellar Authentication", () => {
         const shortApp = express();
         shortApp.use(express.json());
         shortApp.use("/auth", createSep10Router(shortService));
+        shortApp.use(errorHandler);
 
         const challengeRes = await request(shortApp)
           .get("/auth")
@@ -703,10 +1005,13 @@ describe("SEP-10 Stellar Authentication", () => {
 
   describe("End-to-End Auth Flow", () => {
     it("should complete the full SEP-10 authentication flow", async () => {
-      const service = createTestService();
+      const mockAccount = createMockAccountSingleSig(clientKeypair.publicKey());
+      const mockServer = createMockHorizonServer(mockAccount);
+      const service = createTestServiceWithMockedServer(mockServer);
       const app = express();
       app.use(express.json());
       app.use("/auth", createSep10Router(service));
+      app.use(errorHandler);
 
       // Step 1: Client requests challenge
       const challengeRes = await request(app)
@@ -751,10 +1056,13 @@ describe("SEP-10 Stellar Authentication", () => {
     });
 
     it("should reject a challenge signed by wrong key", async () => {
-      const service = createTestService();
+      const mockAccount = createMockAccountSingleSig(clientKeypair.publicKey());
+      const mockServer = createMockHorizonServer(mockAccount);
+      const service = createTestServiceWithMockedServer(mockServer);
       const app = express();
       app.use(express.json());
       app.use("/auth", createSep10Router(service));
+      app.use(errorHandler);
 
       const challengeRes = await request(app)
         .get("/auth")
@@ -772,7 +1080,7 @@ describe("SEP-10 Stellar Authentication", () => {
         .send({ transaction: challengeTx.toXDR() });
 
       expect(authRes.status).toBe(400);
-      expect(authRes.body.error).toContain("not signed by the client account");
+      expect(authRes.body.error).toContain("Signing threshold not met");
     });
   });
 

@@ -1,39 +1,52 @@
 import { Router, Request, Response } from "express";
 import { z } from "zod";
-import { feeService, CreateFeeConfigRequest, UpdateFeeConfigRequest } from "../services/feeService";
+import {
+  feeService,
+  CreateFeeConfigRequest,
+  UpdateFeeConfigRequest,
+} from "../services/feeService";
 import { requirePermission } from "../middleware/rbac";
 import { authenticateToken } from "../middleware/auth";
 import { calculateFeeForUser } from "../utils/fees";
+import { ERROR_CODES } from "../constants/errorCodes";
+import { createError } from "../middleware/errorHandler";
 
 const router = Router();
 
 // Validation schemas
-const createFeeConfigSchema = z.object({
-  name: z.string().min(1).max(100),
-  description: z.string().optional(),
-  feePercentage: z.number().min(0).max(100),
-  feeMinimum: z.number().min(0),
-  feeMaximum: z.number().min(0),
-}).refine(data => data.feeMaximum >= data.feeMinimum, {
-  message: "Fee maximum must be greater than or equal to fee minimum",
-  path: ["feeMaximum"],
-});
+const createFeeConfigSchema = z
+  .object({
+    name: z.string().min(1).max(100),
+    description: z.string().optional(),
+    feePercentage: z.number().min(0).max(100),
+    feeMinimum: z.number().min(0),
+    feeMaximum: z.number().min(0),
+  })
+  .refine((data) => data.feeMaximum >= data.feeMinimum, {
+    message: "Fee maximum must be greater than or equal to fee minimum",
+    path: ["feeMaximum"],
+  });
 
-const updateFeeConfigSchema = z.object({
-  description: z.string().optional(),
-  feePercentage: z.number().min(0).max(100).optional(),
-  feeMinimum: z.number().min(0).optional(), 
-  feeMaximum: z.number().min(0).optional(),
-  isActive: z.boolean().optional(),
-}).refine(data => {
-  if (data.feeMaximum !== undefined && data.feeMinimum !== undefined) {
-    return data.feeMaximum >= data.feeMinimum;
-  }
-  return true;
-}, {
-  message: "Fee maximum must be greater than or equal to fee minimum",
-  path: ["feeMaximum"],
-});
+const updateFeeConfigSchema = z
+  .object({
+    description: z.string().optional(),
+    feePercentage: z.number().min(0).max(100).optional(),
+    feeMinimum: z.number().min(0).optional(),
+    feeMaximum: z.number().min(0).optional(),
+    isActive: z.boolean().optional(),
+  })
+  .refine(
+    (data) => {
+      if (data.feeMaximum !== undefined && data.feeMinimum !== undefined) {
+        return data.feeMaximum >= data.feeMinimum;
+      }
+      return true;
+    },
+    {
+      message: "Fee maximum must be greater than or equal to fee minimum",
+      path: ["feeMaximum"],
+    },
+  );
 
 const calculateFeeSchema = z.object({
   amount: z.number().positive(),
@@ -44,7 +57,9 @@ const estimateFeeSchema = z.object({
   userId: z.string().uuid().optional(),
   senderPhone: z.string().optional(),
   recipientPhone: z.string().optional(),
-  transactionType: z.enum(["send", "deposit", "withdraw", "payment"]).optional(),
+  transactionType: z
+    .enum(["send", "deposit", "withdraw", "payment"])
+    .optional(),
 });
 
 /**
@@ -71,7 +86,8 @@ const logFeeAction = (action: string) => {
 router.post("/estimate", async (req: Request, res: Response) => {
   try {
     const payload = estimateFeeSchema.parse(req.body);
-    const { amount, userId, senderPhone, recipientPhone, transactionType } = payload;
+    const { amount, userId, senderPhone, recipientPhone, transactionType } =
+      payload;
 
     let responseData: Record<string, unknown>;
 
@@ -80,9 +96,10 @@ router.post("/estimate", async (req: Request, res: Response) => {
       const vipResult = await calculateFeeForUser(amount, userId);
 
       // Derive effective rate from the fee and amount
-      const effectiveRate = amount > 0
-        ? parseFloat(((vipResult.fee / amount) * 100).toFixed(4))
-        : 0;
+      const effectiveRate =
+        amount > 0
+          ? parseFloat(((vipResult.fee / amount) * 100).toFixed(4))
+          : 0;
 
       // Fetch base config for breakdown details
       let baseFeeRate = 1.5;
@@ -135,9 +152,8 @@ router.post("/estimate", async (req: Request, res: Response) => {
       // Standard fee calculation (no VIP tier)
       const result = await feeService.calculateFee(amount);
 
-      const effectiveRate = amount > 0
-        ? parseFloat(((result.fee / amount) * 100).toFixed(4))
-        : 0;
+      const effectiveRate =
+        amount > 0 ? parseFloat(((result.fee / amount) * 100).toFixed(4)) : 0;
 
       // Fetch active config for breakdown
       let baseFeeRate = 1.5;
@@ -188,7 +204,7 @@ router.post("/estimate", async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     if (error.name === "ZodError") {
-      return res.status(400).json({
+      throw createError(ERROR_CODES.INVALID_INPUT, "Validation error", {
         success: false,
         error: "Validation error",
         details: error.errors,
@@ -196,7 +212,7 @@ router.post("/estimate", async (req: Request, res: Response) => {
     }
 
     console.error("Fee estimation error:", error);
-    res.status(500).json({
+    throw createError(ERROR_CODES.INTERNAL_ERROR, "Failed to estimate fee", {
       success: false,
       error: "Failed to estimate fee",
     });
@@ -210,24 +226,24 @@ router.post("/estimate", async (req: Request, res: Response) => {
 router.post("/calculate", async (req: Request, res: Response) => {
   try {
     const { amount } = calculateFeeSchema.parse(req.body);
-    
+
     const result = await feeService.calculateFee(amount);
-    
+
     res.json({
       success: true,
       data: result,
     });
   } catch (error: any) {
-    if (error.name === 'ZodError') {
-      return res.status(400).json({
+    if (error.name === "ZodError") {
+      throw createError(ERROR_CODES.INVALID_INPUT, "Validation error", {
         success: false,
         error: "Validation error",
         details: error.errors,
       });
     }
-    
+
     console.error("Fee calculation error:", error);
-    res.status(500).json({
+    throw createError(ERROR_CODES.INTERNAL_ERROR, "Failed to calculate fee", {
       success: false,
       error: "Failed to calculate fee",
     });
@@ -245,19 +261,23 @@ router.get(
   async (req: Request, res: Response) => {
     try {
       const configurations = await feeService.getAllConfigurations();
-      
+
       res.json({
         success: true,
         data: configurations,
       });
     } catch (error: any) {
       console.error("Get configurations error:", error);
-      res.status(500).json({
-        success: false,
-        error: "Failed to fetch fee configurations",
-      });
+      throw createError(
+        ERROR_CODES.INTERNAL_ERROR,
+        "Failed to fetch fee configurations",
+        {
+          success: false,
+          error: "Failed to fetch fee configurations",
+        },
+      );
     }
-  }
+  },
 );
 
 /**
@@ -267,17 +287,21 @@ router.get(
 router.get("/configurations/active", async (req: Request, res: Response) => {
   try {
     const activeConfig = await feeService.getActiveConfiguration();
-    
+
     res.json({
       success: true,
       data: activeConfig,
     });
   } catch (error: any) {
     console.error("Get active configuration error:", error);
-    res.status(500).json({
-      success: false,
-      error: "Failed to fetch active fee configuration",
-    });
+    throw createError(
+      ERROR_CODES.INTERNAL_ERROR,
+      "Failed to fetch fee configurations",
+      {
+        success: false,
+        error: "Failed to fetch fee configurations",
+      },
+    );
   }
 });
 
@@ -293,28 +317,36 @@ router.get(
   async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
-      
+
       const configuration = await feeService.getConfigurationById(id);
-      
+
       if (!configuration) {
-        return res.status(404).json({
-          success: false,
-          error: "Fee configuration not found",
-        });
+        throw createError(
+          ERROR_CODES.NOT_FOUND,
+          "Fee configuration not found",
+          {
+            success: false,
+            error: "Fee configuration not found",
+          },
+        );
       }
-      
+
       res.json({
         success: true,
         data: configuration,
       });
     } catch (error: any) {
       console.error("Get configuration error:", error);
-      res.status(500).json({
-        success: false,
-        error: "Failed to fetch fee configuration",
-      });
+      throw createError(
+        ERROR_CODES.INTERNAL_ERROR,
+        "Failed to fetch fee configuration",
+        {
+          success: false,
+          error: "Failed to fetch fee configuration",
+        },
+      );
     }
-  }
+  },
 );
 /**
  * POST /api/fees/configurations
@@ -327,40 +359,51 @@ router.post(
   logFeeAction("CREATE_CONFIGURATION"),
   async (req: Request, res: Response) => {
     try {
-      const data = createFeeConfigSchema.parse(req.body) as CreateFeeConfigRequest;
-      
+      const data = createFeeConfigSchema.parse(
+        req.body,
+      ) as CreateFeeConfigRequest;
+
       const configuration = await feeService.createConfiguration(
         data,
-        req.jwtUser!.userId
+        req.jwtUser!.userId,
       );
-      
+
       res.status(201).json({
         success: true,
         data: configuration,
       });
     } catch (error: any) {
-      if (error.name === 'ZodError') {
-        return res.status(400).json({
+      if (error.name === "ZodError") {
+        throw createError(ERROR_CODES.INVALID_INPUT, "Validation error", {
           success: false,
           error: "Validation error",
           details: error.errors,
         });
       }
-      
-      if (error.code === '23505') { // Unique constraint violation
-        return res.status(409).json({
-          success: false,
-          error: "Fee configuration with this name already exists",
-        });
+
+      if (error.code === "23505") {
+        // Unique constraint violation
+        throw createError(
+          ERROR_CODES.CONFLICT,
+          "Fee configuration with this name already exists",
+          {
+            success: false,
+            error: "Fee configuration with this name already exists",
+          },
+        );
       }
-      
+
       console.error("Create configuration error:", error);
-      res.status(500).json({
-        success: false,
-        error: "Failed to create fee configuration",
-      });
+      throw createError(
+        ERROR_CODES.INTERNAL_ERROR,
+        "Failed to create fee configuration",
+        {
+          success: false,
+          error: "Failed to create fee configuration",
+        },
+      );
     }
-  }
+  },
 );
 
 /**
@@ -375,43 +418,49 @@ router.put(
   async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
-      const data = updateFeeConfigSchema.parse(req.body) as UpdateFeeConfigRequest;
-      
+      const data = updateFeeConfigSchema.parse(
+        req.body,
+      ) as UpdateFeeConfigRequest;
+
       const configuration = await feeService.updateConfiguration(
         id,
         data,
         req.jwtUser!.userId,
         req.ip,
-        req.get('User-Agent')
+        req.get("User-Agent"),
       );
-      
+
       if (!configuration) {
         return res.status(404).json({
           success: false,
           error: "Fee configuration not found",
         });
       }
-      
+
       res.json({
         success: true,
         data: configuration,
       });
     } catch (error: any) {
-      if (error.name === 'ZodError') {
-        return res.status(400).json({
+      if (error.name === "ZodError") {
+        throw createError(ERROR_CODES.INVALID_INPUT, "Validation error", {
           success: false,
           error: "Validation error",
           details: error.errors,
         });
       }
-      
+
       console.error("Update configuration error:", error);
-      res.status(500).json({
-        success: false,
-        error: "Failed to update fee configuration",
-      });
+      throw createError(
+        ERROR_CODES.INTERNAL_ERROR,
+        "Failed to update fee configuration",
+        {
+          success: false,
+          error: "Failed to update fee configuration",
+        },
+      );
     }
-  }
+  },
 );
 /**
  * DELETE /api/fees/configurations/:id
@@ -425,40 +474,48 @@ router.delete(
   async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
-      
+
       const deleted = await feeService.deleteConfiguration(
         id,
         req.jwtUser!.userId,
         req.ip,
-        req.get('User-Agent')
+        req.get("User-Agent"),
       );
-      
+
       if (!deleted) {
-        return res.status(404).json({
-          success: false,
-          error: "Fee configuration not found",
-        });
+        throw createError(
+          ERROR_CODES.NOT_FOUND,
+          "Fee configuration not found",
+          {
+            success: false,
+            error: "Fee configuration not found",
+          },
+        );
       }
-      
+
       res.json({
         success: true,
         message: "Fee configuration deleted successfully",
       });
     } catch (error: any) {
       if (error.message === "Cannot delete active fee configuration") {
-        return res.status(400).json({
+        throw createError(ERROR_CODES.INVALID_INPUT, error.message, {
           success: false,
           error: error.message,
         });
       }
-      
+
       console.error("Delete configuration error:", error);
-      res.status(500).json({
-        success: false,
-        error: "Failed to delete fee configuration",
-      });
+      throw createError(
+        ERROR_CODES.INTERNAL_ERROR,
+        "Failed to delete fee configuration",
+        {
+          success: false,
+          error: "Failed to delete fee configuration",
+        },
+      );
     }
-  }
+  },
 );
 
 /**
@@ -473,21 +530,25 @@ router.post(
   async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
-      
+
       const configuration = await feeService.activateConfiguration(
         id,
         req.jwtUser!.userId,
         req.ip,
-        req.get('User-Agent')
+        req.get("User-Agent"),
       );
-      
+
       if (!configuration) {
-        return res.status(404).json({
-          success: false,
-          error: "Fee configuration not found",
-        });
+        throw createError(
+          ERROR_CODES.NOT_FOUND,
+          "Fee configuration not found",
+          {
+            success: false,
+            error: "Fee configuration not found",
+          },
+        );
       }
-      
+
       res.json({
         success: true,
         data: configuration,
@@ -495,12 +556,16 @@ router.post(
       });
     } catch (error: any) {
       console.error("Activate configuration error:", error);
-      res.status(500).json({
-        success: false,
-        error: "Failed to activate fee configuration",
-      });
+      throw createError(
+        ERROR_CODES.INTERNAL_ERROR,
+        "Failed to activate fee configuration",
+        {
+          success: false,
+          error: "Failed to activate fee configuration",
+        },
+      );
     }
-  }
+  },
 );
 /**
  * GET /api/fees/configurations/:id/audit
@@ -514,21 +579,25 @@ router.get(
   async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
-      
+
       const auditHistory = await feeService.getAuditHistory(id);
-      
+
       res.json({
         success: true,
         data: auditHistory,
       });
     } catch (error: any) {
       console.error("Get audit history error:", error);
-      res.status(500).json({
-        success: false,
-        error: "Failed to fetch audit history",
-      });
+      throw createError(
+        ERROR_CODES.INTERNAL_ERROR,
+        "Failed to fetch audit history",
+        {
+          success: false,
+          error: "Failed to fetch audit history",
+        },
+      );
     }
-  }
+  },
 );
 
 export default router;

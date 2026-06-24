@@ -217,6 +217,7 @@ POST /api/transactions/deposit        # Mobile money → Stellar
 POST /api/transactions/withdraw       # Stellar → Mobile money
 GET  /api/transactions                # List (paginated, filterable)
 GET  /api/transactions/:id            # Transaction details
+GET  /api/transactions/:id/invoice    # Download completed transaction invoice
 POST /api/transactions/:id/cancel     # Cancel pending transaction
 POST /api/transactions/:id/dispute    # Open dispute
 POST /api/transactions/bulk           # Bulk operations

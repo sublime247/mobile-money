@@ -1,0 +1,309 @@
+# ── SDK Publish Workflow ──────────────────────────────────────────────────────
+#
+# Triggered when a GitHub Release is *published* (not just drafted).
+# Publishes two SDK packages in parallel:
+#
+#   • Kotlin/JVM SDK  → Maven Central (via Sonatype OSSRH)
+#   • TypeScript SDK  → npm registry
+#
+# Required repository secrets
+# ────────────────────────────
+#   SONATYPE_USERNAME          Sonatype OSSRH username (token-based preferred)
+#   SONATYPE_PASSWORD          Sonatype OSSRH password / token
+#   GPG_SIGNING_KEY            ASCII-armored GPG private key (maven-publish signing)
+#   GPG_SIGNING_PASSWORD       Passphrase for the GPG key
+#   NPM_TOKEN                  npm automation token (https://www.npmjs.com/settings/<org>/tokens)
+#
+# See docs/SDK_PUBLISH.md for the full setup guide.
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: SDK Publish
+
+on:
+  release:
+    types: [published]
+
+# Prevent concurrent publish runs for the same ref (e.g. rapid re-publishes).
+concurrency:
+  group: sdk-publish-${{ github.ref }}
+  cancel-in-progress: false   # never cancel an in-flight publish
+
+permissions:
+  contents: read   # checkout only; no write access needed
+
+jobs:
+  # ── 1. Resolve the release version ─────────────────────────────────────────
+  # Strips the leading "v" from the tag (v1.2.3 → 1.2.3) and exposes it as a
+  # job output consumed by both publish jobs.
+  resolve-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.parse.outputs.version }}
+    steps:
+      - name: Parse version from tag
+        id: parse
+        run: |
+          RAW_TAG="${{ github.event.release.tag_name }}"
+          VERSION="${RAW_TAG#v}"   # strip leading "v"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Publishing SDK version: ${VERSION} (from tag: ${RAW_TAG})"
+
+  # ── 2. Publish Kotlin SDK to Maven Central ──────────────────────────────────
+  publish-kotlin-sdk:
+    runs-on: ubuntu-latest
+    needs: resolve-version
+    environment: sdk-publish   # optional: gate behind a manual approval environment
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: "17"
+          distribution: "temurin"
+          cache: gradle
+
+      - name: Set up Node.js (for OpenAPI generator)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install root dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Start API server for OpenAPI spec generation
+        run: |
+          # Build first so we can run the compiled output
+          npm run build
+          node dist/src/index.js &
+          echo "API_PID=$!" >> "$GITHUB_ENV"
+        env:
+          NODE_ENV: development
+          PORT: 3000
+          DATABASE_URL: ${{ secrets.CI_DATABASE_URL || 'postgresql://ci:ci@localhost:5432/ci' }}
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET: ci-jwt-secret-32-chars-long-placeholder
+          SESSION_SECRET: ci-session-secret-placeholder
+          # Dummy value — not a real key. Matches the pattern used across all
+          # other CI workflows. The server only needs this env var to start;
+          # no real Stellar transactions are submitted during spec generation.
+          STELLAR_ISSUER_SECRET: S-DUMMY-SECRET-KEY-FOR-TESTING-PURPOSES-ONLY
+
+      - name: Wait for API to be ready
+        run: npx wait-on http://127.0.0.1:3000/health --timeout 30000
+        continue-on-error: true   # spec generation falls back to cached spec if server fails
+
+      - name: Generate Kotlin SDK from OpenAPI spec
+        run: |
+          # Install the OpenAPI generator CLI if not already cached
+          npm install -g @openapitools/openapi-generator-cli@latest --ignore-scripts
+
+          # Prefer live spec; fall back to the committed public/openapi.json
+          if curl -sf http://127.0.0.1:3000/docs/openapi.json -o /tmp/openapi.json; then
+            echo "Using live OpenAPI spec from running server"
+            SPEC_PATH=/tmp/openapi.json
+          else
+            echo "Server unavailable — using committed spec at public/openapi.json"
+            SPEC_PATH=public/openapi.json
+          fi
+
+          openapi-generator-cli generate \
+            -i "$SPEC_PATH" \
+            -c sdk-config.yaml \
+            -o sdk \
+            --additional-properties=artifactVersion=${{ needs.resolve-version.outputs.version }}
+
+      - name: Stop API server
+        if: always()
+        run: |
+          if [ -n "$API_PID" ]; then
+            kill "$API_PID" 2>/dev/null || true
+          fi
+
+      - name: Check if Sonatype credentials are configured
+        id: check_sonatype
+        run: |
+          if [ -n "${{ secrets.SONATYPE_USERNAME }}" ] && \
+             [ -n "${{ secrets.SONATYPE_PASSWORD }}" ] && \
+             [ -n "${{ secrets.GPG_SIGNING_KEY }}" ] && \
+             [ -n "${{ secrets.GPG_SIGNING_PASSWORD }}" ]; then
+            echo "sonatype_available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "sonatype_available=false" >> "$GITHUB_OUTPUT"
+            echo "⚠️  Sonatype / GPG secrets not configured — skipping Maven Central publish."
+            echo "    Required secrets: SONATYPE_USERNAME, SONATYPE_PASSWORD, GPG_SIGNING_KEY, GPG_SIGNING_PASSWORD"
+            echo "    See docs/SDK_PUBLISH.md for setup instructions."
+          fi
+
+      - name: Make Gradle wrapper executable
+        working-directory: sdk
+        run: chmod +x gradlew 2>/dev/null || true
+
+      - name: Run Kotlin SDK tests
+        working-directory: sdk
+        run: ./gradlew test --no-daemon
+        continue-on-error: false
+
+      - name: Publish Kotlin SDK to Maven Central
+        if: steps.check_sonatype.outputs.sonatype_available == 'true'
+        working-directory: sdk
+        run: |
+          ./gradlew publishMavenKotlinPublicationToSonatypeRepository \
+            --no-daemon \
+            -Pversion=${{ needs.resolve-version.outputs.version }} \
+            -PsigningKey="${{ secrets.GPG_SIGNING_KEY }}" \
+            -PsigningPassword="${{ secrets.GPG_SIGNING_PASSWORD }}"
+        env:
+          SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
+          SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
+
+      - name: Upload Kotlin SDK artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: kotlin-sdk-${{ needs.resolve-version.outputs.version }}
+          path: |
+            sdk/build/libs/*.jar
+            sdk/build/publications/
+          retention-days: 30
+
+  # ── 3. Publish TypeScript SDK to npm ───────────────────────────────────────
+  publish-typescript-sdk:
+    runs-on: ubuntu-latest
+    needs: resolve-version
+    environment: sdk-publish
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js with npm registry auth
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+          cache: npm
+
+      - name: Install root dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Start API server for OpenAPI spec generation
+        run: |
+          npm run build
+          node dist/src/index.js &
+          echo "API_PID=$!" >> "$GITHUB_ENV"
+        env:
+          NODE_ENV: development
+          PORT: 3000
+          DATABASE_URL: ${{ secrets.CI_DATABASE_URL || 'postgresql://ci:ci@localhost:5432/ci' }}
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET: ci-jwt-secret-32-chars-long-placeholder
+          SESSION_SECRET: ci-session-secret-placeholder
+          # Dummy value — not a real key. Matches the pattern used across all
+          # other CI workflows. The server only needs this env var to start;
+          # no real Stellar transactions are submitted during spec generation.
+          STELLAR_ISSUER_SECRET: S-DUMMY-SECRET-KEY-FOR-TESTING-PURPOSES-ONLY
+
+      - name: Wait for API to be ready
+        run: npx wait-on http://127.0.0.1:3000/health --timeout 30000
+        continue-on-error: true
+
+      - name: Generate TypeScript SDK from OpenAPI spec
+        run: |
+          npm install -g @openapitools/openapi-generator-cli@latest --ignore-scripts
+
+          if curl -sf http://127.0.0.1:3000/docs/openapi.json -o /tmp/openapi.json; then
+            echo "Using live OpenAPI spec from running server"
+            SPEC_PATH=/tmp/openapi.json
+          else
+            echo "Server unavailable — using committed spec at public/openapi.json"
+            SPEC_PATH=public/openapi.json
+          fi
+
+          openapi-generator-cli generate \
+            -i "$SPEC_PATH" \
+            -c sdk-config-ts.yaml \
+            -o sdk-ts \
+            --additional-properties=npmVersion=${{ needs.resolve-version.outputs.version }}
+
+      - name: Stop API server
+        if: always()
+        run: |
+          if [ -n "$API_PID" ]; then
+            kill "$API_PID" 2>/dev/null || true
+          fi
+
+      - name: Install TypeScript SDK dependencies
+        working-directory: sdk-ts
+        run: npm install
+
+      - name: Build TypeScript SDK
+        working-directory: sdk-ts
+        run: npm run build
+
+      - name: Check if npm token is configured
+        id: check_npm
+        run: |
+          if [ -n "${{ secrets.NPM_TOKEN }}" ]; then
+            echo "npm_available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "npm_available=false" >> "$GITHUB_OUTPUT"
+            echo "⚠️  NPM_TOKEN secret not configured — skipping npm publish."
+            echo "    See docs/SDK_PUBLISH.md for setup instructions."
+          fi
+
+      - name: Publish TypeScript SDK to npm
+        if: steps.check_npm.outputs.npm_available == 'true'
+        working-directory: sdk-ts
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Upload TypeScript SDK artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: typescript-sdk-${{ needs.resolve-version.outputs.version }}
+          path: sdk-ts/dist/
+          retention-days: 30
+
+  # ── 4. Post-publish summary ─────────────────────────────────────────────────
+  publish-summary:
+    runs-on: ubuntu-latest
+    needs: [resolve-version, publish-kotlin-sdk, publish-typescript-sdk]
+    if: always()
+
+    steps:
+      - name: Summarise publish results
+        run: |
+          VERSION="${{ needs.resolve-version.outputs.version }}"
+          KOTLIN_RESULT="${{ needs.publish-kotlin-sdk.result }}"
+          TS_RESULT="${{ needs.publish-typescript-sdk.result }}"
+
+          echo "## SDK Publish Summary — v${VERSION}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| SDK | Result |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-----|--------|" >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$KOTLIN_RESULT" = "success" ]; then
+            echo "| Kotlin (Maven Central) | ✅ Published |" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "| Kotlin (Maven Central) | ❌ ${KOTLIN_RESULT} |" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          if [ "$TS_RESULT" = "success" ]; then
+            echo "| TypeScript (npm) | ✅ Published |" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "| TypeScript (npm) | ❌ ${TS_RESULT} |" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Release:** ${{ github.event.release.html_url }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Triggered by:** ${{ github.actor }}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail if any publish job failed
+        if: needs.publish-kotlin-sdk.result == 'failure' || needs.publish-typescript-sdk.result == 'failure'
+        run: |
+          echo "One or more SDK publish jobs failed. Check the job logs above."
+          exit 1

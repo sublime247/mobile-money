@@ -1,6 +1,7 @@
 import { pool } from "../config/database";
 import { TransactionModel, TransactionStatus } from "../models/transaction";
 import { MobileMoneyService } from "../services/mobilemoney/mobileMoneyService";
+import logger from "../utils/logger";
 
 const transactionModel = new TransactionModel();
 
@@ -15,7 +16,7 @@ const transactionModel = new TransactionModel();
  *   - 'pending' or 'unknown' → expires as failed (no infinite pending in DB)
  */
 export async function runStaleTransactionWatchdog(
-  service?: MobileMoneyService,
+  service?: InstanceType<typeof MobileMoneyService>,
 ): Promise<void> {
   const staleHours = parseInt(
     process.env.STALE_TRANSACTION_HOURS || "12",
@@ -36,12 +37,13 @@ export async function runStaleTransactionWatchdog(
   );
 
   if (result.rows.length === 0) {
-    console.log("[stale-watchdog] No stale transactions found");
+    logger.info('No stale transactions found');
     return;
   }
 
-  console.log(
-    `[stale-watchdog] Found ${result.rows.length} stale transaction(s) (threshold: ${staleHours}h)`,
+  logger.info(
+    { count: result.rows.length, thresholdHours: staleHours },
+    'Found stale transactions'
   );
 
   const mobileMoneyService = service ?? new MobileMoneyService();
@@ -52,36 +54,58 @@ export async function runStaleTransactionWatchdog(
 
   for (const row of result.rows) {
     try {
-      // TODO: Implement getTransactionStatus method in MobileMoneyService
-      // For now, we can't check transaction status, so we'll mark as failed if stale
-      // const { status } = await mobileMoneyService.getTransactionStatus(
-      //   row.provider,
-      //   row.reference_number,
-      // );
-      // if (status === "completed") {
-      //   await transactionModel.updateStatus(row.id, TransactionStatus.Completed);
-      //   console.log(
-      //     `[stale-watchdog] Resolved as completed: id=${row.id} ref=${row.reference_number}`,
-      //   );
-      //   resolved++;
-      // } else {
-      
-      // Mark stale transaction as failed since we can't verify its status
-      await transactionModel.updateStatus(row.id, TransactionStatus.Failed);
-      console.log(
-        `[stale-watchdog] Marked as failed (stale): id=${row.id} ref=${row.reference_number}`,
+      // Check transaction status with provider
+      const statusResponse = await mobileMoneyService.getTransactionStatus(
+        row.provider as any,
+        row.reference_number,
       );
-      resolved++;
+      
+      if (statusResponse.success && statusResponse.data) {
+        const providerStatus = statusResponse.data.status;
+        
+        if (providerStatus === "completed" || providerStatus === "successful") {
+          await transactionModel.updateStatus(row.id, TransactionStatus.Completed);
+          logger.info(
+            { transactionId: row.id, reference: row.reference_number },
+            'Resolved stale transaction as completed'
+          );
+          resolved++;
+        } else if (providerStatus === "failed" || providerStatus === "rejected") {
+          await transactionModel.updateStatus(row.id, TransactionStatus.Failed);
+          logger.info(
+            { transactionId: row.id, reference: row.reference_number },
+            'Resolved stale transaction as failed'
+          );
+          resolved++;
+        } else {
+          // Still pending or unknown - expire it as failed
+          await transactionModel.updateStatus(row.id, TransactionStatus.Failed);
+          logger.warn(
+            { transactionId: row.id, reference: row.reference_number, providerStatus },
+            'Expired stale transaction (still pending/unknown at provider)'
+          );
+          expired++;
+        }
+      } else {
+        // Can't verify with provider - mark as failed after stale period
+        await transactionModel.updateStatus(row.id, TransactionStatus.Failed);
+        logger.warn(
+          { transactionId: row.id, reference: row.reference_number, error: statusResponse.error },
+          'Expired stale transaction (provider status check failed)'
+        );
+        expired++;
+      }
     } catch (err) {
-      console.error(
-        `[stale-watchdog] Error processing transaction id=${row.id}:`,
-        err,
+      logger.error(
+        { error: err, transactionId: row.id },
+        'Error processing stale transaction'
       );
       errors++;
     }
   }
 
-  console.log(
-    `[stale-watchdog] Done — resolved=${resolved} expired=${expired} errors=${errors}`,
+  logger.info(
+    { resolved, expired, errors },
+    'Stale transaction watchdog completed'
   );
 }

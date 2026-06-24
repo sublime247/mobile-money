@@ -22,6 +22,15 @@ export interface NotificationContext {
   locale?: string;
 }
 
+export interface DisputeNotificationContext {
+  disputeId: string;
+  transactionId: string;
+  event: string;
+  status: string;
+  message: string;
+  metadata?: Record<string, unknown>;
+}
+
 export interface NotificationRoutingRule {
   severity: NotificationSeverity;
   channels: NotificationChannel[];
@@ -222,12 +231,14 @@ export class NotificationRouter {
           context.transaction,
           context.message,
           context.locale || user.preferredLanguage,
+          user.displayName,
         );
       } else {
         await this.emailService.sendTransactionReceipt(
           user.email,
           context.transaction,
           context.locale || user.preferredLanguage,
+          user.displayName,
         );
       }
     } else {
@@ -388,6 +399,26 @@ export class NotificationRouter {
       message,
       data,
     });
+  }
+
+  async sendDisputeNotification(context: DisputeNotificationContext): Promise<void> {
+    const severity: NotificationSeverity =
+      context.status === "reversed" || context.status === "upheld"
+        ? "high"
+        : "medium";
+
+    await this.routeSystemNotification(
+      severity,
+      "dispute",
+      `Dispute ${context.event}`,
+      context.message,
+      {
+        disputeId: context.disputeId,
+        transactionId: context.transactionId,
+        status: context.status,
+        ...context.metadata,
+      },
+    );
   }
 }
 

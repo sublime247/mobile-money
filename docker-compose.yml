@@ -1,4 +1,15 @@
-version: '3.8'
+# docker-compose.yml
+#
+# Local development environment for sublime247/mobile-money.
+# Starts the app alongside Postgres, Redis, and local mock services for Stellar and SMTP.
+#
+# Usage:
+#   docker compose up          # start everything
+#   docker compose up -d       # start in background
+#   docker compose down        # stop and remove containers
+#   docker compose down -v     # stop and wipe volumes (fresh DB)
+
+version: "3.9"
 
 services:
   app:
@@ -49,15 +60,58 @@ services:
   redis:
     image: redis:7-alpine
     container_name: mobilemoney_redis
+    command: redis-server /usr/local/etc/redis/redis.conf
+    volumes:
+      - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
+      - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
+      timeout: 3s
+      retries: 5
     networks:
       - mobilemoney_net
 
+  # ---------------------------------------------------------------------------
+  # Mock SMTP Server (Maildev)
+  # ---------------------------------------------------------------------------
+  maildev:
+    image: maildev/maildev:2.1.0
+    container_name: mobilemoney_maildev
+    restart: unless-stopped
+    ports:
+      - "1080:1080" # Web UI
+      - "1025:1025" # SMTP Port
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 1025 || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # Local Stellar Quickstart Node
+  # ---------------------------------------------------------------------------
+  stellar:
+    image: stellar/quickstart:latest
+    container_name: mobilemoney_stellar_quickstart
+    restart: unless-stopped
+    ports:
+      - "8000:8000" # Horizon API / Faucet (Friendbot)
+    command: ["--standalone", "--enable-horizon"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # ---------------------------------------------------------------------------
+  # Loki (log aggregation)
+  # ---------------------------------------------------------------------------
   loki:
     image: grafana/loki:latest
     container_name: mobilemoney_loki
+    restart: unless-stopped
     ports:
       - "3100:3100"
     volumes:
@@ -82,8 +136,33 @@ services:
     ports:
       - "3001:3000"
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD:-admin}
       - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
+      # ── Azure AD / Entra OAuth SSO ────────────────────────────────────
+      - GF_AUTH_AZUREAD_ENABLED=${GF_AUTH_AZUREAD_ENABLED:-false}
+      - GF_AUTH_AZUREAD_CLIENT_ID=${GF_AUTH_AZUREAD_CLIENT_ID:-}
+      - GF_AUTH_AZUREAD_CLIENT_SECRET=${GF_AUTH_AZUREAD_CLIENT_SECRET:-}
+      - GF_AUTH_AZUREAD_AUTH_URL=${GF_AUTH_AZUREAD_AUTH_URL:-}
+      - GF_AUTH_AZUREAD_TOKEN_URL=${GF_AUTH_AZUREAD_TOKEN_URL:-}
+      - GF_AUTH_AZUREAD_ALLOW_SIGN_UP=${GF_AUTH_AZUREAD_ALLOW_SIGN_UP:-true}
+      - GF_AUTH_AZUREAD_AUTO_LOGIN=${GF_AUTH_AZUREAD_AUTO_LOGIN:-false}
+      - GF_AUTH_AZUREAD_ROLE_ATTRIBUTE_STRICT=${GF_AUTH_AZUREAD_ROLE_ATTRIBUTE_STRICT:-false}
+      - GF_AUTH_AZUREAD_SCOPES=${GF_AUTH_AZUREAD_SCOPES:-openid email profile}
+      # ── Role mapping via Azure AD group claims ────────────────────────
+      - GF_AUTH_AZUREAD_ROLE_ATTRIBUTE_PATH=${GF_AUTH_AZUREAD_ROLE_ATTRIBUTE_PATH:-}
+      - GF_AUTH_AZUREAD_ALLOW_ASSIGN_GRAFANA_ADMIN=${GF_AUTH_AZUREAD_ALLOW_ASSIGN_GRAFANA_ADMIN:-false}
+      - GF_AUTH_AZUREAD_SKIP_ORG_ROLE_SYNC=${GF_AUTH_AZUREAD_SKIP_ORG_ROLE_SYNC:-false}
+      - GF_AUTH_AZUREAD_NAME=${GF_AUTH_AZUREAD_NAME:-Azure AD}
+      # ── Access control ───────────────────────────────────────────────
+      - GF_AUTH_AZUREAD_ALLOWED_DOMAINS=${GF_AUTH_AZUREAD_ALLOWED_DOMAINS:-}
+      - GF_AUTH_AZUREAD_ALLOWED_GROUPS=${GF_AUTH_AZUREAD_ALLOWED_GROUPS:-}
+      - GF_SERVER_ROOT_URL=${GF_SERVER_ROOT_URL:-http://localhost:3001}
+      # ── Global auth hardening ─────────────────────────────────────────
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+      - GF_AUTH_BASIC_ENABLED=true
+      - GF_AUTH_DISABLE_LOGIN_FORM=${GF_AUTH_DISABLE_LOGIN_FORM:-false}
+      - GF_AUTH_OAUTH_AUTO_LOGIN=${GF_AUTH_OAUTH_AUTO_LOGIN:-false}
+      - GF_AUTH_SIGNOUT_REDIRECT_URL=${GF_AUTH_SIGNOUT_REDIRECT_URL:-}
     volumes:
       - grafana_data:/var/lib/grafana
       - ./logging/grafana/provisioning:/etc/grafana/provisioning
@@ -96,3 +175,4 @@ networks:
 
 volumes:
   grafana_data:
+  redis_data:

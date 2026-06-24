@@ -1,8 +1,10 @@
 import { Request, Response } from "express";
 import { ProviderReconService } from "../services/providerReconService";
 import { ReconciliationModel } from "../models/reconciliation";
-import { logger } from "../services/logger";
+import logger from "../utils/logger";
 import { z } from "zod";
+import { ERROR_CODES } from "../constants/errorCodes";
+import { createError } from "../middleware/errorHandler";
 
 const ManualReconSchema = z.object({
   provider: z.string().min(1),
@@ -25,17 +27,19 @@ export class ReconciliationController {
   uploadAndReconcile = async (req: Request, res: Response) => {
     try {
       if (!req.file) {
-        return res.status(400).json({ error: "No file uploaded" });
+        throw createError(ERROR_CODES.INVALID_INPUT, "No file uploaded", {
+          error: "No file uploaded",
+        });
       }
 
       const { provider, date } = ManualReconSchema.parse(req.body);
       const reportDate = date ? new Date(date) : new Date();
-      
+
       const reportId = await this.reconService.runReconciliation(
         provider,
         reportDate,
         req.file.buffer,
-        req.file.originalname
+        req.file.originalname,
       );
 
       res.status(201).json({
@@ -44,10 +48,15 @@ export class ReconciliationController {
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: "Validation error", details: error.issues });
+        throw createError(ERROR_CODES.INVALID_INPUT, "Validation error", {
+          details: error.issues,
+        });
       }
-      logger.error("Manual reconciliation upload failed:", error);
-      res.status(500).json({ error: "Failed to run reconciliation" });
+      logger.error(error, "Manual reconciliation upload failed");
+      throw createError(
+        ERROR_CODES.INTERNAL_ERROR,
+        "Failed to run reconciliation",
+      );
     }
   };
 
@@ -59,12 +68,15 @@ export class ReconciliationController {
     try {
       const limit = parseInt(req.query.limit as string) || 10;
       const offset = parseInt(req.query.offset as string) || 0;
-      
+
       const reports = await this.reconModel.getReports(limit, offset);
       res.json({ success: true, data: reports });
     } catch (error) {
-      logger.error("Failed to fetch reports:", error);
-      res.status(500).json({ error: "Failed to fetch reconciliation reports" });
+      logger.error(error, "Failed to fetch reports");
+      throw createError(
+        ERROR_CODES.INTERNAL_ERROR,
+        "Failed to fetch reconciliation reports",
+      );
     }
   };
 
@@ -76,13 +88,16 @@ export class ReconciliationController {
     try {
       const { id } = req.params;
       const report = await this.reconModel.getReportById(id);
-      
+
       if (!report) {
-        return res.status(404).json({ error: "Report not found" });
+        throw createError(ERROR_CODES.NOT_FOUND, "Report not found", {
+          error: "Report not found",
+        });
       }
 
-      const discrepancies = await this.reconModel.getDiscrepanciesByReportId(id);
-      
+      const discrepancies =
+        await this.reconModel.getDiscrepanciesByReportId(id);
+
       res.json({
         success: true,
         data: {
@@ -91,8 +106,11 @@ export class ReconciliationController {
         },
       });
     } catch (error) {
-      logger.error("Failed to fetch report details:", error);
-      res.status(500).json({ error: "Failed to fetch report details" });
+      logger.error(error, "Failed to fetch report details");
+      throw createError(
+        ERROR_CODES.INTERNAL_ERROR,
+        "Failed to fetch report details",
+      );
     }
   };
 
@@ -106,14 +124,23 @@ export class ReconciliationController {
       const { notes } = req.body;
 
       if (!notes) {
-        return res.status(400).json({ error: "Resolution notes are required" });
+        throw createError(
+          ERROR_CODES.INVALID_INPUT,
+          "Resolution notes are required",
+          {
+            error: "Resolution notes are required",
+          },
+        );
       }
 
       await this.reconModel.resolveDiscrepancy(id, notes);
       res.json({ success: true, message: "Discrepancy marked as resolved" });
     } catch (error) {
-      logger.error("Failed to resolve discrepancy:", error);
-      res.status(500).json({ error: "Failed to resolve discrepancy" });
+      logger.error(error, "Failed to resolve discrepancy");
+      throw createError(
+        ERROR_CODES.INTERNAL_ERROR,
+        "Failed to resolve discrepancy",
+      );
     }
   };
 }

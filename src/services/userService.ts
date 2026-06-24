@@ -3,6 +3,7 @@ import { pool } from "../config/database";
 import { encrypt, decrypt } from "../utils/encryption";
 import { flushUserSessions } from "../config/redis";
 import { UserModel } from "../models/users";
+import { isValidMerchantMCC, requireValidMerchantMCC } from "../utils/merchantMcc";
 
 export interface User {
   id: string;
@@ -10,6 +11,8 @@ export interface User {
   kyc_level: string;
   role_id?: string;
   role_name?: string;
+  display_name?: string | null;
+  mcc?: string | null;
   two_factor_secret?: string | null;
   two_factor_enabled?: boolean;
   two_factor_verified?: boolean;
@@ -22,6 +25,8 @@ export interface CreateUserRequest {
   phone_number: string;
   kyc_level?: string;
   role_name?: string;
+  mcc?: string;
+  display_name?: string | null;
 }
 
 export interface LoginRequest {
@@ -42,6 +47,8 @@ export async function getUserByPhoneNumber(
       u.phone_number,
       u.kyc_level,
       u.role_id,
+      u.display_name,
+      u.mcc,
       u.two_factor_secret,
       u.two_factor_enabled,
       u.two_factor_verified,
@@ -75,6 +82,8 @@ export async function getUserById(userId: string): Promise<User | null> {
       u.phone_number,
       u.kyc_level,
       u.role_id,
+      u.display_name,
+      u.mcc,
       u.two_factor_secret,
       u.two_factor_enabled,
       u.two_factor_verified,
@@ -107,7 +116,17 @@ export async function createUser(userData: CreateUserRequest): Promise<User> {
     phone_number,
     kyc_level = "unverified",
     role_name = "user",
+    mcc,
+    display_name = null,
   } = userData;
+
+  const merchantMcc = role_name === "merchant"
+    ? requireValidMerchantMCC(mcc)
+    : mcc
+      ? isValidMerchantMCC(mcc)
+        ? mcc.trim()
+        : (() => { throw new Error(`Invalid Merchant MCC code '${mcc}'.`); })()
+      : null;
 
   // Get role ID
   const roleQuery = "SELECT id FROM roles WHERE name = $1";
@@ -120,20 +139,28 @@ export async function createUser(userData: CreateUserRequest): Promise<User> {
   const roleId = roleResult.rows[0].id;
 
   const query = `
-    INSERT INTO users (phone_number, kyc_level, role_id)
-    VALUES ($1, $2, $3)
-    RETURNING id, phone_number, kyc_level, role_id, two_factor_secret, two_factor_enabled, two_factor_verified, backup_codes, created_at, updated_at
+    INSERT INTO users (phone_number, kyc_level, role_id, mcc, display_name)
+    VALUES ($1, $2, $3, $4, $5)
+    RETURNING id, phone_number, kyc_level, role_id, display_name, mcc, two_factor_secret, two_factor_enabled, two_factor_verified, backup_codes, created_at, updated_at
   `;
 
   const encryptedPhone = encrypt(phone_number, true);
-  const result = await pool.query(query, [encryptedPhone, kyc_level, roleId]);
+  const result = await pool.query(query, [
+    encryptedPhone,
+    kyc_level,
+    roleId,
+    merchantMcc,
+    display_name,
+  ]);
   const row = result.rows[0];
 
   const user = {
     ...row,
     phone_number: decrypt(row.phone_number) as string,
     two_factor_secret: decrypt(row.two_factor_secret),
-    role_name
+    role_name,
+    display_name: row.display_name ?? null,
+    mcc: row.mcc ?? null,
   };
 
   return user;
@@ -187,7 +214,7 @@ export async function updateUserById(
   userId: string,
   userUpdate: Partial<User>,
 ): Promise<User> {
-  const allowedKeys = ["name", "email", "phone_number"] as const;
+  const allowedKeys = ["name", "email", "phone_number", "mcc", "display_name"] as const;
   const keys = Object.keys(userUpdate).filter((k) =>
     allowedKeys.includes(k as any),
   ) as (keyof typeof userUpdate)[];
@@ -198,6 +225,13 @@ export async function updateUserById(
 
   const setClause = keys.map((k, i) => `${k} = ($${i + 1})`).join(", ");
   const values = keys.map((k) => userUpdate[k]);
+
+  if (userUpdate.mcc !== undefined && userUpdate.mcc !== null) {
+    if (!isValidMerchantMCC(userUpdate.mcc)) {
+      throw new Error(`Invalid Merchant MCC code '${userUpdate.mcc}'.`);
+    }
+    userUpdate.mcc = userUpdate.mcc.trim();
+  }
 
   const query = `UPDATE users
                 SET ${setClause}, updated_at = CURRENT_TIMESTAMP

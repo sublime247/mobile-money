@@ -1,0 +1,696 @@
+{
+  "consumer": {
+    "name": "MobileMoneyService"
+  },
+  "interactions": [
+    {
+      "description": "a request for an Airtel access token",
+      "providerStates": [
+        {
+          "name": "valid Airtel API credentials"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Authorization": "Basic dGVzdC1rZXk6dGVzdC1zZWNyZXQ=",
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "header": {
+            "Authorization": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^Basic [A-Za-z0-9+/=]+$"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/auth/oauth2/token"
+      },
+      "response": {
+        "body": {
+          "access_token": "eyJhbGciOiJSUzI1NiJ9.airtel",
+          "expires_in": 3600,
+          "token_type": "Bearer"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.access_token": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.expires_in": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.token_type": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a request for the Airtel operational balance",
+      "providerStates": [
+        {
+          "name": "Airtel account has funds"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Authorization": "Bearer test-airtel-bearer-token",
+          "X-Country": "NG",
+          "X-Currency": "NGN"
+        },
+        "matchingRules": {
+          "header": {
+            "Authorization": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^Bearer .+$"
+                }
+              ]
+            },
+            "X-Country": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "X-Currency": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "method": "GET",
+        "path": "/standard/v1/users/balance"
+      },
+      "response": {
+        "body": {
+          "data": {
+            "availableBalance": "5000.00",
+            "currency": "NGN"
+          }
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.data.availableBalance": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.data.currency": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a request to check a failed transaction status",
+      "providerStates": [
+        {
+          "name": "Airtel transaction has failed"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Authorization": "Bearer test-airtel-bearer-token",
+          "X-Country": "NG",
+          "X-Currency": "NGN"
+        },
+        "matchingRules": {
+          "header": {
+            "Authorization": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^Bearer .+$"
+                }
+              ]
+            },
+            "X-Country": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "X-Currency": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "method": "GET",
+        "path": "/standard/v1/payments/AIRTEL-1700000000000"
+      },
+      "response": {
+        "body": {
+          "data": {
+            "transaction": {
+              "id": "AIRTEL-1700000000000",
+              "message": "Insufficient funds",
+              "status": "TF"
+            }
+          },
+          "status": {
+            "code": "200",
+            "success": false
+          }
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.data.transaction.id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.data.transaction.message": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.status.code": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.status.success": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a request to check a successful transaction status",
+      "providerStates": [
+        {
+          "name": "Airtel transaction is successful"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Authorization": "Bearer test-airtel-bearer-token",
+          "X-Country": "NG",
+          "X-Currency": "NGN"
+        },
+        "matchingRules": {
+          "header": {
+            "Authorization": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^Bearer .+$"
+                }
+              ]
+            },
+            "X-Country": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "X-Currency": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "method": "GET",
+        "path": "/standard/v1/payments/AIRTEL-1700000000000"
+      },
+      "response": {
+        "body": {
+          "data": {
+            "transaction": {
+              "id": "AIRTEL-1700000000000",
+              "message": "Paid",
+              "status": "TS"
+            }
+          },
+          "status": {
+            "code": "200",
+            "success": true
+          }
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.data.transaction.id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.data.transaction.message": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.status.code": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.status.success": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a request to collect payment from a subscriber",
+      "providerStates": [
+        {
+          "name": "Airtel collection service is available"
+        }
+      ],
+      "request": {
+        "body": {
+          "reference": "AIRTEL-1700000000000",
+          "subscriber": {
+            "country": "NG",
+            "currency": "NGN",
+            "msisdn": "2348012345678"
+          },
+          "transaction": {
+            "amount": 100,
+            "country": "NG",
+            "currency": "NGN",
+            "id": "AIRTEL-1700000000000"
+          }
+        },
+        "headers": {
+          "Authorization": "Bearer test-airtel-bearer-token",
+          "Content-Type": "application/json",
+          "X-Country": "NG",
+          "X-Currency": "NGN"
+        },
+        "matchingRules": {
+          "body": {
+            "$.reference": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.subscriber.country": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.subscriber.currency": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.subscriber.msisdn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.transaction.amount": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.transaction.country": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.transaction.currency": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.transaction.id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Authorization": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^Bearer .+$"
+                }
+              ]
+            },
+            "X-Country": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "X-Currency": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/merchant/v1/payments/"
+      },
+      "response": {
+        "body": {
+          "data": {
+            "transaction": {
+              "id": "AIRTEL-1700000000000",
+              "status": "TP"
+            }
+          },
+          "status": {
+            "code": "200",
+            "success": true
+          }
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.data.transaction.id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.data.transaction.status": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.status.code": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.status.success": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a request to disburse funds to a subscriber",
+      "providerStates": [
+        {
+          "name": "Airtel disbursement service is available"
+        }
+      ],
+      "request": {
+        "body": {
+          "payee": {
+            "msisdn": "2348012345678"
+          },
+          "reference": "AIRTEL-PAYOUT-1700000000000",
+          "transaction": {
+            "amount": 50,
+            "id": "AIRTEL-PAYOUT-1700000000000"
+          }
+        },
+        "headers": {
+          "Authorization": "Bearer test-airtel-bearer-token",
+          "Content-Type": "application/json",
+          "X-Country": "NG",
+          "X-Currency": "NGN"
+        },
+        "matchingRules": {
+          "body": {
+            "$.payee.msisdn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.reference": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.transaction.amount": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.transaction.id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Authorization": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^Bearer .+$"
+                }
+              ]
+            },
+            "X-Country": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "X-Currency": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/standard/v1/disbursements/"
+      },
+      "response": {
+        "body": {
+          "data": {
+            "transaction": {
+              "id": "AIRTEL-PAYOUT-1700000000000",
+              "status": "TS"
+            }
+          },
+          "status": {
+            "code": "200",
+            "success": true
+          }
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.data.transaction.id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.data.transaction.status": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.status.code": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.status.success": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    }
+  ],
+  "metadata": {
+    "pact-js": {
+      "version": "16.3.0"
+    },
+    "pactRust": {
+      "ffi": "0.5.3",
+      "models": "1.3.9"
+    },
+    "pactSpecification": {
+      "version": "3.0.0"
+    }
+  },
+  "provider": {
+    "name": "AirtelMoneyAPI"
+  }
+}

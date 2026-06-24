@@ -31,3 +31,34 @@ limits_config:
 
 ruler:
   alertmanager_url: http://localhost:9093
+  rule_path: /tmp/loki/rules
+  evaluation_interval: 30s
+  alertmanager_ha: false
+  storage:
+    type: local
+    local:
+      directory: /tmp/loki/rules
+  rules:
+    - name: circuit_breaker_and_failover_rules
+      interval: 30s
+      rules:
+        - alert: CircuitBreakerActivated
+          expr: |
+            sum(count_over_time({app="bridge"} |= "circuit breaker opened" [5m])) by (service) > 0
+          for: 0s
+          labels:
+            severity: critical
+            component: circuit-breaker
+          annotations:
+            summary: "Circuit breaker activated for {{ $labels.service }}"
+            description: "Detected 'circuit breaker opened' messages in logs within the last 5 minutes."
+        - alert: CircuitBreakerFailover
+          expr: |
+            sum(count_over_time({app="bridge"} |= "failover" [5m])) by (service) > 0
+          for: 0s
+          labels:
+            severity: critical
+            component: failover
+          annotations:
+            summary: "Failover detected for {{ $labels.service }}"
+            description: "Detected failover-related log messages in the last 5 minutes."

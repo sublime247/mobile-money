@@ -17,8 +17,12 @@ describe("Advanced Dispute Resolution", () => {
     test("should validate valid state transitions", () => {
       expect(stateMachine.isValidTransition("open", "investigating")).toBe(true);
       expect(stateMachine.isValidTransition("open", "resolved")).toBe(true);
+      expect(stateMachine.isValidTransition("open", "reversed")).toBe(true);
+      expect(stateMachine.isValidTransition("open", "upheld")).toBe(true);
       expect(stateMachine.isValidTransition("investigating", "resolved")).toBe(true);
       expect(stateMachine.isValidTransition("investigating", "rejected")).toBe(true);
+      expect(stateMachine.isValidTransition("investigating", "reversed")).toBe(true);
+      expect(stateMachine.isValidTransition("investigating", "upheld")).toBe(true);
     });
 
     test("should reject invalid state transitions", () => {
@@ -30,6 +34,8 @@ describe("Advanced Dispute Resolution", () => {
     test("should identify terminal states", () => {
       expect(stateMachine.isTerminalState("resolved")).toBe(true);
       expect(stateMachine.isTerminalState("rejected")).toBe(true);
+      expect(stateMachine.isTerminalState("reversed")).toBe(true);
+      expect(stateMachine.isTerminalState("upheld")).toBe(true);
       expect(stateMachine.isTerminalState("open")).toBe(false);
       expect(stateMachine.isTerminalState("investigating")).toBe(false);
     });
@@ -72,6 +78,12 @@ describe("Advanced Dispute Resolution", () => {
 
       expect(
         stateMachine.getRecommendedNextState("resolved", {})
+      ).toBeNull();
+      expect(
+        stateMachine.getRecommendedNextState("reversed", {})
+      ).toBeNull();
+      expect(
+        stateMachine.getRecommendedNextState("upheld", {})
       ).toBeNull();
     });
   });

@@ -1,6 +1,8 @@
 generatorName: kotlin
 library: jvm-retrofit2
 packageName: com.mobilemoney.sdk
+apiPackage: com.mobilemoney.sdk.api
+modelPackage: com.mobilemoney.sdk.models
 artifactId: mobile-money-sdk
 artifactVersion: 1.0.0
 enumPropertyNaming: original

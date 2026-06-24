@@ -169,7 +169,7 @@ describe("GraphQL Query Complexity", () => {
 
     const errors = runValidation(query, [
       createComplexityRule({
-        maximumComplexity: 1000,
+        maximumComplexity: 500,
         estimators: [
           fieldExtensionsEstimator(),
           simpleEstimator({ defaultComplexity: 1 }),

@@ -15,6 +15,8 @@ import {
   rejectKycUpgrade,
 } from "../services/kycTierUpgradeService";
 import { KYC_REJECTION_REASONS } from "../config/kycRejectionReasons";
+import { ERROR_CODES } from "../constants/errorCodes";
+import { createError } from "../middleware/errorHandler";
 
 const router = Router();
 
@@ -54,7 +56,13 @@ router.get("/", async (req: Request, res: Response) => {
     res.json({ data: requests, count: requests.length });
   } catch (err) {
     console.error("[kyc-upgrades] list error:", err);
-    res.status(500).json({ error: "Failed to list KYC upgrade requests" });
+    throw createError(
+      ERROR_CODES.INTERNAL_ERROR,
+      "Failed to list KYC upgrade requests",
+      {
+        error: "Failed to list KYC upgrade requests",
+      },
+    );
   }
 });
 
@@ -67,7 +75,9 @@ router.post("/:id/approve", async (req: Request, res: Response) => {
       (req as any).jwtUser?.userId ?? (req as any).user?.id;
 
     if (!reviewedBy) {
-      return res.status(401).json({ error: "Authentication required" });
+      throw createError(ERROR_CODES.UNAUTHORIZED, "Authentication required", {
+        error: "Authentication required",
+      });
     }
 
     const notes =
@@ -87,11 +97,11 @@ router.post("/:id/approve", async (req: Request, res: Response) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     const status = message.includes("not found")
-      ? 404
+      ? ERROR_CODES.NOT_FOUND
       : message.includes("terminal state")
-        ? 409
-        : 500;
-    res.status(status).json({ error: message });
+        ? ERROR_CODES.CONFLICT
+        : ERROR_CODES.INTERNAL_ERROR;
+    throw createError(status, message, { error: message });
   }
 });
 
@@ -104,20 +114,32 @@ router.post("/:id/reject", async (req: Request, res: Response) => {
       (req as any).jwtUser?.userId ?? (req as any).user?.id;
 
     if (!reviewedBy) {
-      return res.status(401).json({ error: "Authentication required" });
+      throw createError(ERROR_CODES.UNAUTHORIZED, "Authentication required", {
+        error: "Authentication required",
+      });
     }
 
     const notes =
       typeof req.body?.notes === "string" ? req.body.notes.trim() : undefined;
     const rejectionReason =
-      typeof req.body?.rejection_reason === "string" ? req.body.rejection_reason.trim() : undefined;
+      typeof req.body?.rejection_reason === "string"
+        ? req.body.rejection_reason.trim()
+        : undefined;
 
     if (!rejectionReason) {
-      return res.status(400).json({ error: "rejection_reason is required when rejecting KYC" });
+      throw createError(
+        ERROR_CODES.INVALID_INPUT,
+        "rejection_reason is required when rejecting KYC",
+        {
+          error: "rejection_reason is required when rejecting KYC",
+        },
+      );
     }
 
     if (!KYC_REJECTION_REASONS.includes(rejectionReason as any)) {
-      return res.status(400).json({ error: "Invalid rejection reason" });
+      throw createError(ERROR_CODES.INVALID_INPUT, "Invalid rejection reason", {
+        error: "Invalid rejection reason",
+      });
     }
 
     await rejectKycUpgrade({ requestId, reviewedBy, notes, rejectionReason });
@@ -126,11 +148,11 @@ router.post("/:id/reject", async (req: Request, res: Response) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     const status = message.includes("not found")
-      ? 404
+      ? ERROR_CODES.NOT_FOUND
       : message.includes("terminal state")
-        ? 409
-        : 500;
-    res.status(status).json({ error: message });
+        ? ERROR_CODES.CONFLICT
+        : ERROR_CODES.INTERNAL_ERROR;
+    throw createError(status, message, { error: message });
   }
 });
 
@@ -141,20 +163,30 @@ router.post("/bulk/approve", async (req: Request, res: Response) => {
       (req as any).jwtUser?.userId ?? (req as any).user?.id;
 
     if (!reviewedBy) {
-      return res.status(401).json({ error: "Authentication required" });
+      throw createError(ERROR_CODES.UNAUTHORIZED, "Authentication required", {
+        error: "Authentication required",
+      });
     }
 
     const requestIds = normalizeBulkIds(req.body?.requestIds);
     if (requestIds.length === 0) {
-      return res.status(400).json({
-        error: "requestIds must be a non-empty array of request IDs",
-      });
+      throw createError(
+        ERROR_CODES.INVALID_INPUT,
+        "requestIds must be a non-empty array of request IDs",
+        {
+          error: "requestIds must be a non-empty array of request IDs",
+        },
+      );
     }
 
     if (requestIds.length > MAX_BULK_IDS) {
-      return res.status(413).json({
-        error: `Too many requestIds supplied (max ${MAX_BULK_IDS})`,
-      });
+      throw createError(
+        ERROR_CODES.LIMIT_EXCEEDED,
+        `Too many requestIds supplied (max ${MAX_BULK_IDS})`,
+        {
+          error: `Too many requestIds supplied (max ${MAX_BULK_IDS})`,
+        },
+      );
     }
 
     const notes =
@@ -185,7 +217,10 @@ router.post("/bulk/approve", async (req: Request, res: Response) => {
     });
   } catch (err) {
     console.error("[kyc-upgrades] bulk approve error:", err);
-    return res.status(500).json({ error: "Failed to bulk approve requests" });
+    throw createError(
+      ERROR_CODES.INTERNAL_ERROR,
+      "Failed to bulk approve requests",
+    );
   }
 });
 
@@ -196,40 +231,65 @@ router.post("/bulk/reject", async (req: Request, res: Response) => {
       (req as any).jwtUser?.userId ?? (req as any).user?.id;
 
     if (!reviewedBy) {
-      return res.status(401).json({ error: "Authentication required" });
+      throw createError(ERROR_CODES.UNAUTHORIZED, "Authentication required", {
+        error: "Authentication required",
+      });
     }
 
     const requestIds = normalizeBulkIds(req.body?.requestIds);
     if (requestIds.length === 0) {
-      return res.status(400).json({
-        error: "requestIds must be a non-empty array of request IDs",
-      });
+      throw createError(
+        ERROR_CODES.INVALID_INPUT,
+        "requestIds must be a non-empty array of request IDs",
+        {
+          error: "requestIds must be a non-empty array of request IDs",
+        },
+      );
     }
 
     if (requestIds.length > MAX_BULK_IDS) {
-      return res.status(413).json({
-        error: `Too many requestIds supplied (max ${MAX_BULK_IDS})`,
-      });
+      throw createError(
+        ERROR_CODES.LIMIT_EXCEEDED,
+        `Too many requestIds supplied (max ${MAX_BULK_IDS})`,
+        {
+          error: `Too many requestIds supplied (max ${MAX_BULK_IDS})`,
+        },
+      );
     }
 
     const notes =
       typeof req.body?.notes === "string" ? req.body.notes.trim() : undefined;
     const rejectionReason =
-      typeof req.body?.rejection_reason === "string" ? req.body.rejection_reason.trim() : undefined;
+      typeof req.body?.rejection_reason === "string"
+        ? req.body.rejection_reason.trim()
+        : undefined;
 
     if (!rejectionReason) {
-      return res.status(400).json({ error: "rejection_reason is required when rejecting KYC" });
+      throw createError(
+        ERROR_CODES.INVALID_INPUT,
+        "rejection_reason is required when rejecting KYC",
+        {
+          error: "rejection_reason is required when rejecting KYC",
+        },
+      );
     }
 
     if (!KYC_REJECTION_REASONS.includes(rejectionReason as any)) {
-      return res.status(400).json({ error: "Invalid rejection reason" });
+      throw createError(ERROR_CODES.INVALID_INPUT, "Invalid rejection reason", {
+        error: "Invalid rejection reason",
+      });
     }
 
     const results: BulkKycUpgradeResult[] = [];
 
     for (const requestId of requestIds) {
       try {
-        await rejectKycUpgrade({ requestId, reviewedBy, notes, rejectionReason });
+        await rejectKycUpgrade({
+          requestId,
+          reviewedBy,
+          notes,
+          rejectionReason,
+        });
         results.push({ requestId, status: "success" });
       } catch (err) {
         results.push({
@@ -250,7 +310,10 @@ router.post("/bulk/reject", async (req: Request, res: Response) => {
     });
   } catch (err) {
     console.error("[kyc-upgrades] bulk reject error:", err);
-    return res.status(500).json({ error: "Failed to bulk reject requests" });
+    throw createError(
+      ERROR_CODES.INTERNAL_ERROR,
+      "Failed to bulk reject requests",
+    );
   }
 });
 

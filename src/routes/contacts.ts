@@ -3,6 +3,8 @@ import { z } from "zod";
 import { ContactModel } from "../models/contact";
 import { authenticateToken } from "../middleware/auth";
 import { TimeoutPresets, haltOnTimedout } from "../middleware/timeout";
+import { ERROR_CODES } from "../constants/errorCodes";
+import { createError } from "../middleware/errorHandler";
 
 const PHONE_REGEX = /^\+\d{7,15}$/;
 const STELLAR_ADDRESS_REGEX = /^G[A-Z2-7]{55}$/;
@@ -106,14 +108,15 @@ contactsRoutes.post(
   async (req: Request, res: Response) => {
     const userId = getUserId(req);
     if (!userId) {
-      return res.status(401).json({ error: "User not authenticated" });
+      throw createError(ERROR_CODES.INVALID_INPUT, "User not authenticated", {
+        error: "User not authenticated",
+      });
     }
 
     const parsed = createContactSchema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({
+      throw createError(ERROR_CODES.INVALID_INPUT, "Validation error", {
         error: "Validation error",
-        details: parsed.error.issues,
       });
     }
 
@@ -128,13 +131,23 @@ contactsRoutes.post(
       return res.status(201).json(contact);
     } catch (error) {
       if (isUniqueViolation(error)) {
-        return res.status(409).json({
-          error: "Contact already exists for this destination",
-        });
+        throw createError(
+          ERROR_CODES.CONFLICT,
+          "Contact already exists for this destination",
+          {
+            error: "Contact already exists for this destination",
+          },
+        );
       }
 
       console.error("Create contact error:", error);
-      return res.status(500).json({ error: "Failed to create contact" });
+      throw createError(
+        ERROR_CODES.INTERNAL_ERROR,
+        "Failed to create contact",
+        {
+          error: "Failed to create contact",
+        },
+      );
     }
   },
 );
@@ -146,7 +159,13 @@ contactsRoutes.get(
   async (req: Request, res: Response) => {
     const userId = getUserId(req);
     if (!userId) {
-      return res.status(401).json({ error: "User not authenticated" });
+      throw createError(
+        ERROR_CODES.INTERNAL_ERROR,
+        "Failed to create contact",
+        {
+          error: "Failed to create contact",
+        },
+      );
     }
 
     try {
@@ -154,7 +173,13 @@ contactsRoutes.get(
       return res.json(contacts);
     } catch (error) {
       console.error("List contacts error:", error);
-      return res.status(500).json({ error: "Failed to fetch contacts" });
+      throw createError(
+        ERROR_CODES.INTERNAL_ERROR,
+        "Failed to fetch contacts",
+        {
+          error: "Failed to fetch contacts",
+        },
+      );
     }
   },
 );
@@ -166,19 +191,25 @@ contactsRoutes.get(
   async (req: Request, res: Response) => {
     const userId = getUserId(req);
     if (!userId) {
-      return res.status(401).json({ error: "User not authenticated" });
+      throw createError(ERROR_CODES.FORBIDDEN, "User not authenticated", {
+        error: "User not authenticated",
+      });
     }
 
     try {
       const contact = await contactModel.findByIdForUser(req.params.id, userId);
       if (!contact) {
-        return res.status(404).json({ error: "Contact not found" });
+        throw createError(ERROR_CODES.NOT_FOUND, "Contact not found", {
+          error: "Contact not found",
+        });
       }
 
       return res.json(contact);
     } catch (error) {
       console.error("Get contact error:", error);
-      return res.status(500).json({ error: "Failed to fetch contact" });
+      throw createError(ERROR_CODES.INTERNAL_ERROR, "Failed to fetch contact", {
+        error: "Failed to fetch contact",
+      });
     }
   },
 );
@@ -190,14 +221,15 @@ contactsRoutes.patch(
   async (req: Request, res: Response) => {
     const userId = getUserId(req);
     if (!userId) {
-      return res.status(401).json({ error: "User not authenticated" });
+      throw createError(ERROR_CODES.FORBIDDEN, "User not authenticated", {
+        error: "User not authenticated",
+      });
     }
 
     const parsed = updateContactSchema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({
+      throw createError(ERROR_CODES.INVALID_INPUT, "Validation error", {
         error: "Validation error",
-        details: parsed.error.issues,
       });
     }
 
@@ -207,7 +239,9 @@ contactsRoutes.patch(
         userId,
       );
       if (!existing) {
-        return res.status(404).json({ error: "Contact not found" });
+        throw createError(ERROR_CODES.NOT_FOUND, "Contact not found", {
+          error: "Contact not found",
+        });
       }
 
       const nextDestinationType =
@@ -219,7 +253,7 @@ contactsRoutes.patch(
         nextDestinationType === "phone" &&
         !PHONE_REGEX.test(nextDestinationValue)
       ) {
-        return res.status(400).json({
+        throw createError(ERROR_CODES.INVALID_INPUT, "Validation error", {
           error: "Validation error",
           details: [
             {
@@ -235,7 +269,7 @@ contactsRoutes.patch(
         nextDestinationType === "stellar" &&
         !STELLAR_ADDRESS_REGEX.test(nextDestinationValue)
       ) {
-        return res.status(400).json({
+        throw createError(ERROR_CODES.INVALID_INPUT, "Validation error", {
           error: "Validation error",
           details: [
             {
@@ -258,19 +292,31 @@ contactsRoutes.patch(
       );
 
       if (!updated) {
-        return res.status(404).json({ error: "Contact not found" });
+        throw createError(ERROR_CODES.NOT_FOUND, "Contact not found", {
+          error: "Contact not found",
+        });
       }
 
       return res.json(updated);
     } catch (error) {
       if (isUniqueViolation(error)) {
-        return res.status(409).json({
-          error: "Contact already exists for this destination",
-        });
+        throw createError(
+          ERROR_CODES.CONFLICT,
+          "Contact already exists for this destination",
+          {
+            error: "Contact already exists for this destination",
+          },
+        );
       }
 
       console.error("Update contact error:", error);
-      return res.status(500).json({ error: "Failed to update contact" });
+      throw createError(
+        ERROR_CODES.INTERNAL_ERROR,
+        "Failed to update contact",
+        {
+          error: "Failed to update contact",
+        },
+      );
     }
   },
 );
@@ -282,7 +328,9 @@ contactsRoutes.delete(
   async (req: Request, res: Response) => {
     const userId = getUserId(req);
     if (!userId) {
-      return res.status(401).json({ error: "User not authenticated" });
+      throw createError(ERROR_CODES.UNAUTHORIZED, "User not authenticated", {
+        error: "User not authenticated",
+      });
     }
 
     try {
@@ -291,13 +339,21 @@ contactsRoutes.delete(
         userId,
       );
       if (!deleted) {
-        return res.status(404).json({ error: "Contact not found" });
+        throw createError(ERROR_CODES.NOT_FOUND, "Contact not found", {
+          error: "Contact not found",
+        });
       }
 
       return res.status(204).send();
     } catch (error) {
       console.error("Delete contact error:", error);
-      return res.status(500).json({ error: "Failed to delete contact" });
+      throw createError(
+        ERROR_CODES.INTERNAL_ERROR,
+        "Failed to delete contact",
+        {
+          error: "Failed to delete contact",
+        },
+      );
     }
   },
 );

@@ -53,8 +53,8 @@ export function generateTOTPSecret(userEmail: string): TOTPSecret {
 export async function generateQRCodeDataURL(qrCodeUrl: string): Promise<string> {
   try {
     return await QRCode.toDataURL(qrCodeUrl);
-  } catch (error) {
-    throw new Error('Failed to generate QR code');
+  } catch (error: unknown) {
+    throw new Error('Failed to generate QR code', { cause: error });
   }
 }
 
@@ -130,10 +130,16 @@ export async function verifyBackupCode(
  * @param user User object with 2FA fields
  * @returns True if 2FA is enabled
  */
-export function is2FAEnabled(user: any): boolean {
+interface TwoFactorUser {
+  two_factor_secret?: string;
+  two_factor_enabled?: boolean;
+  two_factor_verified?: boolean;
+}
+
+export function is2FAEnabled(user: TwoFactorUser): boolean {
   return !!(
-    user.two_factor_secret && 
-    user.two_factor_enabled && 
+    user.two_factor_secret &&
+    user.two_factor_enabled &&
     user.two_factor_verified
   );
 }

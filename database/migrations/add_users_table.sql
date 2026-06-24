@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS users (
   id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   phone_number  VARCHAR(20) UNIQUE NOT NULL,
   kyc_level     VARCHAR(20) NOT NULL CHECK (kyc_level IN ('unverified', 'basic', 'full')),
+  mcc           VARCHAR(4) CHECK (mcc IS NULL OR mcc ~ '^[0-9]{4}$'),
   created_at    TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at    TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

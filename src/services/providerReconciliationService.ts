@@ -195,7 +195,7 @@ export class ProviderReconciliationService {
         WHERE id = $2
       `, [error instanceof Error ? error.message : 'Unknown error', reconciliationRun.id]);
 
-      logger.error(`Reconciliation failed for ${provider}:`, error);
+      logger.error(error, `Reconciliation failed for ${provider}`);
       throw error;
     }
   }

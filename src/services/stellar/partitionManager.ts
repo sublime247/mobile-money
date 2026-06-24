@@ -1,4 +1,4 @@
-import { pool } from "../config/database";
+import { pool } from "../../config/database.js";
 import cron from "node-cron";
 
 export class PartitionManager {

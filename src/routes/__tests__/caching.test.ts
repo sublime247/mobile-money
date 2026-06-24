@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, jest } from "@jest/globals";
-import { cachedQueryManager, CacheTags, QUERY_TTL_POLICIES } from "../../src/services/cachedQueryManager";
-import { TransactionCacheInvalidation, CacheKeyGenerators } from "../../src/services/cacheAside";
+import { cachedQueryManager, CacheTags, QUERY_TTL_POLICIES } from "../../services/cachedQueryManager";
+import { TransactionCacheInvalidation, CacheKeyGenerators } from "../../services/cacheAside";
 
 // Mock Redis
-jest.mock("../../src/config/redis", () => ({
+jest.mock("../../config/redis", () => ({
   redisClient: {
     setex: jest.fn(),
     get: jest.fn(),
@@ -43,7 +43,7 @@ describe("Cache Query Manager", () => {
       const cacheKey = "test-key";
       
       // Mock cache hit
-      jest.mocked(cachedQueryManager.get as any).mockResolvedValue(cached);
+      const getSpy = jest.spyOn(cachedQueryManager, "get").mockResolvedValue(cached);
       
       const result = await cachedQueryManager.getOrFetch(
         cacheKey,
@@ -54,6 +54,7 @@ describe("Cache Query Manager", () => {
       expect(result.data).toEqual(cached);
       expect(result.fromCache).toBe(true);
       expect(fetchFn).not.toHaveBeenCalled();
+      getSpy.mockRestore();
     });
   });
   
@@ -86,7 +87,7 @@ describe("Cache Query Manager", () => {
       const invalidated = await cachedQueryManager.invalidateByTag(tag);
       
       expect(invalidated).toBe(2);
-      expect(cachedQueryManager["redis"].del).toHaveBeenCalledWith(...keys);
+      expect(cachedQueryManager["redis"].del).toHaveBeenCalledWith(keys);
     });
     
     it("should handle multiple tags", async () => {
@@ -125,8 +126,18 @@ describe("Cache Query Manager", () => {
 });
 
 describe("Transaction Cache Invalidation", () => {
+  let invalidateByTagsSpy: jest.SpiedFunction<typeof cachedQueryManager.invalidateByTags>;
+  let invalidateByTagSpy: jest.SpiedFunction<typeof cachedQueryManager.invalidateByTag>;
+
   beforeEach(() => {
     jest.clearAllMocks();
+    invalidateByTagsSpy = jest.spyOn(cachedQueryManager, "invalidateByTags").mockResolvedValue(0);
+    invalidateByTagSpy = jest.spyOn(cachedQueryManager, "invalidateByTag").mockResolvedValue(0);
+  });
+
+  afterEach(() => {
+    invalidateByTagsSpy.mockRestore();
+    invalidateByTagSpy.mockRestore();
   });
   
   it("should invalidate user caches on transaction change", async () => {
@@ -135,7 +146,7 @@ describe("Transaction Cache Invalidation", () => {
     await TransactionCacheInvalidation.invalidateUserCaches(userId);
     
     // Verify tags were invalidated
-    expect(cachedQueryManager.invalidateByTags).toHaveBeenCalled();
+    expect(invalidateByTagsSpy).toHaveBeenCalled();
   });
   
   it("should invalidate provider stats on new transaction", async () => {
@@ -143,13 +154,13 @@ describe("Transaction Cache Invalidation", () => {
     
     await TransactionCacheInvalidation.invalidateProviderStats(provider);
     
-    expect(cachedQueryManager.invalidateByTags).toHaveBeenCalled();
+    expect(invalidateByTagsSpy).toHaveBeenCalled();
   });
   
   it("should invalidate general stats", async () => {
     await TransactionCacheInvalidation.invalidateGeneralStats();
     
-    expect(cachedQueryManager.invalidateByTag).toHaveBeenCalled();
+    expect(invalidateByTagSpy).toHaveBeenCalled();
   });
 });
 
@@ -189,7 +200,7 @@ describe("Cache performance", () => {
     const time1 = Date.now() - start1;
     
     // Mock cache hit for second call
-    jest.mocked(cachedQueryManager.get as any).mockResolvedValue({ result: "data" });
+    const getSpy = jest.spyOn(cachedQueryManager, "get").mockResolvedValue({ result: "data" });
     
     // Second call - cache hit, returns instantly
     const start2 = Date.now();
@@ -203,5 +214,6 @@ describe("Cache performance", () => {
     // Cache hit should be much faster (or at least not slower)
     // This is a rough test since both are fast
     expect(fetchFn).toHaveBeenCalledTimes(1); // Only called once
+    getSpy.mockRestore();
   });
 });

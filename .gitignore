@@ -1,12 +1,16 @@
 # Dependencies
 node_modules/
-package-lock.json
-yarn.lock
 
 # Build outputs
 dist/
 contracts/target/
 *.tsbuildinfo
+.docusaurus/
+
+# Kotlin SDK build artifacts
+sdk/build/
+sdk/.gradle/
+gradle-temp/
 
 # Environment and secrets
 .env
@@ -33,18 +37,7 @@ pact.log
 # Kiro
 .kiro/
 
-# Issue creation and update scripts (local use only)
-create-issues.sh
-create-all-issues.sh
-create-issues.js
-create_issues.py
-issues.json
-update-issues.sh
-update-all-issues.sh
-update-issues-batch*.sh
-run-all-updates.sh
-create-next-100-issues.sh
-scratch/create-backlog.ts
+
 
 # Load test output
 tests/load/results/*.json
@@ -55,3 +48,4 @@ benchmarks/results/*.json
 *.temp
 .cache/
 
+secret.yaml

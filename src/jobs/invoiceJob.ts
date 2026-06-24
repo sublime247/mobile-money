@@ -3,7 +3,7 @@ import { TransactionModel } from '../models/transaction';
 import { UserModel } from '../models/users';
 import { EmailService } from '../services/email';
 import { InvoiceService } from '../services/invoiceService';
-import { logger } from '../services/logger';
+import logger from '../utils/logger';
 
 export async function runMonthlyInvoiceJob() {
   const transactionModel = new TransactionModel();
@@ -73,12 +73,12 @@ export async function runMonthlyInvoiceJob() {
 
         logger.info(`Sent monthly invoice to user ${userId} (${user.email})`);
       } catch (err) {
-        logger.error(`Failed to process invoice for user ${userId}:`, err);
+        logger.error(err, `Failed to process invoice for user ${userId}`);
       }
     }
 
     logger.info('Monthly invoice job completed successfully');
   } catch (err) {
-    logger.error('Monthly invoice job failed:', err);
+    logger.error(err, 'Monthly invoice job failed');
   }
 }

@@ -1,0 +1,470 @@
+{
+  "consumer": {
+    "name": "MobileMoneyService"
+  },
+  "interactions": [
+    {
+      "description": "a request for an access token",
+      "providerStates": [
+        {
+          "name": "valid MTN API credentials"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Authorization": "Basic dGVzdC1hcGkta2V5OnRlc3QtYXBpLXNlY3JldA==",
+          "Ocp-Apim-Subscription-Key": "test-subscription-key"
+        },
+        "matchingRules": {
+          "header": {
+            "Authorization": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^Basic [A-Za-z0-9+/=]+$"
+                }
+              ]
+            },
+            "Ocp-Apim-Subscription-Key": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/collection/token/"
+      },
+      "response": {
+        "body": {
+          "access_token": "eyJhbGciOiJSUzI1NiJ9.test",
+          "expires_in": 3600,
+          "token_type": "access_token"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.access_token": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.expires_in": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.token_type": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a request for the operational balance",
+      "providerStates": [
+        {
+          "name": "MTN disbursement account has funds"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Authorization": "Bearer test-bearer-token",
+          "Ocp-Apim-Subscription-Key": "test-subscription-key",
+          "X-Target-Environment": "sandbox"
+        },
+        "matchingRules": {
+          "header": {
+            "Authorization": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^Bearer .+$"
+                }
+              ]
+            },
+            "Ocp-Apim-Subscription-Key": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "X-Target-Environment": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "method": "GET",
+        "path": "/disbursement/v1_0/account/balance"
+      },
+      "response": {
+        "body": {
+          "availableBalance": "1000.00",
+          "currency": "EUR"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.availableBalance": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.currency": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a request to collect payment from a subscriber",
+      "providerStates": [
+        {
+          "name": "MTN collection service is available"
+        }
+      ],
+      "request": {
+        "body": {
+          "amount": "100",
+          "currency": "EUR",
+          "externalId": "ext-001",
+          "payeeNote": "Deposit",
+          "payer": {
+            "partyId": "46733123450",
+            "partyIdType": "MSISDN"
+          },
+          "payerMessage": "Payment for Stellar deposit"
+        },
+        "headers": {
+          "Authorization": "Bearer test-bearer-token",
+          "Content-Type": "application/json",
+          "Ocp-Apim-Subscription-Key": "test-subscription-key",
+          "X-Reference-Id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+          "X-Target-Environment": "sandbox"
+        },
+        "matchingRules": {
+          "body": {
+            "$.amount": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.currency": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.externalId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.payeeNote": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.payer.partyId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.payerMessage": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Authorization": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^Bearer .+$"
+                }
+              ]
+            },
+            "Ocp-Apim-Subscription-Key": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "X-Reference-Id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                }
+              ]
+            },
+            "X-Target-Environment": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/collection/v1_0/requesttopay"
+      },
+      "response": {
+        "status": 202
+      }
+    },
+    {
+      "description": "a request to get a failed transaction status",
+      "providerStates": [
+        {
+          "name": "MTN transaction exists and has failed"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Authorization": "Bearer test-bearer-token",
+          "Ocp-Apim-Subscription-Key": "test-subscription-key",
+          "X-Target-Environment": "sandbox"
+        },
+        "matchingRules": {
+          "header": {
+            "Authorization": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^Bearer .+$"
+                }
+              ]
+            },
+            "Ocp-Apim-Subscription-Key": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "X-Target-Environment": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "method": "GET",
+        "path": "/collection/v1_0/requesttopay/f47ac10b-58cc-4372-a567-0e02b2c3d479"
+      },
+      "response": {
+        "body": {
+          "reason": "PAYER_NOT_FOUND",
+          "status": "FAILED"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.reason": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a request to get transaction status",
+      "providerStates": [
+        {
+          "name": "MTN transaction exists and is successful"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Authorization": "Bearer test-bearer-token",
+          "Ocp-Apim-Subscription-Key": "test-subscription-key",
+          "X-Target-Environment": "sandbox"
+        },
+        "matchingRules": {
+          "header": {
+            "Authorization": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^Bearer .+$"
+                }
+              ]
+            },
+            "Ocp-Apim-Subscription-Key": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "X-Target-Environment": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "method": "GET",
+        "path": "/collection/v1_0/requesttopay/f47ac10b-58cc-4372-a567-0e02b2c3d479"
+      },
+      "response": {
+        "body": {
+          "amount": "100",
+          "currency": "EUR",
+          "externalId": "ext-001",
+          "financialTransactionId": "363440463",
+          "payer": {
+            "partyId": "46733123450",
+            "partyIdType": "MSISDN"
+          },
+          "status": "SUCCESSFUL"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.amount": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.currency": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.externalId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.financialTransactionId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.payer.partyId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    }
+  ],
+  "metadata": {
+    "pact-js": {
+      "version": "16.3.0"
+    },
+    "pactRust": {
+      "ffi": "0.5.3",
+      "models": "1.3.9"
+    },
+    "pactSpecification": {
+      "version": "3.0.0"
+    }
+  },
+  "provider": {
+    "name": "MTNMoMoAPI"
+  }
+}

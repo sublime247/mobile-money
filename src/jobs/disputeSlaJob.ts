@@ -114,7 +114,12 @@ export class DisputeSlaJob {
       const count = parseInt(row.count, 10);
       totalDisputes += count;
 
-      if (row.status === "resolved" || row.status === "rejected") {
+      if (
+        row.status === "resolved" ||
+        row.status === "rejected" ||
+        row.status === "reversed" ||
+        row.status === "upheld"
+      ) {
         resolvedDisputes += count;
         if (row.avgResolutionHours) {
           totalResolutionHours += parseFloat(row.avgResolutionHours) * count;

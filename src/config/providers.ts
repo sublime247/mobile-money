@@ -4,6 +4,8 @@ export enum MobileMoneyProvider {
   MTN = "mtn",
   AIRTEL = "airtel",
   ORANGE = "orange",
+  ORANGE_MADAGASCAR = "orange_madagascar",
+  SMS_PORTAL = "sms_portal",
 }
 
 export interface ProviderLimits {
@@ -15,6 +17,8 @@ export interface ProviderLimitsConfig {
   [MobileMoneyProvider.MTN]: ProviderLimits;
   [MobileMoneyProvider.AIRTEL]: ProviderLimits;
   [MobileMoneyProvider.ORANGE]: ProviderLimits;
+  [MobileMoneyProvider.ORANGE_MADAGASCAR]: ProviderLimits;
+  [MobileMoneyProvider.SMS_PORTAL]: ProviderLimits;
 }
 
 /**
@@ -36,6 +40,14 @@ export function getProviderLimitsConfig(): ProviderLimitsConfig {
       minAmount: providers.orange.minAmount,
       maxAmount: providers.orange.maxAmount,
     },
+    [MobileMoneyProvider.ORANGE_MADAGASCAR]: {
+      minAmount: providers.orangeMadagascar.minAmount,
+      maxAmount: providers.orangeMadagascar.maxAmount,
+    },
+    [MobileMoneyProvider.SMS_PORTAL]: {
+      minAmount: providers.smsPortal.minAmount,
+      maxAmount: providers.smsPortal.maxAmount,
+    },
   };
 }
 
@@ -43,6 +55,8 @@ export const DEFAULT_PROVIDER_LIMITS: ProviderLimitsConfig = {
   [MobileMoneyProvider.MTN]: { minAmount: 100, maxAmount: 500000 },
   [MobileMoneyProvider.AIRTEL]: { minAmount: 100, maxAmount: 1000000 },
   [MobileMoneyProvider.ORANGE]: { minAmount: 500, maxAmount: 750000 },
+  [MobileMoneyProvider.ORANGE_MADAGASCAR]: { minAmount: 100, maxAmount: 5000000 },
+  [MobileMoneyProvider.SMS_PORTAL]: { minAmount: 100, maxAmount: 5000000 },
 };
 
 // PROVIDER_LIMITS is now dynamically loaded from config
@@ -86,6 +100,8 @@ function validateLimitsConfig(): void {
     MobileMoneyProvider.MTN,
     MobileMoneyProvider.AIRTEL,
     MobileMoneyProvider.ORANGE,
+    MobileMoneyProvider.ORANGE_MADAGASCAR,
+    MobileMoneyProvider.SMS_PORTAL,
   ];
 
   for (const provider of providers) {

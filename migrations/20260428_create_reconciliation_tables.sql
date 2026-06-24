@@ -19,7 +19,7 @@ CREATE TABLE reconciliation_reports (
 CREATE TABLE reconciliation_discrepancies (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     report_id UUID NOT NULL REFERENCES reconciliation_reports(id) ON DELETE CASCADE,
-    transaction_id UUID REFERENCES transactions(id),
+    transaction_id UUID,
     reference_number VARCHAR(100),
     type discrepancy_type NOT NULL,
     expected_value VARCHAR(255), -- Value from our DB

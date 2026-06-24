@@ -1,6 +1,31 @@
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 
+const BASE_URL = __ENV.BASE_URL || 'http://localhost:3000';
+const AUTH_TOKEN = __ENV.AUTH_TOKEN || 'dummy-token';
+const HIGH_VOLUME_ENABLED = (__ENV.HIGH_VOLUME || '').toLowerCase() === 'true';
+
+const highVolumeScenario = HIGH_VOLUME_ENABLED
+  ? {
+      // Optional legacy 10K ingestion path. Disabled by default so the legacy
+      // suite remains a smoke test unless explicitly enabled with HIGH_VOLUME=true.
+      high_volume_ingestion_10k: {
+        executor: 'ramping-vus',
+        startVUs: 0,
+        stages: [
+          { duration: '5m', target: 1000 },
+          { duration: '5m', target: 3000 },
+          { duration: '10m', target: 6000 },
+          { duration: '10m', target: 10000 },
+          { duration: '10m', target: 10000 },
+          { duration: '5m', target: 0 },
+        ],
+        gracefulRampDown: '2m',
+        exec: 'ingestTransaction',
+      },
+    }
+  : {};
+
 export const options = {
   scenarios: {
     // Health Check Scenario (Baseline)
@@ -30,14 +55,13 @@ export const options = {
       maxDuration: '2m',
       exec: 'createDeposit',
     },
+    ...highVolumeScenario,
   },
   thresholds: {
-    http_req_duration: ['p(95)<500'], // 95% of requests must complete below 500ms
-    http_req_failed: ['rate<0.01'],    // Less than 1% failure rate
+    http_req_duration: [HIGH_VOLUME_ENABLED ? 'p(95)<5000' : 'p(95)<500'],
+    http_req_failed: [HIGH_VOLUME_ENABLED ? 'rate<0.10' : 'rate<0.01'],
   },
 };
-
-const BASE_URL = __ENV.BASE_URL || 'http://localhost:3000';
 
 export function healthCheck() {
   const res = http.get(`${BASE_URL}/health`);
@@ -58,25 +82,61 @@ export function readTransactions() {
 }
 
 export function createDeposit() {
-  // We simulate a deposit request. In a real test, we would need a valid auth token.
-  // For this generic load test, we assume the environment might be seeded or using a mock auth.
-  const payload = JSON.stringify({
-    amount: 1000,
-    phoneNumber: '+111111111',
-    provider: 'orange',
-    stellarAddress: 'GSEED000000000000000000000000000000000000000000000000001',
-  });
-
-  const params = {
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${__ENV.AUTH_TOKEN || 'dummy-token'}`,
-    },
-  };
-
-  const res = http.post(`${BASE_URL}/api/transactions/deposit`, payload, params);
+  const res = http.post(
+    `${BASE_URL}/api/transactions/deposit`,
+    depositPayload(__VU * 100000 + __ITER),
+    requestParams('deposit'),
+  );
   check(res, {
     'deposit submitted': (r) => r.status === 201 || r.status === 200 || r.status === 401, // 401 allowed if dummy token
   });
   sleep(1);
+}
+
+export function ingestTransaction() {
+  const seed = __VU * 1000000 + __ITER;
+  const res = http.post(
+    `${BASE_URL}/api/transactions/deposit`,
+    depositPayload(seed),
+    requestParams('high_volume_deposit', { 'Idempotency-Key': `legacy-10k-vu${__VU}-it${__ITER}` }),
+  );
+
+  check(res, {
+    'ingestion accepted': (r) => r.status === 201 || r.status === 200 || r.status === 202 || r.status === 401,
+  });
+  sleep(Number(__ENV.INGEST_THINK_TIME || 0.01));
+}
+
+function depositPayload(seed) {
+  return JSON.stringify({
+    amount: 1000 + (Math.abs(seed) % 49000),
+    phoneNumber: `+23767${(Math.abs(seed) % 9000000) + 1000000}`,
+    provider: ['mtn', 'airtel', 'orange'][seed % 3],
+    stellarAddress: stellarAddress(seed),
+  });
+}
+
+function requestParams(operation, extraHeaders) {
+  return {
+    headers: Object.assign(
+      {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${AUTH_TOKEN}`,
+      },
+      extraHeaders || {},
+    ),
+    tags: { operation },
+    timeout: '15s',
+  };
+}
+
+function stellarAddress(seed) {
+  const b32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  let value = Math.abs(seed % 999983) + 1;
+  let address = 'G';
+  for (let i = 0; i < 55; i++) {
+    address += b32[value % 32];
+    value = ((value * 7) + 13 + i) % 2147483647;
+  }
+  return address;
 }

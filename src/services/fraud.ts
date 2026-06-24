@@ -113,7 +113,7 @@ export interface FraudResult {
   recommendedAction: 'allow' | 'review' | 'block';
 }
 
-function getDistanceKm(
+export function getDistanceKm(
   loc1: { lat: number; lng: number },
   loc2: { lat: number; lng: number }
 ): number {
@@ -161,7 +161,7 @@ export class FraudService {
           '+1234567890', '+0987654321', '+5555555555'
         ];
         this.highRiskNumbers = new Set(sampleNumbers);
-        await redisClient.setex('fraud:high_risk_numbers', 3600, JSON.stringify(sampleNumbers));
+        await redisClient.setEx('fraud:high_risk_numbers', 3600, JSON.stringify(sampleNumbers));
       }
     } catch (error) {
       console.error('Failed to load high risk numbers:', error);
@@ -187,14 +187,9 @@ export class FraudService {
   }
 
   private async getIPLocation(ipAddress: string): Promise<{ lat: number; lng: number; country: string } | null> {
-    try {
-      // In production, use a geolocation service like MaxMind or IP-API
-      // For now, return null to disable this check
-      return null;
-    } catch (error) {
-      console.error('Failed to get IP location:', error);
-      return null;
-    }
+    // In production, use a geolocation service like MaxMind or IP-API
+    // For now, return null to disable this check
+    return null;
   }
 
   private isLocationMismatch(

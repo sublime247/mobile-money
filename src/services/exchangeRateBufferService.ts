@@ -21,7 +21,7 @@
 import { pool } from "../config/database";
 import { redisClient } from "../config/redis";
 import { findRange } from "../models/historicalPrice";
-import { logger } from "./logger";
+import logger from "../utils/logger";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -232,7 +232,7 @@ export class ExchangeRateBufferService {
 
       return dynamicBuffer;
     } catch (err) {
-      logger.warn("[ERB] Dynamic buffer computation failed, using static fallback", err);
+      logger.warn({ err }, "[ERB] Dynamic buffer computation failed, using static fallback");
       return config.bufferPercent;
     }
   }
@@ -427,7 +427,7 @@ export class ExchangeRateBufferService {
         ],
       );
     } catch (err) {
-      logger.warn("[ERB] Failed to log audit entry", err);
+      logger.warn({ err }, "[ERB] Failed to log audit entry");
     }
   }
 }

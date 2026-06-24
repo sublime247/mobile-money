@@ -29,6 +29,8 @@ import {
   SETTINGS_OPTIONS,
   PartialUserSettings,
 } from "../utils/settingsPanel";
+import { ERROR_CODES } from "../constants/errorCodes";
+import { createError } from "../middleware/errorHandler";
 
 const router = Router();
 
@@ -41,8 +43,9 @@ router.use(requireAuth);
 router.get("/", (req: Request, res: Response): void => {
   const userId = (req as Request & { user?: { id: string } }).user?.id;
   if (!userId) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
+    throw createError(ERROR_CODES.UNAUTHORIZED, "Unauthorized", {
+      error: "Unauthorized",
+    });
   }
 
   const settings = getSettings(userId);
@@ -55,20 +58,18 @@ router.get("/", (req: Request, res: Response): void => {
 router.patch("/", (req: Request, res: Response): void => {
   const userId = (req as Request & { user?: { id: string } }).user?.id;
   if (!userId) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
+    throw createError(ERROR_CODES.UNAUTHORIZED, "Unauthorized", {
+      error: "Unauthorized",
+    });
   }
 
   const patch = req.body as PartialUserSettings;
   const result = updateSettings(userId, patch);
 
   if ("errors" in result) {
-    // Return structured validation errors — screen-reader friendly.
-    res.status(422).json({
-      error: "Validation failed",
+    throw createError(ERROR_CODES.UNPROCESSABLE_CONTENT, "Validation failed", {
       details: result.errors,
     });
-    return;
   }
 
   res.json({ settings: result.settings });
@@ -80,8 +81,9 @@ router.patch("/", (req: Request, res: Response): void => {
 router.delete("/", (req: Request, res: Response): void => {
   const userId = (req as Request & { user?: { id: string } }).user?.id;
   if (!userId) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
+    throw createError(ERROR_CODES.UNAUTHORIZED, "Unauthorized", {
+      error: "Unauthorized",
+    });
   }
 
   const settings = resetSettings(userId);

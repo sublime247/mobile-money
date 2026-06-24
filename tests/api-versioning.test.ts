@@ -91,6 +91,59 @@ describe("API Versioning", () => {
     });
   });
 
+  describe("Version Extraction from Accept-Version Header", () => {
+    it("should extract version from Accept-Version header", (done) => {
+      request(app)
+        .get("/api/test")
+        .set("Accept-Version", "v1")
+        .expect(200)
+        .expect((res: any) => {
+          if (res.body.version !== "v1")
+            throw new Error("Accept-Version header version not used");
+          if (res.headers["api-version"] !== "v1")
+            throw new Error("API-Version header not set from Accept-Version");
+        })
+        .end(done);
+    });
+
+    it("should normalize numeric Accept-Version values", (done) => {
+      request(app)
+        .get("/api/test")
+        .set("Accept-Version", "1")
+        .expect(200)
+        .expect((res: any) => {
+          if (res.headers["api-version"] !== "v1")
+            throw new Error("Numeric Accept-Version header not normalized");
+        })
+        .end(done);
+    });
+
+    it("should prioritize URL path over Accept-Version header", (done) => {
+      request(app)
+        .get("/api/v1/test")
+        .set("Accept-Version", "v99")
+        .expect(200)
+        .expect((res: any) => {
+          if (res.headers["api-version"] !== "v1")
+            throw new Error("URL path should take priority over Accept-Version");
+        })
+        .end(done);
+    });
+
+    it("should reject unsupported Accept-Version header values", (done) => {
+      request(app)
+        .get("/api/test")
+        .set("Accept-Version", "v99")
+        .expect(400)
+        .expect((res: any) => {
+          if (res.body.error !== "Unsupported API Version") {
+            throw new Error("Unsupported Accept-Version was not rejected");
+          }
+        })
+        .end(done);
+    });
+  });
+
   describe("Version Validation", () => {
     it("should reject unsupported versions", (done) => {
       request(app)
@@ -177,6 +230,8 @@ describe("API Versioning", () => {
           if (!res.headers["vary"]) throw new Error("Missing Vary header");
           if (!res.headers["vary"].includes("Accept"))
             throw new Error("Vary should include Accept");
+          if (!res.headers["vary"].includes("Accept-Version"))
+            throw new Error("Vary should include Accept-Version");
         })
         .end(done);
     });

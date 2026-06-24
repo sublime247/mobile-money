@@ -5,8 +5,35 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
+  schedule:
+    - cron: "0 0 * * *" # Daily certificate check
 
 jobs:
+  cert-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Verify package-lock.json exists
+        run: |
+          if [ ! -f package-lock.json ]; then
+            npm install --package-lock-only
+          fi
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Run Certificate Expiry Check
+        run: npm run check-cert
+        continue-on-error: true
+
   security:
     runs-on: ubuntu-latest
 
@@ -17,7 +44,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "24"
+          node-version: "20"
           cache: npm
           cache-dependency-path: |
             package-lock.json
@@ -124,7 +151,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "24"
+          node-version: "20"
           cache: npm
 
       - name: Install system dependencies
@@ -144,18 +171,26 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Wait for Postgres to be ready
+        run: |
+          for i in $(seq 1 30); do
+            pg_isready -h localhost -p 5432 -U test_user && break
+            echo "Waiting for Postgres... attempt $i/30"
+            sleep 1
+          done
+
       - name: Run database migrations
-        run: npm run migrate:up
-        continue-on-error: true
+        run: npm run migrate:up 2>&1
+        continue-on-error: false
         env:
           DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_db
 
       - name: Run linter
         run: npm run lint
-        continue-on-error: true
+        continue-on-error: false
 
       - name: Run tests with coverage
-        run: npm run test:coverage -- --maxWorkers=2 --forceExit
+        run: npm run test:coverage -- --maxWorkers=2 --bail --forceExit
         timeout-minutes: 10
         continue-on-error: true
         env:
@@ -163,14 +198,31 @@ jobs:
           REDIS_URL: redis://localhost:6379
           STELLAR_ISSUER_SECRET: S-DUMMY-SECRET-KEY-FOR-TESTING-PURPOSES-ONLY
           NODE_ENV: test
+          NODE_OPTIONS: --experimental-vm-modules
           CI: true
+
+      - name: Run Pact Contract Tests
+        run: npm run test:pact
+        continue-on-error: true
+        env:
+          NODE_OPTIONS: --experimental-vm-modules
+          CI: true
+
+      - name: Upload Pact files as artifacts
+        uses: actions/upload-artifact@v6
+        if: success()
+        with:
+          name: pact-contracts
+          path: pacts/
+          retention-days: 30
+          if-no-files-found: ignore
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
       - name: Build for E2E
         run: npm run build
-        continue-on-error: true
+        continue-on-error: false
 
       - name: Start server for E2E
         run: node dist/src/index.js &
@@ -200,7 +252,7 @@ jobs:
           SESSION_SECRET: ci-session-secret
 
       - name: Upload Playwright report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         if: always()
         with:
           name: playwright-report
@@ -228,7 +280,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "24"
+          node-version: "20"
           cache: npm
 
       - name: Verify package-lock.json exists
@@ -245,11 +297,11 @@ jobs:
 
       - name: Build
         run: npm run build
-        continue-on-error: true
+        continue-on-error: false
 
       - name: Check build artifacts
         run: ls -la dist/
-        continue-on-error: true
+        continue-on-error: false
 
   # Docker build job - optional, only runs if secrets are configured
   # To enable: Add REGISTRY_USERNAME and REGISTRY_PASSWORD to repository secrets

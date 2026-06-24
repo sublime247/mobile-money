@@ -69,16 +69,19 @@ curl -X POST https://api.example.com/api/v2/transactions/deposit \
   -d '{"amount": 100, "phone": "+1234567890"}'
 ```
 
-### Method 2: Accept Header Versioning
+### Method 2: Accept-Version Header Versioning
 
-Specify version in the Accept header:
+Specify version in the `Accept-Version` header:
 
 ```bash
 curl -X POST https://api.example.com/api/transactions/deposit \
-  -H "Accept: application/json;version=v1" \
+  -H "Accept-Version: v1" \
   -H "Content-Type: application/json" \
   -d '{"amount": 100, "phone": "+1234567890"}'
 ```
+
+The legacy `Accept: application/json;version=v1` format is still accepted for
+backward compatibility, but `Accept-Version` is the preferred header.
 
 ### Method 3: Legacy Endpoints
 
@@ -101,7 +104,7 @@ All API responses include version information:
 ```
 HTTP/1.1 200 OK
 API-Version: v1
-Vary: Accept
+Vary: Accept, Accept-Version
 Deprecation: false
 Content-Type: application/json
 
@@ -113,7 +116,7 @@ Content-Type: application/json
 ### Header Meanings
 
 - **API-Version**: Current API version used for this request
-- **Vary**: Cache control - indicates Accept header affects response
+- **Vary**: Cache control - indicates version headers affect response
 - **Deprecation**: True if endpoint is deprecated
 - **Sunset**: Date when deprecated endpoint will be removed
 - **Link**: Alternative version URL (on Deprecation: true)
@@ -176,10 +179,13 @@ HTTP/1.1 400 Bad Request
 1. URL path (highest priority)
    - `/api/v1/transactions` → uses `v1`
 
-2. Accept header
+2. Accept-Version header
+   - `Accept-Version: v1` → uses `v1`
+
+3. Accept header
    - `Accept: application/json;version=v1` → uses `v1`
 
-3. Default
+4. Default
    - No version specified → uses `v1`
 
 ## Best Practices
@@ -214,8 +220,8 @@ npm test tests/api-versioning.test.ts
 # Test v1
 curl -i https://api.example.com/api/v1/transactions
 
-# Test Accept header
-curl -i -H "Accept: application/json;version=v1" \
+# Test Accept-Version header
+curl -i -H "Accept-Version: v1" \
   https://api.example.com/api/transactions
 
 # Test legacy endpoint
@@ -268,7 +274,7 @@ ORDER BY date DESC;
 
 ## FAQ
 
-**Q: Should I use URL versioning or Accept header?**
+**Q: Should I use URL versioning or Accept-Version header?**
 A: Use URL path versioning. It's clearer, easier to debug, and better for caching.
 
 **Q: How do I know which version to use?**

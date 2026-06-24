@@ -6,6 +6,9 @@
 import { Router, Request, Response } from "express";
 import { requireAuth, AuthRequest } from "../middleware/auth";
 import { travelRuleService, TravelRuleRecord } from "../compliance/travelRule";
+import { createError } from "../middleware/errorHandler";
+import { ERROR_CODES } from "../constants/errorCodes";
+import { travelRuleCheckHandler } from "../controllers/complianceController";
 
 export const travelRuleRoutes = Router();
 
@@ -18,7 +21,7 @@ function parseOptionalDate(value: unknown): Date | undefined {
 function requireAdmin(req: Request, res: Response): boolean {
   const user = (req as AuthRequest).user;
   if (!user || user.role !== "admin") {
-    res.status(403).json({ error: "Forbidden", message: "Admin access required" });
+    createError(ERROR_CODES.FORBIDDEN,"Admin access required", {error:"Forbidden"})
     return false;
   }
   return true;
@@ -52,6 +55,13 @@ function serializeRecord(r: TravelRuleRecord) {
 }
 
 /**
+ * POST /api/v1/compliance/travel-rule/check
+ * Checks whether a transaction amount triggers the Travel Rule and, if so,
+ * captures the required identity data. Requires authentication.
+ */
+travelRuleRoutes.post("/check", requireAuth, travelRuleCheckHandler);
+
+/**
  * GET /api/v1/compliance/travel-rule
  * Query params: from, to, onlyUnexported
  * Returns JSON array of Travel Rule records (decrypted).
@@ -75,7 +85,7 @@ travelRuleRoutes.get("/", requireAuth, async (req: Request, res: Response) => {
     res.json({ count: records.length, records: records.map(serializeRecord) });
   } catch (err) {
     console.error("[travel-rule] export error:", err instanceof Error ? err.message : err);
-    res.status(500).json({ error: "Export failed" });
+    throw createError(ERROR_CODES.INTERNAL_ERROR,"Export failed", {error:"Export failed"})
   }
 });
 
@@ -136,7 +146,7 @@ travelRuleRoutes.get("/export.csv", requireAuth, async (req: Request, res: Respo
   } catch (err) {
     console.error("[travel-rule] csv export error:", err instanceof Error ? err.message : err);
     if (!res.headersSent) {
-      res.status(500).json({ error: "CSV export failed" });
+       throw createError(ERROR_CODES.INTERNAL_ERROR,"CSV export failed", {error:"CSV export failed"})
     }
   }
 });
@@ -156,6 +166,6 @@ travelRuleRoutes.get("/:transactionId", requireAuth, async (req: Request, res: R
     res.json(serializeRecord(record));
   } catch (err) {
     console.error("[travel-rule] lookup error:", err instanceof Error ? err.message : err);
-    res.status(500).json({ error: "Lookup failed" });
+     throw createError(ERROR_CODES.INTERNAL_ERROR,"Lookup failed", {error:"Lookup failed"})
   }
 });

@@ -88,8 +88,14 @@ export function createExportRoutes(options?: {
   const router = Router();
 
   router.get("/export", async (req: Request, res: Response) => {
-    let client;
-    let releaseClient = () => {};
+    let client: any;
+    let clientReleased = false;
+    let releaseClient = () => {
+      if (!clientReleased && client) {
+        client.release();
+        clientReleased = true;
+      }
+    };
 
     try {
       const filters = parseTransactionExportFilters(req.query);
@@ -154,12 +160,7 @@ export function createExportRoutes(options?: {
         releaseClient();
       });
 
-      pipeline(rowStream, transform, res, (error) => {
-        releaseClient();
-        if (error) {
-          console.error("Transaction export pipeline failed:", error);
-        }
-      });
+      await pipeline(rowStream, transform, res);
     } catch (error) {
       console.error("Transaction export failed:", error);
       releaseClient();

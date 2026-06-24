@@ -24,8 +24,8 @@ const transactionSchema = z.object({
   phoneNumber: z
     .string()
     .regex(/^\+?\d{10,15}$/, { message: "Invalid phone number format" }),
-  provider: z.enum(["mtn", "airtel", "orange"], {
-    message: "Provider must be one of: mtn, airtel, orange",
+  provider: z.enum(["MTN", "AIRTEL", "ORANGE"], {
+    message: "Provider must be one of: MTN, AIRTEL, ORANGE",
   }),
   stellarAddress: z
     .string()

@@ -2,6 +2,8 @@ import { createHmac, timingSafeEqual } from "crypto";
 import { NextFunction, Request, Response } from "express";
 import { getConfigValue } from "../config/appConfig";
 import { getCurrentRequestIp, logSecurityAnomaly } from "../services/logger";
+import { ERROR_CODES } from "../constants/errorCodes";
+import { createError } from "./errorHandler";
 
 const DEFAULT_SIGNATURE_HEADER = "x-callback-signature";
 const ALT_SIGNATURE_HEADER = "x-mtn-signature";
@@ -12,8 +14,14 @@ function getMtnCallbackSecret(): string {
 }
 
 function getSignatureHeaderName(): string {
-  const configuredHeader = getConfigValue("providers.mtn.callbackSignatureHeader");
-  return String(configuredHeader ?? "").trim().toLowerCase() || DEFAULT_SIGNATURE_HEADER;
+  const configuredHeader = getConfigValue(
+    "providers.mtn.callbackSignatureHeader",
+  );
+  return (
+    String(configuredHeader ?? "")
+      .trim()
+      .toLowerCase() || DEFAULT_SIGNATURE_HEADER
+  );
 }
 
 function getSignatureHeader(req: Request): string | undefined {
@@ -23,7 +31,11 @@ function getSignatureHeader(req: Request): string | undefined {
   return req.headers[ALT_SIGNATURE_HEADER] as string | undefined;
 }
 
-function computeExpectedSignature(rawBody: Buffer, secret: string, headerValue: string): string {
+function computeExpectedSignature(
+  rawBody: Buffer,
+  secret: string,
+  headerValue: string,
+): string {
   const hasPrefix = headerValue.startsWith("sha256=");
   if (hasPrefix) {
     return createHmac("sha256", secret).update(rawBody).digest("hex");
@@ -31,7 +43,11 @@ function computeExpectedSignature(rawBody: Buffer, secret: string, headerValue: 
   return createHmac("sha256", secret).update(rawBody).digest("base64");
 }
 
-function verifySignature(rawBody: Buffer, headerValue: string, secret: string): boolean {
+function verifySignature(
+  rawBody: Buffer,
+  headerValue: string,
+  secret: string,
+): boolean {
   const expected = computeExpectedSignature(rawBody, secret, headerValue);
   const incoming = headerValue.startsWith("sha256=")
     ? headerValue.substring(7)
@@ -44,7 +60,11 @@ function verifySignature(rawBody: Buffer, headerValue: string, secret: string): 
   return timingSafeEqual(Buffer.from(incoming), Buffer.from(expected));
 }
 
-function buildFailureEvent(req: Request, reason: string, headerPresent: boolean): void {
+function buildFailureEvent(
+  req: Request,
+  reason: string,
+  headerPresent: boolean,
+): void {
   logSecurityAnomaly({
     event: "security.anomaly",
     timestamp: new Date().toISOString(),
@@ -74,8 +94,9 @@ export async function verifyMtnCallbackSignature(
 
   if (!signature) {
     buildFailureEvent(req, "mtn_callback_signature_missing", false);
-    res.status(401).json({ error: "Unauthorized callback" });
-    return;
+    throw createError(ERROR_CODES.UNAUTHORIZED, "Unauthorized callback", {
+      error: "Unauthorized callback",
+    });
   }
 
   const rawBody = (req as Request & { rawBody?: Buffer }).rawBody;
@@ -84,13 +105,16 @@ export async function verifyMtnCallbackSignature(
   try {
     if (!verifySignature(payload, signature, callbackSecret)) {
       buildFailureEvent(req, "mtn_callback_signature_invalid", true);
-      res.status(401).json({ error: "Unauthorized callback" });
-      return;
+      throw createError(ERROR_CODES.UNAUTHORIZED, "Unauthorized callback", {
+        error: "Unauthorized callback",
+      });
     }
 
     next();
   } catch (error) {
     buildFailureEvent(req, "mtn_callback_signature_error", true);
-    res.status(401).json({ error: "Unauthorized callback" });
+    throw createError(ERROR_CODES.UNAUTHORIZED, "Unauthorized callback", {
+      error: "Unauthorized callback",
+    });
   }
 }

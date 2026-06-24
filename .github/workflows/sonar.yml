@@ -55,11 +55,24 @@ jobs:
             npm install --package-lock-only
           fi
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libvips-dev libjpeg-dev libpng-dev libtiff-dev libgif-dev librsvg2-dev libpoppler-cpp-dev libcairo2-dev libpango1.0-dev libjpeg8-dev build-essential
+
       - name: Install dependencies
         run: npm ci
 
+      - name: Wait for Postgres to be ready
+        run: |
+          for i in $(seq 1 30); do
+            pg_isready -h localhost -p 5432 -U test_user && break
+            echo "Waiting for Postgres... attempt $i/30"
+            sleep 1
+          done
+
       - name: Run database migrations
-        run: npm run migrate:up
+        run: npm run migrate:up 2>&1
         timeout-minutes: 2
         continue-on-error: true
         env:
@@ -74,6 +87,7 @@ jobs:
           REDIS_URL: redis://localhost:6379
           STELLAR_ISSUER_SECRET: S-DUMMY-SECRET-KEY-FOR-TESTING-PURPOSES-ONLY
           NODE_ENV: test
+          NODE_OPTIONS: --experimental-vm-modules
           CI: true
 
       - name: Check if SonarCloud is configured

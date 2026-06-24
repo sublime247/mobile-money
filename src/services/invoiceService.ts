@@ -44,8 +44,10 @@ export class InvoiceService {
 
       // Customer Info
       doc
+        .font('Helvetica-Bold')
         .fontSize(12)
-        .text('BILL TO:', 350, 120, { bold: true })
+        .text('BILL TO:', 350, 120)
+        .font('Helvetica')
         .text(user.phoneNumber ? maskPhoneNumber(user.phoneNumber) : 'N/A', 350, 135)
         .text(user.email || 'N/A', 350, 150)
         .moveDown(2);
@@ -89,11 +91,13 @@ export class InvoiceService {
       // Render Summary Table
       let y = 230;
       doc.fontSize(10).fillColor('#444444');
-      doc.text('Currency', 50, y, { bold: true });
-      doc.text('Deposits', 150, y, { bold: true });
-      doc.text('Withdrawals', 250, y, { bold: true });
-      doc.text('Fees', 350, y, { bold: true });
-      doc.text('Net Total', 450, y, { bold: true });
+      doc.font('Helvetica-Bold');
+      doc.text('Currency', 50, y);
+      doc.text('Deposits', 150, y);
+      doc.text('Withdrawals', 250, y);
+      doc.text('Fees', 350, y);
+      doc.text('Net Total', 450, y);
+      doc.font('Helvetica');
       y += 20;
       doc.moveTo(50, y - 5).lineTo(550, y - 5).stroke();
 
@@ -121,12 +125,14 @@ export class InvoiceService {
       
       y += 25;
       doc.fontSize(8);
-      doc.text('Date', 50, y, { bold: true });
-      doc.text('Type', 120, y, { bold: true });
-      doc.text('Amount', 180, y, { bold: true });
-      doc.text('Fee', 250, y, { bold: true });
-      doc.text('Provider', 300, y, { bold: true });
-      doc.text('Reference', 380, y, { bold: true });
+      doc.font('Helvetica-Bold');
+      doc.text('Date', 50, y);
+      doc.text('Type', 120, y);
+      doc.text('Amount', 180, y);
+      doc.text('Fee', 250, y);
+      doc.text('Provider', 300, y);
+      doc.text('Reference', 380, y);
+      doc.font('Helvetica');
       
       y += 15;
       doc.moveTo(50, y - 2).lineTo(550, y - 2).stroke();
@@ -146,7 +152,8 @@ export class InvoiceService {
       });
 
       if (transactions.length > 50) {
-        doc.text(`... and ${transactions.length - 50} more transactions.`, 50, y, { italic: true });
+        doc.font('Helvetica-Oblique').text(`... and ${transactions.length - 50} more transactions.`, 50, y);
+        doc.font('Helvetica');
       }
 
       // Footer

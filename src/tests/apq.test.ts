@@ -90,8 +90,17 @@ describe("RedisAPQCache", () => {
       const redis = makeMockRedis();
       const cache = new RedisAPQCache(redis as any, 86400);
 
+      // Verify set path uses the apq: prefix
       await cache.set(SAMPLE_HASH, SAMPLE_QUERY);
+      expect(redis.set).toHaveBeenCalledWith(
+        `apq:${SAMPLE_HASH}`,
+        SAMPLE_QUERY,
+        "EX",
+        86400,
+      );
 
+      // Verify get path also uses the apq: prefix
+      await cache.get(SAMPLE_HASH);
       expect(redis.get).toHaveBeenCalledWith(`apq:${SAMPLE_HASH}`);
     });
   });

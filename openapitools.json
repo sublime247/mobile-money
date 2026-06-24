@@ -2,6 +2,18 @@
   "$schema": "./node_modules/@openapitools/openapi-generator-cli/config.schema.json",
   "spaces": 2,
   "generator-cli": {
-    "version": "7.21.0"
+    "version": "7.21.0",
+    "generators": {
+      "python": {
+        "generatorName": "python",
+        "inputSpec": "http://localhost:3000/docs/openapi.json",
+        "output": "sdk/python",
+        "additionalProperties": {
+          "packageName": "mobile_money_sdk",
+          "projectName": "mobile-money-sdk",
+          "projectVersion": "1.0.0"
+        }
+      }
+    }
   }
 }

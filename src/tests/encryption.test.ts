@@ -277,3 +277,82 @@ describe("encryptPiiFieldsForUser / decryptPiiFieldsForUser", () => {
     expect(() => decryptPiiFieldsForUser(encrypted, "user-wrong")).toThrow(/PII decryption failed/);
   });
 });
+
+describe("zero-downtime key rotation / fallback keys support", () => {
+  const originalEnvKey = process.env.DB_ENCRYPTION_KEY;
+
+  afterEach(() => {
+    process.env.DB_ENCRYPTION_KEY = originalEnvKey;
+    delete process.env.DB_ENCRYPTION_KEYS_FALLBACK;
+  });
+
+  it("decrypts global key PII with fallback keys when master key has rotated", () => {
+    const oldKey = "old-encryption-key-32-chars-long";
+    const newKey = "new-encryption-key-32-chars-long";
+    
+    // Encrypt with old key
+    process.env.DB_ENCRYPTION_KEY = oldKey;
+    const plaintext = "Sensitive Financial Info";
+    const encrypted = encryptField(plaintext);
+
+    // Rotate to new key, old key becomes fallback
+    process.env.DB_ENCRYPTION_KEY = newKey;
+    process.env.DB_ENCRYPTION_KEYS_FALLBACK = oldKey;
+
+    // Decrypt should succeed seamlessly
+    const decrypted = decryptField(encrypted);
+    expect(decrypted).toBe(plaintext);
+  });
+
+  it("decrypts per-user key PII with fallback keys when master key has rotated", () => {
+    const oldKey = "old-encryption-key-32-chars-long";
+    const newKey = "new-encryption-key-32-chars-long";
+    const userId = "user-abc-123";
+
+    // Encrypt with old key
+    process.env.DB_ENCRYPTION_KEY = oldKey;
+    const plaintext = "Sensitive User PII";
+    const encrypted = encryptFieldForUser(plaintext, userId);
+
+    // Rotate to new key, old key becomes fallback
+    process.env.DB_ENCRYPTION_KEY = newKey;
+    process.env.DB_ENCRYPTION_KEYS_FALLBACK = oldKey;
+
+    // Decrypt should succeed seamlessly
+    const decrypted = decryptFieldForUser(encrypted, userId);
+    expect(decrypted).toBe(plaintext);
+  });
+
+  it("decrypts legacy shim encrypted PII with fallback keys when master key has rotated", () => {
+    const oldKey = "old-encryption-key-32-chars-long";
+    const newKey = "new-encryption-key-32-chars-long";
+
+    // Encrypt with old key
+    process.env.DB_ENCRYPTION_KEY = oldKey;
+    const plaintext = "Legacy encrypted phone";
+    const encrypted = encrypt(plaintext);
+
+    // Rotate to new key, old key becomes fallback
+    process.env.DB_ENCRYPTION_KEY = newKey;
+    process.env.DB_ENCRYPTION_KEYS_FALLBACK = oldKey;
+
+    // Decrypt should succeed seamlessly
+    const decrypted = decrypt(encrypted);
+    expect(decrypted).toBe(plaintext);
+  });
+
+  it("fails decryption if neither master key nor fallback keys can decrypt it", () => {
+    const oldKey = "old-encryption-key-32-chars-long";
+    const newKey = "new-encryption-key-32-chars-long";
+    const wrongKey = "wrong-encryption-key-32-chars-lo";
+
+    process.env.DB_ENCRYPTION_KEY = oldKey;
+    const encrypted = encryptField("some data");
+
+    // Rotate to new key, fallback to wrong key
+    process.env.DB_ENCRYPTION_KEY = newKey;
+    process.env.DB_ENCRYPTION_KEYS_FALLBACK = wrongKey;
+
+    expect(() => decryptField(encrypted)).toThrow(/PII decryption failed/);
+  });
+});

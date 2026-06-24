@@ -118,22 +118,123 @@ export function deserializePayload(raw: string): EncryptedPayload {
 }
 
 // ---------------------------------------------------------------------------
-// Convenience field helpers (global key)
+// Dynamic key rotation & registry helpers
 // ---------------------------------------------------------------------------
 
-/** Encrypt a PII field with the global key. Returns null/undefined/empty as-is. */
+/**
+ * Dynamically resolves all configured encryption keys from process.env and env.ts.
+ * Supports:
+ *  - DB_ENCRYPTION_KEY (fallback/legacy key)
+ *  - DB_ENCRYPTION_KEY_XXX (dynamic version keys, e.g. DB_ENCRYPTION_KEY_V1)
+ *  - DB_ENCRYPTION_KEYS (JSON string mapping versions to keys, e.g. {"v1": "key1", "v2": "key2"})
+ */
+export function getEncryptionKeys(): Map<string, string> {
+  const keys = new Map<string, string>();
+
+  // 1. Default/legacy key
+  if (env.DB_ENCRYPTION_KEY) {
+    keys.set("legacy", env.DB_ENCRYPTION_KEY);
+  }
+
+  // 2. Parse DB_ENCRYPTION_KEYS JSON if configured
+  if (process.env.DB_ENCRYPTION_KEYS) {
+    try {
+      const parsed = JSON.parse(process.env.DB_ENCRYPTION_KEYS);
+      for (const [ver, val] of Object.entries(parsed)) {
+        keys.set(ver.toLowerCase(), val as string);
+      }
+    } catch (err) {
+      console.error("Failed to parse DB_ENCRYPTION_KEYS JSON:", err);
+    }
+  }
+
+  // 3. Scan process.env for DB_ENCRYPTION_KEY_XXX
+  for (const [key, val] of Object.entries(process.env)) {
+    if (key.startsWith("DB_ENCRYPTION_KEY_") && val) {
+      const version = key.replace("DB_ENCRYPTION_KEY_", "").toLowerCase();
+      keys.set(version, val);
+    }
+  }
+
+  return keys;
+}
+
+// ---------------------------------------------------------------------------
+// Convenience field helpers (global key with rotation)
+// ---------------------------------------------------------------------------
+
+/**
+ * Encrypt a PII field with the global key.
+ * Respects ACTIVE_ENCRYPTION_KEY_VERSION for key/salt rotation.
+ * Returns null/undefined/empty as-is.
+ */
 export function encryptField(value: string | null | undefined): string | null | undefined {
   if (value == null || value === "") return value;
-  const key = deriveKey(env.DB_ENCRYPTION_KEY);
+
+  const keys = getEncryptionKeys();
+  const activeVersion = (process.env.ACTIVE_ENCRYPTION_KEY_VERSION || "").toLowerCase();
+
+  // If we have an active version and a corresponding key is registered:
+  if (activeVersion && activeVersion !== "legacy" && keys.has(activeVersion)) {
+    const keyMaterial = keys.get(activeVersion)!;
+    const key = deriveKey(keyMaterial);
+    const encrypted = encryptAES(value, key);
+    return `${activeVersion}:${serializePayload(encrypted)}`;
+  }
+
+  // Fallback to legacy/default encryption
+  const keyMaterial = keys.get("legacy") || env.DB_ENCRYPTION_KEY;
+  const key = deriveKey(keyMaterial);
   return serializePayload(encryptAES(value, key));
 }
 
-/** Decrypt a PII field with the global key. Returns null/undefined/empty as-is. */
+/**
+ * Decrypt a PII field with the global key.
+ * Detects version prefixes dynamically to select the appropriate decryption key.
+ * Returns null/undefined/empty as-is.
+ */
 export function decryptField(raw: string | null | undefined): string | null | undefined {
   if (raw == null || raw === "") return raw;
-  const key = deriveKey(env.DB_ENCRYPTION_KEY);
-  return decryptAES(deserializePayload(raw), key);
+
+  const parts = raw.split(":");
+  const keys = getEncryptionKeys();
+
+  // A versioned payload has format: version:iv:authTag:ciphertext (parts.length >= 4)
+  if (parts.length >= 4 && keys.has(parts[0].toLowerCase())) {
+    const version = parts[0].toLowerCase();
+    const keyMaterial = keys.get(version)!;
+    const key = deriveKey(keyMaterial);
+    try {
+      const payload = deserializePayload(parts.slice(1).join(":"));
+      return decryptAES(payload, key);
+    } catch (err) {
+      console.warn(
+        `[Encryption] Decryption failed for versioned payload '${version}'. Returning raw value. Error: ${
+          err instanceof Error ? err.message : err
+        }`
+      );
+      return raw;
+    }
+  }
+
+  // Fallback to legacy/default decryption
+  const keyMaterial = keys.get("legacy") || env.DB_ENCRYPTION_KEY;
+  const key = deriveKey(keyMaterial);
+  try {
+    return decryptAES(deserializePayload(raw), key);
+  } catch (err) {
+    // Only warn if it looks like it was meant to be an encrypted payload (has colons)
+    if (raw.includes(":")) {
+      console.warn(
+        `[Encryption] Decryption failed for legacy-format payload. Returning raw value. Error: ${
+          err instanceof Error ? err.message : err
+        }`
+      );
+    }
+    return raw;
+  }
 }
+
 
 // ---------------------------------------------------------------------------
 // Convenience field helpers (per-user key)
@@ -149,8 +250,19 @@ export function encryptFieldForUser(value: string | null | undefined, userId: st
 /** Decrypt a PII field with a per-user derived key. */
 export function decryptFieldForUser(raw: string | null | undefined, userId: string): string | null | undefined {
   if (raw == null || raw === "") return raw;
-  const key = deriveUserKey(userId);
-  return decryptAES(deserializePayload(raw), key);
+  const payload = deserializePayload(raw);
+  const keysMap = getEncryptionKeys();
+  const keys = Array.from(keysMap.values()).map((k) => deriveKey(k));
+  for (let i = 0; i < keys.length; i++) {
+    try {
+      return decryptAES(payload, keys[i]);
+    } catch (err) {
+      if (i === keys.length - 1) {
+        throw err;
+      }
+    }
+  }
+  return raw;
 }
 
 // ---------------------------------------------------------------------------
@@ -183,12 +295,22 @@ export function decrypt(encryptedData: string | null | undefined): string | null
   const parts = encryptedData.split(":");
   if (parts.length !== 3) return encryptedData;
   const [ivHex, authTagHex, ciphertextHex] = parts;
-  const key = deriveKey(env.DB_ENCRYPTION_KEY);
-  const decipher = crypto.createDecipheriv(ALGORITHM, key, Buffer.from(ivHex, "hex"), { authTagLength: AUTH_TAG_LENGTH });
-  decipher.setAuthTag(Buffer.from(authTagHex, "hex"));
-  try {
-    return Buffer.concat([decipher.update(Buffer.from(ciphertextHex, "hex")), decipher.final()]).toString("utf8");
-  } catch {
-    throw new Error("PII decryption failed: authentication tag mismatch.");
+  const iv = Buffer.from(ivHex, "hex");
+  const authTag = Buffer.from(authTagHex, "hex");
+  const ciphertext = Buffer.from(ciphertextHex, "hex");
+
+  const keysMap = getEncryptionKeys();
+  const keys = Array.from(keysMap.values()).map((k) => deriveKey(k));
+  for (let i = 0; i < keys.length; i++) {
+    try {
+      const decipher = crypto.createDecipheriv(ALGORITHM, keys[i], iv, { authTagLength: AUTH_TAG_LENGTH });
+      decipher.setAuthTag(authTag);
+      return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
+    } catch (err) {
+      if (i === keys.length - 1) {
+        throw new Error("PII decryption failed: authentication tag mismatch.");
+      }
+    }
   }
+  return encryptedData;
 }

@@ -39,8 +39,7 @@
  * the proof size drops from O(n) to O(log n).
  */
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const elliptic = require("elliptic");
+import elliptic from "elliptic";
 import { createHash } from "crypto";
 
 // ── Curve setup ──────────────────────────────────────────────────────────────

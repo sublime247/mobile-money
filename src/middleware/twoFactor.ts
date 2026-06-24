@@ -5,6 +5,7 @@ import {
   is2FAEnabled,
   type BackupCode,
 } from "../auth/2fa";
+import { twoFactorRateLimiter } from "../services/twoFactorRateLimiter";
 // import { getUserById } from "../services/userService";
 
 /**
@@ -50,40 +51,53 @@ export function requireTwoFactor(
 
       // Check for TOTP token in headers
       const totpToken = req.headers["x-2fa-token"] as string;
-
-      if (totpToken) {
-        // Verify TOTP token
-        const isValid = verifyTOTPToken(user.two_factor_secret!, totpToken);
-        if (isValid) {
-          req.twoFactorVerified = true;
-          return next();
-        }
-      }
-
-      // Check for backup code in request body
       const backupCode = req.body["backupCode"] || req.body["backup_code"];
 
-      if (backupCode && user.backup_codes) {
-        const backupCodes: BackupCode[] = user.backup_codes.map((item, index) =>
-          typeof item === 'string'
-            ? {
-                id: String(index),
-                code_hash: item,
-                used: false,
-                created_at: new Date(0),
-              }
-            : item,
-        );
-        // Verify backup code
-        const verification = await verifyBackupCode(
-          backupCode,
-          user.backup_codes as unknown as BackupCode[],
-        );
-        if (verification.valid) {
-          req.twoFactorVerified = true;
-          // Mark backup code as used (this would typically update the database)
-          return next();
+      if (totpToken || (backupCode && user.backup_codes)) {
+        // 1. Check if user is locked
+        if (await twoFactorRateLimiter.isLocked(user.id)) {
+          const timeLeft = await twoFactorRateLimiter.getLockoutTimeRemaining(user.id);
+          return res.status(429).json({
+            error: "2FA locked",
+            message: "Too many failed 2FA attempts. Please try again later.",
+            lockoutSeconds: timeLeft,
+          });
         }
+
+        // 2. Try TOTP token
+        if (totpToken) {
+          const isValid = verifyTOTPToken(user.two_factor_secret!, totpToken);
+          if (isValid) {
+            await twoFactorRateLimiter.resetFailures(user.id);
+            req.twoFactorVerified = true;
+            return next();
+          }
+        }
+
+        // 3. Try backup code
+        if (backupCode && user.backup_codes) {
+          const verification = await verifyBackupCode(
+            backupCode,
+            user.backup_codes as unknown as BackupCode[],
+          );
+          if (verification.valid) {
+            await twoFactorRateLimiter.resetFailures(user.id);
+            req.twoFactorVerified = true;
+            return next();
+          }
+        }
+
+        // 4. Verification failed - increment count
+        const newCount = await twoFactorRateLimiter.incrementFailures(user.id);
+        const triesLeft = Math.max(0, 3 - newCount);
+        
+        return res.status(403).json({
+          error: "Invalid 2FA",
+          message: triesLeft > 0 
+            ? `Invalid 2FA token or backup code. ${triesLeft} attempts remaining.`
+            : "Too many failed attempts. 2FA is now locked for 15 minutes.",
+          triesRemaining: triesLeft,
+        });
       }
 
       // If we reach here, 2FA verification failed
@@ -167,27 +181,40 @@ export function optionalTwoFactor(
 
       // If 2FA is enabled, check for verification
       const totpToken = req.headers["x-2fa-token"] as string;
-
-      if (totpToken) {
-        const isValid = verifyTOTPToken(user.two_factor_secret!, totpToken);
-        if (isValid) {
-          req.twoFactorVerified = true;
-          return next();
-        }
-      }
-
-      // Check for backup code
       const backupCode = req.body["backupCode"] || req.body["backup_code"];
 
-      if (backupCode && user.backup_codes) {
-        const verification = await verifyBackupCode(
-          backupCode,
-          user.backup_codes as unknown as BackupCode[],
-        );
-        if (verification.valid) {
-          req.twoFactorVerified = true;
+      if (totpToken || (backupCode && user.backup_codes)) {
+        // Check if locked
+        if (await twoFactorRateLimiter.isLocked(user.id)) {
+          req.twoFactorVerified = false;
           return next();
         }
+
+        // Try TOTP
+        if (totpToken) {
+          const isValid = verifyTOTPToken(user.two_factor_secret!, totpToken);
+          if (isValid) {
+            await twoFactorRateLimiter.resetFailures(user.id);
+            req.twoFactorVerified = true;
+            return next();
+          }
+        }
+
+        // Try backup code
+        if (backupCode && user.backup_codes) {
+          const verification = await verifyBackupCode(
+            backupCode,
+            user.backup_codes as unknown as BackupCode[],
+          );
+          if (verification.valid) {
+            await twoFactorRateLimiter.resetFailures(user.id);
+            req.twoFactorVerified = true;
+            return next();
+          }
+        }
+
+        // Failed attempt
+        await twoFactorRateLimiter.incrementFailures(user.id);
       }
 
       // If 2FA is enabled but not verified, still allow operation with warning

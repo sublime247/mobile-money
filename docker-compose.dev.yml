@@ -15,20 +15,25 @@ services:
       - NODE_ENV=development
       - DATABASE_URL=postgresql://user:password@db:5432/mobilemoney_stellar
       - REDIS_URL=redis://redis:6379
-      - MTN_BASE_URL=http://provider-mock:4010/mtn
-      - MTN_TARGET_ENVIRONMENT=sandbox
-      - AIRTEL_BASE_URL=http://provider-mock:4010/airtel
-      - AIRTEL_COUNTRY=NG
-      - AIRTEL_CURRENCY=NGN
+      - SMTP_HOST=maildev
+      - SMTP_PORT=1025
+      - STELLAR_HORIZON_URL=http://stellar:8000
+      - STELLAR_NETWORK=local
     env_file:
       - .env
     depends_on:
-      - db
-      - redis
-      - provider-mock
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      maildev:
+        condition: service_healthy
+      stellar:
+        condition: service_healthy
 
   db:
     image: postgres:16-alpine
+    container_name: mobilemoney_db_dev
     environment:
       POSTGRES_USER: user
       POSTGRES_PASSWORD: password
@@ -37,30 +42,54 @@ services:
       - "5432:5432"
     volumes:
       - postgres_dev_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d mobilemoney_stellar"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   redis:
     image: redis:7-alpine
+    container_name: mobilemoney_redis_dev
     ports:
       - "6379:6379"
+    command: redis-server /usr/local/etc/redis/redis.conf
     volumes:
+      - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
       - redis_dev_data:/data
     command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
-  provider-mock:
-    image: node:20-alpine
-    working_dir: /app
-    command: npx tsx watch scripts/provider-mock-server.ts
+  maildev:
+    image: maildev/maildev:2.1.0
+    container_name: mobilemoney_maildev_dev
+    restart: unless-stopped
     ports:
-      - "4010:4010"
-    volumes:
-      - .:/app
-      - /app/node_modules
-    environment:
-      - NODE_ENV=development
-      - PROVIDER_MOCK_PORT=4010
-      - PROVIDER_MOCK_DELAY_MS=0
-      - PROVIDER_MOCK_BALANCE=100000
-      - PROVIDER_MOCK_CURRENCY=XAF
+      - "1080:1080" # Web UI
+      - "1025:1025" # SMTP Port
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 1025 || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  stellar:
+    image: stellar/quickstart:latest
+    container_name: mobilemoney_stellar_quickstart_dev
+    restart: unless-stopped
+    ports:
+      - "8000:8000" # Horizon API
+    command: ["--standalone", "--enable-horizon"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
 volumes:
   postgres_dev_data:

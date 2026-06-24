@@ -18,6 +18,7 @@ ALTER TABLE transactions
   ADD COLUMN IF NOT EXISTS webhook_last_attempt_at TIMESTAMP,
   ADD COLUMN IF NOT EXISTS webhook_delivered_at    TIMESTAMP,
   ADD COLUMN IF NOT EXISTS webhook_last_error      TEXT,
+  ADD COLUMN IF NOT EXISTS provider_reference      VARCHAR(100),
   ADD COLUMN IF NOT EXISTS currency                VARCHAR(3)     NOT NULL DEFAULT 'USD',
   ADD COLUMN IF NOT EXISTS original_amount         DECIMAL(20, 7),
   ADD COLUMN IF NOT EXISTS converted_amount        DECIMAL(20, 7),
@@ -45,6 +46,11 @@ BEGIN
   END IF;
 END$$;
 
+
+-- Ensure created_at is NOT NULL (required for partition key)
+-- First backfill any NULL values, then add the constraint
+UPDATE transactions SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL;
+ALTER TABLE transactions ALTER COLUMN created_at SET NOT NULL;
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Step 1: Drop constraints that are incompatible with partition attachment.
 --
@@ -67,6 +73,9 @@ ALTER TABLE transactions DROP CONSTRAINT IF EXISTS transactions_reference_number
 -- Drop UNIQUE index on idempotency_key
 DROP INDEX IF EXISTS idx_transactions_idempotency_key;
 
+-- Note: We intentionally do NOT drop CHECK constraints (type, status)
+-- PostgreSQL will verify they match the parent table when attaching the partition
+
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Step 2: Rename the existing (now constraint-free) table.
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -78,14 +87,12 @@ ALTER TABLE transactions RENAME TO transactions_legacy;
 CREATE TABLE transactions (
   id                       UUID           NOT NULL DEFAULT gen_random_uuid(),
   reference_number         VARCHAR(25)    NOT NULL,
-  type                     VARCHAR(10)    NOT NULL
-                             CHECK (type IN ('deposit', 'withdraw')),
+  type                     VARCHAR(10)    NOT NULL,
   amount                   DECIMAL(20, 7) NOT NULL,
   phone_number             TEXT           NOT NULL,
   provider                 VARCHAR(20)    NOT NULL,
   stellar_address          TEXT           NOT NULL,
-  status                   VARCHAR(20)    NOT NULL
-                             CHECK (status IN ('pending', 'completed', 'failed', 'cancelled')),
+  status                   VARCHAR(20)    NOT NULL,
   user_id                  UUID           REFERENCES users(id),
   tags                     TEXT[]         DEFAULT '{}',
   created_at               TIMESTAMP      NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -94,19 +101,22 @@ CREATE TABLE transactions (
   metadata                 JSONB          DEFAULT '{}',
   notes                    TEXT,
   admin_notes              TEXT,
-  webhook_delivery_status  VARCHAR(20)    NOT NULL DEFAULT 'pending'
-                             CHECK (webhook_delivery_status IN ('pending', 'delivered', 'failed', 'skipped')),
+  webhook_delivery_status  VARCHAR(20)    NOT NULL DEFAULT 'pending',
   webhook_last_attempt_at  TIMESTAMP,
   webhook_delivered_at     TIMESTAMP,
   webhook_last_error       TEXT,
+  provider_reference       VARCHAR(100),
   currency                 VARCHAR(3)     NOT NULL DEFAULT 'USD',
   original_amount          DECIMAL(20, 7),
   converted_amount         DECIMAL(20, 7),
   idempotency_key          VARCHAR(255),
   idempotency_expires_at   TIMESTAMP,
-  vault_id                 UUID           REFERENCES vaults(id),
+  vault_id                 UUID,
   fee_category             VARCHAR(100)   DEFAULT 'General Fees',
-  location_metadata        JSONB          DEFAULT NULL
+  location_metadata        JSONB          DEFAULT NULL,
+  CONSTRAINT transactions_type_check CHECK (type IN ('deposit', 'withdraw')),
+  CONSTRAINT transactions_status_check CHECK (status IN ('pending', 'completed', 'failed', 'cancelled')),
+  CONSTRAINT transactions_webhook_delivery_status_check CHECK (webhook_delivery_status IN ('pending', 'delivered', 'failed', 'skipped'))
 ) PARTITION BY RANGE (created_at);
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -202,6 +212,7 @@ CREATE TRIGGER transactions_updated_at
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Step 9: Recreate foreign key constraints that were dropped in Step 1.
 -- ─────────────────────────────────────────────────────────────────────────────
-ALTER TABLE disputes
-  ADD CONSTRAINT disputes_transaction_id_fkey
-  FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE RESTRICT;
+-- ALTER TABLE disputes
+--   ADD CONSTRAINT disputes_transaction_id_fkey
+--   FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE RESTRICT;
+

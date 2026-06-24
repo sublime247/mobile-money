@@ -351,6 +351,77 @@ describe("AML Audit Dashboard", () => {
     });
   });
 
+  describe("Keyset Cursor Pagination", () => {
+    let alertIds: string[] = [];
+
+    beforeAll(async () => {
+      // Create 3 alerts with distinct timestamps
+      const now = new Date();
+      const times = [
+        new Date(now.getTime() - 1000 * 60 * 60), // 1 hour ago
+        new Date(now.getTime() - 1000 * 60 * 120), // 2 hours ago
+        new Date(now.getTime() - 1000 * 60 * 180), // 3 hours ago
+      ];
+
+      for (let i = 0; i < 3; i++) {
+        const id = crypto.randomUUID();
+        await amlAlertModel.create({
+          id,
+          transactionId: testTransactionId,
+          userId: testUserId,
+          severity: "medium",
+          status: "pending_review",
+          ruleHits: [],
+          reasons: [`Pagination Alert ${i}`],
+          createdAt: times[i].toISOString(),
+        });
+        alertIds.push(id);
+      }
+    });
+
+    afterAll(async () => {
+      // Cleanup created alerts
+      for (const id of alertIds) {
+        await pool.query("DELETE FROM aml_alerts WHERE id = $1", [id]);
+      }
+    });
+
+    it("should successfully paginate forward and backward using keyset cursors", async () => {
+      // 1. Fetch first page with limit=1
+      const { req: req1, res: res1 } = createMockReqRes({ limit: "1" });
+      await listAmlAlertsForAudit(req1, res1);
+
+      expect(res1.json).toHaveBeenCalled();
+      const page1 = (res1.json as jest.Mock).mock.calls[0][0];
+      expect(page1.data).toHaveLength(1);
+      expect(page1.pagination.hasMore).toBe(true);
+      expect(page1.pagination.after).toBeDefined();
+
+      const afterCursor = page1.pagination.after;
+
+      // 2. Fetch second page with after cursor
+      const { req: req2, res: res2 } = createMockReqRes({ limit: "1", after: afterCursor });
+      await listAmlAlertsForAudit(req2, res2);
+
+      expect(res2.json).toHaveBeenCalled();
+      const page2 = (res2.json as jest.Mock).mock.calls[0][0];
+      expect(page2.data).toHaveLength(1);
+      expect(page2.pagination.before).toBeDefined();
+
+      const beforeCursor = page2.pagination.before;
+
+      // 3. Fetch first page again using before cursor
+      const { req: req3, res: res3 } = createMockReqRes({ limit: "1", before: beforeCursor });
+      await listAmlAlertsForAudit(req3, res3);
+
+      expect(res3.json).toHaveBeenCalled();
+      const page3 = (res3.json as jest.Mock).mock.calls[0][0];
+      expect(page3.data).toHaveLength(1);
+      // It should match the first page data
+      expect(page3.data[0].id).toBe(page1.data[0].id);
+    });
+  });
+
   describe("AML Alert Model", () => {
     it("should find alert by id", async () => {
       const alert = await amlAlertModel.findById(testAlertId);

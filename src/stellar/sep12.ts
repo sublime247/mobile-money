@@ -4,6 +4,9 @@ import { sep12RateLimiter } from "../middleware/rateLimit";
 import { upload } from "../middleware/upload";
 import { z } from "zod";
 import KYCService, { KYCLevel, KYCStatus, DocumentType } from "../services/kyc";
+import { ERROR_CODES } from "../constants/errorCodes";
+import { createError } from "../middleware/errorHandler";
+import {UserModel} from "../models/users";
 
 /**
  * SEP-12: KYC API
@@ -140,10 +143,12 @@ const PutCustomerSchema = z.object({
 export class Sep12Service {
   private kycService: KYCService;
   private db: Pool;
+  private userModel: UserModel;
 
   constructor(db: Pool) {
     this.db = db;
     this.kycService = new KYCService(db);
+    this.userModel = new UserModel();
   }
 
   /**
@@ -480,6 +485,15 @@ export class Sep12Service {
         await this.db.query(linkQuery, [userId, applicantId]);
       }
 
+      // Save sensitive fields in users table in encrypted form
+      await this.userModel.updateSensitiveData(userId, {
+        firstName: first_name,
+        lastName: last_name,
+        address: address,
+        dateOfBirth: birth_date,
+        idNumber: id_number,
+      });
+
       // Handle document uploads if provided
       if (photo_id_front) {
         const docType = this.mapIdTypeToDocumentType(id_type);
@@ -594,7 +608,7 @@ export const createSep12Router = (db: Pool): Router => {
       const { account, memo, memo_type, type } = req.query;
 
       if (!account) {
-        return res.status(400).json({
+        throw createError(ERROR_CODES.INVALID_INPUT, "account parameter is required", {
           error: "account parameter is required",
         });
       }
@@ -609,7 +623,7 @@ export const createSep12Router = (db: Pool): Router => {
       res.json(customer);
     } catch (error: any) {
       console.error("[SEP-12] Error getting customer:", error);
-      res.status(500).json({
+      throw createError(ERROR_CODES.INTERNAL_ERROR, error.message || "Failed to get customer information", {
         error: error.message || "Failed to get customer information",
       });
     }
@@ -634,7 +648,7 @@ export const createSep12Router = (db: Pool): Router => {
       res.json(customer);
     } catch (error: any) {
       console.error("[SEP-12] Error putting customer:", error);
-      res.status(400).json({
+      throw createError(ERROR_CODES.INVALID_INPUT, error.message || "Failed to update customer information", {
         error: error.message || "Failed to update customer information",
       });
     }
@@ -649,7 +663,7 @@ export const createSep12Router = (db: Pool): Router => {
       const { account } = req.params;
 
       if (!account) {
-        return res.status(400).json({
+        throw createError(ERROR_CODES.INVALID_INPUT, "account parameter is required", {
           error: "account parameter is required",
         });
       }
@@ -659,7 +673,7 @@ export const createSep12Router = (db: Pool): Router => {
       res.status(204).send();
     } catch (error: any) {
       console.error("[SEP-12] Error deleting customer:", error);
-      res.status(500).json({
+      throw createError(ERROR_CODES.INTERNAL_ERROR, error.message || "Failed to delete customer information", {
         error: error.message || "Failed to delete customer information",
       });
     }

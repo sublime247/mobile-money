@@ -1,7 +1,6 @@
 import { pool } from "../config/database";
 import { cachedQueryManager, CacheTags, QUERY_TTL_POLICIES } from "./cachedQueryManager";
 import { CacheKeyGenerators } from "./cacheAside";
-import { logger } from "./logger";
 
 /**
  * Cached Statistics Service
@@ -58,7 +57,7 @@ export async function getCachedVolumeByProvider(startDate?: Date, endDate?: Date
     startDate?.toISOString() || "all",
     endDate?.toISOString() || "all",
   );
-  const tags = [CacheTags.provider("*"), CacheTags.generalStats()];
+  const tags = [CacheTags.providerVolumes(), CacheTags.generalStats()];
   
   return cachedQueryManager.getOrFetch(
     cacheKey,

@@ -24,6 +24,8 @@ const VALID_DISPUTE_STATUSES: DisputeStatus[] = [
   "investigating",
   "resolved",
   "rejected",
+  "reversed",
+  "upheld",
 ];
 
 function formatNote(n: DisputeNote) {

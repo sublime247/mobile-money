@@ -387,7 +387,7 @@ export class VaultModel {
       );
 
       // Create corresponding main transaction
-      const { TransactionModel } = await import("./transaction");
+      const { TransactionModel } = await import("./transaction.js");
       const transactionModel = new TransactionModel();
       
       // Note: This creates a record of the vault transfer in the main transactions table

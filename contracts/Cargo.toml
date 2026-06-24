@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["escrow"]
+members = ["escrow", "htlc", "quicklendx-contracts"]
 
 [profile.release]
 opt-level = "z"
@@ -11,3 +11,6 @@ debug-assertions = false
 panic = "abort"
 codegen-units = 1
 lto = true
+
+[workspace.lints.rust]
+unused_variables = "warn"

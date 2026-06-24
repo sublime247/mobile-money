@@ -218,7 +218,7 @@ export class KmsAsymmetricSigner implements TransactionSigner {
 
     const rawPublicKey = pubKeyBuffer.subarray(pubKeyBuffer.length - 32);
 
-    this._kp = Keypair.fromPublicKey(rawPublicKey.toString('hex'));
+    this._kp = new Keypair({ type: 'ed25519', publicKey: rawPublicKey });
     this._publicKey = this._kp.publicKey();
 
     return this._publicKey;
@@ -236,7 +236,7 @@ export class KmsAsymmetricSigner implements TransactionSigner {
           KeyId: this.keyId,
           Message: txHash,
           MessageType: "RAW",
-          SigningAlgorithm: "ECDSA_SHA_256" as any,
+          SigningAlgorithm: "ED25519" as any,
         }),
       );
     } catch (err) {

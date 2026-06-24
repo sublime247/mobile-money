@@ -6,12 +6,9 @@
     "configFile": "jest.stryker.config.js",
     "enableFindRelatedTests": false
   },
-  "checkers": [],
-  "disableTypeChecks": true,
-  "mutate": [
-    "src/services/retry.ts",
-    "src/services/fraud.ts"
-  ],
+  "checkers": ["typescript"],
+  "disableTypeChecks": false,
+  "mutate": ["src/services/retry.ts", "src/services/fraud.ts"],
   "ignorePatterns": [
     "dist",
     "coverage",
@@ -19,9 +16,12 @@
     "contracts/target",
     ".kiro"
   ],
-  "reporters": ["clear-text", "progress", "html"],
+  "reporters": ["clear-text", "progress", "html", "json"],
   "htmlReporter": {
     "fileName": "reports/mutation/html/index.html"
+  },
+  "jsonReporter": {
+    "fileName": "reports/mutation/mutation.json"
   },
   "coverageAnalysis": "perTest",
   "concurrency": 4,

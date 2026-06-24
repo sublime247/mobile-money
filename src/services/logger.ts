@@ -1,5 +1,5 @@
 import { NextFunction, Request, Response } from "express";
-import { extractFingerprint } from "../middleware/fingerprint";
+import { extractFingerprint, hashString } from "../middleware/fingerprint";
 
 declare module "express-session" {
   interface SessionData {
@@ -67,6 +67,13 @@ export function buildSessionAnomalyAuditEvent(
     ? userAgentHeader[0]
     : userAgentHeader;
 
+  // Hash the user agent before including in audit event
+  const userAgentHash = hashString(
+    Array.isArray(userAgent)
+      ? (userAgent[0] ?? String(userAgent))
+      : String(userAgent),
+  );
+
   return {
     event: "session.ip_mismatch",
     timestamp: new Date().toISOString(),
@@ -77,7 +84,7 @@ export function buildSessionAnomalyAuditEvent(
     currentIp,
     suspicious: true,
     mismatchCount,
-    userAgent,
+    userAgent: userAgentHash,
   };
 }
 
@@ -94,6 +101,13 @@ export function buildSessionFingerprintAnomalyAuditEvent(
     ? userAgentHeader[0]
     : userAgentHeader;
 
+  // Hash the user agent before including in audit event
+  const userAgentHash = hashString(
+    Array.isArray(userAgent)
+      ? (userAgent[0] ?? String(userAgent))
+      : String(userAgent),
+  );
+
   return {
     event: "session.fingerprint_mismatch",
     timestamp: new Date().toISOString(),
@@ -104,7 +118,7 @@ export function buildSessionFingerprintAnomalyAuditEvent(
     currentFingerprint,
     suspicious: true,
     mismatchCount,
-    userAgent,
+    userAgent: userAgentHash,
   };
 }
 
@@ -135,7 +149,7 @@ export function logSecurityAnomaly(
 
 export function sessionAnomalyLogger(
   req: Request,
-  _res: Response,
+  res: Response,
   next: NextFunction,
 ): void {
   if (!req.session) {
@@ -145,23 +159,26 @@ export function sessionAnomalyLogger(
 
   const currentIp = getCurrentRequestIp(req);
   if (currentIp) {
-    const previousIp = req.session.sessionIp;
+    const previousIpHash = req.session.sessionIp;
+    const currentIpHash = hashString(currentIp);
 
-    if (!previousIp) {
-      req.session.sessionIp = currentIp;
-    } else if (previousIp !== currentIp) {
+    if (!previousIpHash) {
+      // store hashed IP rather than raw value
+      req.session.sessionIp = currentIpHash;
+    } else if (previousIpHash !== currentIpHash) {
       const mismatchCount = (req.session.sessionIpMismatchCount ?? 0) + 1;
       req.session.sessionIpMismatchCount = mismatchCount;
       req.session.suspicious = true;
       req.session.suspiciousReason = "session_ip_mismatch";
       req.session.lastSessionAnomalyAt = new Date().toISOString();
-      req.session.sessionIp = currentIp;
+      // update stored IP hash
+      req.session.sessionIp = currentIpHash;
 
       logSessionAnomaly(
         buildSessionAnomalyAuditEvent(
           req as Request & { sessionID: string },
-          previousIp,
-          currentIp,
+          previousIpHash ?? "",
+          currentIpHash,
           mismatchCount,
         ),
       );
@@ -175,7 +192,8 @@ export function sessionAnomalyLogger(
     if (!previousFingerprint) {
       req.session.sessionFingerprint = currentFingerprint;
     } else if (previousFingerprint !== currentFingerprint) {
-      const mismatchCount = (req.session.sessionFingerprintMismatchCount ?? 0) + 1;
+      const mismatchCount =
+        (req.session.sessionFingerprintMismatchCount ?? 0) + 1;
       req.session.sessionFingerprintMismatchCount = mismatchCount;
       req.session.suspicious = true;
       req.session.suspiciousReason = "session_fingerprint_mismatch";
@@ -196,7 +214,12 @@ export function sessionAnomalyLogger(
           console.error("Failed to destroy hijacked session:", err);
         }
       });
-      res.status(401).json({ error: "Session invalidated due to suspicious activity. Please log in again." });
+      res
+        .status(401)
+        .json({
+          error:
+            "Session invalidated due to suspicious activity. Please log in again.",
+        });
       return;
     }
   }

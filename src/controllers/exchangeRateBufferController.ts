@@ -4,12 +4,16 @@ import {
   exchangeRateBufferService,
 } from "../services/exchangeRateBufferService";
 import { currencyService } from "../services/currency";
-import { logger } from "../services/logger";
+import logger from "../utils/logger";
 import { z } from "zod";
+import { ERROR_CODES } from "../constants/errorCodes";
+import { createError } from "../middleware/errorHandler";
 
 const CreateBufferSchema = z.object({
   provider: z.string().min(1),
-  currencyPair: z.string().regex(/^[A-Z]{3}_[A-Z]{3}$/, "Must be FORMAT: USD_XAF"),
+  currencyPair: z
+    .string()
+    .regex(/^[A-Z]{3}_[A-Z]{3}$/, "Must be FORMAT: USD_XAF"),
   bufferPercent: z.number().min(0).max(50),
   minBufferPct: z.number().min(0).max(50).optional(),
   maxBufferPct: z.number().min(0).max(50).optional(),
@@ -36,22 +40,28 @@ export class ExchangeRateBufferController {
       const buffers = await this.service.getAllBuffers();
       res.json({ success: true, data: buffers });
     } catch (err) {
-      logger.error("Failed to list buffers:", err);
-      res.status(500).json({ error: "Failed to fetch exchange rate buffers" });
+      logger.error(err, "Failed to list buffers");
+      throw createError(
+        ERROR_CODES.INTERNAL_ERROR,
+        "Failed to fetch exchange rate buffers",
+      );
     }
   };
-
   /**
    * GET /api/exchange-rate-buffers/:id
    */
   getBuffer = async (req: Request, res: Response) => {
     try {
       const buffer = await this.service.getBufferById(req.params.id);
-      if (!buffer) return res.status(404).json({ error: "Buffer not found" });
+      if (!buffer) {
+        throw createError(ERROR_CODES.NOT_FOUND, "Buffer not found", {
+          error: "Buffer not found",
+        });
+      }
       res.json({ success: true, data: buffer });
     } catch (err) {
-      logger.error("Failed to get buffer:", err);
-      res.status(500).json({ error: "Failed to fetch buffer" });
+      logger.error(err, "Failed to get buffer");
+      throw createError(ERROR_CODES.INTERNAL_ERROR, "Failed to fetch buffer");
     }
   };
 
@@ -60,11 +70,13 @@ export class ExchangeRateBufferController {
    */
   getByProvider = async (req: Request, res: Response) => {
     try {
-      const buffers = await this.service.getBuffersByProvider(req.params.provider);
+      const buffers = await this.service.getBuffersByProvider(
+        req.params.provider,
+      );
       res.json({ success: true, data: buffers });
     } catch (err) {
-      logger.error("Failed to get buffers by provider:", err);
-      res.status(500).json({ error: "Failed to fetch buffers" });
+      logger.error(err, "Failed to get buffers by provider");
+      throw createError(ERROR_CODES.INTERNAL_ERROR, "Failed to fetch buffers");
     }
   };
 
@@ -80,10 +92,12 @@ export class ExchangeRateBufferController {
       res.status(201).json({ success: true, data: buffer });
     } catch (err) {
       if (err instanceof z.ZodError) {
-        return res.status(400).json({ error: "Validation error", details: err.issues });
+        throw createError(ERROR_CODES.INVALID_INPUT, "Validation error", {
+          details: err.issues,
+        });
       }
-      logger.error("Failed to create buffer:", err);
-      res.status(500).json({ error: "Failed to create buffer" });
+      logger.error(err, "Failed to create buffer");
+      throw createError(ERROR_CODES.INTERNAL_ERROR, "Failed to create buffer");
     }
   };
 
@@ -103,14 +117,20 @@ export class ExchangeRateBufferController {
         req.headers["user-agent"],
       );
 
-      if (!buffer) return res.status(404).json({ error: "Buffer not found" });
+      if (!buffer) {
+        throw createError(ERROR_CODES.NOT_FOUND, "Buffer not found", {
+          error: "Buffer not found",
+        });
+      }
       res.json({ success: true, data: buffer });
     } catch (err) {
       if (err instanceof z.ZodError) {
-        return res.status(400).json({ error: "Validation error", details: err.issues });
+        throw createError(ERROR_CODES.INVALID_INPUT, "Validation error", {
+          details: err.issues,
+        });
       }
-      logger.error("Failed to update buffer:", err);
-      res.status(500).json({ error: "Failed to update buffer" });
+      logger.error(err, "Failed to update buffer");
+      throw createError(ERROR_CODES.INTERNAL_ERROR, "Failed to update buffer");
     }
   };
 
@@ -120,16 +140,23 @@ export class ExchangeRateBufferController {
   deleteBuffer = async (req: Request, res: Response) => {
     try {
       const userId = req.jwtUser?.userId ?? "system";
-      const deleted = await this.service.deleteBuffer(req.params.id, userId, req.ip);
+      const deleted = await this.service.deleteBuffer(
+        req.params.id,
+        userId,
+        req.ip,
+      );
 
-      if (!deleted) return res.status(404).json({ error: "Buffer not found" });
+      if (!deleted) {
+        throw createError(ERROR_CODES.NOT_FOUND, "Buffer not found", {
+          error: "Buffer not found",
+        });
+      }
       res.json({ success: true, message: "Buffer deleted" });
     } catch (err) {
-      logger.error("Failed to delete buffer:", err);
-      res.status(500).json({ error: "Failed to delete buffer" });
+      logger.error(err, "Failed to delete buffer");
+      throw createError(ERROR_CODES.INTERNAL_ERROR, "Failed to delete buffer");
     }
   };
-
   /**
    * POST /api/exchange-rate-buffers/preview
    * Preview the buffered rate for a given conversion without actually transacting.
@@ -139,9 +166,13 @@ export class ExchangeRateBufferController {
       const { from, to, amount, provider, direction } = req.body;
 
       if (!from || !to || !amount || !provider) {
-        return res.status(400).json({
-          error: "Required fields: from, to, amount, provider",
-        });
+        throw createError(
+          ERROR_CODES.INVALID_INPUT,
+          "Required fields: from, to, amount, provider",
+          {
+            error: "Required fields: from, to, amount, provider",
+          },
+        );
       }
 
       const result = await currencyService.convertWithBuffer(
@@ -165,8 +196,11 @@ export class ExchangeRateBufferController {
         },
       });
     } catch (err) {
-      logger.error("Failed to preview buffered rate:", err);
-      res.status(500).json({ error: "Failed to compute buffered rate" });
+      logger.error(err, "Failed to preview buffered rate");
+      throw createError(
+        ERROR_CODES.INTERNAL_ERROR,
+        "Failed to compute buffered rate",
+      );
     }
   };
 }

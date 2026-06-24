@@ -2,50 +2,64 @@ import { NotificationRouter, NotificationSeverity } from "../notificationRouter"
 import { UserModel } from "../../models/users";
 import { Transaction } from "../../models/transaction";
 
-// Mock the individual services
-const mockEmailService = {
-  sendEmail: jest.fn(),
-  sendTransactionReceipt: jest.fn(),
-  sendTransactionFailure: jest.fn(),
-};
+jest.mock("../email", () => {
+  const mockEmailService = {
+    sendEmail: jest.fn(),
+    sendTransactionReceipt: jest.fn(),
+    sendTransactionFailure: jest.fn(),
+  };
+  (global as any).mockEmailService = mockEmailService;
+  return {
+    emailService: mockEmailService,
+  };
+});
 
-const mockSmsService = {
-  notifyTransactionEvent: jest.fn(),
-};
+jest.mock("../sms", () => {
+  const mockSmsService = {
+    notifyTransactionEvent: jest.fn(),
+  };
+  (global as any).mockSmsService = mockSmsService;
+  return {
+    smsService: mockSmsService,
+  };
+});
 
-const mockPushService = {
-  sendToUser: jest.fn(),
-  sendTransactionComplete: jest.fn(),
-  sendTransactionFailed: jest.fn(),
-};
+jest.mock("../push", () => {
+  const mockPushService = {
+    sendToUser: jest.fn(),
+    sendTransactionComplete: jest.fn(),
+    sendTransactionFailed: jest.fn(),
+  };
+  (global as any).mockPushService = mockPushService;
+  return {
+    pushNotificationService: mockPushService,
+  };
+});
 
-const mockWhatsappService = {
-  notifyTransactionEvent: jest.fn(),
-};
+jest.mock("../whatsapp", () => {
+  const mockWhatsappService = {
+    notifyTransactionEvent: jest.fn(),
+  };
+  (global as any).mockWhatsappService = mockWhatsappService;
+  return {
+    whatsappService: mockWhatsappService,
+  };
+});
 
-const mockPagerDutyService = {
-  // Mock PagerDuty methods as needed
-};
+jest.mock("../pagerDutyService", () => {
+  const mockPagerDutyService = {};
+  (global as any).mockPagerDutyService = mockPagerDutyService;
+  return {
+    pagerDutyService: mockPagerDutyService,
+  };
+});
 
-jest.mock("../email", () => ({
-  emailService: mockEmailService,
-}));
+const mockEmailService = (global as any).mockEmailService;
+const mockSmsService = (global as any).mockSmsService;
+const mockPushService = (global as any).mockPushService;
+const mockWhatsappService = (global as any).mockWhatsappService;
+const mockPagerDutyService = (global as any).mockPagerDutyService;
 
-jest.mock("../sms", () => ({
-  smsService: mockSmsService,
-}));
-
-jest.mock("../push", () => ({
-  pushNotificationService: mockPushService,
-}));
-
-jest.mock("../whatsapp", () => ({
-  whatsappService: mockWhatsappService,
-}));
-
-jest.mock("../pagerDutyService", () => ({
-  pagerDutyService: mockPagerDutyService,
-}));
 
 describe("NotificationRouter", () => {
   let notificationRouter: NotificationRouter;

@@ -137,7 +137,7 @@ export async function getTransactionResolutionPercentiles(
     };
 
     // Cache the result
-    await redisClient.setex(
+    await redisClient.setEx(
       CACHE_KEYS.TRANSACTION_METRICS,
       CACHE_TTL_SECONDS,
       JSON.stringify(metrics),
@@ -196,7 +196,7 @@ export async function getTransactionResolutionTrends(
     }));
 
     // Cache the result
-    await redisClient.setex(
+    await redisClient.setEx(
       CACHE_KEYS.TRANSACTION_TREND,
       CACHE_TTL_SECONDS,
       JSON.stringify(trends),
@@ -239,7 +239,7 @@ export async function getDisputeResolutionPercentiles(
       COUNT(*) AS total_count,
       COUNT(CASE WHEN EXTRACT(EPOCH FROM (updated_at - created_at)) * 1000 > $1 THEN 1 END) AS sla_breaches_count
     FROM disputes
-    WHERE status IN ('resolved', 'rejected')
+    WHERE status IN ('resolved', 'rejected', 'reversed', 'upheld')
       AND created_at >= NOW() - INTERVAL '${daysBack} days'
   `;
 
@@ -278,7 +278,7 @@ export async function getDisputeResolutionPercentiles(
     };
 
     // Cache the result
-    await redisClient.setex(
+    await redisClient.setEx(
       CACHE_KEYS.DISPUTE_METRICS,
       CACHE_TTL_SECONDS,
       JSON.stringify(metrics),
@@ -313,7 +313,7 @@ export async function getDisputeResolutionTrends(
       COUNT(CASE WHEN EXTRACT(EPOCH FROM (updated_at - created_at)) * 1000 > $1 THEN 1 END) AS breach_count,
       COUNT(*) AS total_count
     FROM disputes
-    WHERE status IN ('resolved', 'rejected')
+    WHERE status IN ('resolved', 'rejected', 'reversed', 'upheld')
       AND created_at >= NOW() - INTERVAL '${daysBack} days'
     GROUP BY DATE(created_at)
     ORDER BY date ASC
@@ -337,7 +337,7 @@ export async function getDisputeResolutionTrends(
     }));
 
     // Cache the result
-    await redisClient.setex(
+    await redisClient.setEx(
       CACHE_KEYS.DISPUTE_TREND,
       CACHE_TTL_SECONDS,
       JSON.stringify(trends),

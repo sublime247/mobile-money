@@ -1,0 +1,29 @@
+name: CI - SDK Build
+
+on:
+  push:
+    paths:
+      - 'sdk/**'
+  pull_request:
+    paths:
+      - 'sdk/**'
+
+jobs:
+  build-sdk:
+    name: Build Kotlin SDK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Run Gradle build for sdk
+        uses: gradle/gradle-build-action@v2
+        with:
+          gradle-version: '9.2.0'
+          arguments: '-p sdk build'

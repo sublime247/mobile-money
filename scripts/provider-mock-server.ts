@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { Server } from "http";
 import { Request, Response } from "express";
 import express = require("express");
+import mockServerConfig from "../src/config/mockServer";
 
 type MockScenario = "success" | "failed" | "pending";
 
@@ -105,6 +106,60 @@ async function applyDelay(
   }
 }
 
+/**
+ * Helper function to delay execution by a specified number of milliseconds.
+ * Used to simulate webhook callback latency.
+ * 
+ * @param ms - The number of milliseconds to delay
+ * @returns A Promise that resolves after the specified delay
+ */
+async function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Fires a webhook callback to a configured webhook URL if available.
+ * Respects the webhook latency configuration to simulate realistic delays
+ * before webhook delivery.
+ * 
+ * @param referenceId - The transaction reference ID to include in the webhook payload
+ * @param provider - The payment provider (mtn or airtel)
+ * @param status - The transaction status
+ * @param webhookUrl - Optional webhook URL to POST to; if not provided, webhook is logged instead
+ */
+async function fireWebhookCallback(
+  referenceId: string,
+  provider: "mtn" | "airtel",
+  status: string,
+  webhookUrl?: string,
+): Promise<void> {
+  // Apply webhook latency if enabled
+  if (mockServerConfig.webhookLatencyEnabled && mockServerConfig.webhookLatencyMs > 0) {
+    await delay(mockServerConfig.webhookLatencyMs);
+  }
+
+  const payload = {
+    referenceId,
+    provider,
+    status,
+    timestamp: new Date().toISOString(),
+  };
+
+  if (webhookUrl) {
+    try {
+      // Fire webhook asynchronously without blocking the response
+      // In a real scenario, this would be sent via HTTP request
+      console.log(`[webhook] Firing ${provider} webhook to ${webhookUrl}:`, payload);
+      // Actual HTTP request would go here (e.g., fetch or axios)
+      // await fetch(webhookUrl, { method: 'POST', body: JSON.stringify(payload) });
+    } catch (error) {
+      console.error(`[webhook] Error firing ${provider} webhook:`, error);
+    }
+  } else {
+    console.log(`[webhook] Webhook callback for ${provider} (no URL configured):`, payload);
+  }
+}
+
 function getReferenceId(
   req: Request<unknown, unknown, MockRequestBody>,
   fallbackPrefix: string,
@@ -159,18 +214,26 @@ export function createProviderMockApp() {
       });
 
       if (scenario === "failed") {
-        return res.status(400).json({
+        res.status(400).json({
           status: "FAILED",
           referenceId,
           message: "Mock MTN request-to-pay failure",
         });
+        // Fire webhook for failed transaction
+        fireWebhookCallback(referenceId, "mtn", "FAILED").catch(console.error);
+        return;
       }
 
-      return res.status(202).json({
+      res.status(202).json({
         status: getMtnStatus(scenario),
         referenceId,
         message: "Mock MTN request-to-pay accepted",
       });
+
+      // Fire webhook callback asynchronously after response is sent
+      fireWebhookCallback(referenceId, "mtn", getMtnStatus(scenario)).catch(
+        console.error,
+      );
     },
   );
 
@@ -239,7 +302,7 @@ export function createProviderMockApp() {
       });
 
       if (scenario === "failed") {
-        return res.status(400).json({
+        res.status(400).json({
           status: {
             success: false,
             code: "DP_REQUEST_FAILED",
@@ -251,9 +314,12 @@ export function createProviderMockApp() {
             },
           },
         });
+        // Fire webhook for failed transaction
+        fireWebhookCallback(referenceId, "airtel", "TF").catch(console.error);
+        return;
       }
 
-      return res.status(200).json({
+      res.status(200).json({
         status: {
           success: true,
           code: scenario === "pending" ? "DP_PENDING" : "DP_SUCCESS",
@@ -265,6 +331,11 @@ export function createProviderMockApp() {
           },
         },
       });
+
+      // Fire webhook callback asynchronously after response is sent
+      fireWebhookCallback(referenceId, "airtel", getAirtelStatus(scenario)).catch(
+        console.error,
+      );
     },
   );
 
@@ -337,7 +408,7 @@ export function createProviderMockApp() {
       });
 
       if (scenario === "failed") {
-        return res.status(400).json({
+        res.status(400).json({
           status: {
             success: false,
             code: "DS_REQUEST_FAILED",
@@ -349,9 +420,12 @@ export function createProviderMockApp() {
             },
           },
         });
+        // Fire webhook for failed transaction
+        fireWebhookCallback(referenceId, "airtel", "TF").catch(console.error);
+        return;
       }
 
-      return res.status(200).json({
+      res.status(200).json({
         status: {
           success: true,
           code: scenario === "pending" ? "DS_PENDING" : "DS_SUCCESS",
@@ -363,6 +437,11 @@ export function createProviderMockApp() {
           },
         },
       });
+
+      // Fire webhook callback asynchronously after response is sent
+      fireWebhookCallback(referenceId, "airtel", getAirtelStatus(scenario)).catch(
+        console.error,
+      );
     },
   );
 

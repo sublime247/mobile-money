@@ -1,0 +1,51 @@
+repos:
+  # GitGuardian ggshield - Detects secrets before they're committed
+  - repo: https://github.com/gitguardian/ggshield
+    rev: v1.25.0
+    hooks:
+      - id: ggshield
+        language: python
+        stages: [commit]
+        entry: ggshield secret scan pre-commit
+        types: [text]
+        # Prevent commit if secrets detected
+        pass_filenames: true
+        always_run: false
+
+  # Standard pre-commit hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: detect-private-key
+        name: Detect private keys
+        entry: detect-private-key
+        language: python
+        types: [text]
+
+      - id: detect-aws-credentials
+        name: Detect AWS credentials
+        entry: detect-aws-credentials
+        language: python
+        types: [text]
+
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: check-json
+      - id: check-case-conflict
+      - id: check-merge-conflict
+
+  # ESLint for TypeScript/JavaScript
+  - repo: https://github.com/pre-commit/mirrors-eslint
+    rev: v8.56.0
+    hooks:
+      - id: eslint
+        types: [javascript, typescript]
+        additional_dependencies: ['eslint', 'eslint-config-prettier', 'eslint-plugin-prettier']
+
+# Configuration for all hooks
+default_language_version:
+  python: python3.11
+  node: 18.0.0

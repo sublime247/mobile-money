@@ -37,7 +37,7 @@ export const TransactionResponseSchema = registry.register(
       transactionId: z.string().uuid().openapi({ example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890' }),
       referenceNumber: z.string().openapi({ example: 'TXN-20240425-001' }),
       status: z
-        .enum(['pending', 'processing', 'completed', 'failed', 'cancelled'])
+        .enum(['pending', 'processing', 'completed', 'failed', 'cancelled', 'review', 'dispute', 'reversed', 'clawed_back'])
         .openapi({ example: 'pending' }),
       amount: z.number().openapi({ example: 5000 }),
       provider: z.string().openapi({ example: 'mtn' }),
@@ -54,7 +54,7 @@ export const TransactionDetailSchema = registry.register(
       referenceNumber: z.string().openapi({ example: 'TXN-20240425-001' }),
       type: z.enum(['deposit', 'withdraw']).openapi({ example: 'deposit' }),
       status: z
-        .enum(['pending', 'processing', 'completed', 'failed', 'cancelled'])
+        .enum(['pending', 'processing', 'completed', 'failed', 'cancelled', 'review', 'dispute', 'reversed', 'clawed_back'])
         .openapi({ example: 'completed' }),
       amount: z.number().openapi({ example: 5000 }),
       provider: z.string().openapi({ example: 'mtn' }),

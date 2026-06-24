@@ -170,7 +170,7 @@ export class FraudDetectionMiddleware {
         ipAddress: req.ip || null,
         userAgent: req.get('User-Agent') || null,
         deviceFingerprint: this.generateDeviceFingerprint(req.ip, req.get('User-Agent')),
-        type: transaction.type,
+        type: transaction.type as "deposit" | "withdraw",
         provider: transaction.provider,
         metadata: transaction.metadata
       };

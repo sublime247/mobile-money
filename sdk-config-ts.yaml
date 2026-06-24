@@ -1,0 +1,10 @@
+generatorName: typescript-axios
+npmName: mobile-money-sdk
+npmVersion: 1.0.0
+supportsES6: true
+withSeparateModelsAndApi: true
+apiPackage: api
+modelPackage: model
+enumPropertyNaming: original
+modelPropertyNaming: camelCase
+hideGenerationTimestamp: true

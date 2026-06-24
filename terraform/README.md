@@ -23,7 +23,7 @@ Internet → ALB (public subnets) → ECS Fargate (private subnets) → RDS Post
 
 - [Terraform](https://developer.hashicorp.com/terraform/install) >= 1.5
 - AWS CLI configured with appropriate credentials
-- An S3 bucket + DynamoDB table for remote state (optional, see `main.tf`)
+- Remote backend configured in `terraform/main.tf` using S3 + DynamoDB locking
 
 ## Quick Start
 

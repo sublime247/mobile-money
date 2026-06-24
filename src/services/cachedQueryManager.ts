@@ -1,5 +1,5 @@
 import { redisClient } from "../config/redis";
-import { logger } from "./logger";
+import logger from "../utils/logger";
 
 /**
  * Advanced Redis Caching with Tag-based Invalidation
@@ -78,27 +78,14 @@ export class CacheTags {
   static provider(provider: string): string {
     return `provider:${provider}`;
   }
+
+  static providerVolumes(): string {
+    return `provider:volumes`;
+  }
   
   static auditHistory(userId: string): string {
     return `user:${userId}:audit-history`;
   }
-}
-
-/**
- * Generates a unique cache key from base key and parameters
- */
-function generateCacheKey(baseKey: string, params?: Record<string, any>): string {
-  if (!params || Object.keys(params).length === 0) {
-    return `cache:${baseKey}`;
-  }
-  
-  // Sort params for consistent cache key generation
-  const sortedParams = Object.keys(params)
-    .sort()
-    .map(key => `${key}=${encodeURIComponent(JSON.stringify(params[key]))}`)
-    .join("&");
-  
-  return `cache:${baseKey}:${Buffer.from(sortedParams).toString("base64")}`;
 }
 
 /**
@@ -120,11 +107,11 @@ export class CachedQueryManager {
       // Try to get from cache first
       const cached = await this.get<T>(cacheKey);
       if (cached !== null) {
-        logger.debug("Cache hit", { cacheKey });
+        logger.debug({ cacheKey }, "Cache hit");
         return { data: cached, cachedAt: Date.now(), fromCache: true };
       }
     } catch (error) {
-      logger.warn("Cache retrieval error, will fetch from source", { cacheKey, error });
+      logger.warn({ cacheKey, error }, "Cache retrieval error, will fetch from source");
     }
     
     // Cache miss or error - fetch from source
@@ -133,7 +120,7 @@ export class CachedQueryManager {
     // Store in cache asynchronously
     setImmediate(() => {
       this.set(cacheKey, data, options).catch(error => {
-        logger.warn("Failed to cache query result", { cacheKey, error });
+        logger.warn({ cacheKey, error }, "Failed to cache query result");
       });
     });
     
@@ -157,7 +144,7 @@ export class CachedQueryManager {
       };
       
       // Set main cache entry with TTL
-      await this.redis.setex(
+      await this.redis.setEx(
         key,
         options.ttlSeconds,
         JSON.stringify(entry),
@@ -171,9 +158,9 @@ export class CachedQueryManager {
         await this.redis.expire(tagKey, options.ttlSeconds);
       }
       
-      logger.debug("Cache set with tags", { key, tags: options.tags, ttl: options.ttlSeconds });
+      logger.debug({ key, tags: options.tags, ttl: options.ttlSeconds }, "Cache set with tags");
     } catch (error) {
-      logger.warn("Failed to set cache", { key, error });
+      logger.warn({ key, error }, "Failed to set cache");
     }
   }
   
@@ -185,7 +172,7 @@ export class CachedQueryManager {
       const cached = await this.redis.get(key);
       if (!cached) return null;
       
-      const entry = JSON.parse(cached) as CacheEntry;
+      const entry = JSON.parse(String(cached)) as CacheEntry;
       
       // Check expiration
       if (entry.expiresAt < Date.now()) {
@@ -195,7 +182,7 @@ export class CachedQueryManager {
       
       return JSON.parse(entry.data) as T;
     } catch (error) {
-      logger.warn("Failed to get cache", { key, error });
+      logger.warn({ key, error }, "Failed to get cache");
       return null;
     }
   }
@@ -206,22 +193,22 @@ export class CachedQueryManager {
   async invalidateByTag(tag: string): Promise<number> {
     try {
       const tagKey = `${this.tagNamespace}${tag}`;
-      const keys = await this.redis.smembers(tagKey);
+      const keys = await this.redis.smembers(tagKey) as string[];
       
       if (keys.length === 0) {
         return 0;
       }
       
       // Delete all cached entries
-      await this.redis.del(...keys);
+      await this.redis.del(keys);
       
       // Delete tag index
       await this.redis.del(tagKey);
       
-      logger.info("Cache invalidated by tag", { tag, keysInvalidated: keys.length });
+      logger.info({ tag, keysInvalidated: keys.length }, "Cache invalidated by tag");
       return keys.length;
     } catch (error) {
-      logger.error("Failed to invalidate cache by tag", { tag, error });
+      logger.error({ tag, error }, "Failed to invalidate cache by tag");
       return 0;
     }
   }
@@ -251,12 +238,12 @@ export class CachedQueryManager {
       }
       
       // Delete all matching keys
-      await this.redis.del(...keys);
+      await this.redis.del(keys as string[]);
       
-      logger.info("Cache invalidated by pattern", { pattern, keysInvalidated: keys.length });
+      logger.info({ pattern, keysInvalidated: keys.length }, "Cache invalidated by pattern");
       return keys.length;
     } catch (error) {
-      logger.error("Failed to invalidate cache by pattern", { pattern, error });
+      logger.error({ pattern, error }, "Failed to invalidate cache by pattern");
       return 0;
     }
   }
@@ -268,11 +255,11 @@ export class CachedQueryManager {
     try {
       const keys = await this.redis.keys("cache:*");
       if (keys.length > 0) {
-        await this.redis.del(...keys);
-        logger.info("All cache cleared", { keysCleared: keys.length });
+        await this.redis.del(keys as string[]);
+        logger.info({ keysCleared: keys.length }, "All cache cleared");
       }
     } catch (error) {
-      logger.error("Failed to clear cache", { error });
+      logger.error({ error }, "Failed to clear cache");
     }
   }
   
@@ -289,7 +276,7 @@ export class CachedQueryManager {
       const tagKeys = await this.redis.keys("tag:*");
       
       const info = await this.redis.info("memory");
-      const memoryUsed = info.match(/used_memory_human:(\S+)/)?.[1] || "N/A";
+      const memoryUsed = String(info).match(/used_memory_human:(\S+)/)?.[1] || "N/A";
       
       return {
         totalKeys: keys.length,
@@ -297,7 +284,7 @@ export class CachedQueryManager {
         memoryUsed,
       };
     } catch (error) {
-      logger.warn("Failed to get cache stats", { error });
+      logger.warn({ error }, "Failed to get cache stats");
       return { totalKeys: 0, totalTags: 0, memoryUsed: "N/A" };
     }
   }

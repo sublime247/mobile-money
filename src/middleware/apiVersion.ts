@@ -1,4 +1,4 @@
-import { Request, Response, NextFunction, RequestHandler } from "express";
+import { Request, Response, RequestHandler } from "express";
 
 /**
  * API Versioning Configuration
@@ -24,9 +24,14 @@ export const CURRENT_VERSION = "v1";
 export const SUPPORTED_VERSIONS: string[] = ["v1"];
 export const DEPRECATED_VERSIONS: string[] = [];
 
+const normalizeApiVersion = (version: string): string | undefined => {
+  const match = version.trim().match(/^v?(\d+)$/i);
+  return match ? `v${match[1]}` : undefined;
+};
+
 /**
- * Middleware: Extract API version from URL or Accept header
- * Priority: URL path > Accept header > default (v1)
+ * Middleware: Extract API version from URL or request headers
+ * Priority: URL path > Accept-Version header > Accept header > default (v1)
  */
 export const apiVersionMiddleware: RequestHandler = (req, res, next) => {
   const versionedReq = req as VersionedRequest;
@@ -35,17 +40,29 @@ export const apiVersionMiddleware: RequestHandler = (req, res, next) => {
     let version = CURRENT_VERSION;
 
     // 1. Check URL path for version (e.g., /api/v1/transactions)
-    const pathMatch = versionedReq.path.match(/^\/api\/(v\d+)\//);
+    const pathMatch = versionedReq.path.match(/^\/api\/(v\d+)(?:\/|$)/i);
     if (pathMatch) {
-      version = pathMatch[1];
-    }
+      version = normalizeApiVersion(pathMatch[1]) || CURRENT_VERSION;
+    } else {
+      // 2. Check Accept-Version header (e.g., Accept-Version: v1)
+      const acceptVersionHeader = versionedReq.get("accept-version");
+      const headerVersion = acceptVersionHeader
+        ? normalizeApiVersion(acceptVersionHeader)
+        : undefined;
 
-    // 2. Check Accept header (e.g., Accept: application/vnd.api+json;version=v1)
-    const acceptHeader = versionedReq.get("accept");
-    if (acceptHeader && acceptHeader.includes("version=")) {
-      const versionMatch = acceptHeader.match(/version=(v\d+)/);
-      if (versionMatch) {
-        version = versionMatch[1];
+      if (headerVersion) {
+        version = headerVersion;
+      } else {
+        // 3. Check Accept header (e.g., Accept: application/vnd.api+json;version=v1)
+        const acceptHeader = versionedReq.get("accept");
+        const versionMatch = acceptHeader?.match(/(?:^|[;\s])version=(v?\d+)/i);
+        const acceptVersion = versionMatch
+          ? normalizeApiVersion(versionMatch[1])
+          : undefined;
+
+        if (acceptVersion) {
+          version = acceptVersion;
+        }
       }
     }
 
@@ -55,7 +72,8 @@ export const apiVersionMiddleware: RequestHandler = (req, res, next) => {
 
     // Add version to response headers
     res.setHeader("API-Version", version);
-    res.setHeader("Vary", "Accept");
+    res.vary("Accept");
+    res.vary("Accept-Version");
 
     // Log version information in development
     if (process.env.NODE_ENV === "development") {

@@ -19,7 +19,7 @@ import {
 export async function runKycTierUpgradeJob(): Promise<void> {
   console.log("[kyc-tier-upgrade] Starting volume scan");
 
-  let scanned = 0;
+  let scanned: number;
   let flagged = 0;
   let notified = 0;
   let errors = 0;

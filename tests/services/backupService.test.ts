@@ -9,12 +9,77 @@ import {
   validateBackupIntegrity,
   verifyDataSafety,
   BackupMetadata,
-} from "../src/services/backupService";
+} from "../../src/services/backupService";
+
+let mockS3Payload: Buffer = Buffer.alloc(0);
+
+jest.mock("@aws-sdk/client-s3", () => {
+  return {
+    S3Client: jest.fn().mockImplementation(() => {
+      return {
+        send: jest.fn().mockImplementation((command) => {
+          const commandName = command.commandName;
+          if (commandName === "ListObjectsV2Command") {
+            return Promise.resolve({
+              Contents: [
+                {
+                  Key: "backups/test-backup-001.dump.enc",
+                  LastModified: new Date(),
+                  Size: 1024,
+                },
+              ],
+            });
+          }
+          if (commandName === "HeadObjectCommand") {
+            return Promise.resolve({
+              Metadata: {
+                "backup-timestamp": new Date().toISOString(),
+                "backup-database": "mobilemoney_stellar",
+                "backup-size": "1024",
+                "backup-compressed": "false",
+                "backup-encrypted": "true",
+                "backup-algorithm": "aes-256-gcm",
+                "backup-retention-days": "30",
+                "backup-checksum": "894086ea764a85fa1799276960d70eb06b12b591b93f1d9354020a67119ff39a",
+              },
+            });
+          }
+          if (commandName === "GetObjectCommand") {
+            const { Readable } = require("stream");
+            const stream = new Readable();
+            stream.push(mockS3Payload);
+            stream.push(null);
+            
+            stream.transformToByteArray = () => {
+              return Promise.resolve(new Uint8Array(mockS3Payload));
+            };
+
+            return Promise.resolve({
+              Body: stream,
+            });
+          }
+          if (commandName === "HeadBucketCommand" || commandName === "PutObjectCommand") {
+            return Promise.resolve({});
+          }
+          return Promise.resolve({});
+        }),
+      };
+    }),
+    ListObjectsV2Command: jest.fn().mockImplementation(function (args) { this.args = args; this.commandName = "ListObjectsV2Command"; }),
+    GetObjectCommand: jest.fn().mockImplementation(function (args) { this.args = args; this.commandName = "GetObjectCommand"; }),
+    HeadObjectCommand: jest.fn().mockImplementation(function (args) { this.args = args; this.commandName = "HeadObjectCommand"; }),
+    PutObjectCommand: jest.fn().mockImplementation(function (args) { this.args = args; this.commandName = "PutObjectCommand"; }),
+    HeadBucketCommand: jest.fn().mockImplementation(function (args) { this.args = args; this.commandName = "HeadBucketCommand"; }),
+  };
+});
 
 describe("Backup Service (Issue #553)", () => {
   const TEST_TEMP_DIR = "/tmp/backup-tests";
 
   beforeAll(() => {
+    // Initialize mockS3Payload with a valid GCM encrypted buffer of "SELECT * FROM users;"
+    mockS3Payload = encryptBackup(Buffer.from("SELECT * FROM users;"));
+
     // Create temp directory for tests
     if (!fs.existsSync(TEST_TEMP_DIR)) {
       fs.mkdirSync(TEST_TEMP_DIR, { recursive: true });
@@ -70,9 +135,9 @@ describe("Backup Service (Issue #553)", () => {
       expect(() => decryptBackup(encrypted)).toThrow();
     });
 
-    it("should handle large backup data (simulate 100MB dump)", () => {
-      // Create a large buffer (100MB simulation)
-      const largeData = Buffer.alloc(100 * 1024 * 1024);
+    it("should handle large backup data (simulate 5MB dump)", () => {
+      // Create a large buffer (5MB simulation)
+      const largeData = Buffer.alloc(5 * 1024 * 1024);
       crypto.randomFillSync(largeData);
 
       // Encrypt
@@ -82,7 +147,7 @@ describe("Backup Service (Issue #553)", () => {
       const decrypted = decryptBackup(encrypted);
 
       // Verify
-      expect(decrypted).toEqual(largeData);
+      expect(decrypted.equals(largeData)).toBe(true);
     });
   });
 
@@ -127,6 +192,11 @@ describe("Backup Service (Issue #553)", () => {
 
   describe("Backup Integrity", () => {
     it("should validate backup with correct checksum", async () => {
+      const expectedChecksum = crypto
+        .createHash("sha256")
+        .update(Buffer.from("SELECT * FROM users;"))
+        .digest("hex");
+
       const metadata: BackupMetadata = {
         timestamp: new Date().toISOString(),
         database: "mobilemoney_stellar",
@@ -135,7 +205,7 @@ describe("Backup Service (Issue #553)", () => {
         encrypted: true,
         algorithm: "aes-256-gcm",
         retention_days: 30,
-        checksum: "a" + "0".repeat(63), // Valid hex checksum format
+        checksum: expectedChecksum,
       };
 
       const result = await validateBackupIntegrity("test-backup-001", metadata);

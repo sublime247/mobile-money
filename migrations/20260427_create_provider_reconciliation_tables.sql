@@ -44,7 +44,7 @@ CREATE TRIGGER provider_reconciliation_runs_updated_at
 CREATE TABLE IF NOT EXISTS provider_reconciliation_alerts (
   id UUID DEFAULT gen_random_uuid(),
   reconciliation_run_id UUID NOT NULL REFERENCES provider_reconciliation_runs(id) ON DELETE CASCADE,
-  transaction_id UUID REFERENCES transactions(id) ON DELETE CASCADE,
+  transaction_id UUID,
   alert_type VARCHAR(50) NOT NULL, -- 'amount_mismatch', 'status_mismatch', 'orphaned_provider', 'orphaned_db'
   severity VARCHAR(10) NOT NULL DEFAULT 'medium' CHECK (severity IN ('low', 'medium', 'high', 'critical')),
   status VARCHAR(20) NOT NULL DEFAULT 'pending_review' CHECK (status IN ('pending_review', 'reviewed', 'dismissed', 'resolved')),
@@ -89,7 +89,7 @@ CREATE TABLE IF NOT EXISTS provider_report_configs (
   id UUID DEFAULT gen_random_uuid(),
   provider VARCHAR(20) NOT NULL UNIQUE, -- 'mtn', 'airtel', 'orange'
   is_enabled BOOLEAN NOT NULL DEFAULT false, -- Disabled by default for security
-  download_method VARCHAR(20) NOT NULL DEFAULT 'manual' CHECK (download_method IN ('api', 'manual')),
+  download_method VARCHAR(20) NOT NULL DEFAULT 'manual' CHECK (download_method IN ('api', 'manual', 'sftp', 'email')),
   api_endpoint VARCHAR(500),
   api_key VARCHAR(255),
   api_secret VARCHAR(255),

@@ -7,6 +7,9 @@
 
 // Initialize config system - must be imported first
 import './init';
+import { getConfigValue } from './appConfig';
+import { PROVIDER_LIMITS } from './providers';
+import { TRANSACTION_LIMITS } from './limits';
 
 export { getConfig, getConfigValue } from './appConfig';
 export { PROVIDER_LIMITS, getProviderLimitsConfig, MobileMoneyProvider } from './providers';
@@ -14,17 +17,14 @@ export { TRANSACTION_LIMITS, MIN_TRANSACTION_AMOUNT, MAX_TRANSACTION_AMOUNT, KYC
 
 // Helper functions for commonly accessed config values
 export function getProviderLimit(provider: string): { minAmount: number; maxAmount: number } | null {
-  const limits = require('./providers').PROVIDER_LIMITS;
-  return limits[provider] || null;
+  return PROVIDER_LIMITS[provider] || null;
 }
 
 export function getKycLimit(level: string): number | null {
-  const limits = require('./limits').TRANSACTION_LIMITS;
-  return limits[level] || null;
+  return TRANSACTION_LIMITS[level] || null;
 }
 
 export function getTransactionConfig() {
-  const { getConfigValue } = require('./appConfig');
   return {
     maxTags: getConfigValue('transactions.maxTags'),
     maxMetadataBytes: getConfigValue('transactions.maxMetadataBytes'),
@@ -35,7 +35,6 @@ export function getTransactionConfig() {
 }
 
 export function getCacheConfig() {
-  const { getConfigValue } = require('./appConfig');
   return {
     geolocationTtlSeconds: getConfigValue('cache.geolocationTtlSeconds'),
     geolocationApiTimeoutMs: getConfigValue('cache.geolocationApiTimeoutMs'),
@@ -46,7 +45,6 @@ export function getCacheConfig() {
 }
 
 export function getAuthConfig() {
-  const { getConfigValue } = require('./appConfig');
   return {
     maxLoginAttempts: getConfigValue('auth.maxLoginAttempts'),
     webauthnChallengeTtlSeconds: getConfigValue('auth.webauthnChallengeTtlSeconds'),

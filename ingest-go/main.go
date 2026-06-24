@@ -14,6 +14,7 @@
 //   NATS_ENABLED   — publish to NATS JetStream (default: false)
 //   REDIS_STREAM   — stream key (default: callbacks)
 //   NATS_SUBJECT   — NATS subject (default: callbacks.ingest)
+//   SENTRY_DSN     — Sentry DSN for error tracking
 
 package main
 
@@ -26,8 +27,10 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/getsentry/sentry-go"
 	"github.com/nats-io/nats.go"
 	"github.com/redis/go-redis/v9"
+	"github.com/valyala/fastjson"
 	"github.com/valyala/fasthttp"
 )
 
@@ -50,6 +53,7 @@ var (
 	natsEnabled  = getEnv("NATS_ENABLED", "false") == "true"
 	redisStream  = getEnv("REDIS_STREAM", "callbacks")
 	natsSubject  = getEnv("NATS_SUBJECT", "callbacks.ingest")
+	sentryDSN    = getEnv("SENTRY_DSN", "")
 )
 
 // ---------------------------------------------------------------------------
@@ -94,6 +98,81 @@ func (p *CallbackPayload) Validate() error {
 	return nil
 }
 
+func parseCallbackPayload(body []byte) (*CallbackPayload, error) {
+	var payload CallbackPayload
+	v, err := fastjson.ParseBytes(body)
+	if err != nil {
+		return nil, err
+	}
+
+	payload.EventType, err = getStringField(v, "event_type")
+	if err != nil {
+		return nil, err
+	}
+	payload.Provider, err = getStringField(v, "provider")
+	if err != nil {
+		return nil, err
+	}
+	payload.Reference, err = getStringField(v, "reference")
+	if err != nil {
+		return nil, err
+	}
+	payload.Currency, err = getStringField(v, "currency")
+	if err != nil {
+		return nil, err
+	}
+	payload.Status, err = getStringField(v, "status")
+	if err != nil {
+		return nil, err
+	}
+	payload.Timestamp, err = getStringField(v, "timestamp")
+	if err != nil {
+		return nil, err
+	}
+
+	if payload.Amount, err = getFloatField(v, "amount"); err != nil {
+		return nil, err
+	}
+
+	if metaVal := v.Get("metadata"); metaVal != nil {
+		buf, err := metaVal.MarshalTo(nil)
+		if err != nil {
+			return nil, err
+		}
+		var metadata map[string]interface{}
+		if err := json.Unmarshal(buf, &metadata); err != nil {
+			return nil, err
+		}
+		payload.Metadata = metadata
+	}
+
+	return &payload, nil
+}
+
+func getStringField(v *fastjson.Value, key string) (string, error) {
+	if bytes, err := v.GetStringBytes(key); err == nil {
+		return string(bytes), nil
+	} else if v.Get(key) == nil {
+		return "", nil
+	} else {
+		return "", fmt.Errorf("%s must be a string", key)
+	}
+}
+
+func getFloatField(v *fastjson.Value, key string) (float64, error) {
+	val := v.Get(key)
+	if val == nil {
+		return 0, nil
+	}
+	if f, err := val.Float64(); err == nil {
+		return f, nil
+	}
+	if s, err := val.StringBytes(); err == nil {
+		return strconv.ParseFloat(string(s), 64)
+	}
+	return 0, fmt.Errorf("%s must be a number", key)
+}
+
 // ---------------------------------------------------------------------------
 // Messaging
 // ---------------------------------------------------------------------------
@@ -120,7 +199,22 @@ func initMessaging() error {
 
 	if natsEnabled {
 		var err error
-		nc, err = nats.Connect(natsURL)
+		nc, err = nats.Connect(natsURL,
+			nats.MaxReconnects(-1),
+			nats.ReconnectWait(2*time.Second),
+			nats.DisconnectErrHandler(func(nc *nats.Conn, err error) {
+				log.Printf("[nats] disconnected: %v", err)
+			}),
+			nats.ReconnectHandler(func(nc *nats.Conn) {
+				log.Printf("[nats] reconnected to %s", nc.ConnectedUrl())
+			}),
+			nats.ClosedHandler(func(nc *nats.Conn) {
+				log.Printf("[nats] connection permanently closed")
+			}),
+			nats.ErrorHandler(func(nc *nats.Conn, sub *nats.Subscription, err error) {
+				log.Printf("[nats] async error on subject %s: %v", sub.Subject, err)
+			}),
+		)
 		if err != nil {
 			return fmt.Errorf("nats connect: %w", err)
 		}
@@ -130,7 +224,6 @@ func initMessaging() error {
 		}
 		log.Printf("[nats] connected to %s", natsURL)
 	}
-
 	return nil
 }
 
@@ -175,8 +268,8 @@ func handleIngest(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	var payload CallbackPayload
-	if err := json.Unmarshal(ctx.PostBody(), &payload); err != nil {
+	payload, err := parseCallbackPayload(ctx.PostBody())
+	if err != nil {
 		ctx.SetStatusCode(fasthttp.StatusBadRequest)
 		ctx.SetBodyString(`{"error":"invalid JSON"}`)
 		return
@@ -189,6 +282,7 @@ func handleIngest(ctx *fasthttp.RequestCtx) {
 	}
 
 	if err := publish(&payload); err != nil {
+		sentry.CaptureException(err)
 		log.Printf("[ingest] publish error: %v", err)
 		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
 		ctx.SetBodyString(`{"error":"publish failed"}`)
@@ -200,6 +294,29 @@ func handleIngest(ctx *fasthttp.RequestCtx) {
 }
 
 func handleHealth(ctx *fasthttp.RequestCtx) {
+	// Check Redis
+	if redisEnabled {
+		if rdb == nil {
+			ctx.SetStatusCode(fasthttp.StatusServiceUnavailable)
+			ctx.SetBodyString(`{"status":"error","runtime":"go","detail":"redis not initialized"}`)
+			return
+		}
+		if err := rdb.Ping(ctx).Err(); err != nil {
+			ctx.SetStatusCode(fasthttp.StatusServiceUnavailable)
+			ctx.SetBodyString(fmt.Sprintf(`{"status":"error","runtime":"go","detail":"redis ping failed: %v"}`, err))
+			return
+		}
+	}
+
+	// Check NATS
+	if natsEnabled {
+		if nc == nil || !nc.IsConnected() {
+			ctx.SetStatusCode(fasthttp.StatusServiceUnavailable)
+			ctx.SetBodyString(`{"status":"error","runtime":"go","detail":"nats not connected"}`)
+			return
+		}
+	}
+
 	ctx.SetStatusCode(fasthttp.StatusOK)
 	ctx.SetBodyString(`{"status":"ok","runtime":"go"}`)
 }
@@ -221,7 +338,22 @@ func router(ctx *fasthttp.RequestCtx) {
 // ---------------------------------------------------------------------------
 
 func main() {
+	if sentryDSN != "" {
+		err := sentry.Init(sentry.ClientOptions{
+			Dsn:              sentryDSN,
+			TracesSampleRate: 1.0,
+			Environment:      getEnv("NODE_ENV", "development"),
+		})
+		if err != nil {
+			log.Printf("Sentry initialization failed: %v", err)
+		} else {
+			log.Printf("[sentry] initialized for environment: %s", getEnv("NODE_ENV", "development"))
+			defer sentry.Flush(2 * time.Second)
+		}
+	}
+
 	if err := initMessaging(); err != nil {
+		sentry.CaptureException(err)
 		log.Fatalf("[ingest-go] messaging init failed: %v", err)
 	}
 
@@ -238,6 +370,7 @@ func main() {
 	}
 
 	if err := server.ListenAndServe(addr); err != nil {
+		sentry.CaptureException(err)
 		log.Fatalf("[ingest-go] server error: %v", err)
 	}
 }

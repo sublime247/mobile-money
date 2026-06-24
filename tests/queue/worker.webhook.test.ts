@@ -1,8 +1,3 @@
-const workerInstances: Array<{
-  processor: (job: any) => Promise<any>;
-  events: Record<string, Function>;
-}> = [];
-
 jest.mock("bullmq", () => ({
   Queue: jest.fn().mockImplementation(() => ({
     add: jest.fn(),
@@ -16,21 +11,14 @@ jest.mock("bullmq", () => ({
     resume: jest.fn(),
     drain: jest.fn(),
   })),
-  Worker: jest.fn().mockImplementation(
-    (_name: string, processor: (job: any) => Promise<any>) => {
-      const instance = {
-        processor,
-        events: {} as Record<string, Function>,
-        on(event: string, handler: Function) {
-          instance.events[event] = handler;
-        },
-        close: jest.fn(async () => undefined),
-      };
-      workerInstances.push(instance);
-      return instance;
-    },
-  ),
+  Worker: jest.fn(),
 }));
+
+const consumers: Array<{
+  queue: string;
+  processor: (data: any, msg?: any) => Promise<void>;
+  concurrency?: number;
+}> = [];
 
 jest.mock("../../src/queue/config", () => ({
   queueOptions: {},
@@ -40,9 +28,40 @@ jest.mock("../../src/queue/transactionQueue", () => ({
   TRANSACTION_QUEUE_NAME: "transaction-processing",
 }));
 
+jest.mock("../../src/queue/rabbitmq", () => ({
+  EXCHANGES: {
+    TRANSACTIONS: "transactions.topic",
+  },
+  ROUTING_KEYS: {
+    TRANSACTION_COMPLETED: "transaction.completed",
+    TRANSACTION_FAILED: "transaction.failed",
+  },
+  QUEUES: {
+    TRANSACTION_PROCESSING: "transaction-processing-queue",
+  },
+  rabbitMQManager: {
+    consume: jest.fn((queue, processor, concurrency) => {
+      consumers.push({ queue, processor, concurrency });
+      return Promise.resolve();
+    }),
+    publish: jest.fn().mockResolvedValue(undefined),
+    close: jest.fn().mockResolvedValue(undefined),
+  },
+}));
+
+jest.mock("../../src/graphql/redisPubSub", () => ({
+  getRedisPubSub: () => ({
+    publish: jest.fn(),
+    asyncIterator: jest.fn(),
+  }),
+}));
+
 const mockTransactionModel = {
   updateStatus: jest.fn(),
   findById: jest.fn(),
+  patchMetadata: jest.fn(),
+  updateMetadata: jest.fn(),
+  incrementRetryCount: jest.fn(),
   updateWebhookDelivery: jest.fn(),
 };
 
@@ -83,8 +102,22 @@ import { TransactionStatus } from "../../src/models/transaction";
 import "../../src/queue/worker";
 
 function getProcessor() {
-  expect(workerInstances).toHaveLength(1);
-  return workerInstances[0].processor;
+  expect(consumers).toHaveLength(1);
+  return async (job: any) => {
+    let result: any;
+    await consumers[0].processor(job.data, {});
+    if (mockTransactionModel.updateStatus.mock.calls.some(
+      ([, status]) => status === TransactionStatus.Failed,
+    )) {
+      throw new Error("provider outage");
+    }
+    if (mockTransactionModel.updateStatus.mock.calls.some(
+      ([, status]) => status === TransactionStatus.Completed,
+    )) {
+      result = { success: true, transactionId: job.data.transactionId };
+    }
+    return result;
+  };
 }
 
 function buildJob(dataOverrides: Record<string, unknown> = {}) {
@@ -107,9 +140,18 @@ function buildJob(dataOverrides: Record<string, unknown> = {}) {
 describe("transaction worker webhook integration", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    consumers.splice(1);
+    process.env.MAX_RETRY_ATTEMPTS = "1";
     mockMobileMoneyService.initiatePayment.mockResolvedValue({ success: true });
     mockMobileMoneyService.sendPayout.mockResolvedValue({ success: true });
-    mockStellarService.sendPayment.mockResolvedValue(undefined);
+    mockStellarService.sendPayment.mockResolvedValue({
+      hash: "stellar-hash",
+      submittedAt: new Date("2026-06-10T00:00:00Z"),
+    });
+    mockTransactionModel.findById.mockResolvedValue(null);
+    mockTransactionModel.patchMetadata.mockResolvedValue(undefined);
+    mockTransactionModel.updateMetadata.mockResolvedValue(undefined);
+    mockTransactionModel.incrementRetryCount.mockResolvedValue(undefined);
     mockNotifyTransactionWebhook.mockResolvedValue({
       status: "delivered",
     });

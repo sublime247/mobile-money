@@ -170,6 +170,11 @@ SELECT
     u.created_at                                           AS registered_at,
     DATE_TRUNC('month', u.created_at)                      AS registration_month,
 
+    -- Session Security Metadata
+    u.last_login_at,
+    u.last_login_ip,
+    u.last_login_user_agent,
+
     -- KYC verification
     ka.verification_status                                 AS kyc_verification_status,
     ka.provider                                            AS kyc_provider,
@@ -210,6 +215,7 @@ LEFT JOIN device_fingerprints df ON df.user_id = u.id
 LEFT JOIN referrals r        ON r.user_id  = u.id
 GROUP BY
     u.id, u.kyc_level, u.status, u.stellar_address, u.created_at,
+    u.last_login_at, u.last_login_ip, u.last_login_user_agent,
     ka.verification_status, ka.provider, ka.kyc_level, ka.updated_at,
     r.referral_code, r.referred_by, r.reward_granted;
 
@@ -269,7 +275,7 @@ SELECT
 
     -- SLA breach flag
     CASE
-        WHEN d.status NOT IN ('resolved', 'rejected')
+        WHEN d.status NOT IN ('resolved', 'rejected', 'reversed', 'upheld')
          AND d.sla_due_date < NOW()
         THEN TRUE
         ELSE FALSE
@@ -280,7 +286,7 @@ SELECT
     d.updated_at                                           AS last_updated_at,
     EXTRACT(DAY FROM NOW() - d.created_at)::INTEGER        AS age_days,
     CASE
-        WHEN d.status IN ('resolved', 'rejected')
+        WHEN d.status IN ('resolved', 'rejected', 'reversed', 'upheld')
         THEN EXTRACT(EPOCH FROM (d.updated_at - d.created_at)) / 3600.0
     END                                                    AS resolution_hours,
 

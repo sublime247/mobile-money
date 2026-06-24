@@ -1,130 +1,120 @@
 name: Deploy
 
 on:
-  push:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
     branches: [main]
 
 env:
   IMAGE: ${{ github.repository }}
   DEPLOY_TIMEOUT: "120s"
-  HEALTHCHECK_RETRIES: "10"
+  SENTRY_RELEASE: ${{ github.event.workflow_run.head_sha }}
 
 jobs:
-  deploy:
+  deploy-staging:
     runs-on: ubuntu-latest
-    environment: production
+    environment: staging
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main'
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
 
-      - name: Check if deployment is configured
-        id: check_deploy
+      - name: Check deployment secrets
+        id: check_secrets
         run: |
-          if [ -n "${{ secrets.REGISTRY_USERNAME }}" ] && [ -n "${{ secrets.REGISTRY_PASSWORD }}" ] && [ -n "${{ secrets.KUBECONFIG }}" ]; then
-            echo "deploy_available=true" >> $GITHUB_OUTPUT
+          if [ -n "${{ secrets.REGISTRY_USERNAME }}" ] && [ -n "${{ secrets.REGISTRY_PASSWORD }}" ] && [ -n "${{ secrets.STAGING_KUBECONFIG }}" ]; then
+            echo "credentials_available=true" >> $GITHUB_OUTPUT
           else
-            echo "deploy_available=false" >> $GITHUB_OUTPUT
-            echo "⚠️ Deployment secrets not configured. Skipping deployment."
-            echo "To enable deployment, add REGISTRY_USERNAME, REGISTRY_PASSWORD, and KUBECONFIG secrets."
-            exit 0
+            echo "credentials_available=false" >> $GITHUB_OUTPUT
+            echo "Deployment secrets are not configured. Skipping staging deployment."
           fi
 
       - name: Set up Docker Buildx
-        if: steps.check_deploy.outputs.deploy_available == 'true'
-        uses: docker/setup-buildx-action@v3
+        if: steps.check_secrets.outputs.credentials_available == 'true'
+        uses: docker/setup-buildx-action@v4
 
       - name: Log in to registry
-        if: steps.check_deploy.outputs.deploy_available == 'true'
-        uses: docker/login-action@v3
+        if: steps.check_secrets.outputs.credentials_available == 'true'
+        uses: docker/login-action@v4
         with:
           username: ${{ secrets.REGISTRY_USERNAME }}
           password: ${{ secrets.REGISTRY_PASSWORD }}
 
-      - name: Build & push image
-        if: steps.check_deploy.outputs.deploy_available == 'true'
+      - name: Build and push staging image
+        if: steps.check_secrets.outputs.credentials_available == 'true'
         id: build
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: .
+          file: ./Dockerfile
           push: true
           tags: |
-            ${{ env.IMAGE }}:${{ github.sha }}
-            ${{ env.IMAGE }}:latest
+            ${{ env.IMAGE }}:${{ github.event.workflow_run.head_sha }}
+            ${{ env.IMAGE }}:staging
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # ── Kubernetes deploy ──────────────────────────────────────────────────
       - name: Configure kubectl
-        if: steps.check_deploy.outputs.deploy_available == 'true'
+        if: steps.check_secrets.outputs.credentials_available == 'true'
         uses: azure/k8s-set-context@v3
         with:
           method: kubeconfig
-          kubeconfig: ${{ secrets.KUBECONFIG }}
+          kubeconfig: ${{ secrets.STAGING_KUBECONFIG }}
 
-      - name: Apply manifests
-        if: steps.check_deploy.outputs.deploy_available == 'true'
-        run: kubectl apply -f k8s/
-
-      - name: Update image
-        if: steps.check_deploy.outputs.deploy_available == 'true'
+      - name: Deploy to staging
+        if: steps.check_secrets.outputs.credentials_available == 'true'
+        env:
+          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+          REDIS_URL: ${{ secrets.STAGING_REDIS_URL }}
+          STELLAR_NETWORK: ${{ secrets.STAGING_STELLAR_NETWORK }}
+          STELLAR_HORIZON_URL: ${{ secrets.STAGING_STELLAR_HORIZON_URL }}
+          STELLAR_ISSUER_SECRET: ${{ secrets.STAGING_STELLAR_ISSUER_SECRET }}
         run: |
-          kubectl set image deployment/mobile-money \
-            mobile-money=${{ env.IMAGE }}:${{ github.sha }}
-
-      # ── Wait for rollout ───────────────────────────────────────────────────
-      - name: Wait for rollout
-        if: steps.check_deploy.outputs.deploy_available == 'true'
-        id: rollout
-        run: |
-          kubectl rollout status deployment/mobile-money \
-            --timeout=${{ env.DEPLOY_TIMEOUT }}
-        # Don't fail the step yet — we check health next
-
-      # ── Healthcheck against /ready ─────────────────────────────────────────
-      - name: Healthcheck
-        id: healthcheck
-        if: steps.check_deploy.outputs.deploy_available == 'true' && steps.rollout.outcome == 'success'
-        run: |
-          ENDPOINT="${{ secrets.APP_HEALTHCHECK_URL }}/ready"
-          for i in $(seq 1 ${{ env.HEALTHCHECK_RETRIES }}); do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$ENDPOINT" || echo "000")
-            echo "Attempt $i: HTTP $STATUS"
-            if [ "$STATUS" = "200" ]; then
-              echo "Healthcheck passed"
-              exit 0
-            fi
-            sleep 6
-          done
-          echo "Healthcheck failed after ${{ env.HEALTHCHECK_RETRIES }} attempts"
-          exit 1
-
-      # ── Automated rollback ─────────────────────────────────────────────────
-      - name: Rollback on failure
-        if: steps.check_deploy.outputs.deploy_available == 'true' && failure() && (steps.rollout.outcome == 'failure' || steps.healthcheck.outcome == 'failure')
-        run: |
-          echo "::warning::Deployment failed — rolling back to previous revision"
-          kubectl rollout undo deployment/mobile-money
+          kubectl apply -f k8s/
+          kubectl set image deployment/mobile-money mobile-money=${{ env.IMAGE }}:${{ github.event.workflow_run.head_sha }}
           kubectl rollout status deployment/mobile-money --timeout=${{ env.DEPLOY_TIMEOUT }}
 
-      - name: Check if Slack is configured
-        if: steps.check_deploy.outputs.deploy_available == 'true' && failure() && (steps.rollout.outcome == 'failure' || steps.healthcheck.outcome == 'failure')
-        id: check_slack
+      - name: Health check staging
+        if: steps.check_secrets.outputs.credentials_available == 'true'
         run: |
-          if [ -n "${{ secrets.SLACK_WEBHOOK_URL }}" ]; then
-            echo "slack_available=true" >> $GITHUB_OUTPUT
-          else
-            echo "slack_available=false" >> $GITHUB_OUTPUT
+          TIMEOUT=300
+          INTERVAL=10
+          ELAPSED=0
+          ENDPOINT="${{ secrets.STAGING_HEALTHCHECK_URL }}/ready"
+
+          while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$ENDPOINT" || echo "000")
+            echo "Health check returned HTTP $STATUS after ${ELAPSED}s"
+            if [ "$STATUS" = "200" ]; then
+              exit 0
+            fi
+            sleep "$INTERVAL"
+            ELAPSED=$((ELAPSED + INTERVAL))
+          done
+
+          echo "Health check timed out after ${TIMEOUT}s"
+          exit 1
+
+      - name: Register Sentry deployment
+        if: steps.check_secrets.outputs.credentials_available == 'true'
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+        run: |
+          if [ -n "$SENTRY_AUTH_TOKEN" ] && [ -n "$SENTRY_ORG" ] && [ -n "$SENTRY_PROJECT" ]; then
+            sentry-cli releases new -p "$SENTRY_PROJECT" "${{ env.SENTRY_RELEASE }}" || true
+            sentry-cli releases set-commits --auto "${{ env.SENTRY_RELEASE }}" || true
+            sentry-cli releases finalize "${{ env.SENTRY_RELEASE }}" || true
+            sentry-cli releases deploys "${{ env.SENTRY_RELEASE }}" new -e staging || true
           fi
 
-      - name: Notify on rollback
-        if: steps.check_deploy.outputs.deploy_available == 'true' && steps.check_slack.outputs.slack_available == 'true' && failure() && (steps.rollout.outcome == 'failure' || steps.healthcheck.outcome == 'failure')
-        uses: slackapi/slack-github-action@v1
-        with:
-          payload: |
-            {
-              "text": ":rotating_light: *Deployment rolled back* — `${{ github.sha }}` failed healthcheck on `mobile-money`. Previous version restored."
-            }
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-        continue-on-error: true
+      - name: Notify deployment failure
+        if: failure() && steps.check_secrets.outputs.credentials_available == 'true'
+        run: |
+          echo "Deployment failed. Collecting logs for diagnostics."
+          kubectl logs deployment/mobile-money --tail=200 || true

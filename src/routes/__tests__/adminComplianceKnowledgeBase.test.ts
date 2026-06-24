@@ -83,6 +83,7 @@ jest.mock("../../models/transaction", () => ({
 }));
 
 const { adminRoutes } = require("../admin");
+const { errorHandler } = require("../../middleware/errorHandler");
 
 const documentFixture = {
   id: "doc-123",
@@ -108,6 +109,7 @@ const buildApp = (role = "admin") => {
     next();
   });
   app.use("/api/admin", adminRoutes);
+  app.use(errorHandler);
   return app;
 };
 

@@ -1,6 +1,8 @@
 import { Request, Response } from "express";
 import { StatsService } from "../services/statsService";
 import { Cache } from "../services/cache";
+import { ERROR_CODES } from "../constants/errorCodes";
+import { createError } from "../middleware/errorHandler";
 
 const statsService = new StatsService();
 
@@ -19,10 +21,18 @@ export class StatsController {
 
       // Validate dates
       if (startDate && isNaN(start!.getTime())) {
-        return res.status(400).json({ error: "Invalid startDate format" });
+        throw createError(
+          ERROR_CODES.INVALID_INPUT,
+          "Invalid startDate format",
+          {
+            error: "Invalid startDate format",
+          },
+        );
       }
       if (endDate && isNaN(end!.getTime())) {
-        return res.status(400).json({ error: "Invalid endDate format" });
+        throw createError(ERROR_CODES.INVALID_INPUT, "Invalid endDate format", {
+          error: "Invalid endDate format",
+        });
       }
 
       // Fetch stats from service
@@ -47,10 +57,13 @@ export class StatsController {
       return res.json(response);
     } catch (error) {
       console.error("Error fetching stats:", error);
-      return res.status(500).json({
-        error: "Internal server error",
-        message: "Failed to calculate statistics",
-      });
+      throw createError(
+        ERROR_CODES.INTERNAL_ERROR,
+        "Failed to calculate statistics",
+        {
+          error: "Internal server error",
+        },
+      );
     }
   }
 }

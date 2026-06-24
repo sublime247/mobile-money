@@ -17,3 +17,15 @@ output "ecs_service_name" {
   description = "Name of the ECS service"
   value       = aws_ecs_service.app.name
 }
+
+output "codedeploy_app_name" {
+  description = "Name of the CodeDeploy application used for ECS deployment rollback"
+  value       = aws_codedeploy_app.app[0].name
+  condition   = var.enable_code_deploy
+}
+
+output "codedeploy_deployment_group_name" {
+  description = "Name of the CodeDeploy deployment group used for ECS deployment rollback"
+  value       = aws_codedeploy_deployment_group.app[0].deployment_group_name
+  condition   = var.enable_code_deploy
+}

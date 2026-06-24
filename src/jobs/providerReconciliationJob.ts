@@ -46,7 +46,7 @@ export async function runDailyProviderReconciliation(): Promise<void> {
         logger.info(`[Daily Provider Reconciliation] Completed ${config.provider}: ${result.match_rate}% match rate`);
 
       } catch (error) {
-        logger.error(`[Daily Provider Reconciliation] Failed for ${config.provider}:`, error);
+        logger.error(error, `[Daily Provider Reconciliation] Failed for ${config.provider}`);
 
         results.push({
           provider: config.provider,
@@ -79,7 +79,7 @@ export async function runDailyProviderReconciliation(): Promise<void> {
     }
 
   } catch (error) {
-    logger.error("[Daily Provider Reconciliation] Job failed:", error);
+    logger.error(error, "[Daily Provider Reconciliation] Job failed");
     throw error;
   }
 }
@@ -99,7 +99,7 @@ export async function runManualProviderReconciliation(
     logger.info(`[Manual Provider Reconciliation] Completed: ${result.match_rate}% match rate`);
     return result;
   } catch (error) {
-    logger.error(`[Manual Provider Reconciliation] Failed:`, error);
+    logger.error(error, `[Manual Provider Reconciliation] Failed`);
     throw error;
   }
 }

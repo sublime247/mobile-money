@@ -117,31 +117,32 @@ export const disputeEvidenceExistsInS3 = async (key: string): Promise<boolean> =
 export const validateDisputeEvidenceFile = (file: Express.Multer.File): { valid: boolean; error?: string } => {
   const allowedMimeTypes = [
     'application/pdf',
-    'image/jpeg', 
+    'image/jpeg',
     'image/jpg',
     'image/png',
-    'image/gif',
-    'text/plain',
-    'application/msword',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'application/vnd.ms-excel',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   ];
-  const maxSize = 10 * 1024 * 1024; // 10MB
-  
-  if (!allowedMimeTypes.includes(file.mimetype)) {
+  const allowedExtensions = ['.pdf', '.jpeg', '.jpg', '.png'];
+  const maxSize = 10 * 1024 * 1024;
+  const filename = String(file.originalname || '').toLowerCase();
+
+  const hasAllowedMimeType = allowedMimeTypes.includes(file.mimetype);
+  const hasAllowedExtension = allowedExtensions.some((ext) =>
+    filename.endsWith(ext),
+  );
+
+  if (!hasAllowedMimeType || !hasAllowedExtension) {
     return {
       valid: false,
-      error: `Invalid file type. Allowed types: ${allowedMimeTypes.join(', ')}`,
+      error: `Invalid file type or extension. Allowed types: PDF, JPG, PNG only`,
     };
   }
-  
+
   if (file.size > maxSize) {
     return {
       valid: false,
       error: `File size exceeds maximum limit of ${maxSize / (1024 * 1024)}MB`,
     };
   }
-  
+
   return { valid: true };
 };

@@ -1,41 +1,275 @@
-name: Contracts CI
+name: Soroban Escrow – Verification Suite
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop, "feat/**"]
     paths:
       - "contracts/**"
+      - ".github/workflows/contracts.yml"
   pull_request:
     branches: [main, develop]
     paths:
       - "contracts/**"
+      - ".github/workflows/contracts.yml"
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
 
 jobs:
-  build-and-test:
+  # ──────────────────────────────────────────────────────────────────────────
+  # 1. Lint & format checks
+  # ──────────────────────────────────────────────────────────────────────────
+  lint:
+    name: Lint & Format
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: contracts
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
-      - name: Install Rust
+      - name: Install Rust (stable + wasm target)
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: wasm32-unknown-unknown
+          targets: wasm32v1-none
+          # rustfmt  — needed for `cargo fmt --check`
+          # clippy   — needed for `cargo clippy`
+          components: rustfmt, clippy
 
       - name: Cache cargo registry
-        uses: actions/cache@v5
+        uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             contracts/target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('contracts/Cargo.toml', 'contracts/escrow/Cargo.toml') }}
+          key: ${{ runner.os }}-cargo-${{ hashFiles('contracts/Cargo.toml', 'contracts/escrow/Cargo.toml', 'contracts/htlc/Cargo.toml') }}
           restore-keys: ${{ runner.os }}-cargo-
 
-      - name: Build contracts (wasm)
+      # -----------------------------------------------------------------------
+      # Formatting gate — reject any code that diverges from rustfmt.toml rules.
+      # -----------------------------------------------------------------------
+      - name: Check formatting (cargo fmt)
         working-directory: contracts
-        run: cargo build --target wasm32-unknown-unknown --release
+        run: cargo fmt --all -- --check
 
-      - name: Run contract tests
+      # -----------------------------------------------------------------------
+      # Lint gate — treat every clippy warning as an error (mirrors clippy.toml
+      # and the workspace [lints] table in Cargo.toml).
+      # -----------------------------------------------------------------------
+      - name: Lint (cargo clippy)
         working-directory: contracts
-        run: cargo test
+        run: >
+          cargo clippy
+          --all-targets
+          --all-features
+          -- -D warnings
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 2. Build & WASM
+  # ──────────────────────────────────────────────────────────────────────────
+  build:
+    name: Build & WASM
+    runs-on: ubuntu-latest
+    needs: lint
+    defaults:
+      run:
+        working-directory: contracts
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust (stable + wasm target)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32v1-none
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            contracts/target
+          key: ${{ runner.os }}-cargo-build-${{ hashFiles('contracts/**/Cargo.toml', 'contracts/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-build-
+
+      - name: Build release WASM
+        run: cargo build --target wasm32v1-none --release
+
+      - name: Report WASM size
+        run: |
+          echo "=== WASM artefact sizes ==="
+          find target/wasm32v1-none/release -name "*.wasm" \
+            -exec du -sh {} \;
+
+      - name: Upload WASM artefacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: escrow-wasm-${{ github.sha }}
+          path: contracts/target/wasm32v1-none/release/*.wasm
+          retention-days: 14
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 3. Full test suite with detailed reporting
+  # ──────────────────────────────────────────────────────────────────────────
+  test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    needs: build
+    defaults:
+      run:
+        working-directory: contracts
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32v1-none
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            contracts/target
+          key: ${{ runner.os }}-cargo-test-${{ hashFiles('contracts/**/Cargo.toml', 'contracts/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-test-
+
+      - name: Install cargo-nextest (faster test runner)
+        uses: taiki-e/install-action@nextest
+
+      - name: Run all tests – happy-path
+        run: |
+          cargo nextest run \
+            --test-threads 4 \
+            --filter-expr 'test(test_initialize) | test(test_release) | test(test_refund) | test(test_full_lifecycle) | test(test_fee)' \
+            -- --nocapture
+        env:
+          RUST_LOG: debug
+
+      - name: Run all tests – failure / edge-case scenarios
+        run: |
+          cargo nextest run \
+            --test-threads 4 \
+            --filter-expr 'test(fails) | test(premature) | test(expiry) | test(expired) | test(double)' \
+            -- --nocapture
+        env:
+          RUST_LOG: debug
+
+      - name: Run complete test suite (all tests)
+        run: cargo nextest run --test-threads 4
+        env:
+          RUST_LOG: debug
+
+      - name: Generate JUnit XML report
+        if: always()
+        run: |
+          cargo nextest run \
+            --profile ci \
+            --test-threads 4 \
+            2>&1 | tee /tmp/nextest-output.txt || true
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ github.sha }}
+          path: |
+            contracts/target/nextest/**/*.xml
+            /tmp/nextest-output.txt
+          retention-days: 7
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 4. Code-coverage (native target via cargo-tarpaulin)
+  # ──────────────────────────────────────────────────────────────────────────
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    needs: test
+    defaults:
+      run:
+        working-directory: contracts
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            contracts/target
+          key: ${{ runner.os }}-cargo-cov-${{ hashFiles('contracts/**/Cargo.toml', 'contracts/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-cov-
+
+      - name: Install cargo-tarpaulin
+        uses: taiki-e/install-action@cargo-tarpaulin
+
+      - name: Measure coverage
+        run: |
+          cargo tarpaulin \
+            --out Xml Lcov Html \
+            --output-dir coverage \
+            --ignore-tests \
+            --timeout 120 \
+            --exclude-files "*/target/*"
+        env:
+          RUST_LOG: debug
+
+      - name: Print coverage summary
+        run: |
+          echo "=== Coverage Summary ==="
+          grep -E 'line-rate|branch-rate' coverage/cobertura.xml | head -5 || true
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report-${{ github.sha }}
+          path: contracts/coverage/
+          retention-days: 30
+
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: contracts/coverage/lcov.info
+          flags: soroban-escrow
+          name: escrow-coverage
+          fail_ci_if_error: false
+          verbose: true
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 5. Summary gate – all previous jobs must pass
+  # ──────────────────────────────────────────────────────────────────────────
+  escrow-ci-gate:
+    name: ✅ Escrow CI Gate
+    runs-on: ubuntu-latest
+    needs: [lint, build, test, coverage]
+    if: always()
+    steps:
+      - name: Verify all jobs passed
+        run: |
+          echo "Lint:     ${{ needs.lint.result }}"
+          echo "Build:    ${{ needs.build.result }}"
+          echo "Test:     ${{ needs.test.result }}"
+          echo "Coverage: ${{ needs.coverage.result }}"
+
+          if [[ "${{ needs.lint.result }}"     != "success" ||
+                "${{ needs.build.result }}"    != "success" ||
+                "${{ needs.test.result }}"     != "success" ||
+                "${{ needs.coverage.result }}" != "success" ]]; then
+            echo "❌ One or more jobs failed."
+            exit 1
+          fi
+
+          echo "✅ All Soroban escrow verification jobs passed."

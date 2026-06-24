@@ -26,8 +26,8 @@ const proLimiter = new RateLimiterRedis({
 function getTier(req: Request) {
   // Example: check req.user or req.jwtUser for tier
   // Default to free if not authenticated
-  if (req.user && req.user.tier === "pro") return "pro";
-  if (req.jwtUser && req.jwtUser.tier === "pro") return "pro";
+  if (req.user && (req.user as any).tier === "pro") return "pro";
+  if (req.jwtUser && (req.jwtUser as any).tier === "pro") return "pro";
   return "free";
 }
 

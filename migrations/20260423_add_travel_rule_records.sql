@@ -4,7 +4,7 @@
 
 CREATE TABLE IF NOT EXISTS travel_rule_records (
   id                      UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  transaction_id          UUID        NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+  transaction_id          UUID        NOT NULL,
   amount                  DECIMAL(20, 7) NOT NULL,
   currency                VARCHAR(10) NOT NULL DEFAULT 'USD',
 

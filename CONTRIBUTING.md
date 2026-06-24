@@ -425,12 +425,27 @@ Add translations to `src/locales/`.
 
 ## 🔐 Security Considerations
 
-- Never commit secrets or API keys
-- Validate all user input
-- Use parameterized queries
-- Implement rate limiting
-- Follow OWASP guidelines
-- Use security headers (Helmet)
+**🚨 CRITICAL: Never commit secrets or API keys**
+
+- Use environment variables for ALL sensitive data (API keys, passwords, tokens, etc.)
+- Check [Secrets Management Guide](./docs/SECRETS_MANAGEMENT.md) for detailed guidelines
+- All secrets must be managed via GitHub Actions Secrets or environment variables
+- GitGuardian scans all PRs for accidentally committed secrets
+- If you accidentally commit a secret:
+  1. Immediately revoke the compromised credential
+  2. Remove it from your PR using `git filter-branch` or force push with amended commits
+  3. Notify the security team
+  4. Never reuse the same credential
+
+**Other Security Requirements:**
+- Validate all user input (use libraries like `zod` for schema validation)
+- Use parameterized queries (never string concatenation for SQL)
+- Implement rate limiting on all public endpoints
+- Follow OWASP guidelines (see [OWASP Top 10](https://owasp.org/www-project-top-ten/))
+- Use security headers (Helmet middleware)
+- Enable CORS correctly (restrict to known origins)
+- Implement proper authentication and authorization
+- Keep dependencies up to date (check with `npm audit`)
 
 ## 📦 Dependencies
 

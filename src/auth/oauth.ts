@@ -2,6 +2,8 @@ import crypto from "crypto";
 import { Request, Response, Router } from "express";
 import jwt, { JwtPayload } from "jsonwebtoken";
 import { redisClient } from "../config/redis";
+import { ERROR_CODES } from "../constants/errorCodes";
+import { createError } from "../middleware/errorHandler";
 
 interface OAuthClientConfig {
   clientId: string;
@@ -234,7 +236,7 @@ function createRedisBackedStore(
           return null;
         }
         await redisClient.del(key);
-        const rawStr = typeof raw === 'string' ? raw : raw.toString();
+        const rawStr = typeof raw === "string" ? raw : raw.toString();
         const record = JSON.parse(rawStr) as AuthorizationCodeRecord;
         return record.expiresAt > Date.now() ? record : null;
       }
@@ -267,7 +269,7 @@ function createRedisBackedStore(
         if (!raw) {
           return null;
         }
-        const rawStr = typeof raw === 'string' ? raw : raw.toString();
+        const rawStr = typeof raw === "string" ? raw : raw.toString();
         const record = JSON.parse(rawStr) as RefreshTokenRecord;
         return record.expiresAt > Date.now() ? record : null;
       }
@@ -445,7 +447,7 @@ export function createOAuthRouter(
 
   router.get("/authorize", async (req: Request, res: Response) => {
     if (!requireAuthorizationAdminKey(req)) {
-      return res.status(401).json({
+      throw createError(ERROR_CODES.UNAUTHORIZED, "Unauthorized", {
         error: "Unauthorized",
         message:
           "Valid administrative API key required in X-API-Key header to authorize OAuth clients",

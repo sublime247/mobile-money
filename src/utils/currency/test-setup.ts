@@ -1,3 +1,5 @@
+/// <reference types="jest" />
+
 /**
  * Test setup for Currency Formatter Utility
  * Configures test environment and global test utilities

@@ -198,7 +198,8 @@ function applyPercentageFee(
   amount: number,
 ): { rawFee: number; clampedFee: number; appliedMinimum?: number; appliedMaximum?: number } {
   const rawFee = amount * ((strategy.feePercentage ?? 0) / 100);
-  const { clamped, appliedMin, appliedMax } = clampFee(rawFee, strategy.feeMinimum, strategy.feeMaximum);
+  const minimum = strategy.scope === "user" ? undefined : strategy.feeMinimum;
+  const { clamped, appliedMin, appliedMax } = clampFee(rawFee, minimum, strategy.feeMaximum);
   return { rawFee, clampedFee: clamped, appliedMinimum: appliedMin, appliedMaximum: appliedMax };
 }
 
@@ -243,7 +244,7 @@ function applyTimeBasedFee(
     rawFee = amount * ((strategy.overridePercentage ?? 0) / 100);
   }
 
-  const { clamped, appliedMin, appliedMax } = clampFee(rawFee, strategy.feeMinimum, strategy.feeMaximum);
+  const { clamped, appliedMin, appliedMax } = clampFee(rawFee, undefined, strategy.feeMaximum);
   return { rawFee, clampedFee: clamped, appliedMinimum: appliedMin, appliedMaximum: appliedMax };
 }
 
@@ -262,7 +263,9 @@ function applyVolumeBasedFee(
   );
 
   let rawFee = 0;
+  let matched = false;
   if (matchedTier) {
+    matched = true;
     if (matchedTier.feePercentage !== undefined) {
       rawFee = amount * (matchedTier.feePercentage / 100);
     } else if (matchedTier.flatAmount !== undefined) {
@@ -270,7 +273,8 @@ function applyVolumeBasedFee(
     }
   }
 
-  const { clamped, appliedMin, appliedMax } = clampFee(rawFee, strategy.feeMinimum, strategy.feeMaximum);
+  const minimum = matched ? strategy.feeMinimum : undefined;
+  const { clamped, appliedMin, appliedMax } = clampFee(rawFee, minimum, strategy.feeMaximum);
   return { rawFee, clampedFee: clamped, appliedMinimum: appliedMin, appliedMaximum: appliedMax };
 }
 

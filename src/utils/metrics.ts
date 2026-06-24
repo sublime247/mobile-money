@@ -88,6 +88,28 @@ export const providerCircuitBreakerState = new Gauge({
   registers: [register],
 });
 
+// Horizon node rotation / failover metrics
+export const horizonNodeFailuresTotal = new Counter({
+  name: "horizon_node_failures_total",
+  help: "Total number of failed Horizon requests, labelled per node",
+  labelNames: ["node", "error_type"],
+  registers: [register],
+});
+
+export const horizonNodeHealth = new Gauge({
+  name: "horizon_node_health",
+  help: "Current Horizon node health (1=in rotation, 0=removed/cooldown)",
+  labelNames: ["node"],
+  registers: [register],
+});
+
+export const horizonRequestFailoverTotal = new Counter({
+  name: "horizon_request_failover_total",
+  help: "Total number of Horizon requests retried on an alternative node",
+  labelNames: ["from_node", "to_node", "operation"],
+  registers: [register],
+});
+
 export const healthCheckResponseTimeSeconds = new Histogram({
   name: "health_check_response_time_seconds",
   help: "Duration of provider health checks in seconds",
@@ -185,5 +207,13 @@ export const crossChainAnomalyTotal = new Counter({
   name: "cross_chain_anomaly_total",
   help: "Number of cross-chain balance anomalies detected",
   labelNames: ["chain", "asset", "reason"],
+  registers: [register],
+});
+
+// System Heartbeat Metric
+export const systemHeartbeat = new Gauge({
+  name: "system_heartbeat",
+  help: "System heartbeat metric indicating baseline availability state (1=available, 0=unavailable)",
+  labelNames: ["service"],
   registers: [register],
 });

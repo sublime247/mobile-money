@@ -3,6 +3,7 @@ CREATE TABLE IF NOT EXISTS users (
   id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   phone_number  VARCHAR(20) UNIQUE NOT NULL,
   kyc_level     VARCHAR(20) NOT NULL CHECK (kyc_level IN ('unverified', 'basic', 'full')),
+  mcc           VARCHAR(4) CHECK (mcc IS NULL OR mcc ~ '^[0-9]{4}$'),
   profile_url   TEXT,
   created_at    TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at    TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -66,7 +67,7 @@ CREATE TABLE IF NOT EXISTS transactions (
   phone_number VARCHAR(20) NOT NULL,
   provider VARCHAR(20) NOT NULL,
   stellar_address VARCHAR(56) NOT NULL,
-  status VARCHAR(20) NOT NULL CHECK (status IN ('pending', 'completed', 'failed', 'cancelled', 'clawed_back')),
+  status VARCHAR(20) NOT NULL CHECK (status IN ('pending', 'completed', 'failed', 'cancelled', 'review', 'dispute', 'reversed', 'clawed_back')),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id, user_id),
@@ -74,10 +75,13 @@ CREATE TABLE IF NOT EXISTS transactions (
 );
 
 CREATE INDEX IF NOT EXISTS idx_transactions_status ON transactions(status);
+CREATE INDEX IF NOT EXISTS idx_transactions_status_created_id ON transactions(status, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_transactions_stellar_address ON transactions(stellar_address);
 CREATE INDEX IF NOT EXISTS idx_transactions_created_at ON transactions(created_at);
+CREATE INDEX IF NOT EXISTS idx_transactions_created_id ON transactions(created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_transactions_reference_number ON transactions(reference_number);
 CREATE INDEX IF NOT EXISTS idx_transactions_phone_number ON transactions(phone_number);
+CREATE INDEX IF NOT EXISTS idx_transactions_provider_created_id ON transactions(provider, created_at DESC, id DESC);
 
 -- Tags: array of short lowercase strings for categorization (e.g. "refund", "priority", "verified")
 ALTER TABLE transactions ADD COLUMN IF NOT EXISTS tags TEXT[] DEFAULT '{}';
@@ -88,6 +92,7 @@ CREATE INDEX IF NOT EXISTS idx_transactions_tags ON transactions USING GIN (tags
 
 CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON transactions(user_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_user_created ON transactions(user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_transactions_user_created_id ON transactions(user_id, created_at DESC, id DESC);
 
 ALTER TABLE transactions
 ADD COLUMN IF NOT EXISTS webhook_delivery_status VARCHAR(20) NOT NULL DEFAULT 'pending'

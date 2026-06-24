@@ -8,7 +8,7 @@ import {
   reconcileTransactions, 
   ProviderCSVRow 
 } from "./csvReconciliation";
-import { logger } from "./logger";
+import logger from "../utils/logger";
 
 export class ProviderReconService {
   private reconModel: ReconciliationModel;
@@ -93,7 +93,7 @@ export class ProviderReconService {
       return report.id;
 
     } catch (error) {
-      logger.error(`Reconciliation failed for ${report.id}:`, error);
+      logger.error({ error, reportId: report.id }, `Reconciliation failed for ${report.id}`);
       await this.reconModel.updateReport(report.id, {
         status: ReconciliationStatus.Failed,
         summary: { error: (error as Error).message },

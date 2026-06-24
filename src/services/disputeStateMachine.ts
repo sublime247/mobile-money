@@ -46,6 +46,18 @@ export const DISPUTE_TRANSITIONS: StateTransition[] = [
     conditions: ["Resolution text is required"],
   },
   {
+    from: "open",
+    to: "reversed",
+    requiredFields: ["resolution"],
+    conditions: ["Admin reversal requires resolution text"],
+  },
+  {
+    from: "open",
+    to: "upheld",
+    requiredFields: ["resolution"],
+    conditions: ["Admin uphold decision requires resolution text"],
+  },
+  {
     from: "investigating",
     to: "resolved",
     requiredFields: ["resolution"],
@@ -57,11 +69,23 @@ export const DISPUTE_TRANSITIONS: StateTransition[] = [
     requiredFields: ["resolution"], 
     conditions: ["Resolution text is required"],
   },
+  {
+    from: "investigating",
+    to: "reversed",
+    requiredFields: ["resolution"],
+    conditions: ["Admin reversal requires resolution text"],
+  },
+  {
+    from: "investigating",
+    to: "upheld",
+    requiredFields: ["resolution"],
+    conditions: ["Admin uphold decision requires resolution text"],
+  },
 ];
 
 export const DISPUTE_STATE_MACHINE: StateMachineConfig = {
   transitions: DISPUTE_TRANSITIONS,
-  terminalStates: ["resolved", "rejected"],
+  terminalStates: ["resolved", "rejected", "reversed", "upheld"],
   initialState: "open",
 };
 
@@ -195,6 +219,8 @@ export class DisputeStateMachine {
 
       case "resolved":
       case "rejected":
+      case "reversed":
+      case "upheld":
         return null; // Terminal states
 
       default:

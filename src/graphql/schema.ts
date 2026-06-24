@@ -69,6 +69,8 @@ export const typeDefs = gql`
     investigating: Int!
     resolved: Int!
     rejected: Int!
+    reversed: Int!
+    upheld: Int!
   }
 
   type DisputeReport {

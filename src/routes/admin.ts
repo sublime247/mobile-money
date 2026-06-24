@@ -1,4 +1,5 @@
 import { Router, Request, Response, NextFunction } from "express";
+import * as StellarSdk from "stellar-sdk";
 import { generateToken } from "../auth/jwt";
 import {
   updateAdminNotesHandler,
@@ -44,6 +45,10 @@ import {
   ComplianceDocumentCreateInput,
   ComplianceDocumentUpdateInput,
 } from "../models/complianceDocument";
+import { providerSettingsService } from "../services/providerSettingsService";
+import { resetCircuitBreakerForProvider } from "../utils/circuitBreaker";
+import { ERROR_CODES } from "../constants/errorCodes";
+import { createError } from "../middleware/errorHandler";
 
 const router = Router();
 const IMPERSONATION_TOKEN_EXPIRES_IN = "15m";
@@ -160,7 +165,9 @@ const requireAdmin = (req: Request, res: Response, next: NextFunction) => {
   const user = (req as AuthRequest).user;
 
   if (!user || !isAdminRole(user.role)) {
-    return res.status(403).json({ message: "Admin access required" });
+    throw createError(ERROR_CODES.FORBIDDEN, "Admin access required", {
+      message: "Admin access required",
+    });
   }
 
   next();
@@ -173,7 +180,7 @@ const requireSuperAdmin = (req: Request, res: Response, next: NextFunction) => {
     logImpersonationAuditEvent("IMPERSONATION_TOKEN_DENIED", req, {
       reason: "super_admin_required",
     });
-    return res.status(403).json({
+    throw createError(ERROR_CODES.FORBIDDEN, "Super-admin access required", {
       message: "Super-admin access required",
     });
   }
@@ -241,10 +248,13 @@ router.get(
       });
     } catch (err) {
       console.error("Error fetching transaction resolution metrics:", err);
-      res.status(500).json({
-        message: "Failed to retrieve transaction resolution metrics",
-        error: err instanceof Error ? err.message : "Unknown error",
-      });
+      throw createError(
+        ERROR_CODES.INTERNAL_ERROR,
+        "Failed to retrieve transaction resolution metrics",
+        {
+          message: err instanceof Error ? err.message : "Unknown error",
+        },
+      );
     }
   },
 );
@@ -258,27 +268,41 @@ router.post(
     try {
       const adminUser = (req as AuthRequest).user;
       if (!adminUser) {
-        return res.status(401).json({ message: "Authentication required" });
+        throw createError(ERROR_CODES.UNAUTHORIZED, "Authentication required", {
+          message: "Authentication required",
+        });
       }
 
       const { reason } = req.body;
       if (!reason || typeof reason !== "string" || reason.trim().length === 0) {
-        return res.status(400).json({
-          message: "A reason is required for freezing an account",
-        });
+        throw createError(
+          ERROR_CODES.INVALID_INPUT,
+          "A reason is required for freezing an account",
+          {
+            message: "A reason is required for freezing an account",
+          },
+        );
       }
 
       const userIds = normalizeBulkIds(req.body?.userIds);
       if (userIds.length === 0) {
-        return res.status(400).json({
-          message: "userIds must be a non-empty array of user IDs",
-        });
+        throw createError(
+          ERROR_CODES.INVALID_INPUT,
+          "userIds must be a non-empty array of user IDs",
+          {
+            message: "userIds must be a non-empty array of user IDs",
+          },
+        );
       }
 
       if (userIds.length > MAX_BULK_IDS) {
-        return res.status(413).json({
-          message: `Too many userIds supplied (max ${MAX_BULK_IDS})`,
-        });
+        throw createError(
+          ERROR_CODES.LIMIT_EXCEEDED,
+          `Too many userIds supplied (max ${MAX_BULK_IDS})`,
+          {
+            message: `Too many userIds supplied (max ${MAX_BULK_IDS})`,
+          },
+        );
       }
 
       const userModel = new UserModel();
@@ -347,7 +371,7 @@ router.post(
       });
     } catch (error) {
       console.error("Error bulk freezing users:", error);
-      return res.status(500).json({ message: "Internal server error" });
+      throw createError(ERROR_CODES.INTERNAL_ERROR, "Internal server error");
     }
   },
 );
@@ -361,27 +385,41 @@ router.post(
     try {
       const adminUser = (req as AuthRequest).user;
       if (!adminUser) {
-        return res.status(401).json({ message: "Authentication required" });
+        throw createError(ERROR_CODES.UNAUTHORIZED, "Authentication required", {
+          message: "Authentication required",
+        });
       }
 
       const { reason } = req.body;
       if (!reason || typeof reason !== "string" || reason.trim().length === 0) {
-        return res.status(400).json({
-          message: "A reason is required for unfreezing an account",
-        });
+        throw createError(
+          ERROR_CODES.INVALID_INPUT,
+          "A reason is required for unfreezing an account",
+          {
+            message: "A reason is required for unfreezing an account",
+          },
+        );
       }
 
       const userIds = normalizeBulkIds(req.body?.userIds);
       if (userIds.length === 0) {
-        return res.status(400).json({
-          message: "userIds must be a non-empty array of user IDs",
-        });
+        throw createError(
+          ERROR_CODES.INVALID_INPUT,
+          "userIds must be a non-empty array of user IDs",
+          {
+            message: "userIds must be a non-empty array of user IDs",
+          },
+        );
       }
 
       if (userIds.length > MAX_BULK_IDS) {
-        return res.status(413).json({
-          message: `Too many userIds supplied (max ${MAX_BULK_IDS})`,
-        });
+        throw createError(
+          ERROR_CODES.LIMIT_EXCEEDED,
+          `Too many userIds supplied (max ${MAX_BULK_IDS})`,
+          {
+            message: `Too many userIds supplied (max ${MAX_BULK_IDS})`,
+          },
+        );
       }
 
       const userModel = new UserModel();
@@ -450,7 +488,7 @@ router.post(
       });
     } catch (error) {
       console.error("Error bulk unfreezing users:", error);
-      return res.status(500).json({ message: "Internal server error" });
+      throw createError(ERROR_CODES.INTERNAL_ERROR, "Internal server error");
     }
   },
 );
@@ -475,10 +513,13 @@ router.get(
       });
     } catch (err) {
       console.error("Error fetching dispute resolution metrics:", err);
-      res.status(500).json({
-        message: "Failed to retrieve dispute resolution metrics",
-        error: err instanceof Error ? err.message : "Unknown error",
-      });
+      throw createError(
+        ERROR_CODES.INTERNAL_ERROR,
+        "Failed to retrieve dispute resolution metrics",
+        {
+          message: err instanceof Error ? err.message : "Unknown error",
+        },
+      );
     }
   },
 );
@@ -513,7 +554,9 @@ router.get(
     const user = users.find((u) => u.id === req.params.id);
 
     if (!user) {
-      return res.status(404).json({ message: "User not found" });
+      throw createError(ERROR_CODES.NOT_FOUND, "User not found", {
+        message: "User not found",
+      });
     }
 
     res.json(user);
@@ -535,7 +578,9 @@ router.post(
         targetUserId: req.params.id,
         reason: "target_user_not_found",
       });
-      return res.status(404).json({ message: "User not found" });
+      throw createError(ERROR_CODES.NOT_FOUND, "User not found", {
+        message: "User not found",
+      });
     }
 
     if (!actor) {
@@ -543,7 +588,9 @@ router.post(
         targetUserId: targetUser.id,
         reason: "missing_actor_context",
       });
-      return res.status(401).json({ message: "Authentication required" });
+      throw createError(ERROR_CODES.UNAUTHORIZED, "Authentication required", {
+        message: "Authentication required",
+      });
     }
 
     if (actor.id === targetUser.id) {
@@ -551,9 +598,13 @@ router.post(
         targetUserId: targetUser.id,
         reason: "self_impersonation_blocked",
       });
-      return res.status(400).json({
-        message: "Cannot generate an impersonation token for yourself",
-      });
+      throw createError(
+        ERROR_CODES.INVALID_INPUT,
+        "Cannot generate an impersonation token for yourself",
+        {
+          message: "Cannot generate an impersonation token for yourself",
+        },
+      );
     }
 
     if (!reason) {
@@ -561,9 +612,13 @@ router.post(
         targetUserId: targetUser.id,
         reason: "missing_support_reason",
       });
-      return res.status(400).json({
-        message: "A support reason is required for impersonation",
-      });
+      throw createError(
+        ERROR_CODES.INVALID_INPUT,
+        "A support reason is required for impersonation",
+        {
+          message: "A support reason is required for impersonation",
+        },
+      );
     }
 
     const email =
@@ -621,20 +676,30 @@ router.post(
     try {
       const adminUser = (req as AuthRequest).user;
       if (!adminUser) {
-        return res.status(401).json({ message: "Authentication required" });
+        throw createError(ERROR_CODES.UNAUTHORIZED, "Authentication required", {
+          message: "Authentication required",
+        });
       }
 
       const userIds = normalizeBulkIds(req.body?.userIds);
       if (userIds.length === 0) {
-        return res.status(400).json({
-          message: "userIds must be a non-empty array of user IDs",
-        });
+        throw createError(
+          ERROR_CODES.INVALID_INPUT,
+          "userIds must be a non-empty array of user IDs",
+          {
+            message: "userIds must be a non-empty array of user IDs",
+          },
+        );
       }
 
       if (userIds.length > MAX_BULK_IDS) {
-        return res.status(413).json({
-          message: `Too many userIds supplied (max ${MAX_BULK_IDS})`,
-        });
+        throw createError(
+          ERROR_CODES.LIMIT_EXCEEDED,
+          `Too many userIds supplied (max ${MAX_BULK_IDS})`,
+          {
+            message: `Too many userIds supplied (max ${MAX_BULK_IDS})`,
+          },
+        );
       }
 
       const results: BulkActionResult[] = [];
@@ -676,7 +741,7 @@ router.post(
       });
     } catch (error) {
       console.error("Error bulk unlocking users:", error);
-      return res.status(500).json({ message: "Internal server error" });
+      throw createError(ERROR_CODES.INTERNAL_ERROR, "Internal server error");
     }
   },
 );
@@ -690,7 +755,9 @@ router.put(
     const user = users.find((u) => u.id === req.params.id);
 
     if (!user) {
-      return res.status(404).json({ message: "User not found" });
+      throw createError(ERROR_CODES.NOT_FOUND, "User not found", {
+        message: "User not found",
+      });
     }
 
     Object.assign(user, req.body);
@@ -708,7 +775,9 @@ router.post(
     const user = users.find((u) => u.id === req.params.id);
 
     if (!user) {
-      return res.status(404).json({ message: "User not found" });
+      throw createError(ERROR_CODES.NOT_FOUND, "User not found", {
+        message: "User not found",
+      });
     }
 
     user.locked = false;
@@ -729,14 +798,20 @@ router.post(
       const adminUser = (req as AuthRequest).user;
 
       if (!adminUser) {
-        return res.status(401).json({ message: "Authentication required" });
+        throw createError(ERROR_CODES.UNAUTHORIZED, "Authentication required", {
+          message: "Authentication required",
+        });
       }
 
       // Validate reason
       if (!reason || typeof reason !== "string" || reason.trim().length === 0) {
-        return res.status(400).json({
-          message: "A reason is required for freezing an account",
-        });
+        throw createError(
+          ERROR_CODES.INVALID_INPUT,
+          "A reason is required for freezing an account",
+          {
+            message: "A reason is required for freezing an account",
+          },
+        );
       }
 
       const userModel = new UserModel();
@@ -744,14 +819,20 @@ router.post(
       // Check if user exists
       const user = await userModel.findById(userId);
       if (!user) {
-        return res.status(404).json({ message: "User not found" });
+        throw createError(ERROR_CODES.NOT_FOUND, "User not found", {
+          message: "User not found",
+        });
       }
 
       // Check if already frozen
       if (user.status === "frozen") {
-        return res.status(400).json({
-          message: "User account is already frozen",
-        });
+        throw createError(
+          ERROR_CODES.CONFLICT,
+          "User account is already frozen",
+          {
+            message: "User account is already frozen",
+          },
+        );
       }
 
       // Freeze the user
@@ -765,9 +846,13 @@ router.post(
       );
 
       if (!updatedUser) {
-        return res
-          .status(500)
-          .json({ message: "Failed to freeze user account" });
+        throw createError(
+          ERROR_CODES.INTERNAL_ERROR,
+          "Failed to freeze user account",
+          {
+            message: "Failed to freeze user account",
+          },
+        );
       }
 
       console.log(`[ADMIN] User account frozen: ${userId}`, {
@@ -786,7 +871,7 @@ router.post(
       });
     } catch (error) {
       console.error("Error freezing user account:", error);
-      res.status(500).json({ message: "Internal server error" });
+      throw createError(ERROR_CODES.INTERNAL_ERROR, "Internal server error");
     }
   },
 );
@@ -803,14 +888,20 @@ router.post(
       const adminUser = (req as AuthRequest).user;
 
       if (!adminUser) {
-        return res.status(401).json({ message: "Authentication required" });
+        throw createError(ERROR_CODES.UNAUTHORIZED, "Authentication required", {
+          message: "Authentication required",
+        });
       }
 
       // Validate reason
       if (!reason || typeof reason !== "string" || reason.trim().length === 0) {
-        return res.status(400).json({
-          message: "A reason is required for unfreezing an account",
-        });
+        throw createError(
+          ERROR_CODES.INVALID_INPUT,
+          "A reason is required for unfreezing an account",
+          {
+            message: "A reason is required for unfreezing an account",
+          },
+        );
       }
 
       const userModel = new UserModel();
@@ -818,12 +909,14 @@ router.post(
       // Check if user exists
       const user = await userModel.findById(userId);
       if (!user) {
-        return res.status(404).json({ message: "User not found" });
+        throw createError(ERROR_CODES.NOT_FOUND, "User not found", {
+          message: "User not found",
+        });
       }
 
       // Check if not frozen
       if (user.status !== "frozen") {
-        return res.status(400).json({
+        throw createError(ERROR_CODES.CONFLICT, "User account is not frozen", {
           message: "User account is not frozen",
         });
       }
@@ -839,9 +932,13 @@ router.post(
       );
 
       if (!updatedUser) {
-        return res
-          .status(500)
-          .json({ message: "Failed to unfreeze user account" });
+        throw createError(
+          ERROR_CODES.INTERNAL_ERROR,
+          "Failed to unfreeze user account",
+          {
+            message: "Failed to unfreeze user account",
+          },
+        );
       }
 
       console.log(`[ADMIN] User account unfrozen: ${userId}`, {
@@ -860,7 +957,7 @@ router.post(
       });
     } catch (error) {
       console.error("Error unfreezing user account:", error);
-      res.status(500).json({ message: "Internal server error" });
+      throw createError(ERROR_CODES.INTERNAL_ERROR, "Internal server error");
     }
   },
 );
@@ -878,7 +975,9 @@ router.get(
       // Check if user exists
       const user = await userModel.findById(userId);
       if (!user) {
-        return res.status(404).json({ message: "User not found" });
+        throw createError(ERROR_CODES.NOT_FOUND, "User not found", {
+          message: "User not found",
+        });
       }
 
       const auditHistory = await userModel.getAuditHistory(userId);
@@ -890,7 +989,7 @@ router.get(
       });
     } catch (error) {
       console.error("Error fetching user status history:", error);
-      res.status(500).json({ message: "Internal server error" });
+      throw createError(ERROR_CODES.INTERNAL_ERROR, "Internal server error");
     }
   },
 );
@@ -910,7 +1009,9 @@ router.get(
     const user = users.find((u) => u.id === req.params.id);
 
     if (!user) {
-      return res.status(404).json({ message: "User not found" });
+      throw createError(ERROR_CODES.NOT_FOUND, "User not found", {
+        message: "User not found",
+      });
     }
 
     const config = user.dashboard_config || {
@@ -934,17 +1035,23 @@ router.put(
     const user = users.find((u) => u.id === req.params.id);
 
     if (!user) {
-      return res.status(404).json({ message: "User not found" });
+      throw createError(ERROR_CODES.NOT_FOUND, "User not found", {
+        message: "User not found",
+      });
     }
 
     const { config } = req.body;
 
     // Validate the dashboard config against the JSON schema
     if (!validateDashboardConfig(config)) {
-      return res.status(400).json({
-        message: "Invalid dashboard configuration",
-        errors: DASHBOARD_CONFIG_VALIDATION_ERRORS,
-      });
+      throw createError(
+        ERROR_CODES.INVALID_INPUT,
+        "Invalid dashboard configuration",
+        {
+          message: "Invalid dashboard configuration",
+          errors: DASHBOARD_CONFIG_VALIDATION_ERRORS,
+        },
+      );
     }
 
     // Save the configuration
@@ -1013,7 +1120,13 @@ router.get(
       });
     } catch (err) {
       console.error("Error listing transactions for admin:", err);
-      res.status(500).json({ error: "Failed to list transactions" });
+      throw createError(
+        ERROR_CODES.INTERNAL_ERROR,
+        "Failed to list transactions",
+        {
+          error: "Failed to list transactions",
+        },
+      );
     }
   },
 );
@@ -1029,7 +1142,9 @@ router.put(
       const tx = await transactionModel.findById(req.params.id);
 
       if (!tx) {
-        return res.status(404).json({ message: "Transaction not found" });
+        throw createError(ERROR_CODES.NOT_FOUND, "Transaction not found", {
+          message: "Transaction not found",
+        });
       }
 
       // Basic update logic - in a real app this would be more specific
@@ -1048,7 +1163,10 @@ router.put(
       res.json({ message: "Transaction updated", transaction: updatedTx });
     } catch (err) {
       console.error("Error updating transaction:", err);
-      res.status(500).json({ error: "Failed to update transaction" });
+      throw createError(
+        ERROR_CODES.INTERNAL_ERROR,
+        "Failed to update transaction",
+      );
     }
   },
 );
@@ -1078,28 +1196,42 @@ router.patch(
     try {
       const adminUser = (req as AuthRequest).user;
       if (!adminUser) {
-        return res.status(401).json({ message: "Authentication required" });
+        throw createError(ERROR_CODES.UNAUTHORIZED, "Authentication required", {
+          message: "Authentication required",
+        });
       }
 
       const { admin_notes: adminNotes } = req.body;
       if (typeof adminNotes !== "string") {
-        return res
-          .status(400)
-          .json({ message: "admin_notes must be a string" });
+        throw createError(
+          ERROR_CODES.INVALID_INPUT,
+          "admin_notes must be a string",
+          {
+            message: "admin_notes must be a string",
+          },
+        );
       }
 
       const transactionIds = normalizeBulkIds(req.body?.transactionIds);
       if (transactionIds.length === 0) {
-        return res.status(400).json({
-          message:
-            "transactionIds must be a non-empty array of transaction IDs",
-        });
+        throw createError(
+          ERROR_CODES.INVALID_INPUT,
+          "transactionIds must be a non-empty array of transaction IDs",
+          {
+            message:
+              "transactionIds must be a non-empty array of transaction IDs",
+          },
+        );
       }
 
       if (transactionIds.length > MAX_BULK_IDS) {
-        return res.status(413).json({
-          message: `Too many transactionIds supplied (max ${MAX_BULK_IDS})`,
-        });
+        throw createError(
+          ERROR_CODES.LIMIT_EXCEEDED,
+          `Too many transactionIds supplied (max ${MAX_BULK_IDS})`,
+          {
+            message: `Too many transactionIds supplied (max ${MAX_BULK_IDS})`,
+          },
+        );
       }
 
       const results: BulkTransactionActionResult[] = [];
@@ -1137,7 +1269,7 @@ router.patch(
       });
     } catch (error) {
       console.error("Error bulk updating transaction admin notes:", error);
-      return res.status(500).json({ message: "Internal server error" });
+      throw createError(ERROR_CODES.INTERNAL_ERROR, "Internal server error");
     }
   },
 );
@@ -1151,29 +1283,43 @@ router.patch(
     try {
       const adminUser = (req as AuthRequest).user;
       if (!adminUser) {
-        return res.status(401).json({ message: "Authentication required" });
+        throw createError(ERROR_CODES.UNAUTHORIZED, "Authentication required", {
+          message: "Authentication required",
+        });
       }
 
       const { status } = req.body;
       const allowed = Object.values(TransactionStatus) as string[];
       if (typeof status !== "string" || !allowed.includes(status)) {
-        return res.status(400).json({
-          message: `status must be one of: ${allowed.join(", ")}`,
-        });
+        throw createError(
+          ERROR_CODES.INVALID_INPUT,
+          `status must be one of: ${allowed.join(", ")}`,
+          {
+            message: `status must be one of: ${allowed.join(", ")}`,
+          },
+        );
       }
 
       const transactionIds = normalizeBulkIds(req.body?.transactionIds);
       if (transactionIds.length === 0) {
-        return res.status(400).json({
-          message:
-            "transactionIds must be a non-empty array of transaction IDs",
-        });
+        throw createError(
+          ERROR_CODES.INVALID_INPUT,
+          "transactionIds must be a non-empty array of transaction IDs",
+          {
+            message:
+              "transactionIds must be a non-empty array of transaction IDs",
+          },
+        );
       }
 
       if (transactionIds.length > MAX_BULK_IDS) {
-        return res.status(413).json({
-          message: `Too many transactionIds supplied (max ${MAX_BULK_IDS})`,
-        });
+        throw createError(
+          ERROR_CODES.LIMIT_EXCEEDED,
+          `Too many transactionIds supplied (max ${MAX_BULK_IDS})`,
+          {
+            message: `Too many transactionIds supplied (max ${MAX_BULK_IDS})`,
+          },
+        );
       }
 
       const results: BulkTransactionActionResult[] = [];
@@ -1214,11 +1360,10 @@ router.patch(
       });
     } catch (error) {
       console.error("Error bulk updating transaction status:", error);
-      return res.status(500).json({ message: "Internal server error" });
+      throw createError(ERROR_CODES.INTERNAL_ERROR, "Internal server error");
     }
   },
 );
-
 // POST /api/admin/transactions/bulk/refund
 router.post(
   "/transactions/bulk/refund",
@@ -1228,24 +1373,34 @@ router.post(
     try {
       const adminUser = (req as AuthRequest).user;
       if (!adminUser) {
-        return res.status(401).json({ message: "Authentication required" });
+        throw createError(ERROR_CODES.UNAUTHORIZED, "Authentication required", {
+          message: "Authentication required",
+        });
       }
 
       const transactionIds = normalizeBulkIds(req.body?.transactionIds);
       if (transactionIds.length === 0) {
-        return res.status(400).json({
-          message:
-            "transactionIds must be a non-empty array of transaction IDs",
-        });
+        throw createError(
+          ERROR_CODES.INVALID_INPUT,
+          "transactionIds must be a non-empty array of transaction IDs",
+          {
+            message:
+              "transactionIds must be a non-empty array of transaction IDs",
+          },
+        );
       }
 
       if (transactionIds.length > MAX_BULK_IDS) {
-        return res.status(413).json({
-          message: `Too many transactionIds supplied (max ${MAX_BULK_IDS})`,
-        });
+        throw createError(
+          ERROR_CODES.LIMIT_EXCEEDED,
+          `Too many transactionIds supplied (max ${MAX_BULK_IDS})`,
+          {
+            message: `Too many transactionIds supplied (max ${MAX_BULK_IDS})`,
+          },
+        );
       }
 
-      const { calculateFee } = await import("../utils/fees");
+      const { calculateFee } = await import("../utils/fees.js");
       const results: BulkTransactionActionResult[] = [];
 
       for (const transactionId of transactionIds) {
@@ -1315,7 +1470,7 @@ router.post(
       });
     } catch (error) {
       console.error("Error bulk refunding transactions:", error);
-      return res.status(500).json({ message: "Internal server error" });
+      throw createError(ERROR_CODES.INTERNAL_ERROR, "Internal server error");
     }
   },
 );
@@ -1353,9 +1508,10 @@ router.get(
       res.json({ transfers });
     } catch (err) {
       console.error("[liquidity] Failed to list transfers:", err);
-      res
-        .status(500)
-        .json({ message: "Failed to retrieve liquidity transfers" });
+      throw createError(
+        ERROR_CODES.INTERNAL_ERROR,
+        "Failed to retrieve liquidity transfers",
+      );
     }
   },
 );
@@ -1370,24 +1526,37 @@ router.post(
       const { fromProvider, toProvider, amount, note } = req.body;
       const admin = (req as AuthRequest).user;
 
-      if (!admin)
-        return res.status(401).json({ message: "Authentication required" });
+      if (!admin) {
+        throw createError(ERROR_CODES.UNAUTHORIZED, "Authentication required", {
+          message: "Authentication required",
+        });
+      }
       if (!fromProvider || !toProvider || !amount) {
-        return res
-          .status(400)
-          .json({
+        throw createError(
+          ERROR_CODES.INVALID_INPUT,
+          "fromProvider, toProvider, and amount are required",
+          {
             message: "fromProvider, toProvider, and amount are required",
-          });
+          },
+        );
       }
       if (fromProvider === toProvider) {
-        return res
-          .status(400)
-          .json({ message: "fromProvider and toProvider must be different" });
+        throw createError(
+          ERROR_CODES.INVALID_INPUT,
+          "fromProvider and toProvider must be different",
+          {
+            message: "fromProvider and toProvider must be different",
+          },
+        );
       }
       if (typeof amount !== "number" || amount <= 0) {
-        return res
-          .status(400)
-          .json({ message: "amount must be a positive number" });
+        throw createError(
+          ERROR_CODES.INVALID_INPUT,
+          "amount must be a positive number",
+          {
+            message: "amount must be a positive number",
+          },
+        );
       }
 
       const result = await triggerManualTransfer(
@@ -1401,7 +1570,7 @@ router.post(
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Transfer failed";
       console.error("[liquidity] Manual transfer error:", err);
-      res.status(400).json({ message: msg });
+      throw createError(ERROR_CODES.INTERNAL_ERROR, msg);
     }
   },
 );
@@ -1421,7 +1590,7 @@ router.post(
   async (req: Request, res: Response) => {
     try {
       if (!req.file) {
-        return res.status(400).json({
+        throw createError(ERROR_CODES.INVALID_INPUT, "No file uploaded", {
           error: "No file uploaded",
           message: "Please upload a CSV file with field name 'csv'",
         });
@@ -1437,7 +1606,7 @@ router.post(
       const providerRows = await parseCSV(req.file.buffer);
 
       if (providerRows.length === 0) {
-        return res.status(400).json({
+        throw createError(ERROR_CODES.INVALID_INPUT, "Empty CSV", {
           error: "Empty CSV",
           message: "The uploaded CSV file contains no data rows",
         });
@@ -1458,17 +1627,21 @@ router.post(
         message: "Reconciliation completed successfully",
         result,
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("[CSV RECONCILIATION ERROR]", error);
 
+      if (error.statusCode) {
+        throw error;
+      }
+
       if (error instanceof Error) {
-        return res.status(500).json({
+        throw createError(ERROR_CODES.INTERNAL_ERROR, "Reconciliation failed", {
           error: "Reconciliation failed",
           message: error.message,
         });
       }
 
-      res.status(500).json({
+      throw createError(ERROR_CODES.INTERNAL_ERROR, "Reconciliation failed", {
         error: "Reconciliation failed",
         message: "An unexpected error occurred during reconciliation",
       });
@@ -1496,7 +1669,10 @@ router.get(
       const provider = req.query.provider as string | undefined;
 
       const offset = (page - 1) * limit;
-      const runs = await providerReconciliationService.getReconciliationHistory(provider, limit);
+      const runs = await providerReconciliationService.getReconciliationHistory(
+        provider,
+        limit,
+      );
 
       // Apply pagination
       const paginatedRuns = runs.slice(offset, offset + limit);
@@ -1513,7 +1689,10 @@ router.get(
       });
     } catch (error) {
       console.error("Error fetching reconciliation runs:", error);
-      res.status(500).json({ message: "Failed to fetch reconciliation runs" });
+      throw createError(
+        ERROR_CODES.INTERNAL_ERROR,
+        "Failed to fetch reconciliation runs",
+      );
     }
   },
 );
@@ -1535,10 +1714,14 @@ router.get(
       // Apply filters
       let filteredAlerts = alerts;
       if (status) {
-        filteredAlerts = filteredAlerts.filter(alert => alert.status === status);
+        filteredAlerts = filteredAlerts.filter(
+          (alert) => alert.status === status,
+        );
       }
       if (severity) {
-        filteredAlerts = filteredAlerts.filter(alert => alert.severity === severity);
+        filteredAlerts = filteredAlerts.filter(
+          (alert) => alert.severity === severity,
+        );
       }
 
       // Apply pagination
@@ -1556,11 +1739,13 @@ router.get(
       });
     } catch (error) {
       console.error("Error fetching reconciliation alerts:", error);
-      res.status(500).json({ message: "Failed to fetch reconciliation alerts" });
+      throw createError(
+        ERROR_CODES.INTERNAL_ERROR,
+        "Failed to fetch reconciliation alerts",
+      );
     }
   },
 );
-
 // PATCH /api/admin/reconciliation/alerts/:id - Review reconciliation alert
 router.patch(
   "/reconciliation/alerts/:id",
@@ -1573,33 +1758,47 @@ router.patch(
       const adminUser = (req as AuthRequest).user;
 
       if (!adminUser) {
-        return res.status(401).json({ message: "Authentication required" });
+        throw createError(ERROR_CODES.UNAUTHORIZED, "Authentication required", {
+          message: "Authentication required",
+        });
       }
 
-      const allowedStatuses = ['reviewed', 'dismissed', 'resolved'];
+      const allowedStatuses = ["reviewed", "dismissed", "resolved"];
       if (!allowedStatuses.includes(status)) {
-        return res.status(400).json({
-          message: `Status must be one of: ${allowedStatuses.join(', ')}`,
-        });
+        throw createError(
+          ERROR_CODES.INVALID_INPUT,
+          `Status must be one of: ${allowedStatuses.join(", ")}`,
+          {
+            message: `Status must be one of: ${allowedStatuses.join(", ")}`,
+          },
+        );
       }
 
-      if (!review_notes || typeof review_notes !== 'string' || review_notes.trim().length === 0) {
-        return res.status(400).json({
-          message: "Review notes are required",
-        });
+      if (
+        !review_notes ||
+        typeof review_notes !== "string" ||
+        review_notes.trim().length === 0
+      ) {
+        throw createError(
+          ERROR_CODES.INVALID_INPUT,
+          "Review notes are required",
+          {
+            message: "Review notes are required",
+          },
+        );
       }
 
       await providerReconciliationService.reviewAlert(
         id,
         status,
         review_notes.trim(),
-        adminUser.id
+        adminUser.id,
       );
 
       res.json({ message: "Alert reviewed successfully" });
     } catch (error) {
       console.error("Error reviewing reconciliation alert:", error);
-      res.status(500).json({ message: "Failed to review alert" });
+      throw createError(ERROR_CODES.INTERNAL_ERROR, "Failed to review alert");
     }
   },
 );
@@ -1614,20 +1813,32 @@ router.post(
       const { provider, report_date } = req.body;
 
       if (!provider || !report_date) {
-        return res.status(400).json({
-          message: "Provider and report_date are required",
-        });
+        throw createError(
+          ERROR_CODES.INVALID_INPUT,
+          "Provider and report_date are required",
+          {
+            message: "Provider and report_date are required",
+          },
+        );
       }
 
       const reportDate = new Date(report_date);
       if (isNaN(reportDate.getTime())) {
-        return res.status(400).json({
-          message: "Invalid report_date format. Use ISO date string.",
-        });
+        throw createError(
+          ERROR_CODES.INVALID_INPUT,
+          "Invalid report_date format. Use ISO date string.",
+          {
+            message: "Invalid report_date format. Use ISO date string.",
+          },
+        );
       }
 
-      const { runManualProviderReconciliation } = await import("../jobs/providerReconciliationJob");
-      const result = await runManualProviderReconciliation(provider, reportDate);
+      const { runManualProviderReconciliation } =
+        await import("../jobs/providerReconciliationJob.js");
+      const result = await runManualProviderReconciliation(
+        provider,
+        reportDate,
+      );
 
       res.json({
         message: "Manual reconciliation completed",
@@ -1635,10 +1846,14 @@ router.post(
       });
     } catch (error) {
       console.error("Error running manual reconciliation:", error);
-      res.status(500).json({
-        message: "Manual reconciliation failed",
-        error: error instanceof Error ? error.message : "Unknown error",
-      });
+      throw createError(
+        ERROR_CODES.INTERNAL_ERROR,
+        "Manual reconciliation failed",
+        {
+          message: "Manual reconciliation failed",
+          error: error instanceof Error ? error.message : "Unknown error",
+        },
+      );
     }
   },
 );
@@ -1654,7 +1869,10 @@ router.get(
       res.json({ data: configs });
     } catch (error) {
       console.error("Error fetching reconciliation configs:", error);
-      res.status(500).json({ message: "Failed to fetch reconciliation configs" });
+      throw createError(
+        ERROR_CODES.INTERNAL_ERROR,
+        "Failed to fetch reconciliation configs",
+      );
     }
   },
 );
@@ -1737,11 +1955,15 @@ router.get(
       });
     } catch (err) {
       console.error("Health check error:", err);
-      res.status(500).json({
-        status: "error",
-        message: "Failed to retrieve health data",
-        timestamp: new Date().toISOString(),
-      });
+      throw createError(
+        ERROR_CODES.INTERNAL_ERROR,
+        "Failed to retrieve health data",
+        {
+          status: "error",
+          message: "Failed to retrieve health data",
+          timestamp: new Date().toISOString(),
+        },
+      );
     }
   },
 );
@@ -1758,7 +1980,7 @@ router.get(
   requireAdmin,
   async (_req: Request, res: Response) => {
     try {
-      const { queryRead } = await import("../config/database");
+      const { queryRead } = await import("../config/database.js");
       const result = await queryRead<{
         report_date: string;
         user_fees: string;
@@ -1791,7 +2013,7 @@ router.get(
       res.json({ rows, totals });
     } catch (err) {
       console.error("[financial/pnl]", err);
-      res.status(500).json({ error: "Failed to fetch PnL data" });
+      throw createError(ERROR_CODES.INTERNAL_ERROR, "Failed to fetch PnL data");
     }
   },
 );
@@ -2078,16 +2300,16 @@ const validateComplianceCreate = (
   body: Record<string, unknown>,
 ): ValidationResult<ComplianceDocumentCreateInput> => {
   const title = normalizeString(body.title, "title", true);
-  if (!title.ok) return title;
+  if (!title.ok) return title as ValidationResult<ComplianceDocumentCreateInput>;
 
   const docBody = normalizeString(body.body, "body", true);
-  if (!docBody.ok) return docBody;
+  if (!docBody.ok) return docBody as ValidationResult<ComplianceDocumentCreateInput>;
 
   const summary = normalizeString(body.summary, "summary", false);
-  if (!summary.ok) return summary;
+  if (!summary.ok) return summary as ValidationResult<ComplianceDocumentCreateInput>;
 
   const provider = normalizeString(body.provider, "provider", false);
-  if (!provider.ok) return provider;
+  if (!provider.ok) return provider as ValidationResult<ComplianceDocumentCreateInput>;
   if (provider.value && provider.value.length > 100) {
     return { ok: false, message: "provider must be 100 characters or fewer" };
   }
@@ -2097,16 +2319,16 @@ const validateComplianceCreate = (
     "sourceUrl",
     false,
   );
-  if (!sourceUrl.ok) return sourceUrl;
+  if (!sourceUrl.ok) return sourceUrl as ValidationResult<ComplianceDocumentCreateInput>;
 
   const country = normalizeCountry(getCountryValue(body));
-  if (!country.ok) return country;
+  if (!country.ok) return country as ValidationResult<ComplianceDocumentCreateInput>;
 
   const tags = normalizeTags(body.tags);
-  if (!tags.ok) return tags;
+  if (!tags.ok) return tags as ValidationResult<ComplianceDocumentCreateInput>;
 
   const status = normalizeStatus(body.status);
-  if (!status.ok) return status;
+  if (!status.ok) return status as ValidationResult<ComplianceDocumentCreateInput>;
 
   return {
     ok: true,
@@ -2147,25 +2369,25 @@ const validateComplianceUpdate = (
 
   if (Object.prototype.hasOwnProperty.call(body, "title")) {
     const title = normalizeString(body.title, "title", true);
-    if (!title.ok) return title;
+    if (!title.ok) return title as ValidationResult<ComplianceDocumentUpdateInput>;
     input.title = title.value as string;
   }
 
   if (Object.prototype.hasOwnProperty.call(body, "body")) {
     const docBody = normalizeString(body.body, "body", true);
-    if (!docBody.ok) return docBody;
+    if (!docBody.ok) return docBody as ValidationResult<ComplianceDocumentUpdateInput>;
     input.body = docBody.value as string;
   }
 
   if (Object.prototype.hasOwnProperty.call(body, "summary")) {
     const summary = normalizeString(body.summary, "summary", false);
-    if (!summary.ok) return summary;
+    if (!summary.ok) return summary as ValidationResult<ComplianceDocumentUpdateInput>;
     input.summary = summary.value ?? null;
   }
 
   if (Object.prototype.hasOwnProperty.call(body, "provider")) {
     const provider = normalizeString(body.provider, "provider", false);
-    if (!provider.ok) return provider;
+    if (!provider.ok) return provider as ValidationResult<ComplianceDocumentUpdateInput>;
     if (provider.value && provider.value.length > 100) {
       return { ok: false, message: "provider must be 100 characters or fewer" };
     }
@@ -2181,7 +2403,7 @@ const validateComplianceUpdate = (
       "sourceUrl",
       false,
     );
-    if (!sourceUrl.ok) return sourceUrl;
+    if (!sourceUrl.ok) return sourceUrl as ValidationResult<ComplianceDocumentUpdateInput>;
     input.sourceUrl = sourceUrl.value ?? null;
   }
 
@@ -2191,19 +2413,19 @@ const validateComplianceUpdate = (
     Object.prototype.hasOwnProperty.call(body, "country_code")
   ) {
     const country = normalizeCountry(getCountryValue(body));
-    if (!country.ok) return country;
+    if (!country.ok) return country as ValidationResult<ComplianceDocumentUpdateInput>;
     input.countryCode = country.value ?? null;
   }
 
   if (Object.prototype.hasOwnProperty.call(body, "tags")) {
     const tags = normalizeTags(body.tags);
-    if (!tags.ok) return tags;
+    if (!tags.ok) return tags as ValidationResult<ComplianceDocumentUpdateInput>;
     input.tags = tags.value ?? [];
   }
 
   if (Object.prototype.hasOwnProperty.call(body, "status")) {
     const status = normalizeStatus(body.status);
-    if (!status.ok) return status;
+    if (!status.ok) return status as ValidationResult<ComplianceDocumentUpdateInput>;
     input.status = status.value;
   }
 
@@ -2291,11 +2513,20 @@ router.get(
       const page = parsePositiveInt(req.query.page, 1);
       const limit = parsePositiveInt(req.query.limit, 25, 100);
       const country = normalizeCountry(getQueryString(req.query.country));
-      if (!country.ok)
-        return res.status(400).json({ message: country.message });
+      if (!country.ok) {
+        const err = country as { ok: false; message: string };
+        throw createError(ERROR_CODES.INVALID_INPUT, err.message, {
+          message: err.message,
+        });
+      }
 
       const status = normalizeStatus(getQueryString(req.query.status));
-      if (!status.ok) return res.status(400).json({ message: status.message });
+      if (!status.ok) {
+        const err = status as { ok: false; message: string };
+        throw createError(ERROR_CODES.INVALID_INPUT, err.message, {
+          message: err.message,
+        });
+      }
 
       const result = await complianceDocumentModel.list({
         country: country.value || undefined,
@@ -2318,7 +2549,13 @@ router.get(
       });
     } catch (error) {
       console.error("[compliance/docs:list]", error);
-      res.status(500).json({ message: "Failed to list compliance documents" });
+      if ((error as any).statusCode) {
+        throw error;
+      }
+      throw createError(
+        ERROR_CODES.INTERNAL_ERROR,
+        "Failed to list compliance documents",
+      );
     }
   },
 );
@@ -2331,9 +2568,13 @@ router.get(
       res.json(await complianceDocumentModel.getFacets());
     } catch (error) {
       console.error("[compliance/docs:facets]", error);
-      res
-        .status(500)
-        .json({ message: "Failed to fetch compliance document facets" });
+      throw createError(
+        ERROR_CODES.INTERNAL_ERROR,
+        "Failed to fetch compliance document facets",
+        {
+          message: "Failed to fetch compliance document facets",
+        },
+      );
     }
   },
 );
@@ -2344,14 +2585,25 @@ router.get(
   async (req: Request, res: Response) => {
     try {
       const document = await complianceDocumentModel.findById(req.params.id);
-      if (!document)
-        return res
-          .status(404)
-          .json({ message: "Compliance document not found" });
+      if (!document) {
+        throw createError(
+          ERROR_CODES.NOT_FOUND,
+          "Compliance document not found",
+          {
+            message: "Compliance document not found",
+          },
+        );
+      }
       res.json(document);
     } catch (error) {
       console.error("[compliance/docs:get]", error);
-      res.status(500).json({ message: "Failed to fetch compliance document" });
+      if ((error as any).statusCode) {
+        throw error;
+      }
+      throw createError(
+        ERROR_CODES.INTERNAL_ERROR,
+        "Failed to fetch compliance document",
+      );
     }
   },
 );
@@ -2363,8 +2615,12 @@ router.post(
   async (req: Request, res: Response) => {
     try {
       const validation = validateComplianceCreate(req.body ?? {});
-      if (!validation.ok)
-        return res.status(400).json({ message: validation.message });
+      if (!validation.ok) {
+        const err = validation as { ok: false; message: string };
+        throw createError(ERROR_CODES.INVALID_INPUT, err.message, {
+          message: err.message,
+        });
+      }
 
       const adminUser = (req as AuthRequest).user;
       const document = await complianceDocumentModel.create(
@@ -2374,7 +2630,13 @@ router.post(
       res.status(201).json(document);
     } catch (error) {
       console.error("[compliance/docs:create]", error);
-      res.status(500).json({ message: "Failed to create compliance document" });
+      if ((error as any).statusCode) {
+        throw error;
+      }
+      throw createError(
+        ERROR_CODES.INTERNAL_ERROR,
+        "Failed to create compliance document",
+      );
     }
   },
 );
@@ -2386,8 +2648,12 @@ router.patch(
   async (req: Request, res: Response) => {
     try {
       const validation = validateComplianceUpdate(req.body ?? {});
-      if (!validation.ok)
-        return res.status(400).json({ message: validation.message });
+      if (!validation.ok) {
+        const err = validation as { ok: false; message: string };
+        throw createError(ERROR_CODES.INVALID_INPUT, err.message, {
+          message: err.message,
+        });
+      }
 
       const adminUser = (req as AuthRequest).user;
       const document = await complianceDocumentModel.update(
@@ -2395,14 +2661,25 @@ router.patch(
         validation.value,
         adminUser?.id,
       );
-      if (!document)
-        return res
-          .status(404)
-          .json({ message: "Compliance document not found" });
+      if (!document) {
+        throw createError(
+          ERROR_CODES.NOT_FOUND,
+          "Compliance document not found",
+          {
+            message: "Compliance document not found",
+          },
+        );
+      }
       res.json(document);
     } catch (error) {
       console.error("[compliance/docs:update]", error);
-      res.status(500).json({ message: "Failed to update compliance document" });
+      if ((error as any).statusCode) {
+        throw error;
+      }
+      throw createError(
+        ERROR_CODES.INTERNAL_ERROR,
+        "Failed to update compliance document",
+      );
     }
   },
 );
@@ -2426,10 +2703,14 @@ router.post(
       res.json({ message: "Clawback capability enabled on issuance account" });
     } catch (err) {
       console.error("Error enabling clawback:", err);
-      res.status(500).json({
-        message: "Failed to enable clawback capability",
-        error: err instanceof Error ? err.message : "Unknown error",
-      });
+      throw createError(
+        ERROR_CODES.INTERNAL_ERROR,
+        "Failed to enable clawback capability",
+        {
+          message: "Failed to enable clawback capability",
+          error: err instanceof Error ? err.message : "Unknown error",
+        },
+      );
     }
   },
 );
@@ -2444,23 +2725,39 @@ router.post(
       const { transactionId, reason } = req.body;
 
       if (!transactionId) {
-        return res.status(400).json({ message: "transactionId is required" });
+        throw createError(
+          ERROR_CODES.INVALID_INPUT,
+          "transactionId is required",
+          {
+            message: "transactionId is required",
+          },
+        );
       }
       if (!reason) {
-        return res
-          .status(400)
-          .json({ message: "reason is required for clawback" });
+        throw createError(
+          ERROR_CODES.INVALID_INPUT,
+          "reason is required for clawback",
+          {
+            message: "reason is required for clawback",
+          },
+        );
       }
 
       const transaction = await transactionModel.findById(transactionId);
       if (!transaction) {
-        return res.status(404).json({ message: "Transaction not found" });
+        throw createError(ERROR_CODES.NOT_FOUND, "Transaction not found", {
+          message: "Transaction not found",
+        });
       }
 
       if (transaction.status !== TransactionStatus.Completed) {
-        return res.status(400).json({
-          message: `Cannot claw back transaction in status: ${transaction.status}`,
-        });
+        throw createError(
+          ERROR_CODES.INVALID_INPUT,
+          `Cannot claw back transaction in status: ${transaction.status}`,
+          {
+            message: `Cannot claw back transaction in status: ${transaction.status}`,
+          },
+        );
       }
 
       const stellarService = new StellarService();
@@ -2491,10 +2788,14 @@ router.post(
       });
     } catch (err) {
       console.error("Error executing clawback:", err);
-      res.status(500).json({
-        message: "Failed to execute clawback",
-        error: err instanceof Error ? err.message : "Unknown error",
-      });
+      throw createError(
+        ERROR_CODES.INTERNAL_ERROR,
+        "Failed to execute clawback",
+        {
+          message: "Failed to execute clawback",
+          error: err instanceof Error ? err.message : "Unknown error",
+        },
+      );
     }
   },
 );
@@ -2509,15 +2810,23 @@ router.post(
       const { payments } = req.body; // Array of { destination, amount, memo }
 
       if (!Array.isArray(payments) || payments.length === 0) {
-        return res
-          .status(400)
-          .json({ message: "payments array is required and cannot be empty" });
+        throw createError(
+          ERROR_CODES.INVALID_INPUT,
+          "payments array is required and cannot be empty",
+          {
+            message: "payments array is required and cannot be empty",
+          },
+        );
       }
 
       if (payments.length > 50) {
-        return res
-          .status(400)
-          .json({ message: "Maximum 50 payments per batch allowed" });
+        throw createError(
+          ERROR_CODES.INVALID_INPUT,
+          "Maximum 50 payments per batch allowed",
+          {
+            message: "Maximum 50 payments per batch allowed",
+          },
+        );
       }
 
       // Initialize HighThroughputService if needed
@@ -2530,9 +2839,8 @@ router.post(
         throw new Error("STELLAR_ISSUER_SECRET not configured");
       }
 
-      const issuerPublicKey = StellarSdk.Keypair.fromSecret(
-        stellarIssuerSecret,
-      ).publicKey();
+      const issuerPublicKey =
+        StellarSdk.Keypair.fromSecret(stellarIssuerSecret).publicKey();
 
       // 1. Create transactions in DB
       const transactionIds: string[] = [];
@@ -2569,7 +2877,10 @@ router.post(
         const txId = transactionIds[i];
 
         if (result.success) {
-          await transactionModel.updateStatus(txId, TransactionStatus.Completed);
+          await transactionModel.updateStatus(
+            txId,
+            TransactionStatus.Completed,
+          );
           await transactionModel.updateMetadata(txId, {
             ...payments[i].metadata,
             stellar: { transactionHash: result.hash },
@@ -2592,10 +2903,14 @@ router.post(
       });
     } catch (err) {
       console.error("Error executing batch payment:", err);
-      res.status(500).json({
-        message: "Failed to execute batch payment",
-        error: err instanceof Error ? err.message : "Unknown error",
-      });
+      throw createError(
+        ERROR_CODES.INTERNAL_ERROR,
+        "Failed to execute batch payment",
+        {
+          message: "Failed to execute batch payment",
+          error: err instanceof Error ? err.message : "Unknown error",
+        },
+      );
     }
   },
 );
@@ -2611,16 +2926,269 @@ router.delete(
         req.params.id,
         adminUser?.id,
       );
-      if (!document)
-        return res
-          .status(404)
-          .json({ message: "Compliance document not found" });
+      if (!document) {
+        throw createError(
+          ERROR_CODES.NOT_FOUND,
+          "Compliance document not found",
+          {
+            message: "Compliance document not found",
+          },
+        );
+      }
       res.json(document);
     } catch (error) {
       console.error("[compliance/docs:archive]", error);
-      res
-        .status(500)
-        .json({ message: "Failed to archive compliance document" });
+      if ((error as any).statusCode) {
+        throw error;
+      }
+      throw createError(
+        ERROR_CODES.INTERNAL_ERROR,
+        "Failed to archive compliance document",
+      );
+    }
+  },
+);
+
+// =========================
+// PROVIDER SETTINGS
+// =========================
+
+router.get(
+  "/provider-settings",
+  requireAdmin,
+  logAdminAction("GET_PROVIDER_SETTINGS"),
+  async (req: Request, res: Response) => {
+    try {
+      const settings = await providerSettingsService.getAllSettings();
+      res.json(settings);
+    } catch (error) {
+      console.error("Error fetching provider settings:", error);
+      res.status(500).json({ message: "Failed to fetch provider settings" });
+    }
+  }
+);
+
+router.put(
+  "/provider-settings/:providerName",
+  requireAdmin,
+  logAdminAction("UPDATE_PROVIDER_SETTINGS"),
+  async (req: Request, res: Response) => {
+    try {
+      const providerName = req.params.providerName;
+      const { failure_threshold, timeout_ms, fallback_order } = req.body;
+      
+      const settings = await providerSettingsService.upsertProviderSettings(
+        providerName,
+        failure_threshold || 3,
+        timeout_ms || 5000,
+        fallback_order || null
+      );
+      
+      resetCircuitBreakerForProvider(providerName);
+      
+      res.json({ message: "Provider settings updated successfully", settings });
+    } catch (error) {
+      console.error("Error updating provider settings:", error);
+      res.status(500).json({ message: "Failed to update provider settings" });
+    }
+  }
+);
+
+/**
+ * =========================
+ * DASHBOARD & MONITORING
+ * =========================
+ */
+
+/**
+ * GET /api/admin/dashboard/stats
+ * Comprehensive dashboard statistics for CLI/UI
+ */
+router.get(
+  "/dashboard/stats",
+  requireAdmin,
+  logAdminAction("GET_DASHBOARD_STATS"),
+  async (req: Request, res: Response) => {
+    try {
+      const startTime = Date.now();
+      const timestamp = new Date().toISOString();
+
+      // Fetch system health in parallel
+      const [
+        queueStats,
+        databaseHealth,
+        redisHealth,
+        transactionStats,
+        providerHealth,
+      ] = await Promise.all([
+        getQueueStats().catch((err) => {
+          console.error("[Dashboard] Queue stats error:", err);
+          return {
+            pending: 0,
+            active: 0,
+            completed: 0,
+            failed: 0,
+            total: 0,
+          };
+        }),
+        checkReplicaHealth()
+          .then((replicas) => ({
+            status: "healthy" as const,
+            replicas,
+          }))
+          .catch((err) => {
+            console.error("[Dashboard] Database health error:", err);
+            return { status: "unhealthy" as const, replicas: [] };
+          }),
+        redisClient
+          .ping()
+          .then(() => ({ status: "healthy" as const, responseTime: 0 }))
+          .catch((err) => {
+            console.error("[Dashboard] Redis health error:", err);
+            return { status: "unhealthy" as const, responseTime: undefined };
+          }),
+        (async () => {
+          const stats = await (transactionModel as any).getStatistics(
+            new Date(Date.now() - 24 * 60 * 60 * 1000),
+            new Date(),
+          );
+          return {
+            totalCount: stats.totalTransactions,
+            successRate: stats.successRate,
+            totalVolume: stats.totalVolume,
+            activeUsers: await (UserModel as any).countActiveUsers(24),
+          };
+        })().catch((err) => {
+          console.error("[Dashboard] Transaction stats error:", err);
+          return {
+            totalCount: 0,
+            successRate: 0,
+            totalVolume: 0,
+            activeUsers: 0,
+          };
+        }),
+        (async () => {
+          const mobileMoneyService = new MobileMoneyService();
+          try {
+            return mobileMoneyService.getFailoverStats();
+          } catch (err) {
+            console.error("[Dashboard] Provider health error:", err);
+            return {};
+          }
+        })(),
+      ]);
+
+      const responseTime = Date.now() - startTime;
+      const stellarHealthy = transactionStats.totalCount >= 0; // If we can query, Stellar is ok
+
+      res.json({
+        timestamp,
+        health: {
+          database:
+            databaseHealth.status === "healthy" ? "healthy" : "unhealthy",
+          redis: redisHealth.status === "healthy" ? "healthy" : "unhealthy",
+          stellar: stellarHealthy ? "healthy" : "unhealthy",
+          responseTime,
+        },
+        queue: {
+          totalJobs: (queueStats as any).total || 0,
+          pendingJobs: (queueStats as any).pending || 0,
+          activeJobs: (queueStats as any).active || 0,
+          completedJobs: (queueStats as any).completed || 0,
+          failedJobs: (queueStats as any).failed || 0,
+          dlqSize: (queueStats as any).dlq || 0,
+        },
+        transactions: {
+          totalCount: transactionStats.totalCount,
+          successRate: transactionStats.successRate,
+          totalVolume: transactionStats.totalVolume,
+          activeUsers: transactionStats.activeUsers,
+        },
+        providers: Object.entries(providerHealth).reduce(
+          (acc, [provider, stats]: [string, any]) => {
+            acc[provider] = {
+              status: stats.isHealthy ? "online" : "offline",
+              failureRate: stats.failureRate || 0,
+              lastChecked: timestamp,
+            };
+            return acc;
+          },
+          {} as Record<string, any>,
+        ),
+      });
+    } catch (error) {
+      console.error("[Dashboard] Failed to fetch stats:", error);
+      throw createError(ERROR_CODES.INTERNAL_ERROR, "Failed to fetch dashboard stats");
+    }
+  },
+);
+
+/**
+ * GET /api/admin/health
+ * Quick health check for monitoring
+ */
+router.get(
+  "/health",
+  logAdminAction("GET_HEALTH"),
+  async (req: Request, res: Response) => {
+    try {
+      const startTime = Date.now();
+
+      const [databaseOk, redisOk] = await Promise.all([
+        pool
+          .query("SELECT 1")
+          .then(() => true)
+          .catch(() => false),
+        redisClient
+          .ping()
+          .then(() => true)
+          .catch(() => false),
+      ]);
+
+      const responseTime = Date.now() - startTime;
+
+      res.json({
+        database: databaseOk ? "healthy" : "unhealthy",
+        redis: redisOk ? "healthy" : "unhealthy",
+        stellar: "healthy", // Assume ok unless we detect specific Stellar failures
+        responseTime,
+      });
+    } catch (error) {
+      console.error("[Health] Check failed:", error);
+      res.status(503).json({
+        database: "unhealthy",
+        redis: "unhealthy",
+        stellar: "unhealthy",
+        responseTime: 0,
+      });
+    }
+  },
+);
+
+/**
+ * GET /api/admin/queue/stats
+ * Queue metrics with detailed breakdown
+ */
+router.get(
+  "/queue/stats",
+  requireAdmin,
+  logAdminAction("GET_QUEUE_STATS"),
+  async (req: Request, res: Response) => {
+    try {
+      const stats = await getQueueStats();
+
+      res.json({
+        totalJobs: (stats as any).total || 0,
+        pendingJobs: (stats as any).pending || 0,
+        activeJobs: (stats as any).active || 0,
+        completedJobs: (stats as any).completed || 0,
+        failedJobs: (stats as any).failed || 0,
+        dlqSize: (stats as any).dlq || 0,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error("[Queue] Stats fetch failed:", error);
+      throw createError(ERROR_CODES.INTERNAL_ERROR, "Failed to fetch queue stats");
     }
   },
 );

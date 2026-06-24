@@ -21,7 +21,7 @@ const smsService = new SmsService();
 const webhookService = new WebhookService();
 const pushService = pushNotificationService;
 
-const BATCH_SIZE = 50;
+const BATCH_SIZE = 100;
 const BATCH_INTERVAL_MS = parseInt(process.env.BATCH_PAYOUT_INTERVAL_MS || "5000", 10);
 const SUPPORTED_PROVIDERS = ["mtn"];
 
@@ -46,6 +46,7 @@ async function sendTransactionEmail(transactionId: string): Promise<void> {
       user.email,
       transaction,
       user.preferredLanguage,
+      user.displayName,
     );
   }
 }
@@ -61,6 +62,7 @@ async function sendFailureEmail(transactionId: string, reason: string): Promise<
       transaction,
       reason,
       user.preferredLanguage,
+      user.displayName,
     );
   }
 }

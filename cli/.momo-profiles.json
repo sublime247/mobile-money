@@ -1,0 +1,15 @@
+{
+  "profiles": [
+    {
+      "name": "dev",
+      "apiUrl": "http://localhost:3000",
+      "apiKey": "dev-key-123"
+    },
+    {
+      "name": "production",
+      "apiUrl": "https://api.production.com",
+      "apiKey": "prod-key-789"
+    }
+  ],
+  "activeProfile": "dev"
+}

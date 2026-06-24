@@ -1,5 +1,7 @@
 import { Request, Response } from "express";
 import { DeveloperDashboardService } from "../services/developerDashboardService";
+import { ERROR_CODES } from "../constants/errorCodes";
+import { createError } from "../middleware/errorHandler";
 
 const service = new DeveloperDashboardService();
 
@@ -12,14 +14,19 @@ export class DeveloperDashboardController {
     try {
       const partnerId = (req as any).user?.id;
       if (!partnerId) {
-        return res.status(401).json({ error: "Unauthorized" });
+        throw createError(ERROR_CODES.UNAUTHORIZED, "Unauthorized", {
+          error: "Unauthorized",
+        });
       }
 
       const stats = await service.getUsageStats(partnerId);
       return res.json(stats);
     } catch (error) {
       console.error("Developer dashboard error:", error);
-      return res.status(500).json({ error: "Failed to fetch dashboard stats" });
+      throw createError(
+        ERROR_CODES.INTERNAL_ERROR,
+        "Failed to fetch dashboard stats",
+      );
     }
   }
 }

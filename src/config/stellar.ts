@@ -1,4 +1,5 @@
 import * as StellarSdk from "stellar-sdk";
+import { HorizonPool } from "../stellar/horizonPool";
 
 export const STELLAR_NETWORKS = {
   TESTNET: "testnet",
@@ -57,11 +58,50 @@ export const logStellarNetwork = () => {
   }
 };
 
-export const getStellarServer = () => {
+/**
+ * Resolve the ordered list of Horizon URLs for the active network.
+ *
+ * `STELLAR_HORIZON_URL` may be a single URL or a comma-separated list of URLs
+ * (primary first, then fallbacks). When unset we fall back to the public
+ * Horizon endpoint for the configured network.
+ */
+export const getHorizonUrls = (): string[] => {
   const network = (process.env.STELLAR_NETWORK ||
     STELLAR_NETWORKS.TESTNET) as StellarNetwork;
-  const horizonUrl = HORIZON_URLS[network];
-  return new StellarSdk.Horizon.Server(horizonUrl);
+
+  const configured = process.env.STELLAR_HORIZON_URL;
+  const urls = (configured ?? HORIZON_URLS[network])
+    .split(",")
+    .map((u) => u.trim())
+    .filter((u) => u.length > 0);
+
+  // Guard against a misconfigured value (e.g. trailing comma / all blanks).
+  return urls.length > 0 ? urls : [HORIZON_URLS[network]];
+};
+
+// Lazily-built pool, keyed by the resolved URL list so a changed
+// configuration (mainly in tests) rebuilds the pool.
+let horizonPool: HorizonPool | null = null;
+let horizonPoolKey: string | null = null;
+
+const getHorizonPool = (): HorizonPool => {
+  const urls = getHorizonUrls();
+  const key = urls.join(",");
+  if (!horizonPool || horizonPoolKey !== key) {
+    horizonPool = new HorizonPool(urls);
+    horizonPoolKey = key;
+  }
+  return horizonPool;
+};
+
+/**
+ * Returns a Horizon server backed by the rotation pool. The returned object is
+ * API-compatible with `StellarSdk.Horizon.Server` but transparently retries
+ * failed requests on alternative nodes when the active node is down or
+ * rate-limiting us.
+ */
+export const getStellarServer = (): StellarSdk.Horizon.Server => {
+  return getHorizonPool().getProxiedServer();
 };
 
 export const getNetworkPassphrase = () => {

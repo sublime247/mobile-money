@@ -38,6 +38,24 @@ worker:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  keda:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 20
+    cooldownPeriod: 60
+    pollingInterval: 30
+    triggers:
+      prometheus:
+        enabled: true
+        serverAddress: http://prometheus-service.monitoring.svc.cluster.local:9090
+        query: sum(bullmq_queue_waiting{queue=~"transaction|webhook|notification"})
+        threshold: "20"
+      redis:
+        enabled: false
+        address: redis-service.default.svc.cluster.local:6379
+        listName: bull:transaction:wait
+        listLength: "20"
+        databaseIndex: "0"
 
 redis:
   enabled: true

@@ -14,14 +14,13 @@ terraform {
     }
   }
 
-  # Remote state — uncomment and configure for your team
-  # backend "s3" {
-  #   bucket         = "mobile-money-terraform-state"
-  #   key            = "infra/terraform.tfstate"
-  #   region         = "us-east-1"
-  #   encrypt        = true
-  #   dynamodb_table = "terraform-locks"
-  # }
+  backend "s3" {
+    bucket         = "mobile-money-terraform-state"
+    key            = "global/terraform.tfstate"
+    region         = "us-east-1"
+    encrypt        = true
+    dynamodb_table = "mobile-money-terraform-locks"
+  }
 }
 
 provider "aws" {
@@ -33,6 +32,69 @@ provider "aws" {
       Environment = var.environment
       ManagedBy   = "terraform"
     }
+  }
+}
+
+locals {
+  remote_state_bucket_name     = "mobile-money-terraform-state"
+  remote_state_lock_table_name = "mobile-money-terraform-locks"
+  remote_state_key             = "global/terraform.tfstate"
+}
+
+resource "aws_s3_bucket" "terraform_state" {
+  bucket = local.remote_state_bucket_name
+
+  force_destroy = false
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "aws_s3_bucket_acl" "terraform_state" {
+  bucket = aws_s3_bucket.terraform_state.id
+  acl    = "private"
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "terraform_state" {
+  bucket = aws_s3_bucket.terraform_state.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_bucket_versioning" "terraform_state" {
+  bucket = aws_s3_bucket.terraform_state.id
+
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "terraform_state" {
+  bucket = aws_s3_bucket.terraform_state.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_dynamodb_table" "terraform_locks" {
+  name         = local.remote_state_lock_table_name
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "LockID"
+
+  attribute {
+    name = "LockID"
+    type = "S"
+  }
+
+  lifecycle {
+    prevent_destroy = true
   }
 }
 

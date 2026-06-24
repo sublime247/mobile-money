@@ -1,0 +1,171 @@
+From c2324c74ceb8da6ae9cde5355d981cf872650bee Mon Sep 17 00:00:00 2001
+From: Martin <martinngutswen02@gmail.com>
+Date: Fri, 29 May 2026 16:09:30 +0100
+Subject: [PATCH 1/4] feat: implement Redis pub/sub for real-time notifications
+
+---
+ src/jobs/scheduler.ts             |   8 +++
+ src/models/transaction.ts         |   2 +-
+ src/workers/notificationWorker.ts | 113 ++++++++++++++++++++++++++++++
+ 3 files changed, 122 insertions(+), 1 deletion(-)
+ create mode 100644 src/workers/notificationWorker.ts
+
+diff --git a/src/jobs/scheduler.ts b/src/jobs/scheduler.ts
+index 3fff24b..6186211 100644
+--- a/src/jobs/scheduler.ts
++++ b/src/jobs/scheduler.ts
+@@ -17,6 +17,7 @@ import { runLiquidityRebalanceJob } from "./liquidityRebalanceJob";
+ import { runCrossChainMonitorJob } from "./crossChainMonitorJob";
+ import { runDailyProviderReconciliation } from "./providerReconciliationJob";
+ import { runReconciliationJob } from "./reconciliationJob";
++import { startNotificationWorker } from "../workers/notificationWorker";
+ 
+ 
+ interface JobConfig {
+@@ -128,4 +129,11 @@ export function startJobs(): void {
+     cron.schedule(job.schedule, () => runJob(job));
+     console.log(`[scheduler] "${job.name}" scheduled - ${job.schedule}`);
+   }
++
++  // Start the notification worker which listens for Redis pub/sub events
++  // and drives user-facing notifications in real-time. This replaces any
++  // DB-polling notification mechanisms.
++  startNotificationWorker().catch((err) => {
++    console.warn("Failed to start NotificationWorker:", err);
++  });
+ }
+diff --git a/src/models/transaction.ts b/src/models/transaction.ts
+index bfbd273..00d5e31 100644
+--- a/src/models/transaction.ts
++++ b/src/models/transaction.ts
+@@ -195,7 +195,7 @@ export class TransactionModel {
+     const res = await queryWrite(q, params);
+     if (!res.rowCount) return;
+ 
+-    const row = result.rows[0];
++    const row = res.rows[0];
+ 
+     // ── Invalidate caches on transaction status update ────────────────────
+     if (row.user_id) {
+diff --git a/src/workers/notificationWorker.ts b/src/workers/notificationWorker.ts
+new file mode 100644
+index 0000000..59050b4
+--- /dev/null
++++ b/src/workers/notificationWorker.ts
+@@ -0,0 +1,113 @@
++import IORedis from "ioredis";
++import { SubscriptionChannels } from "../graphql/subscriptions";
++import { notificationRouter } from "../services/notificationRouter";
++import { TransactionModel } from "../models/transaction";
++
++const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
++
++const redisOptions: any = {
++  retryStrategy: (times: number) => Math.min(100 + times * 200, 3000),
++  enableOfflineQueue: false,
++  maxRetriesPerRequest: 1,
++  lazyConnect: false,
++};
++
++let subscriber: IORedis | null = null;
++
++/**
++ * Notification worker — subscribes to transaction update channels in Redis
++ * and routes user-facing notifications (email/sms/push/etc.) via
++ * `NotificationRouter`. This replaces DB polling for notification triggers.
++ */
++export async function startNotificationWorker(): Promise<void> {
++  if (!process.env.REDIS_URL) {
++    console.warn(
++      "NotificationWorker: REDIS_URL not set — running without Redis subscription",
++    );
++    return;
++  }
++
++  subscriber = new IORedis(REDIS_URL, redisOptions);
++
++  subscriber.on("connect", () => console.log("NotificationWorker: Redis connected"));
++  subscriber.on("error", (err) =>
++    console.error("NotificationWorker: Redis error:", err),
++  );
++
++  await subscriber.connect();
++
++  // Subscribe to broadcast updates and per-transaction channels (pattern)
++  await subscriber.subscribe(SubscriptionChannels.TRANSACTION_UPDATED);
++  await subscriber.psubscribe("TRANSACTION_UPDATED:*");
++
++  subscriber.on("message", async (_channel: string, rawMessage: string) => {
++    try {
++      const payload = JSON.parse(rawMessage) as {
++        id?: string;
++        status?: string;
++        [key: string]: any;
++      };
++
++      const txId = payload.id;
++      const status = payload.status;
++      if (!txId || !status) return;
++
++      const txModel = new TransactionModel();
++      const tx = await txModel.findById(txId);
++      if (!tx) return;
++
++      if (status === "completed") {
++        await notificationRouter.routeTransactionNotification(tx, "completed");
++      } else if (status === "failed") {
++        await notificationRouter.routeTransactionNotification(tx, "failed", payload.error);
++      }
++    } catch (err) {
++      console.error("NotificationWorker: failed to handle message:", err);
++    }
++  });
++
++  // pmessage handles pattern subscriptions (TRANSACTION_UPDATED:<id>)
++  subscriber.on(
++    "pmessage",
++    async (_pattern: string, _channel: string, rawMessage: string) => {
++      try {
++        const payload = JSON.parse(rawMessage) as {
++          id?: string;
++          status?: string;
++          [key: string]: any;
++        };
++
++        const txId = payload.id;
++        const status = payload.status;
++        if (!txId || !status) return;
++
++        const txModel = new TransactionModel();
++        const tx = await txModel.findById(txId);
++        if (!tx) return;
++
++        if (status === "completed") {
++          await notificationRouter.routeTransactionNotification(tx, "completed");
++        } else if (status === "failed") {
++          await notificationRouter.routeTransactionNotification(tx, "failed", payload.error);
++        }
++      } catch (err) {
++        console.error("NotificationWorker: failed to handle pmessage:", err);
++      }
++    },
++  );
++
++  console.log("NotificationWorker: subscribed to transaction update channels");
++}
++
++export async function stopNotificationWorker(): Promise<void> {
++  try {
++    if (!subscriber) return;
++    await subscriber.unsubscribe(SubscriptionChannels.TRANSACTION_UPDATED);
++    await subscriber.punsubscribe("TRANSACTION_UPDATED:*");
++    await subscriber.quit();
++    subscriber = null;
++    console.log("NotificationWorker: stopped");
++  } catch (err) {
++    console.warn("NotificationWorker: stop error:", err);
++  }
++}
+-- 
+2.45.1.windows.1
+

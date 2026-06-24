@@ -1,5 +1,5 @@
 import { ProviderReconService } from "../services/providerReconService";
-import { logger } from "../services/logger";
+import logger from "../utils/logger";
 
 /**
  * Daily reconciliation job.
@@ -33,7 +33,7 @@ export async function runReconciliationJob() {
       await reconService.runReconciliation(provider, yesterday, csvBuffer, `${provider}_recon_${yesterday.toISOString().split('T')[0]}.csv`);
       
     } catch (error) {
-      logger.error(`[reconciliation-job] Failed for ${provider}:`, error);
+      logger.error(error, `[reconciliation-job] Failed for ${provider}`);
       // We don't throw here to allow other providers to be processed
     }
   }

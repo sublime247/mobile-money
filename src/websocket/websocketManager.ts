@@ -23,6 +23,7 @@ interface AuthenticatedWebSocket extends WebSocket {
   isAlive: boolean;
   userId?: string;
   subscriptions: Set<string>;
+  missedPings: number; // tracks consecutive missed pongs
 }
 
 // ---------------------------------------------------------------------------
@@ -50,16 +51,18 @@ export class WebSocketManager {
   private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
   private redisSub: RedisClientType | null = null;
   private redisPub: RedisClientType | null = null;
+  public redisReady: Promise<void>;
 
   private readonly REDIS_CHANNEL = "transaction.updates";
-  private readonly HEARTBEAT_INTERVAL_MS = 30_000;
+  private readonly HEARTBEAT_INTERVAL_MS = 10_000; // faster heartbeat for quicker stale detection
+  private readonly MAX_MISSED_PINGS = 2; // number of missed pings before termination
 
   constructor(httpServer: Server) {
     this.wss = new WebSocketServer({ server: httpServer });
     WebSocketManager.activeInstance = this;
     this.init();
     this.startHeartbeat();
-    this.setupRedis().catch((err) =>
+    this.redisReady = this.setupRedis().catch((err) =>
       console.warn("Redis pub/sub unavailable, running without it:", err),
     );
   }
@@ -73,6 +76,7 @@ export class WebSocketManager {
       const client = ws as AuthenticatedWebSocket;
       client.isAlive = true;
       client.subscriptions = new Set();
+      client.missedPings = 0; // initialize missed ping counter
 
       // Authenticate the client
       const token = this.extractToken(req);
@@ -340,10 +344,15 @@ export class WebSocketManager {
     this.heartbeatInterval = setInterval(() => {
       for (const [clientId, client] of this.clients) {
         if (!client.isAlive) {
-          console.log(`Terminating stale WebSocket client: ${clientId}`);
-          client.terminate();
-          this.handleDisconnect(clientId, client);
-          continue;
+          client.missedPings += 1;
+          if (client.missedPings >= this.MAX_MISSED_PINGS) {
+            console.log(`Terminating stale WebSocket client after ${client.missedPings} missed pings: ${clientId}`);
+            client.terminate();
+            this.handleDisconnect(clientId, client);
+            continue;
+          }
+        } else {
+          client.missedPings = 0; // reset on successful pong
         }
         client.isAlive = false;
         client.ping();

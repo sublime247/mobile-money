@@ -1,0 +1,33 @@
+# rustfmt configuration for Soroban smart contracts workspace.
+# Applied to all crates under contracts/ via `cargo fmt`.
+
+# Rust edition used across all contracts.
+edition = "2021"
+
+# Maximum line width before rustfmt wraps expressions.
+max_width = 100
+
+# Use block-style (trailing comma) imports instead of nested use-trees where
+# a single import would be cleaner.
+imports_granularity = "Crate"
+
+# Sort import groups: std → external → crate-local.
+group_imports = "StdExternalCrate"
+
+# Always add a trailing comma after the last item in a multiline structure.
+trailing_comma = "Always"
+
+# Put small functions/closures on a single line only when they fit.
+fn_single_line = false
+
+# Format string literals.
+format_strings = false
+
+# Normalize doc-comment style to `///`.
+normalize_comments = true
+
+# Use field-init shorthand where the field and variable names match.
+use_field_init_shorthand = true
+
+# Collapse small blocks onto one line.
+collapse_macro_arms = true

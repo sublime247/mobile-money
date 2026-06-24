@@ -12,6 +12,7 @@ const request = require("supertest");
 const express = require("express");
 import mtnCallbacksRouter from "../mtnCallbacks";
 import { createHmac } from "crypto";
+import { errorHandler } from "../../middleware/errorHandler";
 
 function buildSignature(payload: string, secret: string): string {
   return createHmac("sha256", secret).update(payload).digest("base64");
@@ -30,6 +31,7 @@ describe("MTN Callback Signature Verification", () => {
       }),
     );
     app.use("/api/mtn", mtnCallbacksRouter);
+    app.use(errorHandler);
   });
 
   it("accepts a valid MTN callback signature", async () => {
@@ -52,7 +54,7 @@ describe("MTN Callback Signature Verification", () => {
       .send({ status: "incoming" })
       .expect(401);
 
-    expect(response.body).toEqual({ error: "Unauthorized callback" });
+    expect(response.body.error).toBe("Unauthorized callback");
   });
 
   it("rejects a callback with an invalid signature", async () => {
@@ -65,6 +67,6 @@ describe("MTN Callback Signature Verification", () => {
       .send(payload)
       .expect(401);
 
-    expect(response.body).toEqual({ error: "Unauthorized callback" });
+    expect(response.body.error).toBe("Unauthorized callback");
   });
 });

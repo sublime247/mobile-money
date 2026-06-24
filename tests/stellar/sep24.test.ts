@@ -1,5 +1,32 @@
 import request from "supertest";
-import app from "../../src/index";
+import express from "express";
+import { Keypair } from "stellar-sdk";
+
+// Mock rate limiter to bypass user authentication check in tests
+jest.mock("../../src/middleware/rateLimit", () => ({
+  sep24RateLimiter: (_req: any, _res: any, next: any) => next(),
+}));
+
+// Mock webhook service to prevent async resource leaks
+jest.mock("../../src/services/stellar/webhooks", () => ({
+  enqueueSepWebhook: jest.fn().mockResolvedValue(undefined),
+}));
+
+import sep24Router from "../../src/stellar/sep24";
+import { errorHandler } from "../../src/middleware/errorHandler";
+
+// Generate a valid Stellar public key for test requests
+const testAccount = Keypair.random().publicKey();
+
+function createTestApp() {
+  const app = express();
+  app.use(express.json());
+  app.use("/sep24", sep24Router);
+  app.use(errorHandler);
+  return app;
+}
+
+const app = createTestApp();
 
 describe("SEP-24 Interactive Flow", () => {
   let txId: string;
@@ -16,7 +43,7 @@ describe("SEP-24 Interactive Flow", () => {
     const payload = {
       asset_code: "XLM",
       amount: "10",
-      account: "GBB4H2JIBOXV6JUD4F2ZXK6WOD5ALW3TBJWB3UnfF4u2PA7QQYUMVY26",
+      account: testAccount,
       success_url: "https://example.com/success",
       failure_url: "https://example.com/failure",
     };
@@ -57,7 +84,7 @@ describe("SEP-24 Interactive Flow", () => {
     const createRes = await request(app).post("/sep24/deposit").send({
       asset_code: "XLM",
       amount: "12",
-      account: "GBB4H2JIBOXV6JUD4F2ZXK6WOD5ALW3TBJWB3UnfF4u2PA7QQYUMVY26",
+      account: testAccount,
       success_url: "https://example.com/success",
       failure_url: "https://example.com/failure",
     });

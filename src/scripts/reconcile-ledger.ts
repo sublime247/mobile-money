@@ -304,4 +304,5 @@ if (require.main === module) {
   main();
 }
 
-export { reconcileLedger, ReconciliationReport };
+export { reconcileLedger };
+export type { ReconciliationReport };

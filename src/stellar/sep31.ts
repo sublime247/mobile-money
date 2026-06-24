@@ -4,6 +4,8 @@ import crypto from "crypto";
 import { TransactionModel, TransactionStatus } from "../models/transaction";
 import { getConfiguredPaymentAsset } from "../services/stellar/assetService";
 import  rateLimit from "express-rate-limit";
+import { ERROR_CODES } from "../constants/errorCodes";
+import { createError } from "../middleware/errorHandler";
 
 const router = Router();
 const transactionModel = new TransactionModel();
@@ -167,7 +169,7 @@ router.get("/info", sep31ReadLimiter, async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error("SEP-31 /info error:", error);
-    return res.status(500).json({ error: "Internal server error" });
+    throw createError(ERROR_CODES.INTERNAL_ERROR, "Internal server error");
   }
 });
 
@@ -191,7 +193,7 @@ router.post("/transactions", sep31WriteLimiter, async (req: Request, res: Respon
 
   // --- Input Validation ---
   if (!amount || !asset_code) {
-    return res.status(400).json({
+    throw createError(ERROR_CODES.INVALID_INPUT, "Missing required fields: amount, asset_code", {
       error: "invalid_request",
       message: "Missing required fields: amount, asset_code",
     });
@@ -199,21 +201,21 @@ router.post("/transactions", sep31WriteLimiter, async (req: Request, res: Respon
 
   const parsedAmount = parseFloat(amount);
   if (isNaN(parsedAmount) || parsedAmount <= 0) {
-    return res.status(400).json({
+    throw createError(ERROR_CODES.INVALID_INPUT, "Amount must be a positive number", {
       error: "invalid_request",
       message: "Amount must be a positive number",
     });
   }
 
   if (parsedAmount < SEP31_CONFIG.minAmount) {
-    return res.status(400).json({
+    throw createError(ERROR_CODES.INVALID_INPUT, `Amount below minimum: ${SEP31_CONFIG.minAmount}`, {
       error: "invalid_request",
       message: `Amount below minimum: ${SEP31_CONFIG.minAmount}`,
     });
   }
 
   if (parsedAmount > SEP31_CONFIG.maxAmount) {
-    return res.status(400).json({
+    throw createError(ERROR_CODES.INVALID_INPUT, `Amount above maximum: ${SEP31_CONFIG.maxAmount}`, {
       error: "invalid_request",
       message: `Amount above maximum: ${SEP31_CONFIG.maxAmount}`,
     });
@@ -223,7 +225,7 @@ router.post("/transactions", sep31WriteLimiter, async (req: Request, res: Respon
   const configuredCode = getAssetCode();
 
   if (cleanAssetCode !== configuredCode) {
-    return res.status(400).json({
+    throw createError(ERROR_CODES.INVALID_INPUT, `Asset ${cleanAssetCode} is not supported. Supported: ${configuredCode}`, {
       error: "invalid_request",
       message: `Asset ${cleanAssetCode} is not supported. Supported: ${configuredCode}`,
     });
@@ -233,7 +235,7 @@ router.post("/transactions", sep31WriteLimiter, async (req: Request, res: Respon
   const configuredAsset = getConfiguredPaymentAsset();
   if (asset_issuer && !configuredAsset.isNative()) {
     if (asset_issuer !== configuredAsset.getIssuer()) {
-      return res.status(400).json({
+      throw createError(ERROR_CODES.INVALID_INPUT, "Asset issuer does not match configured issuer", {
         error: "invalid_request",
         message: "Asset issuer does not match configured issuer",
       });
@@ -246,7 +248,7 @@ router.post("/transactions", sep31WriteLimiter, async (req: Request, res: Respon
   const finalReceiverId = receiver_id || txFields.receiver_id;
 
   if (!finalSenderId || !finalReceiverId) {
-    return res.status(400).json({
+    throw createError(ERROR_CODES.INVALID_INPUT, "Missing required fields: sender_id, receiver_id", {
       error: "invalid_request",
       message: "Missing required fields: sender_id, receiver_id",
     });
@@ -254,7 +256,7 @@ router.post("/transactions", sep31WriteLimiter, async (req: Request, res: Respon
 
   if (!SEP31_CONFIG.receivingAccount) {
     console.error("SEP-31: STELLAR_RECEIVING_ACCOUNT not configured");
-    return res.status(500).json({
+    throw createError(ERROR_CODES.INTERNAL_ERROR, "Anchor receiving account not configured", {
       error: "server_error",
       message: "Anchor receiving account not configured",
     });
@@ -313,7 +315,7 @@ router.post("/transactions", sep31WriteLimiter, async (req: Request, res: Respon
     });
   } catch (error: any) {
     console.error("SEP-31 POST /transactions error:", error);
-    return res.status(500).json({ error: "Internal server error" });
+    throw createError(ERROR_CODES.INTERNAL_ERROR, "Internal server error");
   }
 });
 
@@ -326,20 +328,26 @@ router.get("/transactions/:id", sep31ReadLimiter, async (req: Request, res: Resp
   const { id } = req.params;
 
   if (!isValidUUID(id)) {
-    return res.status(400).json({ error: "Invalid transaction ID format" });
+    throw createError(ERROR_CODES.INVALID_INPUT, "Invalid transaction ID format", {
+      error: "Invalid transaction ID format",
+    });
   }
 
   try {
     const transaction = await transactionModel.findById(id);
 
     if (!transaction) {
-      return res.status(404).json({ error: "Transaction not found" });
+      throw createError(ERROR_CODES.NOT_FOUND, "Transaction not found", {
+        error: "Transaction not found",
+      });
     }
 
     // Verify this is a SEP-31 transaction
     const sep31Meta = (transaction.metadata as any)?.sep31;
     if (!sep31Meta) {
-      return res.status(404).json({ error: "Transaction not found" });
+      throw createError(ERROR_CODES.NOT_FOUND, "Transaction not found", {
+        error: "Transaction not found",
+      });
     }
 
     const sep31Status = mapToSep31Status(transaction.status, transaction.metadata);
@@ -374,7 +382,7 @@ router.get("/transactions/:id", sep31ReadLimiter, async (req: Request, res: Resp
     });
   } catch (error: any) {
     console.error("SEP-31 GET /transactions/:id error:", error);
-    return res.status(500).json({ error: "Internal server error" });
+    throw createError(ERROR_CODES.INTERNAL_ERROR, "Internal server error");
   }
 });
 
@@ -389,11 +397,13 @@ router.patch("/transactions/:id", sep31WriteLimiter, async (req: Request, res: R
   const { fields } = req.body;
 
   if (!isValidUUID(id)) {
-    return res.status(400).json({ error: "Invalid transaction ID format" });
+    throw createError(ERROR_CODES.INVALID_INPUT, "Invalid transaction ID format", {
+      error: "Invalid transaction ID format",
+    });
   }
 
   if (!fields || !fields.transaction) {
-    return res.status(400).json({
+    throw createError(ERROR_CODES.INVALID_INPUT, "Missing required: fields.transaction", {
       error: "invalid_request",
       message: "Missing required: fields.transaction",
     });
@@ -403,19 +413,23 @@ router.patch("/transactions/:id", sep31WriteLimiter, async (req: Request, res: R
     const transaction = await transactionModel.findById(id);
 
     if (!transaction) {
-      return res.status(404).json({ error: "Transaction not found" });
+      throw createError(ERROR_CODES.NOT_FOUND, "Transaction not found", {
+        error: "Transaction not found",
+      });
     }
 
     const sep31Meta = (transaction.metadata as any)?.sep31;
     if (!sep31Meta) {
-      return res.status(404).json({ error: "Transaction not found" });
+      throw createError(ERROR_CODES.NOT_FOUND, "Transaction not found", {
+        error: "Transaction not found",
+      });
     }
 
     const currentStatus = mapToSep31Status(transaction.status, transaction.metadata);
 
     // Only allow updates on pending transactions
     if (currentStatus === Sep31Status.Completed) {
-      return res.status(400).json({
+      throw createError(ERROR_CODES.INVALID_INPUT, "Cannot update a completed transaction", {
         error: "invalid_request",
         message: "Cannot update a completed transaction",
       });
@@ -442,7 +456,7 @@ router.patch("/transactions/:id", sep31WriteLimiter, async (req: Request, res: R
     return res.json({ status: "updated" });
   } catch (error: any) {
     console.error("SEP-31 PATCH /transactions/:id error:", error);
-    return res.status(500).json({ error: "Internal server error" });
+    throw createError(ERROR_CODES.INTERNAL_ERROR, "Internal server error");
   }
 });
 

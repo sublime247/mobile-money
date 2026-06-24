@@ -155,4 +155,13 @@ spec:
                   key: OAUTH_JWT_SECRET
           resources:
 {{ toYaml .Values.worker.resources | indent 12 }}
+          startupProbe:
+            exec:
+              command:
+                - node
+                - -e
+                - "const Redis = require('ioredis'); const client = new Redis(process.env.REDIS_URL || 'redis://localhost:6379'); client.ping().then(() => process.exit(0)).catch(() => process.exit(1));"
+            initialDelaySeconds: 5
+            periodSeconds: 2
+            failureThreshold: 30
 {{- end }}

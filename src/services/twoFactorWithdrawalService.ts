@@ -1,6 +1,8 @@
+import { Request, Response, NextFunction } from 'express';
 import { UserModel } from '../models/users';
 import { is2FAEnabled, verifyTOTPToken } from '../auth/2fa';
-import { pool, queryRead } from '../config/database';
+import { pool } from '../config/database';
+import { twoFactorRateLimiter } from './twoFactorRateLimiter';
 import bcrypt from 'bcrypt';
 import logger from '../utils/logger';
 
@@ -54,14 +56,24 @@ export class TwoFactorWithdrawalService {
       return { success: false, error: 'User has not opted into mandatory 2FA withdrawals' };
     }
 
+    // Check if user is locked
+    if (await twoFactorRateLimiter.isLocked(request.userId)) {
+      const timeLeft = await twoFactorRateLimiter.getLockoutTimeRemaining(request.userId);
+      return { 
+        success: false, 
+        error: `2FA locked. Too many failed attempts. Try again in ${Math.ceil(timeLeft / 60)} minutes.` 
+      };
+    }
+
     // Try TOTP verification first
     if (request.token) {
       const isValidTOTP = verifyTOTPToken(user.two_factor_secret!, request.token);
       if (isValidTOTP) {
-        logger.info(`[2FA] Successful TOTP verification for withdrawal`, {
+        await twoFactorRateLimiter.resetFailures(request.userId);
+        logger.info({
           userId: request.userId,
           method: 'totp'
-        });
+        }, `[2FA] Successful TOTP verification for withdrawal`);
         return { success: true, method: 'totp' };
       }
     }
@@ -70,22 +82,33 @@ export class TwoFactorWithdrawalService {
     if (request.backupCode) {
       const backupCodeResult = await this.verifyBackupCode(request.userId, request.backupCode);
       if (backupCodeResult.success) {
-        logger.info(`[2FA] Successful backup code verification for withdrawal`, {
+        await twoFactorRateLimiter.resetFailures(request.userId);
+        logger.info({
           userId: request.userId,
           method: 'backup',
           codeId: backupCodeResult.codeId
-        });
+        }, `[2FA] Successful backup code verification for withdrawal`);
         return { success: true, method: 'backup' };
       }
     }
 
-    logger.warn(`[2FA] Failed 2FA verification for withdrawal`, {
+    // Verification failed - increment count
+    const newCount = await twoFactorRateLimiter.incrementFailures(request.userId);
+    const triesLeft = Math.max(0, 3 - newCount);
+
+    logger.warn({
       userId: request.userId,
       hasToken: !!request.token,
-      hasBackupCode: !!request.backupCode
-    });
+      hasBackupCode: !!request.backupCode,
+      triesRemaining: triesLeft
+    }, `[2FA] Failed 2FA verification for withdrawal`);
 
-    return { success: false, error: 'Invalid 2FA token or backup code' };
+    return { 
+      success: false, 
+      error: triesLeft > 0 
+        ? `Invalid 2FA token or backup code. ${triesLeft} attempts remaining.` 
+        : 'Too many failed attempts. 2FA is now locked for 15 minutes.' 
+    };
   }
 
   /**
@@ -104,11 +127,11 @@ export class TwoFactorWithdrawalService {
 
     await this.userModel.updateMandatory2FAWithdrawals(userId, enabled);
 
-    logger.info(`[2FA] Updated mandatory 2FA withdrawals preference`, {
+    logger.info({
       userId,
       enabled,
       has2FAEnabled: is2FAEnabled(user)
-    });
+    }, `[2FA] Updated mandatory 2FA withdrawals preference`);
   }
 
   /**
@@ -172,10 +195,46 @@ export class TwoFactorWithdrawalService {
         client.release();
       }
     } catch (error) {
-      logger.error('[2FA] Error verifying backup code:', error);
+      logger.error(error, '[2FA] Error verifying backup code');
       return { success: false };
     }
   }
 }
 
 export const twoFactorWithdrawalService = new TwoFactorWithdrawalService();
+
+/**
+ * Express middleware that validates an OTP token before allowing a withdrawal.
+ * If the user has mandatory 2FA enabled, a valid `otpToken` or `backupCode`
+ * must be present in the request body. Unauthorized requests are rejected with 401.
+ */
+export async function validate2FAForWithdrawal(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  const userId = req.jwtUser?.userId;
+  if (!userId) {
+    res.status(401).json({ error: 'Unauthorized', message: 'Authentication required' });
+    return;
+  }
+
+  const requires2FA = await twoFactorWithdrawalService.requires2FAForWithdrawal(userId).catch(() => false);
+  if (!requires2FA) {
+    return next();
+  }
+
+  const { otpToken, backupCode } = req.body ?? {};
+  const result = await twoFactorWithdrawalService.verifyWithdrawal2FA({
+    userId,
+    token: otpToken,
+    backupCode,
+  });
+
+  if (!result.success) {
+    res.status(401).json({ error: 'Unauthorized', message: result.error ?? '2FA verification failed' });
+    return;
+  }
+
+  next();
+}

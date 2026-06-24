@@ -1,7 +1,5 @@
 import request from "supertest";
 import express from "express";
-import { adminRoutes } from "../admin";
-import * as csvReconciliation from "../../services/csvReconciliation";
 
 jest.mock("../../services/csvReconciliation");
 jest.mock("../../config/redis", () => ({
@@ -10,6 +8,15 @@ jest.mock("../../config/redis", () => ({
     ping: jest.fn().mockResolvedValue("PONG"),
   },
 }));
+jest.mock("../../config/database", () => ({
+  pool: {
+    query: jest.fn().mockResolvedValue({ rows: [] }),
+  },
+}));
+
+import { adminRoutes } from "../admin";
+import * as csvReconciliation from "../../services/csvReconciliation";
+import { errorHandler } from "../../middleware/errorHandler";
 
 describe("Admin CSV Reconciliation Endpoint", () => {
   let app: express.Application;
@@ -25,6 +32,7 @@ describe("Admin CSV Reconciliation Endpoint", () => {
     });
 
     app.use("/api/admin", adminRoutes);
+    app.use(errorHandler);
   });
 
   afterEach(() => {

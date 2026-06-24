@@ -99,7 +99,7 @@ export class EnhancedTransactionController {
               phoneNumber: transaction.phoneNumber,
               timestamp: transaction.createdAt,
               location: null, // Extract from metadata if needed
-              type: transaction.type,
+              type: transaction.type as "deposit" | "withdraw",
               provider: transaction.provider,
               metadata: transaction.metadata
             };

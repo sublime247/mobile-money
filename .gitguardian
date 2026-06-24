@@ -1,0 +1,18 @@
+# GitGuardian configuration file
+# This file helps configure secret detection policies
+
+version: 2
+
+verbose: false
+show_secrets: false
+
+paths-ignore:
+  - node_modules/
+  - dist/
+  - build/
+  - .git/
+  - coverage/
+  - .next/
+  - "**/*.min.js"
+  - "**/package-lock.json"
+  - "**/pnpm-lock.yaml"

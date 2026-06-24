@@ -15,14 +15,21 @@ import {
   withdrawHandler,
 } from "../controllers/transactionController";
 import { validateTransaction } from "../middleware/validateTransaction";
+import { normalizeProvider } from "../middleware/normalizeProvider";
+import { validateNetworkMiddleware } from "../middleware/validateNetworkMiddleware";
 import { TimeoutPresets, haltOnTimedout } from "../middleware/timeout";
 import { authenticateToken } from "../middleware/auth";
+import { cancelTransactionRateLimiter } from "../middleware/rateLimit";
 import { checkAccountStatusStrict } from "../middleware/checkAccountStatus";
 import { geolocateMiddleware } from "../middleware/geolocate";
-import { TransactionModel } from "../models/transaction";
+import { geoFencingMiddleware } from "../middleware/geoFencing";
+import { validate2FAForWithdrawal } from "../services/twoFactorWithdrawalService";
+import { TransactionModel, TransactionStatus } from "../models/transaction";
 import { generateTransactionPdfBuffer } from "../services/pdfReceipt";
 import { generateShareToken, verifyShareToken } from "../utils/share";
 import { createExportRoutes } from "./export";
+import { ERROR_CODES } from "../constants/errorCodes";
+import { createError } from "../middleware/errorHandler";
 
 export const transactionRoutes = Router();
 transactionRoutes.use(createExportRoutes());
@@ -42,7 +49,9 @@ transactionRoutes.get(
 
       const transaction = await transactionModel.findById(id);
       if (!transaction)
-        return res.status(404).json({ error: "Transaction not found" });
+        throw createError(ERROR_CODES.NOT_FOUND, "Transaction not found", {
+          error: "Transaction not found",
+        });
 
       const pdf = await generateTransactionPdfBuffer(transaction);
 
@@ -60,7 +69,55 @@ transactionRoutes.get(
       res.status(200).send(pdf);
     } catch (err) {
       console.error("Failed to generate receipt PDF:", err);
-      res.status(500).json({ error: "Failed to generate receipt PDF" });
+      throw createError(
+        ERROR_CODES.INTERNAL_ERROR,
+        "Failed to generate receipt PDF",
+        {
+          error: "Failed to generate receipt PDF",
+        },
+      );
+    }
+  },
+);
+
+transactionRoutes.get(
+  "/:id/invoice",
+  TimeoutPresets.quick,
+  haltOnTimedout,
+  authenticateToken,
+  async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { download } = req.query;
+
+      const transaction = await transactionModel.findById(id);
+      if (!transaction)
+        return res.status(404).json({ error: "Transaction not found" });
+
+      if (transaction.status !== TransactionStatus.Completed)
+        return res.status(400).json({
+          error: "Invoice download is available only for completed transactions",
+        });
+
+      const pdf = await generateTransactionPdfBuffer(transaction, {
+        title: "Invoice",
+      });
+
+      res.setHeader("Content-Type", "application/pdf");
+      const filename = `invoice-${transaction.referenceNumber}.pdf`;
+      if (download && String(download) === "0") {
+        res.setHeader("Content-Disposition", `inline; filename="${filename}"`);
+      } else {
+        res.setHeader(
+          "Content-Disposition",
+          `attachment; filename="${filename}"`,
+        );
+      }
+
+      res.status(200).send(pdf);
+    } catch (err) {
+      console.error("Failed to generate invoice PDF:", err);
+      res.status(500).json({ error: "Failed to generate invoice PDF" });
     }
   },
 );
@@ -77,8 +134,9 @@ transactionRoutes.post(
       const { expiresIn = 60 * 60 } = req.body || {};
       const transaction = await transactionModel.findById(id);
       if (!transaction)
-        return res.status(404).json({ error: "Transaction not found" });
-
+        throw createError(ERROR_CODES.NOT_FOUND, "Transaction not found", {
+          error: "Transaction not found",
+        });
       const token = generateShareToken(id, Number(expiresIn));
       const host = req.get("host") || "";
       const protocol = req.protocol;
@@ -90,7 +148,13 @@ transactionRoutes.post(
       });
     } catch (err) {
       console.error("Failed to create shareable receipt URL:", err);
-      res.status(500).json({ error: "Failed to create shareable receipt URL" });
+      throw createError(
+        ERROR_CODES.INTERNAL_ERROR,
+        "Failed to create shareable receipt URL",
+        {
+          error: "Failed to create shareable receipt URL",
+        },
+      );
     }
   },
 );
@@ -106,7 +170,9 @@ transactionRoutes.get(
       const payload = verifyShareToken(token);
       const transaction = await transactionModel.findById(payload.id);
       if (!transaction)
-        return res.status(404).json({ error: "Transaction not found" });
+        throw createError(ERROR_CODES.NOT_FOUND, "Transaction not found", {
+          error: "Transaction not found",
+        });
 
       const pdf = await generateTransactionPdfBuffer(transaction);
       const filename = `receipt-${transaction.referenceNumber}.pdf`;
@@ -118,7 +184,13 @@ transactionRoutes.get(
       res.status(200).send(pdf);
     } catch (err) {
       console.error("Invalid or expired share token:", err);
-      return res.status(401).json({ error: "Invalid or expired share token" });
+      throw createError(
+        ERROR_CODES.TOKEN_EXPIRED,
+        "Invalid or expired share token",
+        {
+          error: "Invalid or expired share token",
+        },
+      );
     }
   },
 );
@@ -157,9 +229,12 @@ transactionRoutes.post(
   "/deposit",
   authenticateToken,
   checkAccountStatusStrict,
+  geoFencingMiddleware,
   TimeoutPresets.long,
   haltOnTimedout,
+  normalizeProvider,
   validateTransaction,
+  validateNetworkMiddleware,
   geolocateMiddleware,
   depositHandler,
 );
@@ -168,10 +243,14 @@ transactionRoutes.post(
   "/withdraw",
   authenticateToken,
   checkAccountStatusStrict,
+  geoFencingMiddleware,
   TimeoutPresets.long,
   haltOnTimedout,
+  normalizeProvider,
   validateTransaction,
+  validateNetworkMiddleware,
   geolocateMiddleware,
+  validate2FAForWithdrawal,
   withdrawHandler,
 );
 
@@ -184,6 +263,8 @@ transactionRoutes.get(
 
 transactionRoutes.post(
   "/:id/cancel",
+  authenticateToken,
+  cancelTransactionRateLimiter,
   TimeoutPresets.quick,
   haltOnTimedout,
   cancelTransactionHandler,

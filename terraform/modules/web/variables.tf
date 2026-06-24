@@ -86,6 +86,30 @@ variable "s3_bucket_name" {
   default     = "mobile-money-kyc-documents"
 }
 
+variable "enable_code_deploy" {
+  description = "Enable CodeDeploy-based ECS deployments with rollback on alarms"
+  type        = bool
+  default     = true
+}
+
+variable "error_rate_alarm_threshold" {
+  description = "Threshold for ALB target group 5xx error rate alarm"
+  type        = number
+  default     = 10
+}
+
+variable "error_rate_alarm_evaluation_periods" {
+  description = "Number of periods to evaluate before triggering the error rate alarm"
+  type        = number
+  default     = 2
+}
+
+variable "error_rate_alarm_period" {
+  description = "Alarm evaluation period in seconds for the error rate alarm"
+  type        = number
+  default     = 60
+}
+
 variable "log_retention_days" {
   description = "CloudWatch log retention in days"
   type        = number

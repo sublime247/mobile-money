@@ -74,10 +74,11 @@ export const sentryBreadcrumbMiddleware = (
 /**
  * Global Sentry configuration with PII scrubbing in beforeSend
  */
-export const initSentry = (dsn: string) => {
+export const initSentry = (dsn: string, release?: string) => {
   Sentry.init({
     dsn,
     environment: process.env.NODE_ENV || "development",
+    release: release || process.env.SENTRY_RELEASE,
     beforeSend(event) {
       if (event.request?.data) {
         event.request.data = scrubSensitiveData(event.request.data);

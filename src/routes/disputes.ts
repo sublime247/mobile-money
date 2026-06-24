@@ -15,7 +15,11 @@
  *
  *   PATCH  /api/disputes/:disputeId/status
  *     Transition dispute status.
- *     Body: { status: 'open'|'investigating'|'resolved'|'rejected', resolution?: string, assignedTo?: string }
+ *     Body: { status: 'open'|'investigating'|'resolved'|'rejected'|'reversed'|'upheld', resolution?: string, assignedTo?: string }
+ *
+ *   POST   /api/disputes/:disputeId/resolve
+ *     Admin reverses or upholds a disputed payment.
+ *     Body: { action: 'reverse'|'uphold', resolution: string, adminId?: string }
  *
  *   PATCH  /api/disputes/:disputeId
  *     Update dispute fields.
@@ -60,16 +64,27 @@ import { DisputeService } from "../services/dispute";
 import { DisputeStatus, DisputePriority } from "../models/dispute";
 import { DisputeStateMachine } from "../services/disputeStateMachine";
 import { uploadSingle, uploadMultiple } from "../middleware/disputeUpload";
-import { uploadDisputeEvidenceToS3, uploadMultipleDisputeEvidenceToS3, validateDisputeEvidenceFile } from "../services/disputeS3Upload";
-import { generateDisputeSlaReport, runDisputeSlaJob } from "../jobs/disputeSlaJob";
+import {
+  uploadDisputeEvidenceToS3,
+  uploadMultipleDisputeEvidenceToS3,
+  validateDisputeEvidenceFile,
+} from "../services/disputeS3Upload";
+import {
+  generateDisputeSlaReport,
+  runDisputeSlaJob,
+} from "../jobs/disputeSlaJob";
 import { requireAuth } from "../middleware/auth";
 import { requirePermission } from "../middleware/rbac";
+import { createError } from "../middleware/errorHandler";
+import { ERROR_CODES } from "../constants/errorCodes";
 
 const VALID_STATUSES: DisputeStatus[] = [
   "open",
   "investigating",
   "resolved",
   "rejected",
+  "reversed",
+  "upheld",
 ];
 
 const VALID_PRIORITIES: DisputePriority[] = [
@@ -115,24 +130,34 @@ transactionDisputeRoutes.post(
     const { reason, reportedBy, priority, category, requesterEmail } = req.body;
 
     if (!reason || typeof reason !== "string" || reason.trim().length === 0) {
-      return res.status(400).json({
-        error: 'Field "reason" is required and must be a non-empty string',
-      });
+      throw createError(
+        ERROR_CODES.MISSING_FIELD,
+        'Field "reason" is required and must be a non-empty string',
+        { error: 'Field "reason" is required and must be a non-empty string' },
+      );
     }
 
     if (priority && !VALID_PRIORITIES.includes(priority)) {
-      return res.status(400).json({
-        error: `Invalid priority. Must be one of: ${VALID_PRIORITIES.join(", ")}`,
-      });
+      throw createError(
+        ERROR_CODES.INVALID_INPUT,
+        `Invalid priority. Must be one of: ${VALID_PRIORITIES.join(", ")}`,
+        {
+          error: `Invalid priority. Must be one of: ${VALID_PRIORITIES.join(", ")}`,
+        },
+      );
     }
 
     // Validate requesterEmail if provided
     if (requesterEmail && typeof requesterEmail === "string") {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(requesterEmail)) {
-        return res.status(400).json({
-          error: 'Invalid "requesterEmail" format',
-        });
+        throw createError(
+          ERROR_CODES.INVALID_INPUT,
+          'Invalid "requesterEmail" format',
+          {
+            error: 'Invalid "requesterEmail" format',
+          },
+        );
       }
     }
 
@@ -149,13 +174,13 @@ transactionDisputeRoutes.post(
       const message =
         error instanceof Error ? error.message : "Failed to open dispute";
       const status = message.includes("not found")
-        ? 404
+        ? ERROR_CODES.NOT_FOUND
         : message.includes("already exists")
-          ? 409
+          ? ERROR_CODES.CONFLICT
           : message.includes("only allowed for completed")
-            ? 422
-            : 500;
-      return res.status(status).json({ error: message });
+            ? ERROR_CODES.CONFLICT
+            : ERROR_CODES.INTERNAL_ERROR;
+      throw createError(status, message, { error: message });
     }
   },
 );
@@ -182,13 +207,17 @@ disputeRoutes.get(
     if (from) {
       const d = new Date(from as string);
       if (isNaN(d.getTime()))
-        return res.status(400).json({ error: 'Invalid "from" date' });
+        throw createError(ERROR_CODES.INVALID_INPUT, 'Invalid "from" date', {
+          error: 'Invalid "from" date',
+        });
       filter.from = d;
     }
     if (to) {
       const d = new Date(to as string);
       if (isNaN(d.getTime()))
-        return res.status(400).json({ error: 'Invalid "to" date' });
+        throw createError(ERROR_CODES.INVALID_INPUT, 'Invalid "to" date', {
+          error: 'Invalid "to" date',
+        });
       filter.to = d;
     }
     if (assignedTo) filter.assignedTo = assignedTo as string;
@@ -199,9 +228,11 @@ disputeRoutes.get(
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to generate report";
-      return res.status(500).json({ error: message });
+      throw createError(ERROR_CODES.INTERNAL_ERROR, message, {
+        error: message,
+      });
     }
-  }
+  },
 );
 
 /**
@@ -215,9 +246,13 @@ disputeRoutes.get(
     const days = req.query.days ? parseInt(req.query.days as string, 10) : 30;
 
     if (isNaN(days) || days < 1 || days > 365) {
-      return res.status(400).json({
-        error: "Invalid days parameter. Must be between 1 and 365"
-      });
+      throw createError(
+        ERROR_CODES.INVALID_INPUT,
+        "Invalid days parameter. Must be between 1 and 365",
+        {
+          error: "Invalid days parameter. Must be between 1 and 365",
+        },
+      );
     }
 
     try {
@@ -225,10 +260,14 @@ disputeRoutes.get(
       return res.json(report);
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Failed to generate SLA report";
-      return res.status(500).json({ error: message });
+        error instanceof Error
+          ? error.message
+          : "Failed to generate SLA report";
+      throw createError(ERROR_CODES.INTERNAL_ERROR, message, {
+        error: message,
+      });
     }
-  }
+  },
 );
 
 /**
@@ -244,10 +283,15 @@ disputeRoutes.get(
       return res.json(overdue);
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Failed to get overdue disputes";
-      return res.status(500).json({ error: message });
+        error instanceof Error
+          ? error.message
+          : "Failed to get overdue disputes";
+      // return res.status(500).json({ error: message });
+      throw createError(ERROR_CODES.INTERNAL_ERROR, message, {
+        error: message,
+      });
     }
-  }
+  },
 );
 
 /**
@@ -263,10 +307,62 @@ disputeRoutes.post(
       return res.json(result);
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Failed to process SLA warnings";
-      return res.status(500).json({ error: message });
+        error instanceof Error
+          ? error.message
+          : "Failed to process SLA warnings";
+      throw createError(ERROR_CODES.INTERNAL_ERROR, message, {
+        error: message,
+      });
     }
-  }
+  },
+);
+
+/**
+ * POST /api/disputes/:disputeId/resolve
+ */
+disputeRoutes.post(
+  "/:disputeId/resolve",
+  requireAuth,
+  requirePermission("dispute:manage"),
+  async (req: Request, res: Response) => {
+    const { action, resolution, adminId } = req.body;
+
+    if (action !== "reverse" && action !== "uphold") {
+      return res.status(400).json({
+        error: 'Field "action" must be one of: reverse, uphold',
+      });
+    }
+
+    if (
+      !resolution ||
+      typeof resolution !== "string" ||
+      resolution.trim().length === 0
+    ) {
+      return res.status(400).json({
+        error: 'Field "resolution" is required and must be a non-empty string',
+      });
+    }
+
+    try {
+      const updated = await disputeService.resolvePayment(
+        req.params.disputeId,
+        action,
+        resolution,
+        adminId ?? req.user?.id,
+      );
+      return res.json(updated);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to resolve dispute";
+      const code = message.includes("not found")
+        ? 404
+        : message.includes("Cannot resolve") ||
+            message.includes("Resolution text")
+          ? 422
+          : 500;
+      return res.status(code).json({ error: message });
+    }
+  },
 );
 
 /**
@@ -283,11 +379,17 @@ disputeRoutes.get(
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to fetch dispute";
-      return res
-        .status(message.includes("not found") ? 404 : 500)
-        .json({ error: message });
+      throw createError(
+        message.includes("not found")
+          ? ERROR_CODES.NOT_FOUND
+          : ERROR_CODES.INTERNAL_ERROR,
+        message,
+        {
+          error: message,
+        },
+      );
     }
-  }
+  },
 );
 
 /**
@@ -299,16 +401,26 @@ disputeRoutes.get(
   requirePermission("dispute:read"),
   async (req: Request, res: Response) => {
     try {
-      const dispute = await disputeService.getDisputeWithDetails(req.params.disputeId);
+      const dispute = await disputeService.getDisputeWithDetails(
+        req.params.disputeId,
+      );
       return res.json(dispute);
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Failed to fetch dispute details";
-      return res
-        .status(message.includes("not found") ? 404 : 500)
-        .json({ error: message });
+        error instanceof Error
+          ? error.message
+          : "Failed to fetch dispute details";
+      throw createError(
+        message.includes("not found")
+          ? ERROR_CODES.NOT_FOUND
+          : ERROR_CODES.INTERNAL_ERROR,
+        message,
+        {
+          error: message,
+        },
+      );
     }
-  }
+  },
 );
 
 /**
@@ -322,27 +434,41 @@ disputeRoutes.patch(
     const { status, resolution, assignedTo } = req.body;
 
     if (!status || !VALID_STATUSES.includes(status)) {
-      return res.status(400).json({
-        error: `Field "status" must be one of: ${VALID_STATUSES.join(", ")}`,
-      });
+      throw createError(
+        ERROR_CODES.INVALID_INPUT,
+        `Field "status" must be one of: ${VALID_STATUSES.join(", ")}`,
+        {
+          error: `Field "status" must be one of: ${VALID_STATUSES.join(", ")}`,
+        },
+      );
     }
 
     try {
       // Get current dispute to validate transition
-      const currentDispute = await disputeService.getDispute(req.params.disputeId);
+      const currentDispute = await disputeService.getDispute(
+        req.params.disputeId,
+      );
 
       // Validate state transition
       const validation = stateMachine.validateTransition(
         currentDispute.status,
         status,
-        { resolution, assignedTo }
+        { resolution, assignedTo },
       );
 
       if (!validation.valid) {
-        return res.status(422).json({
-          error: "Invalid state transition",
-          details: validation.errors,
-        });
+        // return res.status(422).json({
+        //   error: "Invalid state transition",
+        //   details: validation.errors,
+        // });
+        throw createError(
+          ERROR_CODES.INVALID_INPUT,
+          "Invalid state transition",
+          {
+            error: "Invalid state transition",
+            details: validation.errors,
+          },
+        );
       }
 
       const updated = await disputeService.updateStatus(
@@ -358,12 +484,14 @@ disputeRoutes.patch(
           ? error.message
           : "Failed to update dispute status";
       const code = message.includes("not found")
-        ? 404
+        ? ERROR_CODES.NOT_FOUND
         : message.includes("Cannot transition") ||
-        message.includes("resolution text")
-          ? 422
-          : 500;
-      return res.status(code).json({ error: message });
+            message.includes("resolution text")
+          ? ERROR_CODES.UNPROCESSABLE_CONTENT
+          : ERROR_CODES.INTERNAL_ERROR;
+      throw createError(code, message, {
+        error: message,
+      });
     }
   },
 );
@@ -379,9 +507,13 @@ disputeRoutes.patch(
     const { priority, category, internalNotes } = req.body;
 
     if (priority && !VALID_PRIORITIES.includes(priority)) {
-      return res.status(400).json({
-        error: `Invalid priority. Must be one of: ${VALID_PRIORITIES.join(", ")}`,
-      });
+      throw createError(
+        ERROR_CODES.INVALID_INPUT,
+        `Invalid priority. Must be one of: ${VALID_PRIORITIES.join(", ")}`,
+        {
+          error: `Invalid priority. Must be one of: ${VALID_PRIORITIES.join(", ")}`,
+        },
+      );
     }
 
     try {
@@ -394,11 +526,17 @@ disputeRoutes.patch(
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to update dispute";
-      return res
-        .status(message.includes("not found") ? 404 : 500)
-        .json({ error: message });
+      throw createError(
+        message.includes("not found")
+          ? ERROR_CODES.NOT_FOUND
+          : ERROR_CODES.INTERNAL_ERROR,
+        message,
+        {
+          error: message,
+        },
+      );
     }
-  }
+  },
 );
 
 /**
@@ -416,7 +554,13 @@ disputeRoutes.post(
       typeof agentName !== "string" ||
       agentName.trim().length === 0
     ) {
-      return res.status(400).json({ error: 'Field "agentName" is required' });
+      throw createError(
+        ERROR_CODES.INVALID_INPUT,
+        'Field "agentName" is required',
+        {
+          error: 'Field "agentName" is required',
+        },
+      );
     }
 
     try {
@@ -429,11 +573,13 @@ disputeRoutes.post(
       const message =
         error instanceof Error ? error.message : "Failed to assign dispute";
       const code = message.includes("not found")
-        ? 404
+        ? ERROR_CODES.NOT_FOUND
         : message.includes("Cannot assign")
-          ? 422
-          : 500;
-      return res.status(code).json({ error: message });
+          ? ERROR_CODES.UNPROCESSABLE_CONTENT
+          : ERROR_CODES.INTERNAL_ERROR;
+      throw createError(code, message, {
+        error: message,
+      });
     }
   },
 );
@@ -449,10 +595,18 @@ disputeRoutes.post(
     const { author, note } = req.body;
 
     if (!author || typeof author !== "string" || author.trim().length === 0) {
-      return res.status(400).json({ error: 'Field "author" is required' });
+      throw createError(
+        ERROR_CODES.INVALID_INPUT,
+        'Field "author" is required',
+        {
+          error: 'Field "author" is required',
+        },
+      );
     }
     if (!note || typeof note !== "string" || note.trim().length === 0) {
-      return res.status(400).json({ error: 'Field "note" is required' });
+      throw createError(ERROR_CODES.INVALID_INPUT, 'Field "note" is required', {
+        error: 'Field "note" is required',
+      });
     }
 
     try {
@@ -465,11 +619,17 @@ disputeRoutes.post(
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to add note";
-      return res
-        .status(message.includes("not found") ? 404 : 500)
-        .json({ error: message });
+      throw createError(
+        message.includes("not found")
+          ? ERROR_CODES.NOT_FOUND
+          : ERROR_CODES.INTERNAL_ERROR,
+        message,
+        {
+          error: message,
+        },
+      );
     }
-  }
+  },
 );
 
 /**
@@ -479,20 +639,24 @@ disputeRoutes.post(
   "/:disputeId/evidence",
   requireAuth,
   requirePermission("dispute:update"),
-  uploadSingle.single('file'),
+  uploadSingle.single("file"),
   async (req: Request, res: Response) => {
     const { disputeId } = req.params;
     const { description } = req.body;
     const file = req.file;
 
     if (!file) {
-      return res.status(400).json({ error: "No file uploaded" });
+      throw createError(ERROR_CODES.INVALID_INPUT, "No file uploaded", {
+        error: "No file uploaded",
+      });
     }
 
     // Validate file
     const validation = validateDisputeEvidenceFile(file);
     if (!validation.valid) {
-      return res.status(400).json({ error: validation.error });
+      throw createError(ERROR_CODES.INVALID_INPUT, validation.error, {
+        error: validation.error,
+      });
     }
 
     try {
@@ -500,11 +664,13 @@ disputeRoutes.post(
       const uploadResult = await uploadDisputeEvidenceToS3({
         disputeId,
         file,
-        uploadedBy: req.user?.id || 'unknown',
+        uploadedBy: req.user?.id || "unknown",
       });
 
       if (!uploadResult.success) {
-        return res.status(500).json({ error: uploadResult.error });
+        throw createError(ERROR_CODES.INTERNAL_ERROR, uploadResult.error, {
+          error: uploadResult.error,
+        });
       }
 
       // Save evidence record
@@ -515,7 +681,7 @@ disputeRoutes.post(
         file.size,
         uploadResult.key!,
         uploadResult.fileUrl!,
-        req.user?.id || 'unknown',
+        req.user?.id || "unknown",
         description,
       );
 
@@ -523,11 +689,18 @@ disputeRoutes.post(
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to upload evidence";
-      return res
-        .status(message.includes("not found") ? 404 : 500)
-        .json({ error: message });
+
+      throw createError(
+        message.includes("not found")
+          ? ERROR_CODES.NOT_FOUND
+          : ERROR_CODES.INTERNAL_ERROR,
+        message,
+        {
+          error: message,
+        },
+      );
     }
-  }
+  },
 );
 
 /**
@@ -537,23 +710,29 @@ disputeRoutes.post(
   "/:disputeId/evidence/multiple",
   requireAuth,
   requirePermission("dispute:update"),
-  uploadMultiple.array('files', 5),
+  uploadMultiple.array("files", 5),
   async (req: Request, res: Response) => {
     const { disputeId } = req.params;
     const { descriptions } = req.body;
     const files = req.files as Express.Multer.File[];
 
     if (!files || files.length === 0) {
-      return res.status(400).json({ error: "No files uploaded" });
+      throw createError(ERROR_CODES.INVALID_INPUT, "No files uploaded", {
+        error: "No files uploaded",
+      });
     }
 
     // Validate all files
     for (const file of files) {
       const validation = validateDisputeEvidenceFile(file);
       if (!validation.valid) {
-        return res.status(400).json({
-          error: `File "${file.originalname}": ${validation.error}`
-        });
+        throw createError(
+          ERROR_CODES.INVALID_INPUT,
+          `File "${file.originalname}": ${validation.error}`,
+          {
+            error: `File "${file.originalname}": ${validation.error}`,
+          },
+        );
       }
     }
 
@@ -562,16 +741,19 @@ disputeRoutes.post(
       const uploadResults = await uploadMultipleDisputeEvidenceToS3(
         disputeId,
         files,
-        req.user?.id || 'unknown'
+        req.user?.id || "unknown",
       );
 
       // Check for upload failures
-      const failedUploads = uploadResults.filter(r => !r.success);
+      const failedUploads = uploadResults.filter((r) => !r.success);
       if (failedUploads.length > 0) {
-        return res.status(500).json({
-          error: "Some files failed to upload",
-          failures: failedUploads,
-        });
+        throw createError(
+          ERROR_CODES.INTERNAL_ERROR,
+          "Some files failed to upload",
+          {
+            error: "Some files failed to upload",
+          },
+        );
       }
 
       // Save evidence records
@@ -579,7 +761,9 @@ disputeRoutes.post(
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         const uploadResult = uploadResults[i];
-        const description = Array.isArray(descriptions) ? descriptions[i] : descriptions;
+        const description = Array.isArray(descriptions)
+          ? descriptions[i]
+          : descriptions;
 
         const evidence = await disputeService.addEvidence(
           disputeId,
@@ -588,7 +772,7 @@ disputeRoutes.post(
           file.size,
           uploadResult.key!,
           uploadResult.fileUrl!,
-          req.user?.id || 'unknown',
+          req.user?.id || "unknown",
           description,
         );
         evidenceRecords.push(evidence);
@@ -598,11 +782,17 @@ disputeRoutes.post(
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to upload evidence";
-      return res
-        .status(message.includes("not found") ? 404 : 500)
-        .json({ error: message });
+      throw createError(
+        message.includes("not found")
+          ? ERROR_CODES.NOT_FOUND
+          : ERROR_CODES.INTERNAL_ERROR,
+        message,
+        {
+          error: message,
+        },
+      );
     }
-  }
+  },
 );
 
 /**
@@ -619,9 +809,15 @@ disputeRoutes.get(
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to get evidence";
-      return res
-        .status(message.includes("not found") ? 404 : 500)
-        .json({ error: message });
+      throw createError(
+        message.includes("not found")
+          ? ERROR_CODES.NOT_FOUND
+          : ERROR_CODES.INTERNAL_ERROR,
+        message,
+        {
+          error: message,
+        },
+      );
     }
-  }
+  },
 );

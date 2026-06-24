@@ -26,11 +26,9 @@ export interface DatabaseRoutingContext {
   path: string;
 }
 
-declare global {
-  namespace Express {
-    interface Request {
-      dbRouting?: DatabaseRoutingContext;
-    }
+declare module "express" {
+  interface Request {
+    dbRouting?: DatabaseRoutingContext;
   }
 }
 

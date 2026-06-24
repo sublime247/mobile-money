@@ -1,9 +1,8 @@
 import { Gauge, register } from 'prom-client';
-import * as StellarSdk from 'stellar-sdk';
+import { getStellarServer } from '../config/stellar';
 
-// Use environment variables for network routing to support dev/prod parity
-const HORIZON_URL = process.env.STELLAR_HORIZON_URL || 'https://horizon.stellar.org';
-const server = new StellarSdk.Horizon.Server(HORIZON_URL);
+// Pooled server with automatic round-robin failover across Horizon nodes.
+const server = getStellarServer();
 const HOT_WALLET_PUBLIC_KEY = process.env.STELLAR_HOT_WALLET_PUBLIC_KEY;
 
 // 1. Define the Prometheus Gauge

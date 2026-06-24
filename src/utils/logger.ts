@@ -1,5 +1,6 @@
 import pino, { Logger, TransportTargetOptions } from 'pino';
 import os from 'os';
+import { REDACT_KEYS } from './redact';
 
 /**
  * Centralized Pino Logger — feature/centralized-logging
@@ -116,18 +117,11 @@ const logger: Logger = pino(
     // Redact sensitive fields before any transport sees them
     redact: {
       paths: [
-        'password',
-        'token',
-        'accountNumber',
-        'secret',
-        'authorization',
-        'req.headers.authorization',
-        '*.password',
-        '*.token',
-        '*.accountNumber',
-        '*.secret',
+        ...REDACT_KEYS,
+        ...REDACT_KEYS.map((key) => `*.${key}`),
+        ...REDACT_KEYS.map((key) => `req.headers.${key}`),
+        ...REDACT_KEYS.map((key) => `*.req.headers.${key}`),
       ],
-      placeholder: '[REDACTED]',
       censor: '[REDACTED]',
     },
 

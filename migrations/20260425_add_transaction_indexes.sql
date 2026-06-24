@@ -63,7 +63,7 @@ CREATE INDEX IF NOT EXISTS idx_transactions_status_created_covering
 --               releaseExpiredIdempotencyKey() — both filter by idempotency_key.
 --    Partial index keeps it small (only rows with an active key are indexed).
 -- ─────────────────────────────────────────────────────────────────────────────
-CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_idempotency_key
+CREATE INDEX IF NOT EXISTS idx_transactions_idempotency_key
   ON transactions (idempotency_key)
   WHERE idempotency_key IS NOT NULL;
 

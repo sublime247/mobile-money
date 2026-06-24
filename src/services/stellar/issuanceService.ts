@@ -1,7 +1,7 @@
 import * as StellarSdk from "stellar-sdk";
 import { getStellarServer, getNetworkPassphrase } from "../../config/stellar";
 import { encrypt } from "../../utils/encryption";
-import { logger } from "../../utils/logger";
+import logger from "../../utils/logger";
 import axios from "axios";
 
 export interface IssuanceSetupResult {
@@ -57,7 +57,7 @@ export class AssetIssuanceService {
     try {
       await axios.get(`https://friendbot.stellar.org?addr=${publicKey}`);
     } catch (error) {
-      logger.error(`[stellar-issuance] Friendbot funding failed for ${publicKey}`, error);
+      logger.error(error, `[stellar-issuance] Friendbot funding failed for ${publicKey}`);
       throw new Error("Failed to fund account via Friendbot");
     }
   }

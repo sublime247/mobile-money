@@ -27,12 +27,12 @@ CREATE INDEX IF NOT EXISTS idx_accounts_is_active ON accounts(is_active);
 
 -- Auto-update updated_at on accounts
 CREATE OR REPLACE FUNCTION update_accounts_updated_at()
-RETURNS TRIGGER AS $
+RETURNS TRIGGER AS $$
 BEGIN
   NEW.updated_at = CURRENT_TIMESTAMP;
   RETURN NEW;
 END;
-$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS accounts_updated_at ON accounts;
 CREATE TRIGGER accounts_updated_at
@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS ledger_entries (
   account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE RESTRICT,
   debit_amount DECIMAL(20, 7) NOT NULL DEFAULT 0 CHECK (debit_amount >= 0),
   credit_amount DECIMAL(20, 7) NOT NULL DEFAULT 0 CHECK (credit_amount >= 0),
-  transaction_id UUID REFERENCES transactions(id) ON DELETE RESTRICT,
+  transaction_id UUID,
   reference_number VARCHAR(50) NOT NULL,
   description TEXT NOT NULL,
   posted_by UUID REFERENCES users(id) ON DELETE RESTRICT,
@@ -65,11 +65,11 @@ CREATE TABLE IF NOT EXISTS ledger_entries (
 
 -- Prevent updates and deletes on ledger_entries (immutability)
 CREATE OR REPLACE FUNCTION prevent_ledger_modification()
-RETURNS TRIGGER AS $
+RETURNS TRIGGER AS $$
 BEGIN
   RAISE EXCEPTION 'Ledger entries are immutable and cannot be modified or deleted';
 END;
-$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS prevent_ledger_update ON ledger_entries;
 CREATE TRIGGER prevent_ledger_update
@@ -119,11 +119,11 @@ CREATE INDEX IF NOT EXISTS idx_account_balances_type ON account_balances(type);
 
 -- Function to refresh account balances
 CREATE OR REPLACE FUNCTION refresh_account_balances()
-RETURNS void AS $
+RETURNS void AS $$
 BEGIN
   REFRESH MATERIALIZED VIEW CONCURRENTLY account_balances;
 END;
-$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
 -- ============================================================================
 -- ATOMIC POST_TRANSACTION FUNCTION
@@ -137,90 +137,90 @@ CREATE OR REPLACE FUNCTION post_transaction(
   p_posted_by UUID,
   p_entries JSONB -- Array of {account_code, debit_amount, credit_amount, description}
 )
-RETURNS TABLE(entry_id UUID, account_code VARCHAR, debit DECIMAL, credit DECIMAL) AS $
-DECLARE
-  v_total_debits DECIMAL(20, 7) := 0;
-  v_total_credits DECIMAL(20, 7) := 0;
-  v_entry JSONB;
-  v_account_id UUID;
-  v_new_entry_id UUID;
-BEGIN
-  -- Validate inputs
-  IF p_entries IS NULL OR jsonb_array_length(p_entries) = 0 THEN
-    RAISE EXCEPTION 'At least one ledger entry is required';
-  END IF;
-
-  IF jsonb_array_length(p_entries) < 2 THEN
-    RAISE EXCEPTION 'Double-entry requires at least 2 entries (debit and credit)';
-  END IF;
-
-  -- Calculate totals and validate each entry
-  FOR v_entry IN SELECT * FROM jsonb_array_elements(p_entries)
-  LOOP
-    -- Get account ID from code
-    SELECT id INTO v_account_id
-    FROM accounts
-    WHERE code = (v_entry->>'account_code')
-      AND is_active = true;
-    
-    IF v_account_id IS NULL THEN
-      RAISE EXCEPTION 'Account not found or inactive: %', (v_entry->>'account_code');
+RETURNS TABLE(entry_id UUID, account_code VARCHAR, debit DECIMAL, credit DECIMAL) AS $$
+  DECLARE
+    v_account_id UUID;
+    v_total_debits DECIMAL(20, 7) := 0;
+    v_total_credits DECIMAL(20, 7) := 0;
+    v_entry JSONB;
+    v_new_entry_id UUID;
+  BEGIN
+    -- Validate inputs
+    IF p_entries IS NULL OR p_entries = '[]'::JSONB THEN
+      RAISE EXCEPTION 'At least one ledger entry is required';
     END IF;
 
-    -- Accumulate totals
-    v_total_debits := v_total_debits + COALESCE((v_entry->>'debit_amount')::DECIMAL(20, 7), 0);
-    v_total_credits := v_total_credits + COALESCE((v_entry->>'credit_amount')::DECIMAL(20, 7), 0);
-  END LOOP;
+    IF jsonb_array_length(p_entries) < 2 THEN
+      RAISE EXCEPTION 'Double-entry requires at least 2 entries (debit and credit)';
+    END IF;
 
-  -- Validate double-entry balance (debits must equal credits)
-  IF v_total_debits != v_total_credits THEN
-    RAISE EXCEPTION 'Transaction is not balanced: debits=% credits=%', v_total_debits, v_total_credits;
-  END IF;
+    -- Calculate totals and validate each entry
+    FOR v_entry IN SELECT * FROM jsonb_array_elements(p_entries)
+    LOOP
+      -- Get account ID from code
+      SELECT id INTO v_account_id
+      FROM accounts
+      WHERE code = (v_entry->>'account_code')
+        AND is_active = true;
+      
+      IF v_account_id IS NULL THEN
+        RAISE EXCEPTION 'Account not found or inactive: %', (v_entry->>'account_code');
+      END IF;
 
-  IF v_total_debits = 0 THEN
-    RAISE EXCEPTION 'Transaction amounts cannot be zero';
-  END IF;
+      -- Accumulate totals
+      v_total_debits := v_total_debits + COALESCE((v_entry->>'debit_amount')::DECIMAL(20, 7), 0);
+      v_total_credits := v_total_credits + COALESCE((v_entry->>'credit_amount')::DECIMAL(20, 7), 0);
+    END LOOP;
 
-  -- Insert all ledger entries atomically
-  FOR v_entry IN SELECT * FROM jsonb_array_elements(p_entries)
-  LOOP
-    SELECT id INTO v_account_id
-    FROM accounts
-    WHERE code = (v_entry->>'account_code');
+    -- Validate double-entry balance (debits must equal credits)
+    IF v_total_debits != v_total_credits THEN
+      RAISE EXCEPTION 'Transaction is not balanced: debits=% credits=%', v_total_debits, v_total_credits;
+    END IF;
 
-    INSERT INTO ledger_entries (
-      account_id,
-      debit_amount,
-      credit_amount,
-      transaction_id,
-      reference_number,
-      description,
-      posted_by,
-      metadata
-    ) VALUES (
-      v_account_id,
-      COALESCE((v_entry->>'debit_amount')::DECIMAL(20, 7), 0),
-      COALESCE((v_entry->>'credit_amount')::DECIMAL(20, 7), 0),
-      p_transaction_id,
-      p_reference_number,
-      COALESCE(v_entry->>'description', p_description),
-      p_posted_by,
-      COALESCE(v_entry->'metadata', '{}'::JSONB)
-    )
-    RETURNING id INTO v_new_entry_id;
+    IF v_total_debits = 0 THEN
+      RAISE EXCEPTION 'Transaction amounts cannot be zero';
+    END IF;
 
-    -- Return the created entry
-    RETURN QUERY
-    SELECT 
-      v_new_entry_id,
-      (v_entry->>'account_code')::VARCHAR,
-      COALESCE((v_entry->>'debit_amount')::DECIMAL(20, 7), 0),
-      COALESCE((v_entry->>'credit_amount')::DECIMAL(20, 7), 0);
-  END LOOP;
+    -- Insert all ledger entries atomically
+    FOR v_entry IN SELECT * FROM jsonb_array_elements(p_entries)
+    LOOP
+      SELECT id INTO v_account_id
+      FROM accounts
+      WHERE code = (v_entry->>'account_code');
 
-  RETURN;
-END;
-$ LANGUAGE plpgsql;
+      INSERT INTO ledger_entries (
+        account_id,
+        debit_amount,
+        credit_amount,
+        transaction_id,
+        reference_number,
+        description,
+        posted_by,
+        metadata
+      ) VALUES (
+        v_account_id,
+        COALESCE((v_entry->>'debit_amount')::DECIMAL(20, 7), 0),
+        COALESCE((v_entry->>'credit_amount')::DECIMAL(20, 7), 0),
+        p_transaction_id,
+        p_reference_number,
+        COALESCE(v_entry->>'description', p_description),
+        p_posted_by,
+        COALESCE(v_entry->'metadata', '{}'::JSONB)
+      )
+      RETURNING id INTO v_new_entry_id;
+
+      -- Return the created entry
+      RETURN QUERY
+      SELECT 
+        v_new_entry_id,
+        (v_entry->>'account_code')::VARCHAR,
+        COALESCE((v_entry->>'debit_amount')::DECIMAL(20, 7), 0),
+        COALESCE((v_entry->>'credit_amount')::DECIMAL(20, 7), 0);
+    END LOOP;
+
+    RETURN;
+  END;
+  $$ LANGUAGE plpgsql;
 
 -- ============================================================================
 -- SEED STANDARD CHART OF ACCOUNTS
@@ -268,7 +268,7 @@ RETURNS TABLE(
   total_credits DECIMAL(20, 7),
   difference DECIMAL(20, 7),
   is_balanced BOOLEAN
-) AS $
+) AS $$
 BEGIN
   RETURN QUERY
   SELECT 
@@ -278,7 +278,7 @@ BEGIN
     COALESCE(SUM(debit_amount), 0) = COALESCE(SUM(credit_amount), 0) AS is_balanced
   FROM ledger_entries;
 END;
-$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
 -- Get trial balance (all account balances)
 CREATE OR REPLACE FUNCTION get_trial_balance(p_as_of_date DATE DEFAULT CURRENT_DATE)
@@ -288,7 +288,7 @@ RETURNS TABLE(
   account_type VARCHAR,
   debit_balance DECIMAL(20, 7),
   credit_balance DECIMAL(20, 7)
-) AS $
+) AS $$
 BEGIN
   RETURN QUERY
   SELECT 
@@ -311,14 +311,14 @@ BEGIN
   GROUP BY a.id, a.code, a.name, a.type, a.normal_balance
   ORDER BY a.code;
 END;
-$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
 -- Get account balance at a specific date
 CREATE OR REPLACE FUNCTION get_account_balance(
   p_account_code VARCHAR,
   p_as_of_date DATE DEFAULT CURRENT_DATE
 )
-RETURNS DECIMAL(20, 7) AS $
+RETURNS DECIMAL(20, 7) AS $$
 DECLARE
   v_balance DECIMAL(20, 7);
   v_normal_balance VARCHAR(10);
@@ -345,4 +345,4 @@ BEGIN
 
   RETURN COALESCE(v_balance, 0);
 END;
-$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;

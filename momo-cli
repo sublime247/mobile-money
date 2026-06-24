@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Mobile Money Admin CLI Wrapper
+# Usage: ./momo-cli retry-batch <batch_id>
+
+# Set current working directory to project root
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+cd "$DIR"
+
+# Run momo-cli via tsx
+npx tsx src/scripts/momo-cli.ts "$@"

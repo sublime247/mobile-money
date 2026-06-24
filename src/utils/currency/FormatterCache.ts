@@ -62,7 +62,7 @@ export class FormatterCache {
     
     try {
       // Get currency configuration to determine formatting options
-      const currencyRule = CurrencyConfig.getCurrencyRule(currencyCode);
+      const currencyRule = this.getCurrencyRuleForFormatter(currencyCode);
       
       const formatter = new Intl.NumberFormat(locale, {
         style: 'currency',
@@ -247,6 +247,41 @@ export class FormatterCache {
    */
   private static generateCacheKey(currencyCode: string, locale: string): string {
     return `${currencyCode}:${locale}`;
+  }
+
+  private static getCurrencyRuleForFormatter(currencyCode: string) {
+    try {
+      return CurrencyConfig.getCurrencyRule(currencyCode);
+    } catch (error) {
+      const normalizedCode = currencyCode.toUpperCase();
+      if (!/^[A-Z]{3}$/.test(normalizedCode)) {
+        throw error;
+      }
+
+      new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: normalizedCode
+      });
+
+      return {
+        code: normalizedCode,
+        numericCode: 999,
+        minorUnits: normalizedCode === 'JPY' ? 0 : 2,
+        symbol: normalizedCode,
+        name: normalizedCode,
+        formatting: {
+          locale: 'en-US',
+          style: 'currency' as const,
+          useGrouping: true,
+          roundingMode: 'round' as const
+        },
+        validation: {
+          minValue: 0,
+          maxValue: Number.MAX_SAFE_INTEGER,
+          precision: normalizedCode === 'JPY' ? 0 : 2
+        }
+      };
+    }
   }
 
   /**

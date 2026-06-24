@@ -37,16 +37,14 @@ const FEE_MAXIMUM = parseFloat(process.env.FEE_MAXIMUM ?? "5000");
 // VIP Tier Definitions
 // ---------------------------------------------------------------------------
 
-export enum VipTier {
-  STANDARD = "STANDARD",
+export enum MerchantTier {
+  BRONZE = "BRONZE",
   SILVER = "SILVER",
   GOLD = "GOLD",
-  PLATINUM = "PLATINUM",
-  DIAMOND = "DIAMOND",
 }
 
 export interface TierConfig {
-  tier: VipTier;
+  tier: MerchantTier;
   /** Minimum 30-day volume (inclusive) required to qualify for this tier. */
   minVolume: number;
   /** Percentage discount applied to the base fee rate (0–100). */
@@ -58,12 +56,10 @@ export interface TierConfig {
  * Ordered from highest to lowest volume requirement so that the first matching
  * entry wins when iterating with `find()`.
  */
-export const VIP_TIERS: readonly TierConfig[] = [
-  { tier: VipTier.DIAMOND,  minVolume: 50_000, discountPercent: 65, label: "Diamond"  },
-  { tier: VipTier.PLATINUM, minVolume: 20_000, discountPercent: 50, label: "Platinum" },
-  { tier: VipTier.GOLD,     minVolume:  5_000, discountPercent: 35, label: "Gold"     },
-  { tier: VipTier.SILVER,   minVolume:  1_000, discountPercent: 20, label: "Silver"   },
-  { tier: VipTier.STANDARD, minVolume:      0, discountPercent:  0, label: "Standard" },
+export const MERCHANT_TIERS: readonly TierConfig[] = [
+  { tier: MerchantTier.GOLD,   minVolume: 5_000, discountPercent: 20, label: "Gold"   },
+  { tier: MerchantTier.SILVER, minVolume: 1_000, discountPercent: 10, label: "Silver" },
+  { tier: MerchantTier.BRONZE, minVolume: 0,     discountPercent: 0,  label: "Bronze" },
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -78,7 +74,7 @@ export interface FeeResult {
 
 export interface VipFeeResult extends FeeResult {
   /** The VIP tier the user currently qualifies for. */
-  tier: VipTier;
+  tier: MerchantTier;
   /** Discount percentage applied to the base fee rate. */
   discountPercent: number;
   /** The user's sum of completed transaction amounts in the last 30 days. */
@@ -141,10 +137,10 @@ export async function getThirtyDayVolume(userId: string): Promise<number> {
  * Pure function — no I/O.
  */
 export function mapVolumeToTier(volume: number): TierConfig {
-  // VIP_TIERS is ordered highest→lowest, so the first match is the best tier.
+  // MERCHANT_TIERS is ordered highest→lowest, so the first match is the best tier.
   return (
-    VIP_TIERS.find((t) => volume >= t.minVolume) ??
-    VIP_TIERS[VIP_TIERS.length - 1]   // STANDARD (fallback, should never be needed)
+    MERCHANT_TIERS.find((t) => volume >= t.minVolume) ??
+    MERCHANT_TIERS[MERCHANT_TIERS.length - 1]   // BRONZE (fallback, should never be needed)
   );
 }
 

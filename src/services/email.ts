@@ -70,8 +70,10 @@ export class EmailService {
     email: string,
     transaction: Transaction,
     locale = "en",
+    merchantDisplayName?: string | null,
   ): Promise<void> {
     const resolvedLocale = resolveLocale(locale);
+    const transactionHash = transaction.transactionHash;
     await this.sendEmail({
       to: email,
       templateId: this.resolveTemplateId(
@@ -89,8 +91,11 @@ export class EmailService {
         provider: transaction.provider.toUpperCase(),
         phoneNumber: transaction.phoneNumber,
         stellarAddress: transaction.stellarAddress,
-        transactionHash: txHash,
-        stellarExpertUrl,
+        transactionHash,
+        stellarExpertUrl: transactionHash
+          ? `https://stellar.expert/explorer/public/tx/${transactionHash}`
+          : undefined,
+        merchantDisplayName: merchantDisplayName ?? undefined,
         createdAt: new Date(transaction.createdAt).toLocaleString(resolvedLocale),
         locale: resolvedLocale,
         year: new Date().getFullYear(),
@@ -172,6 +177,7 @@ export class EmailService {
     transaction: Transaction,
     reason: string,
     locale = "en",
+    merchantDisplayName?: string | null,
   ): Promise<void> {
     const resolvedLocale = resolveLocale(locale);
     await this.sendEmail({
@@ -190,8 +196,74 @@ export class EmailService {
         referenceNumber: transaction.referenceNumber,
         reason,
         reasonLabel: translate("email.labels.reason", resolvedLocale),
+        merchantDisplayName: merchantDisplayName ?? undefined,
         locale: resolvedLocale,
         year: new Date().getFullYear(),
+      },
+    });
+  }
+
+  async sendSubscriptionPaused(email: string, subscriptionId: string, attempts: number, locale = "en") {
+    if (process.env.NODE_ENV === "test") {
+      console.log("Skipping subscription paused email in test environment");
+      return;
+    }
+    const templateId = process.env.SENDGRID_SUBSCRIPTION_PAUSED_TEMPLATE_ID;
+    const resolvedLocale = resolveLocale(locale);
+    if (templateId) {
+      await this.sendEmail({
+        to: email,
+        templateId,
+        dynamicTemplateData: {
+          subscriptionId,
+          attempts,
+          locale: resolvedLocale,
+          year: new Date().getFullYear(),
+        },
+      });
+    } else {
+      await this.sendEmail({
+        to: email,
+        templateId: process.env.SENDGRID_GENERAL_TEMPLATE_ID || "",
+        dynamicTemplateData: {
+          title: "Subscription Paused",
+          message: `Your subscription (${subscriptionId}) has been paused after ${attempts} failed attempts. Please review and resume if required.`,
+        },
+      });
+    }
+  }
+
+  async sendSubscriptionResumed(email: string, subscriptionId: string, locale = "en") {
+    if (process.env.NODE_ENV === "test") {
+      console.log("Skipping subscription resumed email in test environment");
+      return;
+    }
+    const templateId = process.env.SENDGRID_SUBSCRIPTION_RESUMED_TEMPLATE_ID;
+    const resolvedLocale = resolveLocale(locale);
+    await this.sendEmail({
+      to: email,
+      templateId: templateId || process.env.SENDGRID_GENERAL_TEMPLATE_ID || "",
+      dynamicTemplateData: {
+        subscriptionId,
+        locale: resolvedLocale,
+      },
+    });
+  }
+
+  async sendSubscriptionFailure(email: string, subscriptionId: string, reason: string, locale = "en") {
+    if (process.env.NODE_ENV === "test") {
+      console.log("Skipping subscription failure email in test environment");
+      return;
+    }
+    const templateId = process.env.SENDGRID_SUBSCRIPTION_FAILURE_TEMPLATE_ID;
+    const resolvedLocale = resolveLocale(locale);
+    await this.sendEmail({
+      to: email,
+      templateId: templateId || process.env.SENDGRID_GENERAL_TEMPLATE_ID || "",
+      dynamicTemplateData: {
+        subscriptionId,
+        reason,
+        locale: resolvedLocale,
       },
     });
   }

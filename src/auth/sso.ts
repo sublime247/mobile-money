@@ -228,7 +228,6 @@ export class SSOService {
         console.log(`[SSO] Updated existing SSO user: ${userId}`);
       } else {
         // New SSO user - create user and SSO record
-        const email = profile.email || `${profile.nameID}@sso.local`;
         const phoneNumber = `sso-${profile.nameID}`; // Generate unique phone for SSO users
 
         // Create user

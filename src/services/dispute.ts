@@ -33,19 +33,29 @@ import {
   ReportFilter,
 } from "../models/dispute";
 import { TransactionModel, TransactionStatus } from "../models/transaction";
+import logger from "../utils/logger";
 
 // ---------------------------------------------------------------------------
 // Allowed status transitions
 // ---------------------------------------------------------------------------
 
 const TRANSITIONS: Record<DisputeStatus, DisputeStatus[]> = {
-  open: ["investigating", "resolved", "rejected"],
-  investigating: ["resolved", "rejected"],
+  open: ["investigating", "resolved", "rejected", "reversed", "upheld"],
+  investigating: ["resolved", "rejected", "reversed", "upheld"],
   resolved: [],
   rejected: [],
+  reversed: [],
+  upheld: [],
 };
 
-const TERMINAL_STATUSES: DisputeStatus[] = ["resolved", "rejected"];
+const TERMINAL_STATUSES: DisputeStatus[] = [
+  "resolved",
+  "rejected",
+  "reversed",
+  "upheld",
+];
+
+export type DisputeResolutionAction = "reverse" | "uphold";
 
 // ---------------------------------------------------------------------------
 // Notification helper
@@ -63,9 +73,40 @@ interface NotificationPayload {
   metadata?: Record<string, unknown>;
 }
 
-function sendNotification(payload: NotificationPayload): void {
-  // TODO: replace with real delivery (email, SMS, webhook, etc.)
-  console.log("[DisputeNotification]", JSON.stringify(payload));
+async function sendNotification(payload: NotificationPayload): Promise<void> {
+  // Import notification router service for proper multi-channel delivery
+  const { notificationRouter } = await import("./notificationRouter.js");
+  
+  try {
+    // Use notification router to send via email, SMS, webhook as configured
+    await notificationRouter.sendDisputeNotification({
+      disputeId: payload.disputeId,
+      transactionId: payload.transactionId,
+      event: payload.event,
+      status: payload.status,
+      message: payload.message,
+      metadata: payload.metadata,
+    });
+    
+    logger.info(
+      {
+        event: payload.event,
+        disputeId: payload.disputeId,
+        transactionId: payload.transactionId,
+        status: payload.status,
+      },
+      'Dispute notification sent'
+    );
+  } catch (error) {
+    logger.error(
+      {
+        error,
+        disputeId: payload.disputeId,
+        event: payload.event,
+      },
+      'Failed to send dispute notification'
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -125,6 +166,11 @@ export class DisputeService {
       priority,
       category,
     });
+
+    await this.transactionModel.updateStatus(
+      transactionId,
+      TransactionStatus.Dispute,
+    );
 
     sendNotification({
       event: "dispute.opened",
@@ -208,6 +254,71 @@ export class DisputeService {
       status: updated.status,
       message: `Dispute ${disputeId} status changed to "${newStatus}"`,
       metadata: { previousStatus: dispute.status, resolution, assignedTo },
+    });
+
+    return updated;
+  }
+
+  /**
+   * Resolve a disputed payment by reversing it for the customer or upholding it
+   * for the merchant.
+   */
+  async resolvePayment(
+    disputeId: string,
+    action: DisputeResolutionAction,
+    resolution: string,
+    adminId?: string,
+  ): Promise<Dispute> {
+    if (!resolution || resolution.trim().length === 0) {
+      throw new Error("Resolution text is required");
+    }
+
+    const dispute = await this.disputeModel.findById(disputeId);
+    if (!dispute) {
+      throw new Error(`Dispute ${disputeId} not found`);
+    }
+
+    if (TERMINAL_STATUSES.includes(dispute.status)) {
+      throw new Error(`Cannot resolve a ${dispute.status} dispute`);
+    }
+
+    const nextDisputeStatus: DisputeStatus =
+      action === "reverse" ? "reversed" : "upheld";
+    const nextTransactionStatus =
+      action === "reverse"
+        ? TransactionStatus.Reversed
+        : TransactionStatus.Completed;
+    const trimmedResolution = resolution.trim();
+
+    const updated = await this.disputeModel.update(disputeId, {
+      status: nextDisputeStatus,
+      resolution: trimmedResolution,
+      assignedTo: adminId,
+    });
+
+    await this.transactionModel.updateStatus(
+      dispute.transactionId,
+      nextTransactionStatus,
+    );
+
+    await this.disputeModel.addNote(
+      disputeId,
+      adminId ?? "admin",
+      `Admin ${action === "reverse" ? "reversed" : "upheld"} payment: ${trimmedResolution}`,
+    );
+
+    sendNotification({
+      event: `dispute.payment_${action === "reverse" ? "reversed" : "upheld"}`,
+      disputeId: updated.id,
+      transactionId: updated.transactionId,
+      status: updated.status,
+      message: `Payment dispute ${disputeId} was ${nextDisputeStatus}`,
+      metadata: {
+        previousStatus: dispute.status,
+        resolution: trimmedResolution,
+        adminId,
+        transactionStatus: nextTransactionStatus,
+      },
     });
 
     return updated;
@@ -425,6 +536,8 @@ export class DisputeService {
       investigating: number;
       resolved: number;
       rejected: number;
+      reversed: number;
+      upheld: number;
     };
   }> {
     const rows = await this.disputeModel.generateReport(filter);
@@ -435,6 +548,8 @@ export class DisputeService {
       investigating: 0,
       resolved: 0,
       rejected: 0,
+      reversed: 0,
+      upheld: 0,
     };
     for (const row of rows) {
       const count = parseInt(row.count, 10);

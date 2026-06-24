@@ -15,3 +15,10 @@ privacyRoutes.get(
   authenticateToken,
   privacyController.rightToBeForgettenEndpoint,
 );
+
+// New DELETE endpoint for GDPR data purge
+privacyRoutes.delete(
+  "/delete",
+  authenticateToken,
+  privacyController.rightToBeForgettenEndpoint,
+);

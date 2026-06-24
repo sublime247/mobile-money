@@ -1,5 +1,5 @@
 import dotenv from "dotenv";
-import { cleanEnv, str, bool } from "envalid";
+import { cleanEnv, str, bool, num } from "envalid";
 
 // Load environment variables first
 dotenv.config();
@@ -26,6 +26,27 @@ export const env = cleanEnv(process.env, {
     desc: "Whether the application is in maintenance mode (read-only)",
     default: false,
   }),
+  INDEX_REINDEX_JOB_ENABLED: bool({
+    default: true,
+    desc: "Whether the automated index reindex maintenance job should run",
+  }),
+  INDEX_REINDEX_CRON: str({
+    default: "0 3 * * *",
+    desc: "Cron schedule for the automated index reindex maintenance job",
+    example: "0 3 * * *",
+  }),
+  INDEX_REINDEX_MIN_SIZE_MB: num({
+    default: 100,
+    desc: "Minimum size in MB for an index to be eligible for automatic reindexing",
+  }),
+  INDEX_REINDEX_MAX_SCAN_COUNT: num({
+    default: 50,
+    desc: "Maximum scan count for an index to still be eligible for automatic reindexing",
+  }),
+  INDEX_REINDEX_MAX_ACTIVE_CONNECTIONS: num({
+    default: 5,
+    desc: "Maximum active queries allowed in the database before the automatic index reindex job is skipped",
+  }),
   STELLAR_ISSUER_SECRET: str({
     desc: "Stellar secret key for the issuer account",
     example: "S...",
@@ -36,7 +57,7 @@ export const env = cleanEnv(process.env, {
   }),
   STELLAR_HORIZON_URL: str({
     default: "https://horizon-testnet.stellar.org",
-    desc: "Stellar Horizon server URL",
+    desc: "Stellar Horizon server URL, or a comma-separated list of URLs (primary first, then fallbacks) for automatic node rotation/failover",
   }),
   STELLAR_NETWORK: str({
     default: "testnet",
@@ -89,6 +110,30 @@ export const env = cleanEnv(process.env, {
     desc: "API key for third-party AML/sanction screening provider (e.g. Elliptic, Chainalysis)",
     example: "ell_live_xxxxxxxxxxxx",
   }),
+  QUICKBOOKS_CLIENT_ID: str({
+    default: "",
+    desc: "QuickBooks Online OAuth 2.0 Client ID",
+  }),
+  QUICKBOOKS_CLIENT_SECRET: str({
+    default: "",
+    desc: "QuickBooks Online OAuth 2.0 Client Secret",
+  }),
+  QUICKBOOKS_REDIRECT_URI: str({
+    default: "http://localhost:3000/api/accounting/quickbooks/callback",
+    desc: "QuickBooks Online OAuth 2.0 Redirect URI",
+  }),
+  XERO_CLIENT_ID: str({
+    default: "",
+    desc: "Xero OAuth 2.0 Client ID",
+  }),
+  XERO_CLIENT_SECRET: str({
+    default: "",
+    desc: "Xero OAuth 2.0 Client Secret",
+  }),
+  XERO_REDIRECT_URI: str({
+    default: "http://localhost:3000/api/accounting/xero/callback",
+    desc: "Xero OAuth 2.0 Redirect URI",
+  }),
 });
 
 // Re-export specific values for convenience
@@ -106,4 +151,15 @@ export const {
   PAGERDUTY_DEDUP_KEY,
   ADMIN_API_KEY,
   APP_MAINTENANCE_MODE,
+  INDEX_REINDEX_JOB_ENABLED,
+  INDEX_REINDEX_CRON,
+  INDEX_REINDEX_MIN_SIZE_MB,
+  INDEX_REINDEX_MAX_SCAN_COUNT,
+  INDEX_REINDEX_MAX_ACTIVE_CONNECTIONS,
+  QUICKBOOKS_CLIENT_ID,
+  QUICKBOOKS_CLIENT_SECRET,
+  QUICKBOOKS_REDIRECT_URI,
+  XERO_CLIENT_ID,
+  XERO_CLIENT_SECRET,
+  XERO_REDIRECT_URI,
 } = env;

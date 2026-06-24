@@ -2,6 +2,8 @@ import { Request, Response } from "express";
 import { getQueueStats, pauseQueue, resumeQueue } from "./transactionQueue";
 import { providerBalanceAlertQueue } from "./providerBalanceAlertQueue";
 import { QueueHealthResponse, QueueActionResponse } from "../types/api";
+import { ERROR_CODES } from "../constants/errorCodes";
+import { createError } from "../middleware/errorHandler";
 
 export async function getQueueHealth(req: Request, res: Response) {
   try {
@@ -28,7 +30,7 @@ export async function getQueueHealth(req: Request, res: Response) {
     res.json(body);
   } catch (err) {
     console.error("Failed to fetch queue health:", err);
-    res.status(500).json({ error: "Failed to fetch queue health" });
+    throw createError(ERROR_CODES.INTERNAL_ERROR, "Failed to fetch queue health");
   }
 }
 
@@ -42,7 +44,7 @@ export async function pauseQueueEndpoint(req: Request, res: Response) {
     res.json(body);
   } catch (err) {
     console.error("Failed to pause queue:", err);
-    res.status(500).json({ error: "Failed to pause queue" });
+    throw createError(ERROR_CODES.INTERNAL_ERROR, "Failed to pause queue");
   }
 }
 
@@ -56,7 +58,6 @@ export async function resumeQueueEndpoint(req: Request, res: Response) {
     res.json(body);
   } catch (err) {
     console.error("Failed to resume queue:", err);
-    res.status(500).json({ error: "Failed to resume queue" });
+    throw createError(ERROR_CODES.INTERNAL_ERROR, "Failed to resume queue");
   }
 }
-
