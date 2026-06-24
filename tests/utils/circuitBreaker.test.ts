@@ -273,3 +273,84 @@ describe("executeWithCircuitBreaker", () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Targeted coverage for the (breaker as any).toJSON() cast on line 230
+// ---------------------------------------------------------------------------
+describe("checkAndResetCircuitBreaker — toJSON cast coverage", () => {
+  beforeEach(() => {
+    delete process.env.PROVIDER_CIRCUIT_BREAKER_VOLUME_THRESHOLD;
+    delete process.env.PROVIDER_CIRCUIT_BREAKER_ERROR_THRESHOLD_PERCENTAGE;
+    delete process.env.PROVIDER_CIRCUIT_BREAKER_RESET_TIMEOUT_MS;
+
+    process.env.PROVIDER_CIRCUIT_BREAKER_VOLUME_THRESHOLD = "1";
+    process.env.PROVIDER_CIRCUIT_BREAKER_ERROR_THRESHOLD_PERCENTAGE = "1";
+    // Long reset timeout so the breaker stays open for the duration of the test
+    process.env.PROVIDER_CIRCUIT_BREAKER_RESET_TIMEOUT_MS = "5000";
+
+    resetCircuitBreakers();
+    jest.clearAllMocks();
+  });
+
+  afterEach(() => {
+    delete process.env.PROVIDER_CIRCUIT_BREAKER_VOLUME_THRESHOLD;
+    delete process.env.PROVIDER_CIRCUIT_BREAKER_ERROR_THRESHOLD_PERCENTAGE;
+    delete process.env.PROVIDER_CIRCUIT_BREAKER_RESET_TIMEOUT_MS;
+    resetCircuitBreakers();
+  });
+
+  it("invokes toJSON on the opossum breaker instance without throwing (cast is correct)", async () => {
+    // Open the breaker so checkAndResetCircuitBreaker reaches the toJSON call
+    const provider = "tojson-cast-provider-" + Date.now();
+
+    await expect(
+      executeWithCircuitBreaker({
+        provider,
+        operation: "op",
+        execute: async () => ({ success: false, error: new Error("down") }),
+      }),
+    ).rejects.toThrow("down");
+
+    // Simulate provider being healthy so the full code path through toJSON executes
+    (checkMobileMoneyHealth as jest.Mock).mockResolvedValue({
+      providers: { [provider]: { status: "up", responseTime: 50 } },
+    });
+
+    // Should not throw — if the cast were absent TS would still error at compile
+    // time, but at runtime we verify the toJSON() call returns a usable object
+    // with a `state` property that the surrounding code can read.
+    const result = await checkAndResetCircuitBreaker(provider, "op");
+
+    // The breaker was open so health check ran and closed the breaker → true
+    expect(result).toBe(true);
+    expect(checkMobileMoneyHealth).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns false without calling toJSON when no breaker exists for the key", async () => {
+    const result = await checkAndResetCircuitBreaker(
+      "non-existent-provider",
+      "non-existent-op",
+    );
+
+    // Guard clause returns early — toJSON is never reached
+    expect(result).toBe(false);
+    expect(checkMobileMoneyHealth).not.toHaveBeenCalled();
+  });
+
+  it("returns false without calling health check when breaker state is closed (not open/halfOpen)", async () => {
+    // Register a breaker by running a successful execution first
+    const provider = "closed-state-provider-" + Date.now();
+
+    await executeWithCircuitBreaker({
+      provider,
+      operation: "op",
+      execute: async () => ({ success: true, data: "ok" }),
+    });
+
+    // Breaker is closed — toJSON().state.open and .halfOpen are both falsy
+    const result = await checkAndResetCircuitBreaker(provider, "op");
+
+    expect(result).toBe(false);
+    expect(checkMobileMoneyHealth).not.toHaveBeenCalled();
+  });
+});
