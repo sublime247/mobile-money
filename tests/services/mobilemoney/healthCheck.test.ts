@@ -213,6 +213,79 @@ describe("Circuit breaker", () => {
     const result = await pingProvider(AIRTEL, fakeFetch(200));
     expect(result.status).toBe("up");
   });
+
+  describe("configurable failure threshold via PROVIDER_HEALTH_FAILURE_THRESHOLD", () => {
+    beforeEach(() => {
+      process.env.PROVIDER_HEALTH_FAILURE_THRESHOLD = "5";
+      _resetCircuits();
+    });
+
+    afterEach(() => {
+      delete process.env.PROVIDER_HEALTH_FAILURE_THRESHOLD;
+    });
+
+    it("opens circuit after 5 consecutive failures when threshold is 5", async () => {
+      for (let i = 0; i < 5; i++) {
+        await pingProvider(MTN, failingFetch());
+      }
+      const state = _circuitMap.get("mtn");
+      expect(state?.openUntil).toBeGreaterThan(Date.now());
+    });
+
+    it("remains closed after 4 failures when threshold is 5", async () => {
+      for (let i = 0; i < 4; i++) {
+        await pingProvider(MTN, failingFetch());
+      }
+      const state = _circuitMap.get("mtn");
+      expect(state?.openUntil).toBe(0);
+    });
+  });
+
+  describe("configurable open duration via PROVIDER_HEALTH_OPEN_DURATION_MS", () => {
+    beforeEach(() => {
+      process.env.PROVIDER_HEALTH_OPEN_DURATION_MS = "200";
+      _resetCircuits();
+    });
+
+    afterEach(() => {
+      delete process.env.PROVIDER_HEALTH_OPEN_DURATION_MS;
+    });
+
+    it("opens circuit with custom duration", async () => {
+      for (let i = 0; i < 3; i++) {
+        await pingProvider(MTN, failingFetch());
+      }
+      const state = _circuitMap.get("mtn");
+      expect(state?.openUntil).toBeGreaterThan(Date.now());
+      expect(state?.openUntil).toBeLessThanOrEqual(Date.now() + 200);
+    });
+  });
+
+  describe("invalid configuration values fall back gracefully", () => {
+    beforeEach(() => {
+      _resetCircuits();
+    });
+
+    it("uses default threshold when env var is non-numeric", async () => {
+      process.env.PROVIDER_HEALTH_FAILURE_THRESHOLD = "not-a-number";
+      for (let i = 0; i < 3; i++) {
+        await pingProvider(MTN, failingFetch());
+      }
+      const state = _circuitMap.get("mtn");
+      expect(state?.openUntil).toBeGreaterThan(Date.now());
+      delete process.env.PROVIDER_HEALTH_FAILURE_THRESHOLD;
+    });
+
+    it("uses default open duration when env var is empty", async () => {
+      process.env.PROVIDER_HEALTH_OPEN_DURATION_MS = "";
+      for (let i = 0; i < 3; i++) {
+        await pingProvider(MTN, failingFetch());
+      }
+      const state = _circuitMap.get("mtn");
+      expect(state?.openUntil).toBeGreaterThan(Date.now());
+      delete process.env.PROVIDER_HEALTH_OPEN_DURATION_MS;
+    });
+  });
 });
 
 // ═════════════════════════════════════════════════════════════════════════════

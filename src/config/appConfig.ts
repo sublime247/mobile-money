@@ -250,14 +250,16 @@ export const configSchema = convict({
   // Mobile Money Provider Health Checks
   healthCheck: {
     failureThreshold: {
-      doc: "Number of failures before opening circuit breaker",
+      doc: "Number of consecutive failures before opening the health-check circuit breaker",
       format: "nat",
       default: 3,
+      env: "PROVIDER_HEALTH_FAILURE_THRESHOLD",
     },
     openDurationMs: {
-      doc: "Duration to keep circuit breaker open in milliseconds",
+      doc: "Duration (ms) to keep the health-check circuit breaker open before allowing a retry",
       format: "nat",
       default: 60000, // 1 minute
+      env: "PROVIDER_HEALTH_OPEN_DURATION_MS",
     },
   },
 

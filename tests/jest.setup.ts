@@ -99,14 +99,19 @@ try {
   console.error("Failed to patch Express for async errors in tests:", e);
 }
 
-import { connectRedis, disconnectRedis } from "../src/config/redis";
-
-beforeAll(async () => {
-  await connectRedis();
-});
-
-afterAll(async () => {
-  await disconnectRedis();
-});
+// Mock Redis module to prevent real connections in test environment
+jest.mock("../src/config/redis", () => ({
+  __esModule: true,
+  connectRedis: jest.fn().mockResolvedValue(undefined),
+  disconnectRedis: jest.fn().mockResolvedValue(undefined),
+  redisClient: {
+    isOpen: false,
+    on: jest.fn(),
+    connect: jest.fn(),
+    quit: jest.fn(),
+    disconnect: jest.fn(),
+  },
+  SESSION_TTL_SECONDS: 86400,
+}));
 
 
