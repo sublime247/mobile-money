@@ -8,7 +8,6 @@
  *   retry-batch <batch_id>  – re-queue failed or stuck transactions belonging to a batch
  */
 
-import { pool } from "../config/database";
 import { TransactionStatus } from "../models/transaction";
 import dotenv from "dotenv";
 import { addTransactionJob } from "../queue/index.js";
@@ -97,11 +96,13 @@ ${colors.bold}Usage:${colors.reset}
   momo-cli <command> [options]
 
 ${colors.bold}Commands:${colors.reset}
+  ${colors.green}setup${colors.reset}                    Interactive setup for database and Stellar credentials.
   ${colors.green}retry-batch <batch_id>${colors.reset}   Retry all failed or stuck transactions for a specific batch ID (UUID).
   ${colors.green}dashboard${colors.reset}                Render an active terminal overview of node CPU, memory, and queue lengths.
 
 ${colors.bold}Options:${colors.reset}
   --help, -h             Show this help information.
+  --file, -f <path>      Config file path for setup. Defaults to .env.
 `);
 }
 
@@ -189,6 +190,15 @@ export async function runCli(args: string[]): Promise<void> {
       process.exitCode = 1;
       return;
     }
+
+    const [{ pool }, queueModule, transactionQueueModule] = await Promise.all([
+      import("../config/database"),
+      import("../queue/index.js"),
+      import("../queue/transactionQueue.js"),
+    ]);
+    const { addTransactionJob } = queueModule;
+    activePool = pool;
+    activeTransactionQueue = transactionQueueModule.transactionQueue;
 
     console.log(
       `${colors.cyan}Searching for transactions in batch ${colors.bold}${batchId}${colors.reset}...`,
