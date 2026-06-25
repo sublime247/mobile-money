@@ -43,6 +43,7 @@
     "contracts:test": "cd contracts && cargo test",
     "contracts:check": "bash scripts/check-wasm.sh",
     "contracts:build:verify": "npm run contracts:build && npm run contracts:check",
+    "contracts:deploy": "bash contracts/deploy.sh",
     "test:load": "k6 run tests/load/api.js",
     "test:load:stress": "k6 run -e SCENARIO=stress tests/load/api.js",
     "test:load:transactions": "k6 run -e SCENARIO=transactions tests/load/api.js",

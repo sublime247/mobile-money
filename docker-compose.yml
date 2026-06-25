@@ -97,7 +97,8 @@ services:
     restart: unless-stopped
     ports:
       - "8000:8000" # Horizon API / Faucet (Friendbot)
-    command: ["--standalone", "--enable-horizon"]
+      - "8001:8001" # Soroban RPC (contract deployment)
+    command: ["--standalone", "--enable-horizon", "--enable-soroban-rpc"]
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8000 || exit 1"]
       interval: 10s
