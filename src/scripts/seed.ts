@@ -1,11 +1,12 @@
 #!/usr/bin/env node
+import { printError } from "./momo-cli";
 import dotenv from "dotenv";
 import { Pool } from "pg";
 
 dotenv.config();
 
 if (process.env.NODE_ENV !== "development") {
-  console.error("Seeding is allowed only in development environment. Set NODE_ENV=development to proceed.");
+  printError("Seeding is allowed only in development environment. Set NODE_ENV=development to proceed.");
   process.exit(1);
 }
 
@@ -120,7 +121,7 @@ async function seed() {
 
     console.log("Seeding complete.");
   } catch (err) {
-    console.error("Seeding failed:", err);
+    printError("Seeding failed:", err);
     process.exit(1);
   } finally {
     await pool.end();

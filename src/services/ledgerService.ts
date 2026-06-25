@@ -1,5 +1,6 @@
-import { Pool, PoolClient } from 'pg';
+import { Pool } from 'pg';
 import { pool } from '../config/database';
+import { UserModel } from '../models/users';
 
 /**
  * Double-Entry Ledger Service
@@ -77,6 +78,43 @@ export interface LedgerEntryPage {
 
 const DEFAULT_LEDGER_ENTRY_LIMIT = 100;
 const MAX_LEDGER_ENTRY_LIMIT = 500;
+const LEDGER_BALANCE_TOLERANCE = 0.0000001;
+
+const validateLedgerEntries = (entries: LedgerEntry[]): void => {
+  if (!entries || entries.length < 2) {
+    throw new Error('At least 2 entries required for double-entry');
+  }
+
+  const { totalDebits, totalCredits } = entries.reduce(
+    (totals, entry, index) => {
+      const debitAmount = entry.debit_amount || 0;
+      const creditAmount = entry.credit_amount || 0;
+      const hasDebit = debitAmount > 0;
+      const hasCredit = creditAmount > 0;
+
+      if (hasDebit === hasCredit) {
+        throw new Error(
+          `Ledger entry ${index + 1} must have exactly one non-zero amount`
+        );
+      }
+
+      totals.totalDebits += debitAmount;
+      totals.totalCredits += creditAmount;
+      return totals;
+    },
+    { totalDebits: 0, totalCredits: 0 }
+  );
+
+  if (Math.abs(totalDebits - totalCredits) > LEDGER_BALANCE_TOLERANCE) {
+    throw new Error(
+      `Transaction not balanced: debits=${totalDebits} credits=${totalCredits}`
+    );
+  }
+
+  if (totalDebits <= LEDGER_BALANCE_TOLERANCE) {
+    throw new Error('Transaction amounts cannot be zero');
+  }
+};
 
 const normalizeLimit = (limit: number): number => {
   if (!Number.isFinite(limit)) {
@@ -152,27 +190,16 @@ export class LedgerService {
     description: string,
     entries: LedgerEntry[],
     transactionId?: string,
-    postedBy?: string
+    postedBy?: string,
+    currency?: SupportedCurrency,
+    conversionRate?: number
   ): Promise<PostedEntry[]> {
+    validateLedgerEntries(entries);
+
     const client = await this.pool.connect();
-    
+
     try {
       await client.query('BEGIN');
-
-      // Validate entries
-      if (!entries || entries.length < 2) {
-        throw new Error('At least 2 entries required for double-entry');
-      }
-
-      // Calculate totals for client-side validation
-      const totalDebits = entries.reduce((sum, e) => sum + (e.debit_amount || 0), 0);
-      const totalCredits = entries.reduce((sum, e) => sum + (e.credit_amount || 0), 0);
-
-      if (Math.abs(totalDebits - totalCredits) > 0.0000001) {
-        throw new Error(
-          `Transaction not balanced: debits=${totalDebits} credits=${totalCredits}`
-        );
-      }
 
       // Call the database function to post atomically
       const result = await client.query(
@@ -182,7 +209,7 @@ export class LedgerService {
           description,
           transactionId || null,
           postedBy || null,
-          JSON.stringify(entries)
+          JSON.stringify(enrichedEntries)
         ]
       );
 
@@ -201,21 +228,23 @@ export class LedgerService {
       client.release();
     }
   }
+/* Duplicate block removed */
 
   /**
-   * Post a deposit transaction
-   * Debit: Mobile Money Float (asset increases)
-   * Credit: Customer Balances (liability increases)
+   * Post a deposit transaction with currency conversion.
+   * `amount` and `fee` are in the original `currency`.
+   * The amounts are converted to base currency (USD) for ledger accounting.
+   * Metadata records original currency and conversion rate.
    */
-  async postDeposit(
+  async postDepositWithCurrency(
     amount: number,
     fee: number,
+    currency: SupportedCurrency,
     referenceNumber: string,
     transactionId: string,
     userId: string
   ): Promise<PostedEntry[]> {
     // Determine settlement delay from user
-    const { UserModel } = await import('../models/users.js');
     const userModel = new UserModel();
     const user = await userModel.findById(userId);
     const delayDays = user?.settlementDelayDays || 0;
@@ -228,8 +257,13 @@ export class LedgerService {
     const entries: LedgerEntry[] = [
       {
         account_code: '1100', // Mobile Money Float
-        debit_amount: amount,
-        description: 'Customer deposit received'
+        debit_amount: amountConversion.convertedAmount,
+        description: 'Customer deposit received',
+        metadata: {
+          originalAmount: amount,
+          originalCurrency: currency,
+          conversionRate: amountConversion.rate,
+        },
       },
       {
         account_code: '2000', // Customer Balances
@@ -243,17 +277,24 @@ export class LedgerService {
     if (fee > 0) {
       entries.push({
         account_code: '4100', // Deposit Fee Revenue
-        credit_amount: fee,
-        description: 'Deposit fee earned'
+        credit_amount: feeConversion.convertedAmount,
+        description: 'Deposit fee earned',
+        metadata: {
+          originalAmount: fee,
+          originalCurrency: currency,
+          conversionRate: feeConversion.rate,
+        },
       });
     }
 
     return this.postTransaction(
       referenceNumber,
-      `Deposit: ${amount} (fee: ${fee})`,
+      `Deposit: ${amount} ${currency} (fee: ${fee} ${currency})`,
       entries,
       transactionId,
-      userId
+      userId,
+      currency,
+      amountConversion.rate
     );
   }
 

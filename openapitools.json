@@ -13,6 +13,12 @@
           "projectName": "mobile-money-sdk",
           "projectVersion": "1.0.0"
         }
+      },
+      "typescript": {
+        "generatorName": "typescript-axios",
+        "inputSpec": "http://localhost:3000/docs/openapi.json",
+        "output": "sdk-ts",
+        "configFile": "sdk-config-ts.yaml"
       }
     }
   }

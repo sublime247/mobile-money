@@ -21,16 +21,25 @@ function buildClient(): AxiosInstance {
   });
 }
 
-function extractMessage(err: unknown): string {
+function extractMessage(err: any): string {
   if (axios.isAxiosError(err)) {
     const data = err.response?.data as Record<string, unknown> | undefined;
     if (data) {
       if (typeof data["error"] === "string") return data["error"];
       if (typeof data["message"] === "string") return data["message"];
     }
-    return err.message;
+    if (err.message) return err.message;
+    if (err.code) return `Connection failed: ${err.code}`;
   }
-  return err instanceof Error ? err.message : String(err);
+  if (err instanceof Error) {
+    if (err.message) return err.message;
+    if (err.cause && Array.isArray((err.cause as any).errors)) {
+      return (err.cause as any).errors.map((e: any) => e.message).join(", ");
+    }
+    const anyErr = err as any;
+    if (anyErr.code) return `Error: ${anyErr.code}`;
+  }
+  return String(err);
 }
 
 export async function getTransaction(id: string): Promise<Transaction> {
@@ -112,9 +121,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
 
 export async function getSystemHealth(): Promise<HealthStatus> {
   try {
-    const { data } = await buildClient().get<HealthStatus>(
-      "/api/admin/health",
-    );
+    const { data } = await buildClient().get<HealthStatus>("/api/admin/health");
     return data;
   } catch (err) {
     throw new Error(extractMessage(err));

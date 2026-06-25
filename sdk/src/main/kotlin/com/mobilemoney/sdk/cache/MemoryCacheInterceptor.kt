@@ -35,7 +35,22 @@ class MemoryCacheInterceptor : Interceptor {
             }
         }
 
-        val response = chain.proceed(request)
+        val response = try {
+            chain.proceed(request)
+        } catch (e: java.io.IOException) {
+            val cached = cache[url]
+            if (cached != null) {
+                Response.Builder()
+                    .request(request)
+                    .protocol(okhttp3.Protocol.HTTP_1_1)
+                    .code(200)
+                    .message("OK")
+                    .body(cached.body.toResponseBody(cached.contentType?.toMediaTypeOrNull()))
+                    .build()
+            } else {
+                throw e
+            }
+        }
         
         // Respect response Cache-Control: no-store
         val responseCacheControl = response.cacheControl

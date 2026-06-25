@@ -168,7 +168,7 @@ var OrangeProvider = /** @class */ (function () {
             sessionStorePath: (_19 = options.sessionStorePath) !== null && _19 !== void 0 ? _19 : process.env.ORANGE_SESSION_STORE_PATH,
             sessionTtlMs: Number((_21 = (_20 = options.sessionTtlMs) !== null && _20 !== void 0 ? _20 : process.env.ORANGE_SESSION_TTL_MS) !== null && _21 !== void 0 ? _21 : DEFAULT_SESSION_TTL_MS),
             refreshSkewMs: Number((_23 = (_22 = options.refreshSkewMs) !== null && _22 !== void 0 ? _22 : process.env.ORANGE_REFRESH_SKEW_MS) !== null && _23 !== void 0 ? _23 : DEFAULT_REFRESH_SKEW_MS),
-            requestTimeoutMs: Number((_25 = (_24 = options.requestTimeoutMs) !== null && _24 !== void 0 ? _24 : process.env.REQUEST_TIMEOUT_MS) !== null && _25 !== void 0 ? _25 : 30000),
+            requestTimeoutMs: Number((_25 = (_24 = options.requestTimeoutMs) !== null && _24 !== void 0 ? _24 : process.env.ORANGE_REQUEST_TIMEOUT_MS) !== null && _25 !== void 0 ? _25 : 30000),
             maxAttempts: Number((_27 = (_26 = options.maxAttempts) !== null && _26 !== void 0 ? _26 : process.env.ORANGE_MAX_ATTEMPTS) !== null && _27 !== void 0 ? _27 : 3),
             proxyBaseUrl: (_28 = options.proxyBaseUrl) !== null && _28 !== void 0 ? _28 : process.env.ORANGE_PROXY_URL,
             proxySecret: (_29 = options.proxySecret) !== null && _29 !== void 0 ? _29 : process.env.ORANGE_PROXY_SECRET,
@@ -187,7 +187,7 @@ var OrangeProvider = /** @class */ (function () {
                 if (!url) {
                     throw new Error("Orange request URL is required");
                 }
-                config = __assign({}, request);
+                config = __assign(__assign({}, request), { timeout: request.timeout == null ? this.config.requestTimeoutMs : request.timeout });
                 delete config.method;
                 delete config.url;
                 if (method === "GET" && client.get) {

@@ -11,6 +11,7 @@
  */
 
 import { reconcile } from "../services/reconciler";
+import logger from "../logger";
 import type { ReconciliationReport } from "../types/reconciliation";
 
 // ─── Configuration ───────────────────────────────────────────────────────────
@@ -68,16 +69,33 @@ function printReport(report: ReconciliationReport): void {
 async function runOnce(): Promise<void> {
   try {
     const report = await reconcile();
+    
+    logger.info(
+      {
+        totalLocal: report.totalLocal,
+        totalRemote: report.totalRemote,
+        matched: report.matched,
+        mismatched: report.mismatched,
+        missingLocal: report.missingLocal,
+        missingRemote: report.missingRemote,
+      },
+      "Reconciliation completed"
+    );
+    
     printReport(report);
   } catch (err) {
-    console.error("[reconciler] Reconciliation failed:", err);
+    logger.error(
+      { err },
+      "Reconciliation failed"
+    );
     process.exitCode = 1;
   }
 }
 
 async function runLoop(): Promise<void> {
-  console.log(
-    `[reconciler] Starting reconciliation loop (interval: ${LOOP_INTERVAL_MS / 1000}s) …`
+  logger.info(
+    { interval: `${LOOP_INTERVAL_MS / 1000}s` },
+    "Starting reconciliation loop"
   );
   console.log("[reconciler] Press Ctrl+C to stop.\n");
 

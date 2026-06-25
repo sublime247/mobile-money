@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import {
   checkMobileMoneyHealth,
   ProviderName,
@@ -156,7 +157,7 @@ function log(
     ...meta,
   });
   if (level === "error") {
-    console.error(line);
+    logger.error(line);
   } else if (level === "warn") {
     console.warn(line);
   } else {

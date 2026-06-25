@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import * as admin from "firebase-admin";
 import { pool } from "../config/database";
 
@@ -60,7 +61,7 @@ function initializeFirebase(): admin.app.App | null {
       credential: admin.credential.cert(serviceAccount),
     });
   } catch (error) {
-    console.error("Firebase Admin initialization failed:", error);
+    logger.error("Firebase Admin initialization failed:", error);
     return null;
   }
 }
@@ -260,7 +261,7 @@ export class PushNotificationService {
         return false;
       }
 
-      console.error("Failed to send push notification:", error);
+      logger.error("Failed to send push notification:", error);
       return false;
     }
   }

@@ -202,29 +202,38 @@ export class AccountingService {
         );
       }
 
-      const activeTenant = this.resolveActiveXeroTenant(
-        tenants,
-        selectedTenantId,
-      );
+      // If the caller didn't select a specific tenant, create a connection
+      // record for each authorized tenant so the user can sync per-organization.
+      // All created connections share the same OAuth tokens and must be kept
+      // in sync when a refresh occurs.
+      const createdConnections: AccountingConnection[] = [];
 
-      const connection: AccountingConnection = {
-        id: uuidv4(),
-        userId,
-        provider: AccountingProvider.XERO,
-        tenantId: activeTenant.tenantId,
-        tenantName: activeTenant.tenantName,
-        accessToken: tokenResponse.access_token,
-        refreshToken: tokenResponse.refresh_token,
-        expiresAt: new Date(Date.now() + tokenResponse.expires_in * 1000),
-        isActive: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
+      const tenantsToCreate = selectedTenantId
+        ? [this.resolveActiveXeroTenant(tenants, selectedTenantId)]
+        : tenants;
 
-      await this.saveConnection(connection);
-      await this.scheduleTokenRefresh(connection);
+      for (const t of tenantsToCreate) {
+        const conn: AccountingConnection = {
+          id: uuidv4(),
+          userId,
+          provider: AccountingProvider.XERO,
+          tenantId: t.tenantId,
+          tenantName: t.tenantName,
+          accessToken: tokenResponse.access_token,
+          refreshToken: tokenResponse.refresh_token,
+          expiresAt: new Date(Date.now() + tokenResponse.expires_in * 1000),
+          isActive: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
 
-      return connection;
+        await this.saveConnection(conn);
+        await this.scheduleTokenRefresh(conn);
+        createdConnections.push(conn);
+      }
+
+      // Return the first created connection for compatibility with callers
+      return createdConnections[0];
     } catch (error) {
       logger.error(`Xero OAuth callback failed: ${error}`);
       throw new Error(`Xero OAuth failed: ${error}`);
@@ -428,25 +437,39 @@ export class AccountingService {
           },
         },
       );
+      // When refreshing a Xero token, update all Xero connections for the
+      // same user so that multi-tenant connections remain in sync.
+      const newAccessToken: string = response.data.access_token;
+      const newRefreshToken: string = response.data.refresh_token;
+      const newExpiresAt = new Date(Date.now() + response.data.expires_in * 1000);
 
-      const updatedConnection: AccountingConnection = {
-        ...connection,
-        accessToken: response.data.access_token,
-        refreshToken: response.data.refresh_token,
-        expiresAt: new Date(Date.now() + response.data.expires_in * 1000),
-        updatedAt: new Date(),
-      };
+      // Encrypt tokens for storage
+      const encAccess = encryptField(newAccessToken);
+      const encRefresh = encryptField(newRefreshToken);
 
-      await this.updateConnectionTokens(connectionId, {
-        accessToken: updatedConnection.accessToken,
-        refreshToken: updatedConnection.refreshToken,
-        expiresAt: updatedConnection.expiresAt,
-      });
-
-      await this.scheduleTokenRefresh(updatedConnection);
-      logger.info(
-        `Successfully refreshed Xero token for connection ${connectionId}`,
+      // Update all accounting_connections rows for this user and provider
+      await pool.query(
+        `UPDATE accounting_connections SET access_token = $1, refresh_token = $2, expires_at = $3, updated_at = $4 WHERE user_id = $5 AND provider = $6`,
+        [encAccess, encRefresh, newExpiresAt, new Date(), connection.userId, AccountingProvider.XERO],
       );
+
+      // Reschedule refresh jobs for all active Xero connections for this user
+      const updatedConns = await this.getUserConnections(connection.userId);
+      const xeroConns = updatedConns.filter((c) => c.provider === AccountingProvider.XERO);
+
+      for (const c of xeroConns) {
+        const updatedConn: AccountingConnection = {
+          ...c,
+          accessToken: newAccessToken,
+          refreshToken: newRefreshToken,
+          expiresAt: newExpiresAt,
+          updatedAt: new Date(),
+        };
+
+        await this.scheduleTokenRefresh(updatedConn);
+      }
+
+      logger.info(`Successfully refreshed Xero tokens for user ${connection.userId} (${xeroConns.length} connections)`);
     } catch (error) {
       logger.error(`Xero token refresh failed for ${connectionId}: ${error}`);
       throw new Error(`Xero token refresh failed: ${error}`);
@@ -1615,6 +1638,25 @@ export class AccountingService {
             err instanceof Error ? err.message : String(err),
           ],
         );
+
+        const providerType =
+          connection.provider === AccountingProvider.QUICKBOOKS
+            ? 'quickbooks'
+            : connection.provider === AccountingProvider.XERO
+              ? 'xero'
+              : null;
+
+        if (providerType) {
+          const errorMessage =
+            err instanceof Error ? err.message : String(err);
+          await pool.query(
+            `INSERT INTO accounting_sync_errors
+               (transaction_id, provider_type, error_message, status)
+             VALUES ($1, $2, $3, 'pending')
+             ON CONFLICT DO NOTHING`,
+            [transaction.id, providerType, errorMessage.slice(0, 500)],
+          );
+        }
       }
     }
   }

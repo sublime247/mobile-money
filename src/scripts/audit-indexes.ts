@@ -1,4 +1,5 @@
 #!/usr/bin/env tsx
+import { printError } from "./momo-cli";
 /**
  * Database Index Audit Script
  *
@@ -463,7 +464,7 @@ async function runAudit() {
     const hasIssues = unused.length > 0 || duplicates.length > 0 || bloated.length > 0;
     process.exit(hasIssues ? 1 : 0);
   } catch (error) {
-    console.error('❌ Audit failed:', error);
+    printError('❌ Audit failed:', error);
     process.exit(1);
   } finally {
     await pool.end();

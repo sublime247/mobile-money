@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { pool } from "../config/database";
 import { TransactionModel, TransactionStatus } from "../models/transaction";
 import { Sep31Status, mapToSep31Status, isValidTransition } from "../stellar/sep31";
@@ -64,11 +65,11 @@ export async function runSep31MonitorJob(): Promise<void> {
         }
 
       } catch (error) {
-        console.error(`[sep31-monitor] Error processing transaction ${row.id}:`, error);
+        logger.error(`[sep31-monitor] Error processing transaction ${row.id}:`, error);
       }
     }
   } catch (error) {
-    console.error("[sep31-monitor] Job failed:", error);
+    logger.error("[sep31-monitor] Job failed:", error);
   }
 }
 
@@ -97,7 +98,7 @@ async function checkPaymentReceived(
       }
     }
   } catch (error) {
-    console.error("[sep31-monitor] Error checking payment:", error);
+    logger.error("[sep31-monitor] Error checking payment:", error);
   }
 
   return false;

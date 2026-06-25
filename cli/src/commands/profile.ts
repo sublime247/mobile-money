@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import chalk from "chalk";
 import {
   saveProfile,
   useProfile,
@@ -6,6 +7,7 @@ import {
   listProfiles,
   getConfig,
 } from "../config";
+import { printError } from "../dashboard";
 
 export function registerProfileCommand(program: Command): void {
   const profile = program
@@ -20,10 +22,15 @@ export function registerProfileCommand(program: Command): void {
     .action((name: string, options: { url: string; key: string }) => {
       try {
         saveProfile(name, options.url, options.key);
-        console.log(`✓ Profile "${name}" saved successfully`);
+        console.log(
+          `${chalk.green("✓")} Profile ${chalk.bold(`"${name}"`)} saved successfully`,
+        );
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error(`✗ Failed to save profile: ${msg}`);
+        printError(
+          `Failed to save profile "${name}"`,
+          err instanceof Error ? err : undefined,
+          "ERR_PROFILE",
+        );
         process.exit(1);
       }
     });
@@ -34,12 +41,19 @@ export function registerProfileCommand(program: Command): void {
     .action((name: string) => {
       try {
         const profile = useProfile(name);
-        console.log(`✓ Switched to profile "${name}"`);
-        console.log(`  URL: ${profile.apiUrl}`);
-        console.log(`  Key: ${profile.apiKey.substring(0, 8)}...`);
+        console.log(
+          `${chalk.green("✓")} Switched to profile ${chalk.bold(`"${name}"`)} `,
+        );
+        console.log(`  ${chalk.gray("URL:")} ${chalk.cyan(profile.apiUrl)}`);
+        console.log(
+          `  ${chalk.gray("Key:")} ${profile.apiKey.substring(0, 8)}...`,
+        );
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error(`✗ ${msg}`);
+        printError(
+          `Failed to switch to profile "${name}"`,
+          err instanceof Error ? err : undefined,
+          "ERR_PROFILE",
+        );
         process.exit(1);
       }
     });
@@ -52,30 +66,38 @@ export function registerProfileCommand(program: Command): void {
         const { profiles, activeProfile } = listProfiles();
 
         if (profiles.length === 0) {
-          console.log("No profiles saved yet");
+          console.log(chalk.gray("No profiles saved yet"));
           return;
         }
 
-        console.log("\nAvailable profiles:");
+        console.log(chalk.bold("\nAvailable profiles:"));
         profiles.forEach((p) => {
-          const isActive = p.name === activeProfile ? " ← active" : "";
+          const isActive =
+            p.name === activeProfile ? chalk.green(" ← active") : "";
           console.log(
-            `  ${p.name}${isActive} — ${p.apiUrl} (${p.apiKey.substring(0, 8)}...)`,
+            `  ${chalk.bold(p.name)}${isActive} — ${chalk.cyan(p.apiUrl)} ${chalk.gray(`(${p.apiKey.substring(0, 8)}...)`)}`,
           );
         });
 
         if (!activeProfile) {
           try {
             const config = getConfig();
-            console.log("\n✓ Currently using environment variables");
-            console.log(`  URL: ${config.apiUrl}`);
+            console.log(
+              `\n${chalk.green("✓")} Currently using environment variables`,
+            );
+            console.log(`  ${chalk.gray("URL:")} ${chalk.cyan(config.apiUrl)}`);
           } catch {
-            console.log("\n⚠ No active profile or environment variables set");
+            process.stderr.write(
+              `${chalk.yellow("⚠")} No active profile or environment variables set\n`,
+            );
           }
         }
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error(`✗ ${msg}`);
+        printError(
+          "Failed to list profiles",
+          err instanceof Error ? err : undefined,
+          "ERR_PROFILE",
+        );
         process.exit(1);
       }
     });
@@ -86,10 +108,15 @@ export function registerProfileCommand(program: Command): void {
     .action((name: string) => {
       try {
         deleteProfile(name);
-        console.log(`✓ Profile "${name}" deleted successfully`);
+        console.log(
+          `${chalk.green("✓")} Profile ${chalk.bold(`"${name}"`)} deleted successfully`,
+        );
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error(`✗ ${msg}`);
+        printError(
+          `Failed to delete profile "${name}"`,
+          err instanceof Error ? err : undefined,
+          "ERR_PROFILE",
+        );
         process.exit(1);
       }
     });

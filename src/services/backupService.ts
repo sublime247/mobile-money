@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 /**
  * Database Backup Service (Issue #553)
  *
@@ -149,7 +150,7 @@ async function verifyBackupBucket(): Promise<boolean> {
     await s3.send(new HeadBucketCommand({ Bucket: BACKUP_BUCKET }));
     return true;
   } catch (err) {
-    console.error(`Backup bucket ${BACKUP_BUCKET} not accessible:`, err);
+    logger.error(`Backup bucket ${BACKUP_BUCKET} not accessible:`, err);
     return false;
   }
 }
@@ -194,7 +195,7 @@ async function uploadBackupToS3(
     console.log(`✓ Backup uploaded to S3: s3://${BACKUP_BUCKET}/${key}`);
     return `s3://${BACKUP_BUCKET}/${key}`;
   } catch (err) {
-    console.error("Failed to upload backup to S3:", err);
+    logger.error("Failed to upload backup to S3:", err);
     throw err;
   }
 }
@@ -300,7 +301,7 @@ export async function createBackup(): Promise<BackupResult> {
       duration_ms: duration,
     };
   } catch (err) {
-    console.error("Backup failed:", err);
+    logger.error("Backup failed:", err);
     return {
       success: false,
       backupId,
@@ -314,7 +315,7 @@ export async function createBackup(): Promise<BackupResult> {
         await fsUnlink(tempDumpFile);
         console.log("✓ Temporary dump file cleaned up");
       } catch (err) {
-        console.error("Failed to clean up temporary dump file:", err);
+        logger.error("Failed to clean up temporary dump file:", err);
       }
     }
   }
@@ -364,7 +365,7 @@ export async function getBackupMetadata(backupId: string): Promise<BackupMetadat
       checksum: s3Metadata["backup-checksum"] || "",
     };
   } catch (err) {
-    console.error(`Failed to get metadata for backup ${backupId}:`, err);
+    logger.error(`Failed to get metadata for backup ${backupId}:`, err);
     throw err;
   }
 }
@@ -382,7 +383,7 @@ export async function validateBackupIntegrity(
 ): Promise<boolean> {
   try {
     if (!metadata.checksum || metadata.checksum.length !== 64) {
-      console.error("Invalid checksum format");
+      logger.error("Invalid checksum format");
       return false;
     }
 
@@ -407,14 +408,14 @@ export async function validateBackupIntegrity(
     const checksum = computeChecksum(decryptedData);
 
     if (checksum !== metadata.checksum) {
-      console.error(`Backup ${backupId} integrity verification failed: Checksum mismatch!`);
+      logger.error(`Backup ${backupId} integrity verification failed: Checksum mismatch!`);
       return false;
     }
 
     console.log(`✓ Backup ${backupId} integrity check passed`);
     return true;
   } catch (err) {
-    console.error(`Backup integrity check failed for ${backupId}:`, err);
+    logger.error(`Backup integrity check failed for ${backupId}:`, err);
     return false;
   }
 }
@@ -466,7 +467,7 @@ export async function verifyDataSafety(): Promise<{
       details,
     };
   } catch (err) {
-    console.error("Data safety check failed:", err);
+    logger.error("Data safety check failed:", err);
     return {
       safe: false,
       details: { ...details, error: String(err) },
@@ -509,7 +510,7 @@ export async function listBackups(): Promise<
 
     return backups.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
   } catch (err) {
-    console.error("Failed to list backups from S3:", err);
+    logger.error("Failed to list backups from S3:", err);
     throw err;
   }
 }

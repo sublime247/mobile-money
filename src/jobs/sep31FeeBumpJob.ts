@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { pool } from "../config/database";
 import { TransactionModel, TransactionStatus } from "../models/transaction";
 import { Sep31Status, mapToSep31Status, isValidTransition } from "../stellar/sep31";
@@ -55,11 +56,11 @@ export async function runSep31FeeBumpJob(): Promise<void> {
         await performSep31FeeBump(row.id, row.stellar_address, row.amount, metadata, server);
         console.log(`[sep31-fee-bump] Performed fee bump for SEP-31 transaction ${row.id}`);
       } catch (error) {
-        console.error(`[sep31-fee-bump] Error processing SEP-31 transaction ${row.id}:`, error);
+        logger.error(`[sep31-fee-bump] Error processing SEP-31 transaction ${row.id}:`, error);
       }
     }
   } catch (error) {
-    console.error("[sep31-fee-bump] Job failed:", error);
+    logger.error("[sep31-fee-bump] Job failed:", error);
   }
 }
 
@@ -96,11 +97,14 @@ async function performSep31FeeBump(
     const account = await server.loadAccount(keypair.publicKey());
     const paymentAsset = getConfiguredPaymentAsset();
 
-    // Calculate new fee (double previous, max 1 XLM in stroops)
+    // Fetch current network base fee and adjust dynamically
+    const baseFee = await server.feeStats().then(res => Number(res.last_ledger_base_fee));
     const previousFee = sep31Meta.feeBumps?.length > 0
       ? sep31Meta.feeBumps[sep31Meta.feeBumps.length - 1].fee
-      : StellarSdk.BASE_FEE;
-    const newFee = Math.min(previousFee * 2, 100000);
+      : baseFee;
+    // Increase fee by a multiplier; use 2x if network fee increased, else 1.5x
+    const multiplier = baseFee > previousFee ? 2 : 1.5;
+    const newFee = Math.min(Math.ceil(previousFee * multiplier), 100000);
 
     // Rebuild original transaction (assume payment)
     const txBuilder = new StellarSdk.TransactionBuilder(account, {
@@ -142,7 +146,7 @@ async function performSep31FeeBump(
     };
     await transactionModel.updateMetadata(transactionId, updatedMetadata);
   } catch (error) {
-    console.error(`[sep31-fee-bump] Failed to fee bump SEP-31 transaction ${transactionId}:`, error);
+    logger.error(`[sep31-fee-bump] Failed to fee bump SEP-31 transaction ${transactionId}:`, error);
     throw error;
   }
 }
@@ -175,3 +179,5 @@ async function updateSep31Status(
   }
   await transactionModel.updateStatus(transactionId, transactionStatus);
 }
+
+// PR temporary comment – do not remove

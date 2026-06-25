@@ -160,8 +160,9 @@ export class AirtelService {
       directBaseUrl:
         options.directBaseUrl ??
         options.baseUrl ??
-        process.env.AIRTEL_BASE_URL ??
+        process.env.AIRTEL_DIRECT_BASE_URL ??
         "https://openapi.airtel.africa",
+      sandboxBaseUrl: options.sandboxBaseUrl ?? options.baseUrl ?? process.env.AIRTEL_SANDBOX_BASE_URL ?? "",
       loginPath: options.loginPath ?? process.env.AIRTEL_LOGIN_PATH ?? "/login",
       refreshPath:
         options.refreshPath ??

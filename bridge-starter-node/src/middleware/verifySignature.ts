@@ -27,13 +27,21 @@ export const verifyWebhookSignature = (
     return;
   }
 
+  const rawBody = (req as any).rawBody && Buffer.isBuffer((req as any).rawBody)
+    ? (req as any).rawBody
+    : Buffer.from(JSON.stringify(req.body));
+
   const expected = crypto
     .createHmac("sha256", config.webhookSecret)
-    .update(JSON.stringify(req.body))
+    .update(rawBody)
     .digest("hex");
 
+  const rawSignature = signature.startsWith("sha256=")
+    ? signature.substring(7)
+    : signature;
+
   // Use a timing-safe comparison to prevent timing-oracle attacks.
-  const sigBuffer = Buffer.from(signature);
+  const sigBuffer = Buffer.from(rawSignature);
   const expBuffer = Buffer.from(expected);
 
   const isValid =

@@ -1,3 +1,4 @@
+import logger from "../../utils/logger";
 import { Queue, Worker, Job } from "bullmq";
 import { createHmac } from "crypto";
 import { queueOptions } from "../../queue/config";
@@ -83,7 +84,7 @@ export const sepWebhookWorker = new Worker<SepWebhookJobData>(
         throw new Error(`HTTP error ${response.status}: ${responseText}`);
       }
     } catch (error: any) {
-      console.error(`[sep-webhook] Delivery failed for transaction=${transactionId} callbackUrl=${callbackUrl}:`, error.message);
+      logger.error(`[sep-webhook] Delivery failed for transaction=${transactionId} callbackUrl=${callbackUrl}:`, error.message);
       throw error; // Propagate error so BullMQ retries the job
     }
   },

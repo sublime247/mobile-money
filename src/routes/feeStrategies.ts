@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 /**
  * Fee Strategy Engine — REST API
  *
@@ -232,7 +233,7 @@ router.post("/calculate", async (req: Request, res: Response) => {
         details: error.errors,
       });
     }
-    console.error("[FeeStrategies] calculate error:", error);
+    logger.error("[FeeStrategies] calculate error:", error);
     throw createError(ERROR_CODES.INTERNAL_ERROR, "Failed to calculate fee");
   }
 });
@@ -255,7 +256,7 @@ router.get(
       const strategies = await feeStrategyEngine.getAllStrategies();
       res.json({ success: true, data: strategies });
     } catch (error: any) {
-      console.error("[FeeStrategies] list error:", error);
+      logger.error("[FeeStrategies] list error:", error);
       throw createError(
         ERROR_CODES.INTERNAL_ERROR,
         "Failed to fetch fee strategies",
@@ -313,7 +314,7 @@ router.post(
           },
         );
       }
-      console.error("[FeeStrategies] create error:", error);
+      logger.error("[FeeStrategies] create error:", error);
       throw createError(
         ERROR_CODES.INTERNAL_ERROR,
         "Failed to create fee strategy",
@@ -341,7 +342,7 @@ router.get(
       }
       res.json({ success: true, data: strategy });
     } catch (error: any) {
-      console.error("[FeeStrategies] get error:", error);
+      logger.error("[FeeStrategies] get error:", error);
       throw createError(
         ERROR_CODES.INTERNAL_ERROR,
         "Failed to fetch fee strategy",
@@ -386,7 +387,7 @@ router.put(
           details: error.errors,
         });
       }
-      console.error("[FeeStrategies] update error:", error);
+      logger.error("[FeeStrategies] update error:", error);
       throw createError(
         ERROR_CODES.INTERNAL_ERROR,
         "Failed to update fee strategy",
@@ -421,7 +422,7 @@ router.delete(
 
       res.json({ success: true, message: "Fee strategy deleted successfully" });
     } catch (error: any) {
-      console.error("[FeeStrategies] delete error:", error);
+      logger.error("[FeeStrategies] delete error:", error);
       throw createError(
         ERROR_CODES.INTERNAL_ERROR,
         "Failed to delete fee strategy",
@@ -460,7 +461,7 @@ router.post(
         message: "Fee strategy activated",
       });
     } catch (error: any) {
-      console.error("[FeeStrategies] activate error:", error);
+      logger.error("[FeeStrategies] activate error:", error);
       throw createError(
         ERROR_CODES.INTERNAL_ERROR,
         "Failed to activate fee strategy",
@@ -499,7 +500,7 @@ router.post(
         message: "Fee strategy deactivated",
       });
     } catch (error: any) {
-      console.error("[FeeStrategies] deactivate error:", error);
+      logger.error("[FeeStrategies] deactivate error:", error);
       throw createError(
         ERROR_CODES.INTERNAL_ERROR,
         "Failed to deactivate fee strategy",
@@ -522,7 +523,7 @@ router.get(
       const history = await feeStrategyEngine.getAuditHistory(req.params.id);
       res.json({ success: true, data: history });
     } catch (error: any) {
-      console.error("[FeeStrategies] audit error:", error);
+      logger.error("[FeeStrategies] audit error:", error);
       throw createError(
         ERROR_CODES.INTERNAL_ERROR,
         "Failed to fetch audit history",

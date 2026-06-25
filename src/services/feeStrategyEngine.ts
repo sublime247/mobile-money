@@ -397,25 +397,67 @@ export class FeeStrategyEngine {
     const candidates = await this.resolveStrategies(ctx.userId, ctx.provider);
 
     for (const strategy of candidates) {
-      const result = this.applyStrategy(strategy, ctx.amount, evaluationTime);
-      if (result !== null) {
-        return {
-          fee: parseFloat(result.clampedFee.toFixed(2)),
-          total: parseFloat((ctx.amount + result.clampedFee).toFixed(2)),
-          strategyUsed: strategy.name,
-          scopeUsed: strategy.scope,
-          timeOverrideActive: strategy.strategyType === "time_based",
-          breakdown: {
-            strategyId: strategy.id,
-            strategyType: strategy.strategyType,
-            rawFee: parseFloat(result.rawFee.toFixed(2)),
-            clampedFee: parseFloat(result.clampedFee.toFixed(2)),
-            appliedMinimum: result.appliedMinimum,
-            appliedMaximum: result.appliedMaximum,
-          },
-        };
+  const result = this.applyStrategy(strategy, ctx.amount, evaluationTime);
+  if (result !== null) {
+    // Base fee and total from strategy result
+    let fee = result.clampedFee;
+    let total = ctx.amount + fee;
+
+    // Apply VIP discount if userId is present
+    if (ctx.userId) {
+      const { getThirtyDayVolume, mapVolumeToTier } = await import("../utils/fees");
+      const volume = await getThirtyDayVolume(ctx.userId);
+      const tier = mapVolumeToTier(volume);
+      const discount = tier.discountPercent;
+      if (discount > 0) {
+        const multiplier = 1 - discount / 100;
+        // Discount raw fee
+        const discountedRaw = result.rawFee * multiplier;
+        // Discount min/max if they were applied
+        const min = result.appliedMinimum ?? 0;
+        const max = result.appliedMaximum ?? Infinity;
+        const discountedMin = min * multiplier;
+        const discountedMax = max * multiplier;
+        // Clamp fee
+        let finalFee = discountedRaw;
+        let appliedMin: number | undefined;
+        let appliedMax: number | undefined;
+        if (finalFee < discountedMin) {
+          finalFee = discountedMin;
+          appliedMin = discountedMin;
+        }
+        if (finalFee > discountedMax) {
+          finalFee = discountedMax;
+          appliedMax = discountedMax;
+        }
+        fee = finalFee;
+        total = ctx.amount + fee;
+        // Update breakdown values
+        result.rawFee = parseFloat(discountedRaw.toFixed(2));
+        result.clampedFee = parseFloat(finalFee.toFixed(2));
+        if (appliedMin !== undefined) result.appliedMinimum = parseFloat(appliedMin.toFixed(2));
+        if (appliedMax !== undefined) result.appliedMaximum = parseFloat(appliedMax.toFixed(2));
       }
     }
+
+    return {
+      fee: parseFloat(fee.toFixed(2)),
+      total: parseFloat(total.toFixed(2)),
+      strategyUsed: strategy.name,
+      scopeUsed: strategy.scope,
+      timeOverrideActive: strategy.strategyType === "time_based",
+      breakdown: {
+        strategyId: strategy.id,
+        strategyType: strategy.strategyType,
+        rawFee: parseFloat(result.rawFee.toFixed(2)),
+        clampedFee: parseFloat(result.clampedFee.toFixed(2)),
+        appliedMinimum: result.appliedMinimum,
+        appliedMaximum: result.appliedMaximum,
+      },
+    };
+  }
+}
+
 
     // No strategy matched — return zero fee as safe default
     return {

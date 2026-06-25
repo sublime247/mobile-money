@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { MTNProvider } from "./mobilemoney/providers/mtn";
 import { AirtelService } from "./mobilemoney/providers/airtel";
 import { queryWrite, queryRead } from "../config/database";
@@ -151,7 +152,7 @@ export async function runLiquidityRebalance(): Promise<void> {
       recipient.balance += transferAmount;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error(`[liquidity] Transfer ${transferId} failed: ${msg}`);
+      logger.error(`[liquidity] Transfer ${transferId} failed: ${msg}`);
       await markTransferDone(transferId, "failed", msg);
     }
   }

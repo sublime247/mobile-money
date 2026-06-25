@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import twilio from "twilio";
 // @ts-ignore
 import africastalking from "africastalking";
@@ -195,7 +196,7 @@ export class SmsService {
       return { sent: true, messageSid: messageSidStr };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error("[sms] send failed", { to, error: msg });
+      logger.error("[sms] send failed", { to, error: msg });
       return { sent: false, error: msg };
     }
   }

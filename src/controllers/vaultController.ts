@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { Request, Response } from "express";
 import { z } from "zod";
 import {
@@ -5,7 +6,11 @@ import {
   CreateVaultInput,
   VaultTransferInput,
 } from "../models/vault";
-import { lockManager, LockKeys } from "../utils/lock";
+import {
+  isLockAcquisitionError,
+  lockManager,
+  LockKeys,
+} from "../utils/lock";
 import { createError } from "../middleware/errorHandler";
 import { ERROR_CODES } from "../constants/errorCodes";
 
@@ -93,7 +98,7 @@ export const createVault = async (req: Request, res: Response) => {
       });
     }
 
-    console.error("Create vault error:", error);
+    logger.error("Create vault error:", error);
 
     throw createError(
       ERROR_CODES.INTERNAL_ERROR,
@@ -122,7 +127,7 @@ export const getUserVaults = async (req: Request, res: Response) => {
       data: vaults,
     });
   } catch (error: any) {
-    console.error("Get user vaults error:", error);
+    logger.error("Get user vaults error:", error);
 
     throw createError(ERROR_CODES.INTERNAL_ERROR, "Failed to retrieve vaults", {
       error: "Internal server error",
@@ -164,7 +169,7 @@ export const getVaultById = async (req: Request, res: Response) => {
       data: vault,
     });
   } catch (error: any) {
-    console.error("Get vault error:", error);
+    logger.error("Get vault error:", error);
     throw createError(ERROR_CODES.INTERNAL_ERROR, "Failed to retrieve vault", {
       error: "Internal server error",
     });
@@ -231,7 +236,7 @@ export const updateVault = async (req: Request, res: Response) => {
       });
     }
 
-    console.error("Update vault error:", error);
+    logger.error("Update vault error:", error);
     throw createError(
       ERROR_CODES.INTERNAL_ERROR,
       error.message || "Failed to update vault",
@@ -282,7 +287,7 @@ export const deleteVault = async (req: Request, res: Response) => {
       message: "Vault deleted successfully",
     });
   } catch (error: any) {
-    console.error("Delete vault error:", error);
+    logger.error("Delete vault error:", error);
     throw createError(
       ERROR_CODES.INTERNAL_ERROR,
       error.message || "Failed to delete vault",
@@ -331,7 +336,7 @@ export const transferFunds = async (req: Request, res: Response) => {
     }
 
     // Use distributed lock to prevent race conditions
-    const lockKey = `vault-transfer:${userId}:${vaultId}`;
+    const lockKey = LockKeys.vaultTransfer(userId, vaultId);
 
     const result = await lockManager.withLock(
       lockKey,
@@ -362,7 +367,27 @@ export const transferFunds = async (req: Request, res: Response) => {
       });
     }
 
-    console.error("Transfer funds error:", error);
+    logger.error("Transfer funds error:", error);
+
+    if (isLockAcquisitionError(error)) {
+      if (error.isContention) {
+        throw createError(
+          ERROR_CODES.CONFLICT,
+          "Vault transfer already in progress",
+          {
+            error: "Vault transfer already in progress",
+          },
+        );
+      }
+
+      throw createError(
+        ERROR_CODES.SERVICE_UNAVAILABLE,
+        "Vault transfer lock service unavailable",
+        {
+          error: "Vault transfer lock service unavailable",
+        },
+      );
+    }
 
     if (error.message.includes("Insufficient")) {
       throw createError(ERROR_CODES.INSUFFICIENT_FUNDS, error.message, {
@@ -425,7 +450,7 @@ export const getVaultTransactions = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error("Get vault transactions error:", error);
+    logger.error("Get vault transactions error:", error);
     throw createError(
       ERROR_CODES.INTERNAL_ERROR,
       "Failed to retrieve vault transactions",
@@ -456,7 +481,7 @@ export const getUserBalanceSummary = async (req: Request, res: Response) => {
       data: summary,
     });
   } catch (error: any) {
-    console.error("Get balance summary error:", error);
+    logger.error("Get balance summary error:", error);
     throw createError(
       ERROR_CODES.INTERNAL_ERROR,
       "Failed to retrieve balance summary",

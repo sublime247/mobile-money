@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { Request, Response } from "express";
 import { getQueueStats, pauseQueue, resumeQueue } from "./transactionQueue";
 import { providerBalanceAlertQueue } from "./providerBalanceAlertQueue";
@@ -29,7 +30,7 @@ export async function getQueueHealth(req: Request, res: Response) {
     };
     res.json(body);
   } catch (err) {
-    console.error("Failed to fetch queue health:", err);
+    logger.error("Failed to fetch queue health:", err);
     throw createError(ERROR_CODES.INTERNAL_ERROR, "Failed to fetch queue health");
   }
 }
@@ -43,7 +44,7 @@ export async function pauseQueueEndpoint(req: Request, res: Response) {
     };
     res.json(body);
   } catch (err) {
-    console.error("Failed to pause queue:", err);
+    logger.error("Failed to pause queue:", err);
     throw createError(ERROR_CODES.INTERNAL_ERROR, "Failed to pause queue");
   }
 }
@@ -57,7 +58,7 @@ export async function resumeQueueEndpoint(req: Request, res: Response) {
     };
     res.json(body);
   } catch (err) {
-    console.error("Failed to resume queue:", err);
+    logger.error("Failed to resume queue:", err);
     throw createError(ERROR_CODES.INTERNAL_ERROR, "Failed to resume queue");
   }
 }

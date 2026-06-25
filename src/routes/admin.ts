@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { Router, Request, Response, NextFunction } from "express";
 import * as StellarSdk from "stellar-sdk";
 import { generateToken } from "../auth/jwt";
@@ -247,7 +248,7 @@ router.get(
         sla_threshold_hours: 24,
       });
     } catch (err) {
-      console.error("Error fetching transaction resolution metrics:", err);
+      logger.error("Error fetching transaction resolution metrics:", err);
       throw createError(
         ERROR_CODES.INTERNAL_ERROR,
         "Failed to retrieve transaction resolution metrics",
@@ -370,7 +371,7 @@ router.post(
         results,
       });
     } catch (error) {
-      console.error("Error bulk freezing users:", error);
+      logger.error("Error bulk freezing users:", error);
       throw createError(ERROR_CODES.INTERNAL_ERROR, "Internal server error");
     }
   },
@@ -487,7 +488,7 @@ router.post(
         results,
       });
     } catch (error) {
-      console.error("Error bulk unfreezing users:", error);
+      logger.error("Error bulk unfreezing users:", error);
       throw createError(ERROR_CODES.INTERNAL_ERROR, "Internal server error");
     }
   },
@@ -512,7 +513,7 @@ router.get(
         sla_threshold_hours: 24,
       });
     } catch (err) {
-      console.error("Error fetching dispute resolution metrics:", err);
+      logger.error("Error fetching dispute resolution metrics:", err);
       throw createError(
         ERROR_CODES.INTERNAL_ERROR,
         "Failed to retrieve dispute resolution metrics",
@@ -740,7 +741,7 @@ router.post(
         results,
       });
     } catch (error) {
-      console.error("Error bulk unlocking users:", error);
+      logger.error("Error bulk unlocking users:", error);
       throw createError(ERROR_CODES.INTERNAL_ERROR, "Internal server error");
     }
   },
@@ -870,7 +871,7 @@ router.post(
         },
       });
     } catch (error) {
-      console.error("Error freezing user account:", error);
+      logger.error("Error freezing user account:", error);
       throw createError(ERROR_CODES.INTERNAL_ERROR, "Internal server error");
     }
   },
@@ -956,7 +957,7 @@ router.post(
         },
       });
     } catch (error) {
-      console.error("Error unfreezing user account:", error);
+      logger.error("Error unfreezing user account:", error);
       throw createError(ERROR_CODES.INTERNAL_ERROR, "Internal server error");
     }
   },
@@ -988,7 +989,7 @@ router.get(
         history: auditHistory,
       });
     } catch (error) {
-      console.error("Error fetching user status history:", error);
+      logger.error("Error fetching user status history:", error);
       throw createError(ERROR_CODES.INTERNAL_ERROR, "Internal server error");
     }
   },
@@ -1119,7 +1120,7 @@ router.get(
         },
       });
     } catch (err) {
-      console.error("Error listing transactions for admin:", err);
+      logger.error("Error listing transactions for admin:", err);
       throw createError(
         ERROR_CODES.INTERNAL_ERROR,
         "Failed to list transactions",
@@ -1162,7 +1163,7 @@ router.put(
       const updatedTx = await transactionModel.findById(req.params.id);
       res.json({ message: "Transaction updated", transaction: updatedTx });
     } catch (err) {
-      console.error("Error updating transaction:", err);
+      logger.error("Error updating transaction:", err);
       throw createError(
         ERROR_CODES.INTERNAL_ERROR,
         "Failed to update transaction",
@@ -1268,7 +1269,7 @@ router.patch(
         results,
       });
     } catch (error) {
-      console.error("Error bulk updating transaction admin notes:", error);
+      logger.error("Error bulk updating transaction admin notes:", error);
       throw createError(ERROR_CODES.INTERNAL_ERROR, "Internal server error");
     }
   },
@@ -1359,7 +1360,7 @@ router.patch(
         results,
       });
     } catch (error) {
-      console.error("Error bulk updating transaction status:", error);
+      logger.error("Error bulk updating transaction status:", error);
       throw createError(ERROR_CODES.INTERNAL_ERROR, "Internal server error");
     }
   },
@@ -1469,7 +1470,7 @@ router.post(
         results,
       });
     } catch (error) {
-      console.error("Error bulk refunding transactions:", error);
+      logger.error("Error bulk refunding transactions:", error);
       throw createError(ERROR_CODES.INTERNAL_ERROR, "Internal server error");
     }
   },
@@ -1507,7 +1508,7 @@ router.get(
       const transfers = await getLiquidityTransfers(limit, offset);
       res.json({ transfers });
     } catch (err) {
-      console.error("[liquidity] Failed to list transfers:", err);
+      logger.error("[liquidity] Failed to list transfers:", err);
       throw createError(
         ERROR_CODES.INTERNAL_ERROR,
         "Failed to retrieve liquidity transfers",
@@ -1569,7 +1570,7 @@ router.post(
       res.status(201).json({ message: "Transfer initiated", ...result });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Transfer failed";
-      console.error("[liquidity] Manual transfer error:", err);
+      logger.error("[liquidity] Manual transfer error:", err);
       throw createError(ERROR_CODES.INTERNAL_ERROR, msg);
     }
   },
@@ -1628,7 +1629,7 @@ router.post(
         result,
       });
     } catch (error: any) {
-      console.error("[CSV RECONCILIATION ERROR]", error);
+      logger.error("[CSV RECONCILIATION ERROR]", error);
 
       if (error.statusCode) {
         throw error;
@@ -1688,7 +1689,7 @@ router.get(
         },
       });
     } catch (error) {
-      console.error("Error fetching reconciliation runs:", error);
+      logger.error("Error fetching reconciliation runs:", error);
       throw createError(
         ERROR_CODES.INTERNAL_ERROR,
         "Failed to fetch reconciliation runs",
@@ -1738,7 +1739,7 @@ router.get(
         },
       });
     } catch (error) {
-      console.error("Error fetching reconciliation alerts:", error);
+      logger.error("Error fetching reconciliation alerts:", error);
       throw createError(
         ERROR_CODES.INTERNAL_ERROR,
         "Failed to fetch reconciliation alerts",
@@ -1797,7 +1798,7 @@ router.patch(
 
       res.json({ message: "Alert reviewed successfully" });
     } catch (error) {
-      console.error("Error reviewing reconciliation alert:", error);
+      logger.error("Error reviewing reconciliation alert:", error);
       throw createError(ERROR_CODES.INTERNAL_ERROR, "Failed to review alert");
     }
   },
@@ -1845,7 +1846,7 @@ router.post(
         result,
       });
     } catch (error) {
-      console.error("Error running manual reconciliation:", error);
+      logger.error("Error running manual reconciliation:", error);
       throw createError(
         ERROR_CODES.INTERNAL_ERROR,
         "Manual reconciliation failed",
@@ -1868,7 +1869,7 @@ router.get(
       const configs = await providerReconciliationService.getProviderConfigs();
       res.json({ data: configs });
     } catch (error) {
-      console.error("Error fetching reconciliation configs:", error);
+      logger.error("Error fetching reconciliation configs:", error);
       throw createError(
         ERROR_CODES.INTERNAL_ERROR,
         "Failed to fetch reconciliation configs",
@@ -1898,7 +1899,7 @@ router.get(
       try {
         providers = mobileMoneyService.getFailoverStats();
       } catch (err) {
-        console.error("Error fetching failover stats:", err);
+        logger.error("Error fetching failover stats:", err);
       }
 
       // Get queue stats
@@ -1910,7 +1911,7 @@ router.get(
           stats: queueStats,
         };
       } catch (err) {
-        console.error("Error fetching queue stats:", err);
+        logger.error("Error fetching queue stats:", err);
       }
 
       // Get Redis status
@@ -1923,7 +1924,7 @@ router.get(
           redis.status = "closed";
         }
       } catch (err) {
-        console.error("Error checking Redis status:", err);
+        logger.error("Error checking Redis status:", err);
         redis.status = "down";
       }
 
@@ -1942,7 +1943,7 @@ router.get(
           replicas: replicaHealth,
         };
       } catch (err) {
-        console.error("Error checking database health:", err);
+        logger.error("Error checking database health:", err);
       }
 
       res.json({
@@ -1954,7 +1955,7 @@ router.get(
         database,
       });
     } catch (err) {
-      console.error("Health check error:", err);
+      logger.error("Health check error:", err);
       throw createError(
         ERROR_CODES.INTERNAL_ERROR,
         "Failed to retrieve health data",
@@ -2012,7 +2013,7 @@ router.get(
 
       res.json({ rows, totals });
     } catch (err) {
-      console.error("[financial/pnl]", err);
+      logger.error("[financial/pnl]", err);
       throw createError(ERROR_CODES.INTERNAL_ERROR, "Failed to fetch PnL data");
     }
   },
@@ -2133,7 +2134,7 @@ function copyRef(ref) {
      toast.classList.add('show');
      setTimeout(() => toast.classList.remove('show'), 2000);
    }).catch(err => {
-     console.error('Failed to copy:', err);
+     logger.error('Failed to copy:', err);
    });
  }
 
@@ -2300,16 +2301,20 @@ const validateComplianceCreate = (
   body: Record<string, unknown>,
 ): ValidationResult<ComplianceDocumentCreateInput> => {
   const title = normalizeString(body.title, "title", true);
-  if (!title.ok) return title as ValidationResult<ComplianceDocumentCreateInput>;
+  if (!title.ok)
+    return title as ValidationResult<ComplianceDocumentCreateInput>;
 
   const docBody = normalizeString(body.body, "body", true);
-  if (!docBody.ok) return docBody as ValidationResult<ComplianceDocumentCreateInput>;
+  if (!docBody.ok)
+    return docBody as ValidationResult<ComplianceDocumentCreateInput>;
 
   const summary = normalizeString(body.summary, "summary", false);
-  if (!summary.ok) return summary as ValidationResult<ComplianceDocumentCreateInput>;
+  if (!summary.ok)
+    return summary as ValidationResult<ComplianceDocumentCreateInput>;
 
   const provider = normalizeString(body.provider, "provider", false);
-  if (!provider.ok) return provider as ValidationResult<ComplianceDocumentCreateInput>;
+  if (!provider.ok)
+    return provider as ValidationResult<ComplianceDocumentCreateInput>;
   if (provider.value && provider.value.length > 100) {
     return { ok: false, message: "provider must be 100 characters or fewer" };
   }
@@ -2319,16 +2324,19 @@ const validateComplianceCreate = (
     "sourceUrl",
     false,
   );
-  if (!sourceUrl.ok) return sourceUrl as ValidationResult<ComplianceDocumentCreateInput>;
+  if (!sourceUrl.ok)
+    return sourceUrl as ValidationResult<ComplianceDocumentCreateInput>;
 
   const country = normalizeCountry(getCountryValue(body));
-  if (!country.ok) return country as ValidationResult<ComplianceDocumentCreateInput>;
+  if (!country.ok)
+    return country as ValidationResult<ComplianceDocumentCreateInput>;
 
   const tags = normalizeTags(body.tags);
   if (!tags.ok) return tags as ValidationResult<ComplianceDocumentCreateInput>;
 
   const status = normalizeStatus(body.status);
-  if (!status.ok) return status as ValidationResult<ComplianceDocumentCreateInput>;
+  if (!status.ok)
+    return status as ValidationResult<ComplianceDocumentCreateInput>;
 
   return {
     ok: true,
@@ -2369,25 +2377,29 @@ const validateComplianceUpdate = (
 
   if (Object.prototype.hasOwnProperty.call(body, "title")) {
     const title = normalizeString(body.title, "title", true);
-    if (!title.ok) return title as ValidationResult<ComplianceDocumentUpdateInput>;
+    if (!title.ok)
+      return title as ValidationResult<ComplianceDocumentUpdateInput>;
     input.title = title.value as string;
   }
 
   if (Object.prototype.hasOwnProperty.call(body, "body")) {
     const docBody = normalizeString(body.body, "body", true);
-    if (!docBody.ok) return docBody as ValidationResult<ComplianceDocumentUpdateInput>;
+    if (!docBody.ok)
+      return docBody as ValidationResult<ComplianceDocumentUpdateInput>;
     input.body = docBody.value as string;
   }
 
   if (Object.prototype.hasOwnProperty.call(body, "summary")) {
     const summary = normalizeString(body.summary, "summary", false);
-    if (!summary.ok) return summary as ValidationResult<ComplianceDocumentUpdateInput>;
+    if (!summary.ok)
+      return summary as ValidationResult<ComplianceDocumentUpdateInput>;
     input.summary = summary.value ?? null;
   }
 
   if (Object.prototype.hasOwnProperty.call(body, "provider")) {
     const provider = normalizeString(body.provider, "provider", false);
-    if (!provider.ok) return provider as ValidationResult<ComplianceDocumentUpdateInput>;
+    if (!provider.ok)
+      return provider as ValidationResult<ComplianceDocumentUpdateInput>;
     if (provider.value && provider.value.length > 100) {
       return { ok: false, message: "provider must be 100 characters or fewer" };
     }
@@ -2403,7 +2415,8 @@ const validateComplianceUpdate = (
       "sourceUrl",
       false,
     );
-    if (!sourceUrl.ok) return sourceUrl as ValidationResult<ComplianceDocumentUpdateInput>;
+    if (!sourceUrl.ok)
+      return sourceUrl as ValidationResult<ComplianceDocumentUpdateInput>;
     input.sourceUrl = sourceUrl.value ?? null;
   }
 
@@ -2413,19 +2426,22 @@ const validateComplianceUpdate = (
     Object.prototype.hasOwnProperty.call(body, "country_code")
   ) {
     const country = normalizeCountry(getCountryValue(body));
-    if (!country.ok) return country as ValidationResult<ComplianceDocumentUpdateInput>;
+    if (!country.ok)
+      return country as ValidationResult<ComplianceDocumentUpdateInput>;
     input.countryCode = country.value ?? null;
   }
 
   if (Object.prototype.hasOwnProperty.call(body, "tags")) {
     const tags = normalizeTags(body.tags);
-    if (!tags.ok) return tags as ValidationResult<ComplianceDocumentUpdateInput>;
+    if (!tags.ok)
+      return tags as ValidationResult<ComplianceDocumentUpdateInput>;
     input.tags = tags.value ?? [];
   }
 
   if (Object.prototype.hasOwnProperty.call(body, "status")) {
     const status = normalizeStatus(body.status);
-    if (!status.ok) return status as ValidationResult<ComplianceDocumentUpdateInput>;
+    if (!status.ok)
+      return status as ValidationResult<ComplianceDocumentUpdateInput>;
     input.status = status.value;
   }
 
@@ -2548,7 +2564,7 @@ router.get(
         },
       });
     } catch (error) {
-      console.error("[compliance/docs:list]", error);
+      logger.error("[compliance/docs:list]", error);
       if ((error as any).statusCode) {
         throw error;
       }
@@ -2567,7 +2583,7 @@ router.get(
     try {
       res.json(await complianceDocumentModel.getFacets());
     } catch (error) {
-      console.error("[compliance/docs:facets]", error);
+      logger.error("[compliance/docs:facets]", error);
       throw createError(
         ERROR_CODES.INTERNAL_ERROR,
         "Failed to fetch compliance document facets",
@@ -2596,7 +2612,7 @@ router.get(
       }
       res.json(document);
     } catch (error) {
-      console.error("[compliance/docs:get]", error);
+      logger.error("[compliance/docs:get]", error);
       if ((error as any).statusCode) {
         throw error;
       }
@@ -2629,7 +2645,7 @@ router.post(
       );
       res.status(201).json(document);
     } catch (error) {
-      console.error("[compliance/docs:create]", error);
+      logger.error("[compliance/docs:create]", error);
       if ((error as any).statusCode) {
         throw error;
       }
@@ -2672,7 +2688,7 @@ router.patch(
       }
       res.json(document);
     } catch (error) {
-      console.error("[compliance/docs:update]", error);
+      logger.error("[compliance/docs:update]", error);
       if ((error as any).statusCode) {
         throw error;
       }
@@ -2702,7 +2718,7 @@ router.post(
       await stellarService.enableClawback();
       res.json({ message: "Clawback capability enabled on issuance account" });
     } catch (err) {
-      console.error("Error enabling clawback:", err);
+      logger.error("Error enabling clawback:", err);
       throw createError(
         ERROR_CODES.INTERNAL_ERROR,
         "Failed to enable clawback capability",
@@ -2787,7 +2803,7 @@ router.post(
         transactionId,
       });
     } catch (err) {
-      console.error("Error executing clawback:", err);
+      logger.error("Error executing clawback:", err);
       throw createError(
         ERROR_CODES.INTERNAL_ERROR,
         "Failed to execute clawback",
@@ -2902,7 +2918,7 @@ router.post(
         totalTimeMs: batchResult.totalTimeMs,
       });
     } catch (err) {
-      console.error("Error executing batch payment:", err);
+      logger.error("Error executing batch payment:", err);
       throw createError(
         ERROR_CODES.INTERNAL_ERROR,
         "Failed to execute batch payment",
@@ -2937,7 +2953,7 @@ router.delete(
       }
       res.json(document);
     } catch (error) {
-      console.error("[compliance/docs:archive]", error);
+      logger.error("[compliance/docs:archive]", error);
       if ((error as any).statusCode) {
         throw error;
       }
@@ -2962,10 +2978,10 @@ router.get(
       const settings = await providerSettingsService.getAllSettings();
       res.json(settings);
     } catch (error) {
-      console.error("Error fetching provider settings:", error);
+      logger.error("Error fetching provider settings:", error);
       res.status(500).json({ message: "Failed to fetch provider settings" });
     }
-  }
+  },
 );
 
 router.put(
@@ -2976,22 +2992,69 @@ router.put(
     try {
       const providerName = req.params.providerName;
       const { failure_threshold, timeout_ms, fallback_order } = req.body;
-      
+
       const settings = await providerSettingsService.upsertProviderSettings(
         providerName,
         failure_threshold || 3,
         timeout_ms || 5000,
-        fallback_order || null
+        fallback_order || null,
       );
-      
+
       resetCircuitBreakerForProvider(providerName);
-      
+
       res.json({ message: "Provider settings updated successfully", settings });
     } catch (error) {
-      console.error("Error updating provider settings:", error);
+      logger.error("Error updating provider settings:", error);
       res.status(500).json({ message: "Failed to update provider settings" });
     }
-  }
+  },
+);
+
+router.post(
+  "/provider-maintenance",
+  requireAdmin,
+  logAdminAction("CREATE_PROVIDER_MAINTENANCE_OUTAGE"),
+  async (req: Request, res: Response) => {
+    try {
+      const adminUser = (req as AuthRequest).user;
+      const {
+        provider_name,
+        providerName,
+        starts_at,
+        startsAt,
+        ends_at,
+        endsAt,
+        reason,
+        fallback_provider,
+        fallbackProvider,
+        notify_users,
+        notifyUsers,
+      } = req.body;
+
+      const outage = await providerSettingsService.createMaintenanceOutage({
+        providerName: providerName ?? provider_name,
+        startsAt: startsAt ?? starts_at,
+        endsAt: endsAt ?? ends_at,
+        reason: reason ?? null,
+        fallbackProvider: fallbackProvider ?? fallback_provider ?? null,
+        notifyUsers: notifyUsers ?? notify_users ?? true,
+        createdBy: adminUser?.id ?? null,
+      });
+
+      res.status(201).json({
+        message: "Provider maintenance outage scheduled",
+        outage,
+      });
+    } catch (error) {
+      console.error("Error scheduling provider maintenance outage:", error);
+      res.status(400).json({
+        message:
+          error instanceof Error
+            ? error.message
+            : "Failed to schedule provider maintenance outage",
+      });
+    }
+  },
 );
 
 /**
@@ -3022,7 +3085,7 @@ router.get(
         providerHealth,
       ] = await Promise.all([
         getQueueStats().catch((err) => {
-          console.error("[Dashboard] Queue stats error:", err);
+          logger.error("[Dashboard] Queue stats error:", err);
           return {
             pending: 0,
             active: 0,
@@ -3037,14 +3100,14 @@ router.get(
             replicas,
           }))
           .catch((err) => {
-            console.error("[Dashboard] Database health error:", err);
+            logger.error("[Dashboard] Database health error:", err);
             return { status: "unhealthy" as const, replicas: [] };
           }),
         redisClient
           .ping()
           .then(() => ({ status: "healthy" as const, responseTime: 0 }))
           .catch((err) => {
-            console.error("[Dashboard] Redis health error:", err);
+            logger.error("[Dashboard] Redis health error:", err);
             return { status: "unhealthy" as const, responseTime: undefined };
           }),
         (async () => {
@@ -3059,7 +3122,7 @@ router.get(
             activeUsers: await (UserModel as any).countActiveUsers(24),
           };
         })().catch((err) => {
-          console.error("[Dashboard] Transaction stats error:", err);
+          logger.error("[Dashboard] Transaction stats error:", err);
           return {
             totalCount: 0,
             successRate: 0,
@@ -3072,7 +3135,7 @@ router.get(
           try {
             return mobileMoneyService.getFailoverStats();
           } catch (err) {
-            console.error("[Dashboard] Provider health error:", err);
+            logger.error("[Dashboard] Provider health error:", err);
             return {};
           }
         })(),
@@ -3117,7 +3180,7 @@ router.get(
         ),
       });
     } catch (error) {
-      console.error("[Dashboard] Failed to fetch stats:", error);
+      logger.error("[Dashboard] Failed to fetch stats:", error);
       throw createError(ERROR_CODES.INTERNAL_ERROR, "Failed to fetch dashboard stats");
     }
   },
@@ -3154,7 +3217,7 @@ router.get(
         responseTime,
       });
     } catch (error) {
-      console.error("[Health] Check failed:", error);
+      logger.error("[Health] Check failed:", error);
       res.status(503).json({
         database: "unhealthy",
         redis: "unhealthy",
@@ -3187,7 +3250,7 @@ router.get(
         timestamp: new Date().toISOString(),
       });
     } catch (error) {
-      console.error("[Queue] Stats fetch failed:", error);
+      logger.error("[Queue] Stats fetch failed:", error);
       throw createError(ERROR_CODES.INTERNAL_ERROR, "Failed to fetch queue stats");
     }
   },

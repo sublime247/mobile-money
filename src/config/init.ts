@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 /**
  * Configuration Initialization Module
  * 
@@ -19,7 +20,7 @@ try {
   
   console.log(`[Config] Initialized with environment: ${env}`);
 } catch (error) {
-  console.error('[Config] Failed to initialize configuration:', error);
+  logger.error('[Config] Failed to initialize configuration:', error);
   process.exit(1);
 }
 

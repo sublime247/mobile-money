@@ -99,6 +99,24 @@ export const configSchema = convict({
         default: 1000000,
         env: "AIRTEL_MAX_AMOUNT",
       },
+      webBaseUrl: {
+        doc: "Airtel web base URL (session mode)",
+        format: String,
+        default: "",
+        env: "AIRTEL_WEB_BASE_URL",
+      },
+      directBaseUrl: {
+        doc: "Airtel direct base URL (OAuth2 mode)",
+        format: String,
+        default: "https://openapi.airtel.africa",
+        env: "AIRTEL_DIRECT_BASE_URL",
+      },
+      sandboxBaseUrl: {
+        doc: "Airtel sandbox base URL (for sandbox mode)",
+        format: String,
+        default: "https://sandbox.airtel.africa",
+        env: "AIRTEL_SANDBOX_BASE_URL",
+      },
     },
     orange: {
       minAmount: {
@@ -112,6 +130,46 @@ export const configSchema = convict({
         format: "nat",
         default: 750000,
         env: "ORANGE_MAX_AMOUNT",
+      },
+    },
+    orangeMadagascar: {
+      minAmount: {
+        doc: "Minimum transaction amount for Orange Madagascar (MGA)",
+        format: "nat",
+        default: 100,
+        env: "ORANGE_MADAGASCAR_MIN_AMOUNT",
+      },
+      maxAmount: {
+        doc: "Maximum transaction amount for Orange Madagascar (MGA)",
+        format: "nat",
+        default: 5000000,
+        env: "ORANGE_MADAGASCAR_MAX_AMOUNT",
+      },
+      callbackSecret: {
+        doc: "Orange Madagascar callback HMAC secret for verifying incoming callbacks",
+        format: String,
+        default: "",
+        env: "ORANGE_MADAGASCAR_CALLBACK_SECRET",
+      },
+      callbackSignatureHeader: {
+        doc: "Header used by Orange Madagascar for callback signature verification",
+        format: String,
+        default: "X-Callback-Signature",
+        env: "ORANGE_MADAGASCAR_CALLBACK_SIGNATURE_HEADER",
+      },
+    },
+    smsPortal: {
+      minAmount: {
+        doc: "Minimum transaction amount for SMS Portal (various currencies)",
+        format: "nat",
+        default: 100,
+        env: "SMS_PORTAL_MIN_AMOUNT",
+      },
+      maxAmount: {
+        doc: "Maximum transaction amount for SMS Portal (various currencies)",
+        format: "nat",
+        default: 5000000,
+        env: "SMS_PORTAL_MAX_AMOUNT",
       },
     },
   },
@@ -250,14 +308,16 @@ export const configSchema = convict({
   // Mobile Money Provider Health Checks
   healthCheck: {
     failureThreshold: {
-      doc: "Number of failures before opening circuit breaker",
+      doc: "Number of consecutive failures before opening the health-check circuit breaker",
       format: "nat",
       default: 3,
+      env: "PROVIDER_HEALTH_FAILURE_THRESHOLD",
     },
     openDurationMs: {
-      doc: "Duration to keep circuit breaker open in milliseconds",
+      doc: "Duration (ms) to keep the health-check circuit breaker open before allowing a retry",
       format: "nat",
       default: 60000, // 1 minute
+      env: "PROVIDER_HEALTH_OPEN_DURATION_MS",
     },
   },
 
@@ -272,6 +332,12 @@ export const configSchema = convict({
       doc: "Orange refresh token skew in milliseconds",
       format: "nat",
       default: 60000, // 1 minute
+    },
+    requestTimeoutMs: {
+      doc: 'Orange API request timeout in milliseconds',
+      format: 'nat',
+      default: 30000,
+      env: 'ORANGE_REQUEST_TIMEOUT_MS',
     },
   },
 

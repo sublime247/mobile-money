@@ -26,3 +26,200 @@ button.copyButton_node_modules-\@docusaurus-theme-classic-src-theme-CodeBlock-st
 pre code {
   position: relative;
 }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   GraphQL Playground
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+.graphql-playground-wrapper {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 60px); /* navbar height */
+  overflow: hidden;
+}
+
+/* ── Config Bar ──────────────────────────────────────────────────────────────── */
+
+.graphql-config-bar {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  border-bottom: 1px solid rgba(99, 102, 241, 0.25);
+  color: #e0e0ff;
+  padding: 0.75rem 1.25rem;
+  flex-shrink: 0;
+}
+
+.graphql-config-bar__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.graphql-config-bar__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 700;
+  font-size: 0.95rem;
+  letter-spacing: 0.025em;
+  color: #c4b5fd;
+}
+
+.graphql-config-bar__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #34d399;
+  box-shadow: 0 0 6px rgba(52, 211, 153, 0.6);
+  animation: graphql-pulse 2s ease-in-out infinite;
+}
+
+@keyframes graphql-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.graphql-config-bar__toggle {
+  background: rgba(99, 102, 241, 0.15);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  color: #a5b4fc;
+  border-radius: 6px;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.graphql-config-bar__toggle:hover {
+  background: rgba(99, 102, 241, 0.3);
+  color: #e0e7ff;
+}
+
+.graphql-config-bar__body {
+  margin-top: 0.6rem;
+}
+
+.graphql-config-bar__hint {
+  font-size: 0.82rem;
+  color: #94a3b8;
+  margin: 0 0 0.5rem;
+  line-height: 1.4;
+}
+
+.graphql-config-bar__hint code {
+  background: rgba(99, 102, 241, 0.15);
+  color: #a5b4fc;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  font-size: 0.78rem;
+}
+
+.graphql-config-bar__controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.graphql-config-bar__label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #94a3b8;
+}
+
+.graphql-config-bar__input-group {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.graphql-config-bar__input {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: 8px;
+  color: #e2e8f0;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.85rem;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.graphql-config-bar__input:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+.graphql-config-bar__button {
+  padding: 0.5rem 1.25rem;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.graphql-config-bar__button:hover:not(:disabled) {
+  background: linear-gradient(135deg, #818cf8, #a78bfa);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
+}
+
+.graphql-config-bar__button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ── Loading State ───────────────────────────────────────────────────────────── */
+
+.graphql-playground-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 3rem;
+  color: var(--ifm-color-primary);
+  font-size: 0.95rem;
+}
+
+.graphql-playground-loading__spinner {
+  width: 22px;
+  height: 22px;
+  border: 3px solid rgba(99, 102, 241, 0.2);
+  border-top-color: #6366f1;
+  border-radius: 50%;
+  animation: graphql-spin 0.7s linear infinite;
+}
+
+@keyframes graphql-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Sandbox Embed ───────────────────────────────────────────────────────────── */
+
+.graphql-playground-embed {
+  flex: 1;
+  min-height: 0;
+}
+
+.graphql-playground-embed iframe {
+  width: 100% !important;
+  height: 100% !important;
+  border: none;
+}
+
+/* ── Responsive tweaks ───────────────────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+  .graphql-config-bar__input-group {
+    flex-direction: column;
+  }
+
+  .graphql-config-bar__button {
+    width: 100%;
+  }
+}

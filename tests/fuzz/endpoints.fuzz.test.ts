@@ -108,6 +108,11 @@ jest.mock("express-session", () =>
   () => (_req: unknown, _res: unknown, next: () => void) => next(),
 );
 
+// Skip GraphQL/Apollo startup imports that pull in Redis pubsub and queue workers
+jest.mock("../../src/graphql/server", () => ({
+  startApolloServer: jest.fn().mockResolvedValue(undefined),
+}));
+
 // Tracer (avoids dd-trace startup overhead)
 jest.mock("../../src/tracer", () => {});
 

@@ -1,3 +1,4 @@
+import logger from "../logger";
 /**
  * CurrencyConfig - Configuration manager for currency formatting rules
  * Manages currency-specific formatting rules and validation
@@ -41,7 +42,7 @@ export class CurrencyConfig {
       }
     } catch (error) {
       // If validation fails completely, use safe defaults and log error
-      console.error('Currency configuration validation failed, using safe defaults:', error);
+      logger.error('Currency configuration validation failed, using safe defaults:', error);
       this.configuration = this.createSafeConfiguration(DEFAULT_CONFIG);
       this.isInitialized = true;
       this.initializationErrors.push(`Configuration validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);

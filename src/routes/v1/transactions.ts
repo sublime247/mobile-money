@@ -1,3 +1,4 @@
+import logger from "../../utils/logger";
 import { Router } from "express";
 import { setApiVersion, VersionedRequest } from "../../middleware/apiVersion";
 import {
@@ -24,6 +25,7 @@ import { geoFencingMiddleware } from "../../middleware/geoFencing";
 import { createExportRoutes } from "../export";
 import { TransactionModel, TransactionStatus } from "../../models/transaction";
 import { generateTransactionPdfBuffer } from "../../services/pdfReceipt";
+import { validate2FAForWithdrawal } from "../../services/twoFactorWithdrawalService";
 
 
 export const transactionRoutesV1 = Router();
@@ -56,6 +58,7 @@ transactionRoutesV1.post(
   haltOnTimedout,
   setApiVersion("v1"),
   geolocateMiddleware,
+  validate2FAForWithdrawal,
   withdrawHandler,
 );
 
@@ -140,7 +143,7 @@ transactionRoutesV1.get(
 
       res.status(200).send(pdf);
     } catch (err) {
-      console.error("Failed to generate invoice PDF:", err);
+      logger.error("Failed to generate invoice PDF:", err);
       res.status(500).json({ error: "Failed to generate invoice PDF" });
     }
   },

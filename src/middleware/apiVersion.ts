@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { Request, Response, RequestHandler } from "express";
 
 /**
@@ -82,7 +83,7 @@ export const apiVersionMiddleware: RequestHandler = (req, res, next) => {
 
     next();
   } catch (error) {
-    console.error("Error in apiVersionMiddleware:", error);
+    logger.error("Error in apiVersionMiddleware:", error);
     next(error);
   }
 };

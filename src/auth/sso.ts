@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import passport from "passport";
 import {
   Strategy as SamlStrategy,
@@ -126,7 +127,7 @@ export class SSOService {
 
       console.log(`[SSO] Configured ${result.rows.length} SAML strategy(ies)`);
     } catch (error) {
-      console.error("[SSO] Error loading SSO providers:", error);
+      logger.error("[SSO] Error loading SSO providers:", error);
       throw error;
     }
   }
@@ -295,7 +296,7 @@ export class SSOService {
       };
     } catch (error) {
       await client.query("ROLLBACK");
-      console.error("[SSO] Error processing SSO profile:", error);
+      logger.error("[SSO] Error processing SSO profile:", error);
       throw error;
     } finally {
       client.release();
@@ -625,7 +626,7 @@ export class SSOService {
       `saml-${providerId}`,
       async (err: Error | null, user: any) => {
         if (err) {
-          console.error("[SSO] SAML authentication error:", err);
+          logger.error("[SSO] SAML authentication error:", err);
           res.status(401).json({
             error: "SSO authentication failed",
             message: err.message,
@@ -676,7 +677,7 @@ export class SSOService {
             },
           });
         } catch (error) {
-          console.error("[SSO] Error generating tokens:", error);
+          logger.error("[SSO] Error generating tokens:", error);
           res.status(500).json({
             error: "Token generation failed",
             message: error instanceof Error ? error.message : "Unknown error",
@@ -710,7 +711,7 @@ export function createSSORouter(): Router {
         })),
       });
     } catch (error) {
-      console.error("[SSO] Error fetching providers:", error);
+      logger.error("[SSO] Error fetching providers:", error);
       res.status(500).json({
         error: "Failed to fetch SSO providers",
         message: error instanceof Error ? error.message : "Unknown error",
@@ -742,7 +743,7 @@ export function createSSORouter(): Router {
         failureFlash: true,
       })(req, res);
     } catch (error) {
-      console.error("[SSO] Error initiating SSO login:", error);
+      logger.error("[SSO] Error initiating SSO login:", error);
       res.status(500).json({
         error: "SSO login initiation failed",
         message: error instanceof Error ? error.message : "Unknown error",
@@ -781,7 +782,7 @@ export function createSSORouter(): Router {
       const mappings = await ssoService.getGroupRoleMappings(providerId);
       res.json({ mappings });
     } catch (error) {
-      console.error("[SSO] Error fetching mappings:", error);
+      logger.error("[SSO] Error fetching mappings:", error);
       res.status(500).json({
         error: "Failed to fetch group-role mappings",
         message: error instanceof Error ? error.message : "Unknown error",
@@ -812,7 +813,7 @@ export function createSSORouter(): Router {
         mapping: { sso_group_name, role_id },
       });
     } catch (error) {
-      console.error("[SSO] Error adding mapping:", error);
+      logger.error("[SSO] Error adding mapping:", error);
       res.status(500).json({
         error: "Failed to add group-role mapping",
         message: error instanceof Error ? error.message : "Unknown error",
@@ -835,7 +836,7 @@ export function createSSORouter(): Router {
           message: "Group-role mapping removed successfully",
         });
       } catch (error) {
-        console.error("[SSO] Error removing mapping:", error);
+        logger.error("[SSO] Error removing mapping:", error);
         res.status(500).json({
           error: "Failed to remove group-role mapping",
           message: error instanceof Error ? error.message : "Unknown error",
@@ -856,7 +857,7 @@ export function createSSORouter(): Router {
       const auditLog = await ssoService.getAuditLog(userId, limit);
       res.json({ audit_log: auditLog });
     } catch (error) {
-      console.error("[SSO] Error fetching audit log:", error);
+      logger.error("[SSO] Error fetching audit log:", error);
       res.status(500).json({
         error: "Failed to fetch audit log",
         message: error instanceof Error ? error.message : "Unknown error",

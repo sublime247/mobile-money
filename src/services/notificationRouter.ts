@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { EmailService, emailService } from "./email";
 import { SmsService, smsService } from "./sms";
 import { PushNotificationService, pushNotificationService } from "./push";
@@ -121,7 +122,7 @@ export class NotificationRouter {
         // Could be extended to read from user.notificationPreferences field
       };
     } catch (error) {
-      console.error(`Failed to get user preferences for ${userId}:`, error);
+      logger.error(`Failed to get user preferences for ${userId}:`, error);
       return this.defaultPreferences;
     }
   }
@@ -212,7 +213,7 @@ export class NotificationRouter {
           break;
       }
     } catch (error) {
-      console.error(`Failed to send ${channel} notification:`, error);
+      logger.error(`Failed to send ${channel} notification:`, error);
       // Don't throw - we don't want one channel failure to stop others
     }
   }

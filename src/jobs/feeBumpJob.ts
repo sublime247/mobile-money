@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { pool } from "../config/database";
 import { TransactionModel, TransactionStatus } from "../models/transaction";
 import { getStellarServer, getNetworkPassphrase } from "../config/stellar";
@@ -55,11 +56,11 @@ export async function runFeeBumpJob(): Promise<void> {
         console.log(`[fee-bump] Performed fee bump for transaction ${row.id}`);
 
       } catch (error) {
-        console.error(`[fee-bump] Error processing transaction ${row.id}:`, error);
+        logger.error(`[fee-bump] Error processing transaction ${row.id}:`, error);
       }
     }
   } catch (error) {
-    console.error("[fee-bump] Job failed:", error);
+    logger.error("[fee-bump] Job failed:", error);
   }
 }
 
@@ -146,7 +147,7 @@ async function performFeeBump(
     await transactionModel.updateMetadata(transactionId, updatedMetadata);
 
   } catch (error) {
-    console.error(`[fee-bump] Failed to fee bump transaction ${transactionId}:`, error);
+    logger.error(`[fee-bump] Failed to fee bump transaction ${transactionId}:`, error);
     throw error;
   }
 }

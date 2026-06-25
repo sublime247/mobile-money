@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { Request, Response, NextFunction } from "express";
 import { UserModel } from "../models/users";
 
@@ -87,7 +88,7 @@ export async function checkAccountStatus(
     // Account is active, proceed
     next();
   } catch (error) {
-    console.error("[ACCOUNT STATUS] Error checking account status:", error);
+    logger.error("[ACCOUNT STATUS] Error checking account status:", error);
     // Don't block request on error, just log it
     // In production, you might want to fail closed instead
     next();
@@ -150,7 +151,7 @@ export async function checkAccountStatusStrict(
 
     next();
   } catch (error) {
-    console.error("[ACCOUNT STATUS] Error checking account status:", error);
+    logger.error("[ACCOUNT STATUS] Error checking account status:", error);
     // Fail closed for transaction-related endpoints
     res.status(500).json({
       error: "Internal server error",

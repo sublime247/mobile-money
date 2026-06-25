@@ -1,0 +1,253 @@
+{
+  "metadata": {
+    "tool": "soroban-gas-bench",
+    "version": "1.0.0",
+    "timestamp": "2026-06-23T10:27:43.406Z",
+    "costModel": "Soroban Protocol 20",
+    "note": "Gas estimates based on static source analysis using Soroban fee model constants."
+  },
+  "contracts": {
+    "escrow": {
+      "methods": {
+        "initialize": {
+          "cpuInstructions": 82800,
+          "memoryBytes": 2832,
+          "parameters": [
+            "depositor: Address",
+            "beneficiary: Address",
+            "arbiter: Address",
+            "token: Address",
+            "amount: i128",
+            "emergency_unlock_timestamp: u64",
+            "lock_until_ledger: u32",
+            "fee_bps: u32",
+            "fee_recipient: Address"
+          ],
+          "operations": {
+            "storageReads": 0,
+            "storageWrites": 1,
+            "storageHasChecks": 1,
+            "storageTtlExtends": 1,
+            "tokenTransfers": 1,
+            "tokenMints": 0,
+            "requireAuths": 1,
+            "cryptoSha256": 0,
+            "assertions": 6,
+            "arithmeticOps": 0,
+            "comparisons": 0,
+            "structCreations": 1,
+            "ledgerReads": 1
+          }
+        },
+        "release": {
+          "cpuInstructions": 131200,
+          "memoryBytes": 4624,
+          "parameters": [],
+          "operations": {
+            "storageReads": 1,
+            "storageWrites": 1,
+            "storageHasChecks": 0,
+            "storageTtlExtends": 1,
+            "tokenTransfers": 2,
+            "tokenMints": 0,
+            "requireAuths": 1,
+            "cryptoSha256": 0,
+            "assertions": 0,
+            "arithmeticOps": 0,
+            "comparisons": 4,
+            "structCreations": 2,
+            "ledgerReads": 1
+          }
+        },
+        "refund": {
+          "cpuInstructions": 86100,
+          "memoryBytes": 3592,
+          "parameters": [],
+          "operations": {
+            "storageReads": 1,
+            "storageWrites": 1,
+            "storageHasChecks": 0,
+            "storageTtlExtends": 1,
+            "tokenTransfers": 1,
+            "tokenMints": 0,
+            "requireAuths": 1,
+            "cryptoSha256": 0,
+            "assertions": 0,
+            "arithmeticOps": 0,
+            "comparisons": 3,
+            "structCreations": 2,
+            "ledgerReads": 1
+          }
+        },
+        "emergency_refund": {
+          "cpuInstructions": 79900,
+          "memoryBytes": 3168,
+          "parameters": [],
+          "operations": {
+            "storageReads": 1,
+            "storageWrites": 1,
+            "storageHasChecks": 0,
+            "storageTtlExtends": 0,
+            "tokenTransfers": 1,
+            "tokenMints": 0,
+            "requireAuths": 1,
+            "cryptoSha256": 0,
+            "assertions": 2,
+            "arithmeticOps": 0,
+            "comparisons": 0,
+            "structCreations": 1,
+            "ledgerReads": 1
+          }
+        },
+        "self_refund": {
+          "cpuInstructions": 82300,
+          "memoryBytes": 3544,
+          "parameters": [],
+          "operations": {
+            "storageReads": 1,
+            "storageWrites": 1,
+            "storageHasChecks": 0,
+            "storageTtlExtends": 0,
+            "tokenTransfers": 1,
+            "tokenMints": 0,
+            "requireAuths": 1,
+            "cryptoSha256": 0,
+            "assertions": 0,
+            "arithmeticOps": 0,
+            "comparisons": 3,
+            "structCreations": 2,
+            "ledgerReads": 1
+          }
+        },
+        "get_state": {
+          "cpuInstructions": 11500,
+          "memoryBytes": 688,
+          "parameters": [],
+          "operations": {
+            "storageReads": 1,
+            "storageWrites": 0,
+            "storageHasChecks": 0,
+            "storageTtlExtends": 1,
+            "tokenTransfers": 0,
+            "tokenMints": 0,
+            "requireAuths": 0,
+            "cryptoSha256": 0,
+            "assertions": 0,
+            "arithmeticOps": 0,
+            "comparisons": 0,
+            "structCreations": 0,
+            "ledgerReads": 0
+          }
+        }
+      },
+      "aggregate": {
+        "totalCpuInstructions": 473800,
+        "totalMemoryBytes": 18448,
+        "avgCpuInstructions": 78967,
+        "avgMemoryBytes": 3075,
+        "methodCount": 6
+      }
+    },
+    "htlc": {
+      "methods": {
+        "initialize": {
+          "cpuInstructions": 81750,
+          "memoryBytes": 2784,
+          "parameters": [
+            "sender: Address",
+            "receiver: Address",
+            "token: Address",
+            "amount: i128",
+            "hashlock: BytesN<32>",
+            "timelock: u64"
+          ],
+          "operations": {
+            "storageReads": 0,
+            "storageWrites": 1,
+            "storageHasChecks": 1,
+            "storageTtlExtends": 1,
+            "tokenTransfers": 1,
+            "tokenMints": 0,
+            "requireAuths": 1,
+            "cryptoSha256": 0,
+            "assertions": 3,
+            "arithmeticOps": 0,
+            "comparisons": 0,
+            "structCreations": 1,
+            "ledgerReads": 1
+          }
+        },
+        "claim": {
+          "cpuInstructions": 85150,
+          "memoryBytes": 3424,
+          "parameters": [
+            "preimage: BytesN<32>"
+          ],
+          "operations": {
+            "storageReads": 1,
+            "storageWrites": 1,
+            "storageHasChecks": 0,
+            "storageTtlExtends": 1,
+            "tokenTransfers": 1,
+            "tokenMints": 0,
+            "requireAuths": 0,
+            "cryptoSha256": 1,
+            "assertions": 3,
+            "arithmeticOps": 0,
+            "comparisons": 0,
+            "structCreations": 1,
+            "ledgerReads": 0
+          }
+        },
+        "refund": {
+          "cpuInstructions": 75650,
+          "memoryBytes": 2984,
+          "parameters": [],
+          "operations": {
+            "storageReads": 1,
+            "storageWrites": 1,
+            "storageHasChecks": 0,
+            "storageTtlExtends": 1,
+            "tokenTransfers": 1,
+            "tokenMints": 0,
+            "requireAuths": 0,
+            "cryptoSha256": 0,
+            "assertions": 3,
+            "arithmeticOps": 0,
+            "comparisons": 1,
+            "structCreations": 1,
+            "ledgerReads": 1
+          }
+        },
+        "get_state": {
+          "cpuInstructions": 11500,
+          "memoryBytes": 688,
+          "parameters": [],
+          "operations": {
+            "storageReads": 1,
+            "storageWrites": 0,
+            "storageHasChecks": 0,
+            "storageTtlExtends": 1,
+            "tokenTransfers": 0,
+            "tokenMints": 0,
+            "requireAuths": 0,
+            "cryptoSha256": 0,
+            "assertions": 0,
+            "arithmeticOps": 0,
+            "comparisons": 0,
+            "structCreations": 0,
+            "ledgerReads": 0
+          }
+        }
+      },
+      "aggregate": {
+        "totalCpuInstructions": 254050,
+        "totalMemoryBytes": 9880,
+        "avgCpuInstructions": 63513,
+        "avgMemoryBytes": 2470,
+        "methodCount": 4
+      }
+    }
+  },
+  "wasmBinaries": {}
+}

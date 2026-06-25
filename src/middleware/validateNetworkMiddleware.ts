@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { Request, Response, NextFunction } from "express";
 import { NETWORK_PREFIXES, type MobileNetworkName } from "../constants/networkPrefixes";
 
@@ -106,7 +107,7 @@ export const validateNetworkMiddleware = (
     (req.body as any).resolvedNetwork = resolvedNetwork;
     next();
   } catch (error) {
-    console.error("Error in validateNetworkMiddleware:", error);
+    logger.error("Error in validateNetworkMiddleware:", error);
     return res.status(500).json({
       error: "An internal server error occurred during network validation",
     });

@@ -1,4 +1,10 @@
-import Redlock, { Lock, Settings } from "redlock";
+import logger from "./logger";
+import Redlock, {
+  ExecutionError,
+  Lock,
+  ResourceLockedError,
+  Settings,
+} from "redlock";
 import { redisClient } from "../config/redis";
 
 /**
@@ -15,6 +21,49 @@ import { redisClient } from "../config/redis";
  * Distributed lock manager using Redlock algorithm.
  * Prevents race conditions in distributed systems.
  */
+export class LockAcquisitionError extends Error {
+  readonly code = "LOCK_ACQUISITION_FAILED";
+  readonly resource: string;
+  readonly isContention: boolean;
+  readonly cause?: unknown;
+
+  constructor(resource: string, options: { cause?: unknown; isContention?: boolean } = {}) {
+    super(
+      options.isContention
+        ? `Resource is already locked: ${resource}`
+        : `Unable to acquire lock for resource: ${resource}`,
+    );
+    this.name = "LockAcquisitionError";
+    this.resource = resource;
+    this.isContention = options.isContention ?? false;
+    this.cause = options.cause;
+  }
+}
+
+export const isLockAcquisitionError = (
+  error: unknown,
+): error is LockAcquisitionError => error instanceof LockAcquisitionError;
+
+const isExecutionContentionError = async (
+  error: ExecutionError,
+): Promise<boolean> => {
+  const attempts = await Promise.all(error.attempts);
+
+  if (attempts.length === 0) {
+    return false;
+  }
+
+  return attempts.every((attempt) => {
+    if (attempt.votesAgainst.size === 0) {
+      return false;
+    }
+
+    return Array.from(attempt.votesAgainst.values()).every(
+      (voteError) => voteError instanceof ResourceLockedError,
+    );
+  });
+};
+
 class LockManager {
   private redlock: Redlock;
   private readonly defaultTTL = 10000; // 10 seconds default TTL
@@ -33,7 +82,7 @@ class LockManager {
     this.redlock = new Redlock([redisClient as any], settings);
 
     this.redlock.on("error", (error) => {
-      console.error("Redlock error:", error);
+      logger.error("Redlock error:", error);
     });
   }
 
@@ -57,8 +106,17 @@ class LockManager {
       console.log(`Lock acquired: ${resource} (TTL: ${ttl}ms)`);
       return lock;
     } catch (error) {
-      console.error(`Failed to acquire lock: ${resource}`, error);
-      throw new Error(`Unable to acquire lock for resource: ${resource}`);
+      logger.error(`Failed to acquire lock: ${resource}`, error);
+
+      const isContention =
+        error instanceof ResourceLockedError ||
+        (error instanceof ExecutionError &&
+          (await isExecutionContentionError(error)));
+
+      throw new LockAcquisitionError(resource, {
+        cause: error,
+        isContention,
+      });
     }
   }
 
@@ -75,7 +133,7 @@ class LockManager {
       await lock.release();
       console.log(`Lock released: ${lock.resources}`);
     } catch (error) {
-      console.error("Failed to release lock:", error);
+      logger.error("Failed to release lock:", error);
       throw error;
     }
   }
@@ -93,7 +151,7 @@ class LockManager {
       console.log(`Lock extended: ${lock.resources} (+${ttl}ms)`);
       return extendedLock;
     } catch (error) {
-      console.error("Failed to extend lock:", error);
+      logger.error("Failed to extend lock:", error);
       throw error;
     }
   }

@@ -4,19 +4,24 @@
   "version": "1.0.0",
   "scripts": {
     "sync:openapi": "cp ../openapi.yaml ./static/openapi.yaml",
+    "optimize:images": "node scripts/optimize-images.mjs",
     "start": "npm run sync:openapi && docusaurus start --port 3001",
-    "build": "npm run sync:openapi && docusaurus build",
+    "build": "npm run optimize:images && npm run sync:openapi && docusaurus build",
     "serve": "docusaurus serve",
     "deploy": "docusaurus deploy"
   },
   "dependencies": {
-    "@docusaurus/core": "3.9.2",
-    "@docusaurus/preset-classic": "3.9.2",
+    "@docusaurus/core": "3.10.1",
+    "@docusaurus/faster": "^3.10.1",
+    "@docusaurus/preset-classic": "3.10.1",
     "@mdx-js/react": "^3.1.1",
     "clsx": "^2.1.1",
+    "dotenv": "^17.4.2",
     "prism-react-renderer": "^2.4.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "redoc": "^2.5.1"
+    "redoc": "^2.5.1",
+    "swagger-ui-dist": "^5.32.8",
+    "swagger-ui-react": "^5.32.8"
   }
 }

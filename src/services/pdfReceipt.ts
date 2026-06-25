@@ -1,6 +1,7 @@
 import PDFDocument from "pdfkit";
 import { Transaction } from "../models/transaction";
 import { maskPhoneNumber, maskStellarAddress } from "../utils/masking";
+import { CurrencyFormatter } from "../utils/currency";
 
 export interface TransactionPdfOptions {
   title?: string;
@@ -118,7 +119,19 @@ export async function generateTransactionPdfBuffer(
           .fillColor("#000");
       }
 
-      const amountStr = transaction.amount;
+      let amountStr = transaction.amount;
+      try {
+        const numericAmount = parseFloat(transaction.amount);
+        if (!isNaN(numericAmount)) {
+          amountStr = CurrencyFormatter.format(
+            numericAmount,
+            transaction.currency || "USD"
+          );
+        }
+      } catch (err) {
+        console.warn("[pdfReceipt] Failed to format amount with CurrencyFormatter:", err);
+      }
+
       doc.fontSize(12).text(`Amount`, rightX, 140, { continued: false });
       doc.fontSize(14).text(`${amountStr}`, rightX, 158, { align: "right" });
 

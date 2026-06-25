@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import sgMail from "@sendgrid/mail";
 import { Transaction } from "../models/transaction";
 import { DailySnapshot } from "../models/snapshot";
@@ -60,7 +61,7 @@ export class EmailService {
         attachments: options.attachments,
       });
     } catch (error) {
-      console.error("Email delivery failed:", error);
+      logger.error("Email delivery failed:", error);
       // We don't throw here to prevent blocking the transaction flow
       // but in a real app, we might want to retry or log to a dedicated service
     }
@@ -168,7 +169,7 @@ export class EmailService {
         });
       }
     } catch (error) {
-      console.error("[Email] Lockout notification delivery failed:", error);
+      logger.error("[Email] Lockout notification delivery failed:", error);
     }
   }
 

@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { Request, Response, NextFunction } from "express";
 import { pool } from "../config/database";
 import { newEnforcer, Enforcer } from "casbin";
@@ -129,7 +130,7 @@ export function authorizeObj(resourceType: string, action: string, requireOwners
 
       next();
     } catch (error) {
-      console.error("RBAC permission check error:", error);
+      logger.error("RBAC permission check error:", error);
       return res.status(500).json({
         error: "Internal server error",
         message: "Failed to check permissions",

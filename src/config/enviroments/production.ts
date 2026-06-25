@@ -15,6 +15,9 @@ const config: AppConfig = {
   providers: {
     airtel: {
       baseUrl: process.env.AIRTEL_BASE_URL!,
+      webBaseUrl: process.env.AIRTEL_WEB_BASE_URL!,
+      directBaseUrl: process.env.AIRTEL_DIRECT_BASE_URL!,
+      sandboxBaseUrl: process.env.AIRTEL_SANDBOX_BASE_URL!,
       apiKey: process.env.AIRTEL_API_KEY!,
       apiSecret: process.env.AIRTEL_API_SECRET!,
     },

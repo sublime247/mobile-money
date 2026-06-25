@@ -14,9 +14,10 @@ describe("Datadog Tracer initialisation", () => {
     process.env.NODE_ENV = "production";
 
     const initMock = jest.fn();
+    const useMock = jest.fn().mockReturnThis();
     // The compiled CJS import looks for module.default or module itself
     jest.doMock("dd-trace", () => {
-      const mockTracer = { init: initMock };
+      const mockTracer = { init: initMock, use: useMock };
       // Support both `import tracer from 'dd-trace'` styles
       (mockTracer as any).default = mockTracer;
       return mockTracer;
@@ -35,8 +36,9 @@ describe("Datadog Tracer initialisation", () => {
     delete process.env.NODE_ENV;
 
     const initMock = jest.fn();
+    const useMock = jest.fn().mockReturnThis();
     jest.doMock("dd-trace", () => {
-      const mockTracer = { init: initMock };
+      const mockTracer = { init: initMock, use: useMock };
       (mockTracer as any).default = mockTracer;
       return mockTracer;
     });

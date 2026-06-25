@@ -144,10 +144,12 @@ export const getHttpStatus = (code: string): number => {
   if (code === ERROR_CODES.PROVIDER_ERROR) {
     return 502;
   }
+  if (code === ERROR_CODES.SERVICE_UNAVAILABLE) {
+    return 503;
+  }
   if (
     code.startsWith("500") ||
     code === ERROR_CODES.INTERNAL_ERROR ||
-    code === ERROR_CODES.SERVICE_UNAVAILABLE ||
     code === ERROR_CODES.DATABASE_ERROR
   ) {
     return 500;

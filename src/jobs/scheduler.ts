@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import cron from "node-cron";
 import { runAccountMergeJob } from "./accountMerge";
 import { runCleanupJob } from "./cleanupJob";
@@ -16,6 +17,7 @@ import { runProviderHealthCheckJob } from "./providerHealthCheck";
 import { runKycTierUpgradeJob } from "./kycTierUpgradeJob";
 import { runLiquidityRebalanceJob } from "./liquidityRebalanceJob";
 import { runCrossChainMonitorJob } from "./crossChainMonitorJob";
+import { runDailySettlementJob } from "./dailySettlementJob";
 import { runDailyProviderReconciliation } from "./providerReconciliationJob";
 import { runReconciliationJob } from "./reconciliationJob";
 import { runDatabaseBackupJob } from "./databaseBackupJob";
@@ -102,6 +104,10 @@ const JOBS: JobConfig[] = [
     handler: runProviderHealthCheckJob,
   },
   {
+    name: "daily-settlement",
+    // Daily at 01:00 AM UTC — sweeps merchant fees and settles provider balances
+    schedule: process.env.DAILY_SETTLEMENT_CRON || "0 1 * * *",
+    handler: runDailySettlementJob,
     name: "provider-reconciliation",
     // Daily at 4:00 AM - runs automated reconciliation against provider CSV reports
     schedule: process.env.PROVIDER_RECONCILIATION_CRON || "0 4 * * *",
@@ -150,6 +156,12 @@ const JOBS: JobConfig[] = [
     schedule: process.env.DATABASE_BACKUP_VERIFY_CRON || "0 3 * * *",
     handler: runDatabaseBackupVerifyJob,
   },
+  {
+    name: "sanction-sync",
+    // Daily at 1:00 AM - streams and indexes sanctions list updates, clears match cache
+    schedule: process.env.SANCTION_SYNC_CRON || "0 1 * * *",
+    handler: runSanctionSyncJob,
+  },
 ];
 
 async function runJob(job: JobConfig): Promise<void> {
@@ -158,7 +170,7 @@ async function runJob(job: JobConfig): Promise<void> {
     await job.handler();
     console.log(`[${job.name}] Completed`);
   } catch (err) {
-    console.error(`[${job.name}] Failed:`, err);
+    logger.error(`[${job.name}] Failed:`, err);
   }
 }
 
@@ -172,7 +184,7 @@ export function startJobs(): void {
 
   for (const job of JOBS) {
     if (!cron.validate(job.schedule)) {
-      console.error(
+      logger.error(
         `[scheduler] Invalid cron expression for "${job.name}": ${job.schedule}`,
       );
       continue;

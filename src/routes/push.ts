@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { Router, Request, Response } from "express";
 import { pushNotificationService, pushTokenModel, type PushToken } from "../services/push";
 import { GraphQLError } from "graphql";
@@ -91,7 +92,7 @@ export function createPushRouter(): Router {
         });
       }
 
-      console.error("Failed to register push token:", error);
+      logger.error("Failed to register push token:", error);
       res.status(400).json({
         error: "Bad Request",
         message: error.message || "Failed to register push token",
@@ -146,7 +147,7 @@ export function createPushRouter(): Router {
         });
       }
 
-      console.error("Failed to unregister push token:", error);
+      logger.error("Failed to unregister push token:", error);
       res.status(500).json({
         error: "Internal Server Error",
         message: error.message || "Failed to unregister token",
@@ -176,7 +177,7 @@ export function createPushRouter(): Router {
         });
       }
 
-      console.error("Failed to unregister all push tokens:", error);
+      logger.error("Failed to unregister all push tokens:", error);
       res.status(500).json({
         error: "Internal Server Error",
         message: error.message || "Failed to unregister tokens",
@@ -209,7 +210,7 @@ export function createPushRouter(): Router {
         });
       }
 
-      console.error("Failed to fetch push tokens:", error);
+      logger.error("Failed to fetch push tokens:", error);
       res.status(500).json({
         error: "Internal Server Error",
         message: error.message || "Failed to fetch tokens",
@@ -249,7 +250,7 @@ export function createPushRouter(): Router {
         });
       }
 
-      console.error("Failed to send test push notification:", error);
+      logger.error("Failed to send test push notification:", error);
       res.status(500).json({
         error: "Internal Server Error",
         message: error.message || "Failed to send test notification",

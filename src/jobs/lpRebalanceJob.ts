@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { rebalanceReserves } from "../services/stellar/lpRebalanceService";
 
 /**
@@ -17,7 +18,7 @@ export async function runLpRebalanceJob(): Promise<void> {
         `[lp-rebalance] ${r.assetCode}: swapped ${r.amountSwapped} — tx ${r.txHash}`
       );
     } else {
-      console.error(
+      logger.error(
         `[lp-rebalance] ${r.assetCode}: FAILED — ${r.reason}`
       );
     }

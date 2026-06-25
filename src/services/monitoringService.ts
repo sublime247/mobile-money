@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import {
   register,
   providerResponseTimeSeconds,
@@ -64,7 +65,7 @@ export class MonitoringService {
       // 2. Check provider error rates (new PagerDuty integration)
       this.checkProviderErrorRates(metrics);
     } catch (error) {
-      console.error("Error in monitoring service checks", error);
+      logger.error("Error in monitoring service checks", error);
     }
   }
 
@@ -94,7 +95,7 @@ export class MonitoringService {
           val.labels.quantile === 0.95 &&
           val.value > this.P95_THRESHOLD_S
         ) {
-          console.error(
+          logger.error(
             JSON.stringify({
               timestamp: new Date().toISOString(),
               level: "CRITICAL",

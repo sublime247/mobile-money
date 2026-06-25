@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { Worker, Job } from "bullmq";
 import * as StellarSdk from "stellar-sdk";
 import { queueOptions } from "./config";
@@ -276,7 +277,7 @@ export const accountMergeWorker = new Worker<
       }
 
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      console.error(
+      logger.error(
         `${ACCOUNT_MERGE_PREFIX} Failed to merge ${sourcePublicKey}:`,
         error,
       );
@@ -301,14 +302,14 @@ accountMergeWorker.on("completed", (job) => {
 });
 
 accountMergeWorker.on("failed", (job, error) => {
-  console.error(
+  logger.error(
     `${ACCOUNT_MERGE_PREFIX} Job ${job?.id} failed after ${job?.attemptsMade} attempts:`,
     error.message,
   );
 
   if (job) {
     capturePersistentFailure(job).catch((err) =>
-      console.error("[DLQ] Error capturing failure:", err),
+      logger.error("[DLQ] Error capturing failure:", err),
     );
   }
 });

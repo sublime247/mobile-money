@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { DisputeService } from "../services/dispute";
 import { DisputeStateMachine } from "../services/disputeStateMachine";
 
@@ -43,7 +44,7 @@ export class DisputeSlaJob {
           await this.escalateOverdueDispute(dispute.id);
           escalated++;
         } catch (error) {
-          console.error(`Failed to escalate dispute ${dispute.id}:`, error);
+          logger.error(`Failed to escalate dispute ${dispute.id}:`, error);
         }
       }
 
@@ -57,7 +58,7 @@ export class DisputeSlaJob {
       return result;
 
     } catch (error) {
-      console.error("[DisputeSlaJob] Job failed:", error);
+      logger.error("[DisputeSlaJob] Job failed:", error);
       throw error;
     }
   }

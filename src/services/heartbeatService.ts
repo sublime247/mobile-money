@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { systemHeartbeat } from "../utils/metrics";
 
 /**
@@ -58,7 +59,7 @@ function updateHeartbeat(): void {
   try {
     systemHeartbeat.set({ service: "mobile-money" }, 1);
   } catch (error) {
-    console.error("[Heartbeat Service] Failed to update heartbeat:", error);
+    logger.error("[Heartbeat Service] Failed to update heartbeat:", error);
   }
 }
 
@@ -75,7 +76,7 @@ export async function getHeartbeatStatus(): Promise<number> {
     );
     return heartbeatMetric ? heartbeatMetric.value : 0;
   } catch (error) {
-    console.error("[Heartbeat Service] Failed to get heartbeat status:", error);
+    logger.error("[Heartbeat Service] Failed to get heartbeat status:", error);
     return 0;
   }
 }

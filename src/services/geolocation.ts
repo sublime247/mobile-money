@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import axios from "axios";
 import { redisClient } from "../config/redis";
 
@@ -157,7 +158,7 @@ export class GeolocationService {
       return result;
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      console.error("[GeolocationService] lookup failed", { ip: anonIp, error: message });
+      logger.error("[GeolocationService] lookup failed", { ip: anonIp, error: message });
       return { ...UNKNOWN_LOCATION };
     }
   }

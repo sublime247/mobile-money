@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { Router, Request, Response } from "express";
 import { authenticateToken } from "../middleware/auth";
 import subscriptionModel from "../models/subscription";
@@ -45,7 +46,7 @@ subscriptionsRoutes.post("/", authenticateToken, async (req: Request, res: Respo
 
     res.status(201).json({ subscription: created });
   } catch (err) {
-    console.error("Failed to create subscription", err);
+    logger.error("Failed to create subscription", err);
     res.status(500).json({ error: "Failed to create subscription" });
   }
 });
@@ -58,7 +59,7 @@ subscriptionsRoutes.get("/", authenticateToken, async (req: Request, res: Respon
     const rows = await subscriptionModel.listByMerchant(user.userId);
     res.json({ subscriptions: rows });
   } catch (err) {
-    console.error("Failed to list subscriptions", err);
+    logger.error("Failed to list subscriptions", err);
     res.status(500).json({ error: "Failed to list subscriptions" });
   }
 });
@@ -73,7 +74,7 @@ subscriptionsRoutes.get("/:id", authenticateToken, async (req: Request, res: Res
     if (sub.merchant_id !== user.userId) return res.status(403).json({ error: "Forbidden" });
     res.json({ subscription: sub });
   } catch (err) {
-    console.error("Failed to get subscription", err);
+    logger.error("Failed to get subscription", err);
     res.status(500).json({ error: "Failed to get subscription" });
   }
 });
@@ -104,7 +105,7 @@ subscriptionsRoutes.patch("/:id", authenticateToken, async (req: Request, res: R
 
     res.json({ subscription: updated });
   } catch (err) {
-    console.error("Failed to update subscription", err);
+    logger.error("Failed to update subscription", err);
     res.status(500).json({ error: "Failed to update subscription" });
   }
 });
@@ -120,7 +121,7 @@ subscriptionsRoutes.delete("/:id", authenticateToken, async (req: Request, res: 
     await subscriptionModel.delete(req.params.id);
     res.status(204).end();
   } catch (err) {
-    console.error("Failed to delete subscription", err);
+    logger.error("Failed to delete subscription", err);
     res.status(500).json({ error: "Failed to delete subscription" });
   }
 });
@@ -137,7 +138,7 @@ subscriptionsRoutes.post("/:id/pause", authenticateToken, async (req: Request, r
     await notificationRouter.routeSystemNotification("medium", "subscription", "Subscription Paused", `Subscription ${req.params.id} was paused by merchant`, { subscriptionId: req.params.id });
     res.status(200).json({ paused: true });
   } catch (err) {
-    console.error("Failed to pause subscription", err);
+    logger.error("Failed to pause subscription", err);
     res.status(500).json({ error: "Failed to pause subscription" });
   }
 });
@@ -155,7 +156,7 @@ subscriptionsRoutes.post("/:id/resume", authenticateToken, async (req: Request, 
     const refreshed = await subscriptionModel.getById(req.params.id);
     res.json({ subscription: refreshed });
   } catch (err) {
-    console.error("Failed to resume subscription", err);
+    logger.error("Failed to resume subscription", err);
     res.status(500).json({ error: "Failed to resume subscription" });
   }
 });

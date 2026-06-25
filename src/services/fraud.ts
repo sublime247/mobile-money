@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { transactionTotal, transactionErrorsTotal } from '../utils/metrics';
 import { Transaction, TransactionStatus } from '../models/transaction';
 import { TransactionModel } from '../models/transaction';
@@ -113,7 +114,7 @@ export interface FraudResult {
   recommendedAction: 'allow' | 'review' | 'block';
 }
 
-function getDistanceKm(
+export function getDistanceKm(
   loc1: { lat: number; lng: number },
   loc2: { lat: number; lng: number }
 ): number {
@@ -164,7 +165,7 @@ export class FraudService {
         await redisClient.setEx('fraud:high_risk_numbers', 3600, JSON.stringify(sampleNumbers));
       }
     } catch (error) {
-      console.error('Failed to load high risk numbers:', error);
+      logger.error('Failed to load high risk numbers:', error);
     }
   }
 
@@ -172,7 +173,7 @@ export class FraudService {
     try {
       return await this.transactionModel.findByUserId(userId);
     } catch (error) {
-      console.error('Failed to get user transactions:', error);
+      logger.error('Failed to get user transactions:', error);
       return [];
     }
   }
@@ -219,7 +220,7 @@ export class FraudService {
       }
       return false;
     } catch (error) {
-      console.error('Failed to check device fingerprint:', error);
+      logger.error('Failed to check device fingerprint:', error);
       return false;
     }
   }
@@ -534,7 +535,7 @@ export class FraudService {
       await this.transactionModel.updateStatus(transactionId, TransactionStatus.Review);
       console.log(`Transaction ${transactionId} set to Review status`);
     } catch (error) {
-      console.error(`Failed to set transaction ${transactionId} to Review:`, error);
+      logger.error(`Failed to set transaction ${transactionId} to Review:`, error);
       throw error;
     }
   }

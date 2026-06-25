@@ -1,3 +1,4 @@
+import { Request, Response, NextFunction } from 'express';
 import { UserModel } from '../models/users';
 import { is2FAEnabled, verifyTOTPToken } from '../auth/2fa';
 import { pool } from '../config/database';
@@ -201,3 +202,39 @@ export class TwoFactorWithdrawalService {
 }
 
 export const twoFactorWithdrawalService = new TwoFactorWithdrawalService();
+
+/**
+ * Express middleware that validates an OTP token before allowing a withdrawal.
+ * If the user has mandatory 2FA enabled, a valid `otpToken` or `backupCode`
+ * must be present in the request body. Unauthorized requests are rejected with 401.
+ */
+export async function validate2FAForWithdrawal(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  const userId = req.jwtUser?.userId;
+  if (!userId) {
+    res.status(401).json({ error: 'Unauthorized', message: 'Authentication required' });
+    return;
+  }
+
+  const requires2FA = await twoFactorWithdrawalService.requires2FAForWithdrawal(userId).catch(() => false);
+  if (!requires2FA) {
+    return next();
+  }
+
+  const { otpToken, backupCode } = req.body ?? {};
+  const result = await twoFactorWithdrawalService.verifyWithdrawal2FA({
+    userId,
+    token: otpToken,
+    backupCode,
+  });
+
+  if (!result.success) {
+    res.status(401).json({ error: 'Unauthorized', message: result.error ?? '2FA verification failed' });
+    return;
+  }
+
+  next();
+}

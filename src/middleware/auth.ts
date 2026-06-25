@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { Request, Response, NextFunction } from "express";
 import { verifyOAuthAccessToken } from "../auth/oauth";
 import { verifyToken, JWTPayload } from "../auth/jwt";
@@ -113,7 +114,7 @@ export const requireAuth = async (
     } catch (err) {
       // DB lookup failure — fall through to env-var check so a DB outage doesn't
       // lock out the system admin key.
-      console.error("[requireAuth] DB api_keys lookup failed:", err);
+      logger.error("[requireAuth] DB api_keys lookup failed:", err);
     }
 
     // 2. Fall back to system ADMIN_API_KEY env var

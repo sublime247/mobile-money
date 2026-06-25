@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { Router, Request, Response } from "express";
 import { z } from "zod";
 import {
@@ -147,7 +148,7 @@ authRoutes.post(
               });
             }
           } catch (emailErr) {
-            console.error(
+            logger.error(
               "[Login] Failed to send lockout notification:",
               emailErr,
             );
@@ -391,7 +392,7 @@ authRoutes.get(
           try {
             balanceStats = JSON.parse(cachedStats.toString());
           } catch (e) {
-            console.error("Error parsing cached balance stats", e);
+            logger.error("Error parsing cached balance stats", e);
           }
         } else {
           const transactionModel = new TransactionModel();

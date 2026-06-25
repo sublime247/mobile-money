@@ -1,38 +1,175 @@
 // Import the service under test
 import { LedgerService, LedgerEntry } from '../../src/services/ledgerService';
+
 // Mock the database pool to avoid real DB interactions
 jest.mock('../../src/config/database', () => ({
   pool: {
     query: jest.fn(),
+    connect: jest.fn(),
     end: jest.fn()
   }
 }));
+
+jest.mock('../../src/models/users', () => ({
+  UserModel: jest.fn().mockImplementation(() => ({
+    findById: jest.fn().mockResolvedValue({ settlementDelayDays: 0 })
+  }))
+}));
+
 import { pool } from '../../src/config/database';
+
+const buildPostedRows = (entries: LedgerEntry[]) =>
+  entries.map((entry, index) => ({
+    entry_id: `entry-${index + 1}`,
+    account_code: entry.account_code,
+    debit: String(entry.debit_amount || 0),
+    credit: String(entry.credit_amount || 0)
+  }));
+
+const buildLedgerEntryRows = (accountCode: string, transactionId?: string) => [
+  {
+    id: 'entry-1',
+    entry_date: '2026-04-15',
+    account_code: accountCode,
+    account_name: 'Test Account',
+    debit_amount: '200',
+    credit_amount: '0',
+    description: 'Test ledger entry',
+    reference_number: 'TEST-REF-011',
+    transaction_id: transactionId || null,
+    created_at: '2026-04-15T12:00:00.000Z'
+  },
+  {
+    id: 'entry-2',
+    entry_date: '2026-04-15',
+    account_code: accountCode,
+    account_name: 'Test Account',
+    debit_amount: '0',
+    credit_amount: '200',
+    description: 'Balancing ledger entry',
+    reference_number: 'TEST-REF-011',
+    transaction_id: transactionId || null,
+    created_at: '2026-04-15T12:01:00.000Z'
+  }
+];
 
 describe('LedgerService', () => {
   let ledgerService: LedgerService;
   let testTransactionId: string;
   let testUserId: string;
+  let mockClient: {
+    query: jest.Mock;
+    release: jest.Mock;
+  };
 
   beforeAll(async () => {
     ledgerService = new LedgerService();
-    // Mock pool query responses for user creation and transaction creation
-    const mockQuery = pool.query as jest.Mock;
-    mockQuery
-      .mockResolvedValueOnce({ rows: [{ id: 'mock-user-id' }] }) // userResult
-      .mockResolvedValueOnce({ rows: [{ id: 'mock-tx-id' }] }); // txResult
     testUserId = 'mock-user-id';
     testTransactionId = 'mock-tx-id';
   });
 
+  beforeEach(() => {
+    mockClient = {
+      query: jest.fn(),
+      release: jest.fn()
+    };
+
+    (pool.connect as jest.Mock).mockResolvedValue(mockClient);
+
+    mockClient.query.mockImplementation(async (queryText: string, values?: unknown[]) => {
+      if (queryText === 'BEGIN' || queryText === 'COMMIT' || queryText === 'ROLLBACK') {
+        return { rows: [] };
+      }
+
+      if (queryText.includes('SELECT * FROM post_transaction')) {
+        const entries = JSON.parse(String(values?.[4] || '[]')) as LedgerEntry[];
+
+        if (entries.some(entry => entry.account_code === 'INVALID')) {
+          throw new Error('Account not found or inactive: INVALID');
+        }
+
+        return { rows: buildPostedRows(entries) };
+      }
+
+      return { rows: [] };
+    });
+
+    (pool.query as jest.Mock).mockImplementation(async (queryText: string, values?: unknown[]) => {
+      if (queryText.includes('SELECT get_account_balance')) {
+        return { rows: [{ balance: '500' }] };
+      }
+
+      if (queryText.includes('SELECT * FROM check_ledger_balance()')) {
+        return {
+          rows: [{ total_debits: '500', total_credits: '500', difference: '0', is_balanced: true }]
+        };
+      }
+
+      if (queryText.includes('SELECT * FROM get_trial_balance')) {
+        return {
+          rows: [
+            {
+              account_code: '1100',
+              account_name: 'Mobile Money Float',
+              account_type: 'asset',
+              debit_balance: 500,
+              credit_balance: 0
+            },
+            {
+              account_code: '2000',
+              account_name: 'Customer Balances',
+              account_type: 'liability',
+              debit_balance: 0,
+              credit_balance: 500
+            }
+          ]
+        };
+      }
+
+      if (queryText.includes('FROM ledger_entries le') && queryText.includes('WHERE le.transaction_id = $1')) {
+        return { rows: buildLedgerEntryRows('1100', String(values?.[0] || testTransactionId)) };
+      }
+
+      if (queryText.includes('FROM ledger_entries le') && queryText.includes('WHERE a.code = $1')) {
+        return { rows: buildLedgerEntryRows(String(values?.[0] || '1100')) };
+      }
+
+      if (queryText.includes('UPDATE ledger_entries') || queryText.includes('DELETE FROM ledger_entries')) {
+        throw new Error('Ledger entries are immutable and cannot be modified or deleted');
+      }
+
+      if (queryText.includes('SELECT refresh_account_balances()')) {
+        return { rows: [] };
+      }
+
+      if (queryText.includes('SELECT * FROM account_balances')) {
+        return {
+          rows: [
+            {
+              account_id: 'account-1',
+              code: '1100',
+              name: 'Mobile Money Float',
+              type: 'asset',
+              normal_balance: 'debit',
+              total_debits: '500',
+              total_credits: '0',
+              balance: '500',
+              last_entry_at: new Date('2026-04-15T12:00:00.000Z')
+            }
+          ]
+        };
+      }
+
+      return { rows: [] };
+    });
+  });
+
   afterAll(async () => {
-    // End mock pool
     await pool.end();
   });
 
   afterEach(() => {
-    // Reset mock calls between tests
-    (pool.query as jest.Mock).mockReset();
+    jest.clearAllMocks();
   });
 
   describe('postTransaction', () => {
@@ -155,10 +292,110 @@ describe('LedgerService', () => {
       );
 
       expect(result).toHaveLength(3);
-      
+
       const totalDebits = result.reduce((sum, e) => sum + e.debit, 0);
       const totalCredits = result.reduce((sum, e) => sum + e.credit, 0);
       expect(totalDebits).toBe(totalCredits);
+    });
+
+    it('should reject zero-amount transactions', async () => {
+      const entries: LedgerEntry[] = [
+        {
+          account_code: '1100',
+          debit_amount: 0
+        },
+        {
+          account_code: '2000',
+          credit_amount: 0
+        }
+      ];
+
+      await expect(
+        ledgerService.postTransaction(
+          'TEST-REF-014',
+          'Zero amount test',
+          entries,
+          testTransactionId,
+          testUserId
+        )
+      ).rejects.toThrow(/exactly one non-zero amount/i);
+
+      expect(pool.connect).not.toHaveBeenCalled();
+    });
+
+    it('should reject entries with both debit and credit amounts', async () => {
+      const entries: LedgerEntry[] = [
+        {
+          account_code: '1100',
+          debit_amount: 100,
+          credit_amount: 10
+        },
+        {
+          account_code: '2000',
+          credit_amount: 90
+        }
+      ];
+
+      await expect(
+        ledgerService.postTransaction(
+          'TEST-REF-015',
+          'Invalid sided entry test',
+          entries,
+          testTransactionId,
+          testUserId
+        )
+      ).rejects.toThrow(/exactly one non-zero amount/i);
+
+      expect(pool.connect).not.toHaveBeenCalled();
+    });
+
+    it('should reject entries with neither debit nor credit amounts', async () => {
+      const entries: LedgerEntry[] = [
+        {
+          account_code: '1100'
+        },
+        {
+          account_code: '2000',
+          credit_amount: 100
+        }
+      ];
+
+      await expect(
+        ledgerService.postTransaction(
+          'TEST-REF-016',
+          'Missing amount test',
+          entries,
+          testTransactionId,
+          testUserId
+        )
+      ).rejects.toThrow(/exactly one non-zero amount/i);
+
+      expect(pool.connect).not.toHaveBeenCalled();
+    });
+
+    it('should reject balanced zero-total transactions before opening a database connection', async () => {
+      const entries: LedgerEntry[] = [
+        {
+          account_code: '1100',
+          debit_amount: 0.00000001
+        },
+        {
+          account_code: '2000',
+          credit_amount: 0.00000001
+        }
+      ];
+
+      await expect(
+        ledgerService.postTransaction(
+          'TEST-REF-017',
+          'Near-zero amount test',
+          entries,
+          testTransactionId,
+          testUserId
+        )
+      ).rejects.toThrow(/transaction amounts cannot be zero/i);
+
+      expect(pool.connect).not.toHaveBeenCalled();
     });
   });
 

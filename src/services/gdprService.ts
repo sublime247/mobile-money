@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import crypto from "node:crypto";
 import { PassThrough } from "node:stream";
 import archiver from "archiver";
@@ -21,6 +22,31 @@ export class GDPRService {
 
   constructor() {
     this.txService = new TransactionService(new TransactionModel());
+  }
+
+  private serializeUser(user: User) {
+    return {
+      id: user.id,
+      phone_number: user.phone_number,
+      kyc_level: user.kyc_level,
+      role_name: user.role_name ?? null,
+      display_name: user.display_name ?? null,
+      created_at: user.created_at,
+      updated_at: user.updated_at,
+    };
+  }
+
+  private serializeTransaction(tx: Transaction) {
+    return {
+      id: tx.id,
+      referenceNumber: tx.referenceNumber,
+      type: tx.type,
+      amount: tx.amount,
+      provider: tx.provider,
+      status: tx.status,
+      createdAt: tx.createdAt,
+      updatedAt: tx.updatedAt,
+    };
   }
 
   /**
@@ -48,10 +74,10 @@ export class GDPRService {
       archive.pipe(passthrough);
 
       // Append each export file directly as in-memory buffers — no disk I/O.
-      archive.append(Buffer.from(JSON.stringify(user, null, 2), "utf8"), {
+      archive.append(Buffer.from(JSON.stringify(this.serializeUser(user!), null, 2), "utf8"), {
         name: "profile.json",
       });
-      archive.append(Buffer.from(JSON.stringify(txs, null, 2), "utf8"), {
+      archive.append(Buffer.from(JSON.stringify(txs.map(tx => this.serializeTransaction(tx)), null, 2), "utf8"), {
         name: "transactions.json",
       });
 
@@ -145,7 +171,7 @@ export class GDPRService {
       // Disable/deactivate user account
       await this.deactivateUserAccount(userId);
     } catch (err) {
-      console.error("Erasure error:", err);
+      logger.error("Erasure error:", err);
       throw err;
     }
   }
@@ -178,7 +204,7 @@ export class GDPRService {
         await this.purgeUserData(row.id);
         usersPurged++;
       } catch (err) {
-        console.error(`[GDPR] Failed to purge expired user ${row.id}:`, err);
+        logger.error(`[GDPR] Failed to purge expired user ${row.id}:`, err);
       }
     }
 
@@ -203,7 +229,7 @@ export class GDPRService {
         );
         transactionsAnonymized++;
       } catch (err) {
-        console.error(
+        logger.error(
           `[GDPR] Failed to anonymize expired transaction ${row.id}:`,
           err,
         );
@@ -240,7 +266,7 @@ export class GDPRService {
         }
       }
     } catch (err) {
-      console.error("S3 deletion error for user", userId, err);
+      logger.error("S3 deletion error for user", userId, err);
     }
   }
 

@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 /**
  * Compliance Controller — Travel Rule check endpoint.
  *
@@ -89,7 +90,7 @@ export async function travelRuleCheckHandler(
       },
     });
   } catch (err) {
-    console.error(
+    logger.error(
       "[compliance] travel-rule check failed:",
       err instanceof Error ? err.message : err,
     );

@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import NodeCache from "node-cache";
 import { redisClient } from "../config/redis";
 
@@ -43,7 +44,7 @@ export class LayeredCache {
         this.isInitialized = true;
         console.log("[LayeredCache] Initialized L1 invalidation subscriber");
       } catch (err) {
-        console.error("[LayeredCache] Failed to initialize subscriber", err);
+        logger.error("[LayeredCache] Failed to initialize subscriber", err);
       }
     }
   }
@@ -163,7 +164,7 @@ export class LayeredCache {
       if (isStale) {
         // Background refresh for stale data (0-latency return of stale data)
         this.revalidateSwr(key, fetcher, totalTtlSec, options.freshTtlSec).catch((err) => {
-          console.error(`[LayeredCache] SWR background revalidation failed for key: ${key}`, err);
+          logger.error(`[LayeredCache] SWR background revalidation failed for key: ${key}`, err);
         });
       }
       return cached.data;

@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import axios from "axios";
 import {
   CurrencyCode,
@@ -143,7 +144,7 @@ export async function captureSnapshot(at: Date = new Date()): Promise<CaptureRes
     );
   } catch (err) {
     errors.push({ pair: "XLM/USD", message: (err as Error).message });
-    console.error("[priceTicker] XLM/USD fetch failed:", (err as Error).message);
+    logger.error("[priceTicker] XLM/USD fetch failed:", (err as Error).message);
   }
 
   // Step 2: USD / XAF (exchangerate-api)
@@ -161,7 +162,7 @@ export async function captureSnapshot(at: Date = new Date()): Promise<CaptureRes
     );
   } catch (err) {
     errors.push({ pair: "USD/XAF", message: (err as Error).message });
-    console.error("[priceTicker] USD/XAF fetch failed:", (err as Error).message);
+    logger.error("[priceTicker] USD/XAF fetch failed:", (err as Error).message);
   }
 
   // Step 3: XLM / XAF (derived). Only persisted when both legs succeeded this

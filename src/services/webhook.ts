@@ -3,6 +3,7 @@ import { webhookPayloadSchema, flatWebhookPayloadSchema } from "./webhookSchema"
 import { gzip } from "zlib";
 import { promisify } from "util";
 import { Transaction, WebhookDeliveryUpdate } from "../models/transaction";
+import { enqueueWebhookRetry } from "../queue/webhookRetryQueue";
 
 const gzipAsync = promisify(gzip);
 
@@ -179,6 +180,14 @@ export class WebhookService {
     this.compress = options.compress ?? (process.env.WEBHOOK_COMPRESSION === "true");
     // Zod schemas for payload validation
     // Imported lazily to avoid circular dependencies
+  }
+
+  getWebhookUrl(): string {
+    return this.webhookUrl;
+  }
+
+  getWebhookSecret(): string {
+    return this.webhookSecret;
   }
 
   buildPayload(event: WebhookEvent, transaction: Transaction): WebhookPayload {
@@ -463,6 +472,20 @@ export class WebhookService {
             lastAttemptAt: now,
             errorMessage: `Exhausted retries: ${errorMessage}`,
           });
+
+          // Enqueue to BullMQ retry queue for persistent retry
+          if (this.getWebhookUrl() && this.getWebhookSecret()) {
+            const isFlat = "event_id" in entry.payload;
+            await enqueueWebhookRetry({
+              webhookId: entry.id,
+              userId: "",
+              url: this.getWebhookUrl(),
+              secret: this.getWebhookSecret(),
+              eventType: entry.eventType,
+              payload: entry.payload as unknown as Record<string, unknown>,
+              useFlatPayload: isFlat,
+            });
+          }
         } else {
           const backoffMs = this.baseDelayMs * Math.pow(2, attempts - 1);
           await outboxModel.update(entry.id, {
@@ -503,6 +526,23 @@ export async function notifyTransactionWebhook(
     return null;
   }
   const result = await webhookService.sendTransactionEvent(event, transaction);
+
+  // Enqueue to BullMQ retry queue if delivery failed
+  if (
+    result.status === "failed" &&
+    webhookService.getWebhookUrl() &&
+    webhookService.getWebhookSecret()
+  ) {
+    await enqueueWebhookRetry({
+      webhookId: transactionId,
+      userId: transaction.userId || "",
+      url: webhookService.getWebhookUrl(),
+      secret: webhookService.getWebhookSecret(),
+      eventType: event,
+      payload: webhookService.buildPayload(event, transaction) as unknown as Record<string, unknown>,
+      useFlatPayload: false,
+    });
+  }
 
   // Guard clause added here
   if (
@@ -570,6 +610,23 @@ export async function notifyFlatTransactionWebhook(
     event,
     transaction,
   );
+
+  // Enqueue to BullMQ retry queue if delivery failed
+  if (
+    result.status === "failed" &&
+    webhookService.getWebhookUrl() &&
+    webhookService.getWebhookSecret()
+  ) {
+    await enqueueWebhookRetry({
+      webhookId: transactionId,
+      userId: transaction.userId || "",
+      url: webhookService.getWebhookUrl(),
+      secret: webhookService.getWebhookSecret(),
+      eventType: event,
+      payload: webhookService.buildFlatPayload(event, transaction) as unknown as Record<string, unknown>,
+      useFlatPayload: true,
+    });
+  }
 
   // Guard clause added here
   if (

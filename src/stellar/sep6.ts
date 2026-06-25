@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { Router, Request, Response } from "express";
 import { v4 as uuidv4 } from "uuid";
 import { StrKey } from "stellar-sdk";
@@ -127,7 +128,7 @@ export const createSep6Router = (db: Pool): Router => {
         }
       });
     } catch (error: any) {
-      console.error("[SEP-6 Deposit Error]:", error);
+      logger.error("[SEP-6 Deposit Error]:", error);
       res.status(500).json({ error: "Internal Server Error" });
     }
   });
@@ -187,7 +188,7 @@ export const createSep6Router = (db: Pool): Router => {
         fee_fixed: 0.5,
       });
     } catch (error: any) {
-      console.error("[SEP-6 Withdraw Error]:", error);
+      logger.error("[SEP-6 Withdraw Error]:", error);
       res.status(500).json({ error: "Internal Server Error" });
     }
   });

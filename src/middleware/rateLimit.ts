@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { Request, Response, NextFunction } from "express";
 import { redisClient } from "../config/redis";
 
@@ -74,7 +75,7 @@ async function checkRateLimit(
 
     return { allowed, remaining, resetTime };
   } catch (error) {
-    console.error("Rate limit Redis error:", error);
+    logger.error("Rate limit Redis error:", error);
     // Fallback to in-memory if Redis fails
     return checkRateLimitInMemory(key, limit, windowMs);
   }
@@ -112,7 +113,7 @@ function checkRateLimitInMemory(
  * Log high-severity events
  */
 const logHighSeverity = (message: string, context: Record<string, unknown>) => {
-  console.error(`[RATE_LIMIT_BREACH] HIGH SEVERITY: ${message}`, {
+  logger.error(`[RATE_LIMIT_BREACH] HIGH SEVERITY: ${message}`, {
     timestamp: new Date().toISOString(),
     ...context,
   });
@@ -254,7 +255,7 @@ async function checkSlidingWindowRateLimit(
       resetTime,
     };
   } catch (error) {
-    console.error("Cancellation rate limit Redis error:", error);
+    logger.error("Cancellation rate limit Redis error:", error);
     return {
       allowed: true,
       remaining: limit,

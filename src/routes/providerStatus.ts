@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { Router, Request, Response } from "express";
 import { getProvidersStatus } from "../services/providerStatusService";
 
@@ -18,7 +19,7 @@ router.get("/", async (_req: Request, res: Response) => {
     const result = await getProvidersStatus();
     res.json(result);
   } catch (err) {
-    console.error("[provider-status] Failed to fetch provider status", err);
+    logger.error("[provider-status] Failed to fetch provider status", err);
     res.status(500).json({ error: "Failed to fetch provider status" });
   }
 });

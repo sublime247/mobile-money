@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { pool, queryRead, queryWrite } from "../config/database";
 
 export interface RefreshTokenFamily {
@@ -84,7 +85,7 @@ export class RefreshTokenFamilyModel {
       };
     } catch (err: any) {
       await client.query("ROLLBACK");
-      console.error(err);
+      logger.error(err);
 
       throw err;
     } finally {
@@ -149,7 +150,7 @@ export class RefreshTokenFamilyModel {
       };
     } catch (err: any) {
       await client.query("ROLLBACK");
-      console.error("Error revoking all tokens:", err);
+      logger.error("Error revoking all tokens:", err);
 
       throw err.message;
     } finally {

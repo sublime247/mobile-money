@@ -1,0 +1,8 @@
+{
+  "title": "Mobile Money API",
+  "items": [
+    { "to": "/", "label": "Vue d'ensemble" },
+    { "to": "/api", "label": "Référence" },
+    { "href": "https://github.com/sublime247/mobile-money", "label": "GitHub" }
+  ]
+}

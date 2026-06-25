@@ -13,6 +13,9 @@ export interface AppConfig {
   providers: {
     airtel: {
       baseUrl: string;
+      webBaseUrl?: string;
+      directBaseUrl?: string;
+      sandboxBaseUrl?: string;
       apiKey: string;
       apiSecret: string;
     };

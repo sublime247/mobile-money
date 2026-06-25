@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { Router, Request, Response } from "express";
 import { z } from "zod";
 import {
@@ -211,7 +212,7 @@ router.post("/estimate", async (req: Request, res: Response) => {
       });
     }
 
-    console.error("Fee estimation error:", error);
+    logger.error("Fee estimation error:", error);
     throw createError(ERROR_CODES.INTERNAL_ERROR, "Failed to estimate fee", {
       success: false,
       error: "Failed to estimate fee",
@@ -242,7 +243,7 @@ router.post("/calculate", async (req: Request, res: Response) => {
       });
     }
 
-    console.error("Fee calculation error:", error);
+    logger.error("Fee calculation error:", error);
     throw createError(ERROR_CODES.INTERNAL_ERROR, "Failed to calculate fee", {
       success: false,
       error: "Failed to calculate fee",
@@ -267,7 +268,7 @@ router.get(
         data: configurations,
       });
     } catch (error: any) {
-      console.error("Get configurations error:", error);
+      logger.error("Get configurations error:", error);
       throw createError(
         ERROR_CODES.INTERNAL_ERROR,
         "Failed to fetch fee configurations",
@@ -293,7 +294,7 @@ router.get("/configurations/active", async (req: Request, res: Response) => {
       data: activeConfig,
     });
   } catch (error: any) {
-    console.error("Get active configuration error:", error);
+    logger.error("Get active configuration error:", error);
     throw createError(
       ERROR_CODES.INTERNAL_ERROR,
       "Failed to fetch fee configurations",
@@ -336,7 +337,7 @@ router.get(
         data: configuration,
       });
     } catch (error: any) {
-      console.error("Get configuration error:", error);
+      logger.error("Get configuration error:", error);
       throw createError(
         ERROR_CODES.INTERNAL_ERROR,
         "Failed to fetch fee configuration",
@@ -393,7 +394,7 @@ router.post(
         );
       }
 
-      console.error("Create configuration error:", error);
+      logger.error("Create configuration error:", error);
       throw createError(
         ERROR_CODES.INTERNAL_ERROR,
         "Failed to create fee configuration",
@@ -450,7 +451,7 @@ router.put(
         });
       }
 
-      console.error("Update configuration error:", error);
+      logger.error("Update configuration error:", error);
       throw createError(
         ERROR_CODES.INTERNAL_ERROR,
         "Failed to update fee configuration",
@@ -505,7 +506,7 @@ router.delete(
         });
       }
 
-      console.error("Delete configuration error:", error);
+      logger.error("Delete configuration error:", error);
       throw createError(
         ERROR_CODES.INTERNAL_ERROR,
         "Failed to delete fee configuration",
@@ -555,7 +556,7 @@ router.post(
         message: "Fee configuration activated successfully",
       });
     } catch (error: any) {
-      console.error("Activate configuration error:", error);
+      logger.error("Activate configuration error:", error);
       throw createError(
         ERROR_CODES.INTERNAL_ERROR,
         "Failed to activate fee configuration",
@@ -587,7 +588,7 @@ router.get(
         data: auditHistory,
       });
     } catch (error: any) {
-      console.error("Get audit history error:", error);
+      logger.error("Get audit history error:", error);
       throw createError(
         ERROR_CODES.INTERNAL_ERROR,
         "Failed to fetch audit history",

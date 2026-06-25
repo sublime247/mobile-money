@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { AirtelService } from "../services/mobilemoney/providers/airtel";
 import { MTNProvider } from "../services/mobilemoney/providers/mtn";
 
@@ -71,7 +72,7 @@ async function fetchProviderBalance(
   const result = await fetchBalance();
 
   if (!result.success || !result.data) {
-    console.error(
+    logger.error(
       `[balances] Failed to fetch ${provider.toUpperCase()} balance: ${toErrorMessage(result.error)}`,
     );
     return null;
@@ -150,7 +151,7 @@ export async function runProviderBalanceAlertJob(): Promise<void> {
     try {
       await postAlert(webhookUrl, payload);
     } catch (error) {
-      console.error(
+      logger.error(
         `[balances] Failed to send balance alert to ${webhookUrl}: ${toErrorMessage(error)}`,
       );
     }

@@ -106,33 +106,12 @@ services:
       start_period: 30s
 
   # ---------------------------------------------------------------------------
-  # Application (live reload via ts-node-dev)
+  # Loki (log aggregation)
   # ---------------------------------------------------------------------------
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
-    container_name: mobilemoney_app
+  loki:
+    image: grafana/loki:latest
+    container_name: mobilemoney_loki
     restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      maildev:
-        condition: service_healthy
-      stellar:
-        condition: service_healthy
-    env_file:
-      - .env
-    environment:
-      # Override the localhost URLs from .env to use Docker service names
-      DATABASE_URL: postgresql://user:password@postgres:5432/mobilemoney_stellar
-      REDIS_URL: redis://redis:6379
-      SMTP_HOST: maildev
-      SMTP_PORT: 1025
-      STELLAR_HORIZON_URL: http://stellar:8000
-      STELLAR_NETWORK: local
     ports:
       - "3100:3100"
     volumes:
@@ -157,8 +136,33 @@ services:
     ports:
       - "3001:3000"
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD:-admin}
       - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
+      # ── Azure AD / Entra OAuth SSO ────────────────────────────────────
+      - GF_AUTH_AZUREAD_ENABLED=${GF_AUTH_AZUREAD_ENABLED:-false}
+      - GF_AUTH_AZUREAD_CLIENT_ID=${GF_AUTH_AZUREAD_CLIENT_ID:-}
+      - GF_AUTH_AZUREAD_CLIENT_SECRET=${GF_AUTH_AZUREAD_CLIENT_SECRET:-}
+      - GF_AUTH_AZUREAD_AUTH_URL=${GF_AUTH_AZUREAD_AUTH_URL:-}
+      - GF_AUTH_AZUREAD_TOKEN_URL=${GF_AUTH_AZUREAD_TOKEN_URL:-}
+      - GF_AUTH_AZUREAD_ALLOW_SIGN_UP=${GF_AUTH_AZUREAD_ALLOW_SIGN_UP:-true}
+      - GF_AUTH_AZUREAD_AUTO_LOGIN=${GF_AUTH_AZUREAD_AUTO_LOGIN:-false}
+      - GF_AUTH_AZUREAD_ROLE_ATTRIBUTE_STRICT=${GF_AUTH_AZUREAD_ROLE_ATTRIBUTE_STRICT:-false}
+      - GF_AUTH_AZUREAD_SCOPES=${GF_AUTH_AZUREAD_SCOPES:-openid email profile}
+      # ── Role mapping via Azure AD group claims ────────────────────────
+      - GF_AUTH_AZUREAD_ROLE_ATTRIBUTE_PATH=${GF_AUTH_AZUREAD_ROLE_ATTRIBUTE_PATH:-}
+      - GF_AUTH_AZUREAD_ALLOW_ASSIGN_GRAFANA_ADMIN=${GF_AUTH_AZUREAD_ALLOW_ASSIGN_GRAFANA_ADMIN:-false}
+      - GF_AUTH_AZUREAD_SKIP_ORG_ROLE_SYNC=${GF_AUTH_AZUREAD_SKIP_ORG_ROLE_SYNC:-false}
+      - GF_AUTH_AZUREAD_NAME=${GF_AUTH_AZUREAD_NAME:-Azure AD}
+      # ── Access control ───────────────────────────────────────────────
+      - GF_AUTH_AZUREAD_ALLOWED_DOMAINS=${GF_AUTH_AZUREAD_ALLOWED_DOMAINS:-}
+      - GF_AUTH_AZUREAD_ALLOWED_GROUPS=${GF_AUTH_AZUREAD_ALLOWED_GROUPS:-}
+      - GF_SERVER_ROOT_URL=${GF_SERVER_ROOT_URL:-http://localhost:3001}
+      # ── Global auth hardening ─────────────────────────────────────────
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+      - GF_AUTH_BASIC_ENABLED=true
+      - GF_AUTH_DISABLE_LOGIN_FORM=${GF_AUTH_DISABLE_LOGIN_FORM:-false}
+      - GF_AUTH_OAUTH_AUTO_LOGIN=${GF_AUTH_OAUTH_AUTO_LOGIN:-false}
+      - GF_AUTH_SIGNOUT_REDIRECT_URL=${GF_AUTH_SIGNOUT_REDIRECT_URL:-}
     volumes:
       - grafana_data:/var/lib/grafana
       - ./logging/grafana/provisioning:/etc/grafana/provisioning

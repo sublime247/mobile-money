@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import IORedis from "ioredis";
 import { SubscriptionChannels } from "../graphql/subscriptions";
 import { notificationRouter } from "../services/notificationRouter";
@@ -31,7 +32,7 @@ export async function startNotificationWorker(): Promise<void> {
 
   subscriber.on("connect", () => console.log("NotificationWorker: Redis connected"));
   subscriber.on("error", (err) =>
-    console.error("NotificationWorker: Redis error:", err),
+    logger.error("NotificationWorker: Redis error:", err),
   );
 
   await subscriber.connect();
@@ -62,7 +63,7 @@ export async function startNotificationWorker(): Promise<void> {
         await notificationRouter.routeTransactionNotification(tx, "failed", payload.error);
       }
     } catch (err) {
-      console.error("NotificationWorker: failed to handle message:", err);
+      logger.error("NotificationWorker: failed to handle message:", err);
     }
   });
 
@@ -91,7 +92,7 @@ export async function startNotificationWorker(): Promise<void> {
           await notificationRouter.routeTransactionNotification(tx, "failed", payload.error);
         }
       } catch (err) {
-        console.error("NotificationWorker: failed to handle pmessage:", err);
+        logger.error("NotificationWorker: failed to handle pmessage:", err);
       }
     },
   );

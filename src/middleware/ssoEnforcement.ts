@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 import { Request, Response, NextFunction } from "express";
 import { ssoService } from "../auth/sso";
 import { ssoConfig } from "../config/sso";
@@ -52,7 +53,7 @@ export async function enforceSSOOnly(
 
     next();
   } catch (error) {
-    console.error("[SSO Enforcement] Error checking SSO-only status:", error);
+    logger.error("[SSO Enforcement] Error checking SSO-only status:", error);
     // Don't block request on error, just continue
     next();
   }
@@ -131,7 +132,7 @@ export async function checkSSOUserStatus(
 
     next();
   } catch (error) {
-    console.error("[SSO Enforcement] Error checking SSO user status:", error);
+    logger.error("[SSO Enforcement] Error checking SSO user status:", error);
     // Don't block request on error, just continue
     next();
   }
@@ -163,7 +164,7 @@ export async function attachSSOContext(
 
     next();
   } catch (error) {
-    console.error("[SSO Enforcement] Error attaching SSO context:", error);
+    logger.error("[SSO Enforcement] Error attaching SSO context:", error);
     // Don't block request on error, just continue
     next();
   }
@@ -210,7 +211,7 @@ export async function validateSSOProvider(
     (req as any).ssoProvider = provider;
     next();
   } catch (error) {
-    console.error("[SSO Enforcement] Error validating SSO provider:", error);
+    logger.error("[SSO Enforcement] Error validating SSO provider:", error);
     res.status(500).json({
       error: "SSO provider validation failed",
       message: error instanceof Error ? error.message : "Unknown error",
@@ -248,7 +249,7 @@ export function logSSOEvent(
         );
       }
     } catch (error) {
-      console.error("[SSO Enforcement] Error logging SSO event:", error);
+      logger.error("[SSO Enforcement] Error logging SSO event:", error);
       // Don't block request on error
     }
 

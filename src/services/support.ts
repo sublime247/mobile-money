@@ -1,3 +1,4 @@
+import logger from "../utils/logger";
 /**
  * SupportService — Zendesk/Intercom API Integration
  *
@@ -325,7 +326,7 @@ ${formatTransactionDetails(transaction)}
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown Zendesk error";
-    console.error("[SupportService] Zendesk ticket creation failed:", message);
+    logger.error("[SupportService] Zendesk ticket creation failed:", message);
 
     return {
       success: false,
@@ -443,7 +444,7 @@ _Transaction ID: ${transaction.transactionId}_
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown Intercom error";
-    console.error("[SupportService] Intercom conversation creation failed:", message);
+    logger.error("[SupportService] Intercom conversation creation failed:", message);
 
     return {
       success: false,
