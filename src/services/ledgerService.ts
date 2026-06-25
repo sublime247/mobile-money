@@ -298,7 +298,7 @@ export class LedgerService {
       transactionId,
       userId,
       currency,
-      amountConversion.rate,
+      amountConversion.rate
     );
   }
 
