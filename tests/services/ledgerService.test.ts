@@ -437,6 +437,56 @@ describe('LedgerService', () => {
     });
   });
 
+  describe('postDepositWithCurrency', () => {
+    it('should post a deposit transaction in GHS correctly', async () => {
+      // 150 GHS with 15 GHS fee.
+      // With fallback rates: GHS = 15. So 150 GHS = 10 USD, 15 GHS fee = 1 USD.
+      const result = await ledgerService.postDepositWithCurrency(
+        150,
+        15,
+        'GHS',
+        'TEST-REF-GHS-001',
+        testTransactionId,
+        testUserId
+      );
+
+      expect(result).toHaveLength(3);
+      
+      const floatEntry = result.find(e => e.account_code === '1100');
+      expect(floatEntry?.debit).toBe(10); // 150 / 15 = 10 USD
+
+      const customerEntry = result.find(e => e.account_code === '2000');
+      expect(customerEntry?.credit).toBe(9); // (150 - 15) / 15 = 9 USD
+
+      const feeEntry = result.find(e => e.account_code === '4100');
+      expect(feeEntry?.credit).toBe(1); // 15 / 15 = 1 USD
+    });
+
+    it('should post a deposit transaction in NGN correctly', async () => {
+      // 3100 NGN with 155 NGN fee.
+      // With fallback rates: NGN = 1550. So 3100 NGN = 2 USD, 155 NGN fee = 0.1 USD.
+      const result = await ledgerService.postDepositWithCurrency(
+        3100,
+        155,
+        'NGN',
+        'TEST-REF-NGN-001',
+        testTransactionId,
+        testUserId
+      );
+
+      expect(result).toHaveLength(3);
+      
+      const floatEntry = result.find(e => e.account_code === '1100');
+      expect(floatEntry?.debit).toBe(2);
+
+      const customerEntry = result.find(e => e.account_code === '2000');
+      expect(customerEntry?.credit).toBe(1.9);
+
+      const feeEntry = result.find(e => e.account_code === '4100');
+      expect(feeEntry?.credit).toBe(0.1);
+    });
+  });
+
   describe('postWithdrawal', () => {
     it('should post a withdrawal transaction correctly', async () => {
       const result = await ledgerService.postWithdrawal(
@@ -460,6 +510,32 @@ describe('LedgerService', () => {
       // Check credit to Fee Revenue
       const feeEntry = result.find(e => e.account_code === '4200');
       expect(feeEntry?.credit).toBe(5);
+    });
+  });
+
+  describe('postWithdrawalWithCurrency', () => {
+    it('should post a withdrawal transaction in GHS correctly', async () => {
+      // 150 GHS with 15 GHS fee.
+      // With fallback rates: GHS = 15. So 150 GHS = 10 USD, 15 GHS fee = 1 USD.
+      const result = await ledgerService.postWithdrawalWithCurrency(
+        150,
+        15,
+        'GHS',
+        'TEST-REF-GHS-WD-001',
+        testTransactionId,
+        testUserId
+      );
+
+      expect(result).toHaveLength(3);
+      
+      const customerEntry = result.find(e => e.account_code === '2000');
+      expect(customerEntry?.debit).toBe(11);
+
+      const floatEntry = result.find(e => e.account_code === '1100');
+      expect(floatEntry?.credit).toBe(10);
+
+      const feeEntry = result.find(e => e.account_code === '4200');
+      expect(feeEntry?.credit).toBe(1);
     });
   });
 

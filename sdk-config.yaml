@@ -16,3 +16,7 @@ additionalProperties:
   useRxJava3: false
   useAndroidMavenGradlePlugin: true
   androidSupport: true
+  dynamicTokenMapping:
+    script: generate_token.sh
+    args: []
+
