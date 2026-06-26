@@ -217,3 +217,10 @@ export const systemHeartbeat = new Gauge({
   labelNames: ["service"],
   registers: [register],
 });
+
+export const kycRequestsTotal = new Counter({
+  name: "kyc_requests_total",
+  help: "Total number of KYC related requests",
+  labelNames: ["operation", "status"],
+  registers: [register],
+});
