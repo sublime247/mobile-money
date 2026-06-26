@@ -9,6 +9,14 @@ import {
   ValidationError,
 } from "../services/accounting/accountingService";
 import { pool } from "../config/database";
+import logger from "../utils/logger";
+import { addAccountingRetryJob } from "./accountingRetryQueue";
+import { natsManager, NATS_QUEUE_ENABLED, type JsMsg } from "./nats";
+
+const SYNC_CONCURRENCY = 5;
+const NATS_SYNC_SUBJECT = process.env.NATS_SYNC_SUBJECT || "accounting.sync";
+const NATS_SYNC_DURABLE_CONSUMER = process.env.NATS_SYNC_DURABLE_CONSUMER || "accounting-sync-consumer";
+const NATS_SYNC_CONSUMER_GROUP = process.env.NATS_SYNC_CONSUMER_GROUP || "accounting-sync-group";
 
 // Create instance of our Accounting Service
 export const accountingService = new AccountingService();

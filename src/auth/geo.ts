@@ -59,6 +59,10 @@ async function getGeoReader(): Promise<MaxmindReader | null> {
   return readerPromise;
 }
 
+export function resetGeoReader(): void {
+  readerPromise = null;
+}
+
 function getSanctionedCountries(): Set<string> {
   const configured = parseCsv(process.env.GEO_SANCTIONED_COUNTRIES);
 

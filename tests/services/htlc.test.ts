@@ -23,11 +23,11 @@ describe("HtlcService", () => {
     const params = {
       senderAddress: "GBAF7YV6T7YV6T7YV6T7YV6T7YV6T7YV6T7YV6T7YV6T7YV6T7YV6T7", // Placeholder
       receiverAddress: "GBAF7YV6T7YV6T7YV6T7YV6T7YV6T7YV6T7YV6T7YV6T7YV6T7YV6T7",
-      tokenAddress: "CDW7YV6T7YV6T7YV6T7YV6T7YV6T7YV6T7YV6T7YV6T7YV6T7YV6T7",
+      tokenAddress: "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB2XJ",
       amount: "100",
       hashlock: "0".repeat(64),
       timelock: 2000,
-      contractId: "CDW7YV6T7YV6T7YV6T7YV6T7YV6T7YV6T7YV6T7YV6T7YV6T7YV6T7",
+      contractId: "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB2XJ",
     };
 
     const tx = await htlcService.buildLockTx(params);
@@ -40,7 +40,7 @@ describe("HtlcService", () => {
     const params = {
       claimerAddress: "GBAF7YV6T7YV6T7YV6T7YV6T7YV6T7YV6T7YV6T7YV6T7YV6T7YV6T7",
       preimage: "0".repeat(64),
-      contractId: "CDW7YV6T7YV6T7YV6T7YV6T7YV6T7YV6T7YV6T7YV6T7YV6T7YV6T7",
+      contractId: "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB2XJ",
     };
 
     const tx = await htlcService.buildClaimTx(params);

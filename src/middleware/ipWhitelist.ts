@@ -86,7 +86,7 @@ export const ipWhitelist = async (
     }
 
     // 2. Impossible Travel Check for Providers
-    const providerId = req.params.provider || req.body.provider || req.headers["x-provider-id"];
+    const providerId = req.params.provider || req.body?.provider || req.headers["x-provider-id"];
 
     if (providerId && geo.status === "resolved") {
       const cacheKey = `provider:geofence:location:${providerId}`;

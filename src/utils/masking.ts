@@ -12,9 +12,7 @@ export function maskPhoneNumber(phone: string): string {
   if (cleaned.length <= 6) return cleaned;
   const prefix = cleaned.slice(0, 4);
   const suffix = cleaned.slice(-2);
-  const middleLen = Math.max(0, cleaned.length - prefix.length - suffix.length);
-  const stars = "*".repeat(middleLen);
-  return `${prefix}${stars}${suffix}`;
+  return `${prefix}***${suffix}`;
 }
 
 /**

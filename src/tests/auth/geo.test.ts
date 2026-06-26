@@ -10,13 +10,15 @@ function makeRequest(ip: string): Request {
 describe('evaluateGeoLoginAccess', () => {
   const previousEnv = { ...process.env };
 
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.resetModules();
     jest.clearAllMocks();
     process.env = { ...previousEnv };
     delete process.env.MAXMIND_GEOIP_DB_PATH;
     delete process.env.GEO_WHITELIST_IPS;
     delete process.env.GEO_SANCTIONED_COUNTRIES;
+    const { resetGeoReader } = await import('../../auth/geo');
+    resetGeoReader();
   });
 
   afterAll(() => {
