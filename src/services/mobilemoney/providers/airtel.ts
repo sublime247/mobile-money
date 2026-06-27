@@ -93,6 +93,15 @@ interface AirtelProviderOptions extends Partial<AirtelProviderConfig> {
 const DEFAULT_SESSION_TTL_MS = 20 * 60 * 1000;
 const DEFAULT_REFRESH_SKEW_MS = 60 * 1000;
 
+// East Africa Airtel markets and their mandatory currencies.
+// Mixing a Central/West Africa currency (e.g. XAF, NGN) with an East Africa
+// country code (or vice versa) causes silent failures at the Airtel API layer.
+const EAST_AFRICA_COUNTRY_CURRENCIES: Record<string, string> = {
+  KE: "KES",
+  TZ: "TZS",
+  UG: "UGX",
+};
+
 // ============================================================================
 // AIRTEL SERVICE
 // ============================================================================
@@ -191,6 +200,19 @@ export class AirtelService {
       case "TZ": return "TZS";
       case "NG": return "NGN";
       default: return "NGN";
+    }
+  }
+
+  private validateEastAfricaCurrency(): void {
+    const country = this.countryCode.toUpperCase();
+    const expectedCurrency = EAST_AFRICA_COUNTRY_CURRENCIES[country];
+    if (!expectedCurrency) return;
+    if (this.currency !== expectedCurrency) {
+      throw new Error(
+        `Airtel East Africa: country "${country}" requires currency "${expectedCurrency}" ` +
+        `but is configured with "${this.currency}". ` +
+        `Set AIRTEL_CURRENCY_${country}=${expectedCurrency} or pass currency: "${expectedCurrency}" in options.`,
+      );
     }
   }
 
@@ -304,6 +326,7 @@ export class AirtelService {
     const startTime = Date.now();
 
     try {
+      this.validateEastAfricaCurrency();
       const reference = `AIRTEL-${Date.now()}`;
 
       const response =
@@ -363,6 +386,7 @@ export class AirtelService {
     const startTime = Date.now();
 
     try {
+      this.validateEastAfricaCurrency();
       const reference = `AIRTEL-PAYOUT-${Date.now()}`;
 
       const response =
