@@ -5,8 +5,21 @@ import {
   is2FAEnabled,
   type BackupCode,
 } from "../auth/2fa";
-import { twoFactorRateLimiter } from "../services/twoFactorRateLimiter";
+import {
+  twoFactorRateLimiter,
+  type TwoFactorRateLimitHeaders,
+} from "../services/twoFactorRateLimiter";
 // import { getUserById } from "../services/userService";
+
+function applyTwoFactorRateLimitHeaders(
+  res: Response,
+  headers: TwoFactorRateLimitHeaders,
+): void {
+  res.setHeader("X-RateLimit-Limit", String(headers.limit));
+  res.setHeader("X-RateLimit-Remaining", String(headers.remaining));
+  res.setHeader("X-RateLimit-Reset", headers.resetAt);
+  res.setHeader("Retry-After", String(headers.retryAfter));
+}
 
 /**
  * Middleware to require 2FA verification for sensitive operations
@@ -56,11 +69,15 @@ export function requireTwoFactor(
       if (totpToken || (backupCode && user.backup_codes)) {
         // 1. Check if user is locked
         if (await twoFactorRateLimiter.isLocked(user.id)) {
-          const timeLeft = await twoFactorRateLimiter.getLockoutTimeRemaining(user.id);
+          const headers = await twoFactorRateLimiter.getRateLimitHeaders(
+            user.id,
+          );
+          applyTwoFactorRateLimitHeaders(res, headers);
+
           return res.status(429).json({
             error: "2FA locked",
             message: "Too many failed 2FA attempts. Please try again later.",
-            lockoutSeconds: timeLeft,
+            lockoutSeconds: headers.retryAfter,
           });
         }
 
@@ -90,17 +107,23 @@ export function requireTwoFactor(
         // 4. Verification failed - increment count
         const newCount = await twoFactorRateLimiter.incrementFailures(user.id);
         const triesLeft = Math.max(0, 3 - newCount);
-        
+        const headers = await twoFactorRateLimiter.getRateLimitHeaders(user.id);
+        applyTwoFactorRateLimitHeaders(res, headers);
+
         return res.status(403).json({
           error: "Invalid 2FA",
-          message: triesLeft > 0 
-            ? `Invalid 2FA token or backup code. ${triesLeft} attempts remaining.`
-            : "Too many failed attempts. 2FA is now locked for 15 minutes.",
+          message:
+            triesLeft > 0
+              ? `Invalid 2FA token or backup code. ${triesLeft} attempts remaining.`
+              : "Too many failed attempts. 2FA is now locked for 15 minutes.",
           triesRemaining: triesLeft,
         });
       }
 
       // If we reach here, 2FA verification failed
+      const headers = await twoFactorRateLimiter.getRateLimitHeaders(user.id);
+      applyTwoFactorRateLimitHeaders(res, headers);
+
       return res.status(403).json({
         error: "Two-factor authentication required",
         message: "This operation requires two-factor authentication",
