@@ -5,14 +5,22 @@
  * Provides administrative commands for managing transactions, queues, and batches.
  *
  * Commands:
- *   retry-batch <batch_id>  – re-queue failed or stuck transactions belonging to a batch
+ *   retry-batch <batch_id>  - re-queue failed or stuck transactions belonging to a batch
  */
 
-import { TransactionStatus } from "../models/transaction";
 import dotenv from "dotenv";
-import { addTransactionJob } from "../queue/index.js";
-import { getQueueStatsAggregate } from "../queue/queueDepthMetrics";
 import os from "os";
+import { TransactionStatus } from "../models/transaction";
+import { getQueueStatsAggregate } from "../queue/queueDepthMetrics";
+import {
+  CLI_ERROR_CODES,
+  formatCliHeading,
+  printError,
+  printSuccess,
+  printWarning,
+} from "../utils/cli";
+
+export { printError } from "../utils/cli";
 
 dotenv.config();
 
@@ -31,14 +39,14 @@ function formatTransactionHashes(text: string): string {
   });
 }
 
-// Intercept process.stdout.write and process.stderr.write to automatically format hashes
-const originalStdoutWrite = process.stdout.write;
-const originalStderrWrite = process.stderr.write;
+// Intercept stdout/stderr writes so transaction hashes become clickable links.
+const originalStdoutWrite = process.stdout.write.bind(process.stdout);
+const originalStderrWrite = process.stderr.write.bind(process.stderr);
 
 process.stdout.write = function (
   chunk: any,
   encodingOrCb?: any,
-  cb?: any
+  cb?: any,
 ): boolean {
   if (typeof chunk === "string") {
     chunk = formatTransactionHashes(chunk);
@@ -47,13 +55,13 @@ process.stdout.write = function (
     const formatted = formatTransactionHashes(text);
     chunk = new TextEncoder().encode(formatted);
   }
-  return originalStdoutWrite.call(process.stdout, chunk, encodingOrCb, cb);
+  return originalStdoutWrite(chunk, encodingOrCb, cb);
 };
 
 process.stderr.write = function (
   chunk: any,
   encodingOrCb?: any,
-  cb?: any
+  cb?: any,
 ): boolean {
   if (typeof chunk === "string") {
     chunk = formatTransactionHashes(chunk);
@@ -62,45 +70,28 @@ process.stderr.write = function (
     const formatted = formatTransactionHashes(text);
     chunk = new TextEncoder().encode(formatted);
   }
-  return originalStderrWrite.call(process.stderr, chunk, encodingOrCb, cb);
+  return originalStderrWrite(chunk, encodingOrCb, cb);
 };
 
+type ActivePool = { end: () => Promise<void> };
+type ActiveQueue = { close: () => Promise<void> };
 
-const isTest = process.env.NODE_ENV === "test";
-const colors = {
-  reset: isTest ? "" : "\x1b[0m",
-  bold: isTest ? "" : "\x1b[1m",
-  green: isTest ? "" : "\x1b[32m",
-  yellow: isTest ? "" : "\x1b[33m",
-  red: isTest ? "" : "\x1b[31m",
-  cyan: isTest ? "" : "\x1b[36m",
-  gray: isTest ? "" : "\x1b[90m",
-};
+let activePool: ActivePool | null = null;
+let activeTransactionQueue: ActiveQueue | null = null;
 
-export function printError(message: string, error?: any, code?: string): void {
-  const label = code ? `[${code}] ` : "";
-  printError(
-    `\n${colors.red}✗ Error: ${colors.bold}${label}${colors.reset}${colors.red}${message}${colors.reset}\n`,
-  );
-  if (error && error.message) {
-    printError(`  ${colors.gray}Details: ${error.message}${colors.reset}\n`);
-  }
-}
-
-export function showHelp() {
+export function showHelp(): void {
   console.log(`
-${colors.cyan}${colors.bold}Mobile Money Admin CLI${colors.reset}
-${colors.gray}========================${colors.reset}
+${formatCliHeading("Mobile Money Admin CLI")}
 
-${colors.bold}Usage:${colors.reset}
+Usage:
   momo-cli <command> [options]
 
-${colors.bold}Commands:${colors.reset}
-  ${colors.green}setup${colors.reset}                    Interactive setup for database and Stellar credentials.
-  ${colors.green}retry-batch <batch_id>${colors.reset}   Retry all failed or stuck transactions for a specific batch ID (UUID).
-  ${colors.green}dashboard${colors.reset}                Render an active terminal overview of node CPU, memory, and queue lengths.
+Commands:
+  setup                    Interactive setup for database and Stellar credentials.
+  retry-batch <batch_id>   Retry all failed or stuck transactions for a specific batch ID (UUID).
+  dashboard                Render an active terminal overview of node CPU, memory, and queue lengths.
 
-${colors.bold}Options:${colors.reset}
+Options:
   --help, -h             Show this help information.
   --file, -f <path>      Config file path for setup. Defaults to .env.
 `);
@@ -117,64 +108,70 @@ export async function runCli(args: string[]): Promise<void> {
 
   if (command === "dashboard") {
     console.clear();
-    console.log(`${colors.cyan}Starting Interactive CLI System Status Dashboard...${colors.reset}`);
-    console.log(`Press Ctrl+C to exit.\n`);
+    console.log("Starting Interactive CLI System Status Dashboard...");
+    console.log("Press Ctrl+C to exit.\n");
 
     const renderDashboard = async () => {
       try {
         const stats = await getQueueStatsAggregate();
-        
-        // Node CPU & Mem
+
         const totalMem = os.totalmem();
         const freeMem = os.freemem();
         const usedMem = totalMem - freeMem;
         const memUsagePercent = ((usedMem / totalMem) * 100).toFixed(2);
-        
         const loadAvg = os.loadavg();
         const cpus = os.cpus().length;
 
-        // Clear screen and position cursor to top-left
-        process.stdout.write('\x1b[2J\x1b[0f');
-        
-        console.log(`${colors.bold}${colors.cyan}=== Mobile Money System Status Dashboard ===${colors.reset}\n`);
-        
-        // System Stats
-        console.log(`${colors.bold}System Stats:${colors.reset}`);
-        console.log(`  CPU Load Avg: ${loadAvg[0].toFixed(2)}, ${loadAvg[1].toFixed(2)}, ${loadAvg[2].toFixed(2)} (Cores: ${cpus})`);
-        console.log(`  Memory Usage: ${(usedMem / 1024 / 1024).toFixed(2)} MB / ${(totalMem / 1024 / 1024).toFixed(2)} MB (${memUsagePercent}%)`);
+        process.stdout.write("\x1b[2J\x1b[0f");
+
+        console.log(`${formatCliHeading("Mobile Money System Status Dashboard")}\n`);
+
+        console.log("System Stats:");
+        console.log(
+          `  CPU Load Avg: ${loadAvg[0].toFixed(2)}, ${loadAvg[1].toFixed(2)}, ${loadAvg[2].toFixed(2)} (Cores: ${cpus})`,
+        );
+        console.log(
+          `  Memory Usage: ${(usedMem / 1024 / 1024).toFixed(2)} MB / ${(totalMem / 1024 / 1024).toFixed(2)} MB (${memUsagePercent}%)`,
+        );
         console.log(`  Redis Memory: ${(stats.redis_memory_bytes / 1024 / 1024).toFixed(2)} MB\n`);
-        
-        // Queue Stats
-        console.log(`${colors.bold}Queue Lengths (Total Depth: ${stats.total_depth}):${colors.reset}`);
+
+        console.log(`Queue Lengths (Total Depth: ${stats.total_depth}):`);
         console.log(`  ${"Queue Name".padEnd(30)} | Waiting | Active | Total | Latency (ms)`);
-        console.log(`  ${"-".repeat(30)}-+-${"-".repeat(7)}-+-${"-".repeat(6)}-+-${"-".repeat(5)}-+-${"-".repeat(12)}`);
-        
+        console.log(
+          `  ${"-".repeat(30)}-+-${"-".repeat(7)}-+-${"-".repeat(6)}-+-${"-".repeat(5)}-+-${"-".repeat(12)}`,
+        );
+
         for (const q of stats.queues) {
-          console.log(`  ${q.name.padEnd(30)} | ${q.waiting.toString().padStart(7)} | ${q.active.toString().padStart(6)} | ${q.depth.toString().padStart(5)} | ${q.latency_ms.toString().padStart(12)}`);
+          console.log(
+            `  ${q.name.padEnd(30)} | ${q.waiting.toString().padStart(7)} | ${q.active.toString().padStart(6)} | ${q.depth.toString().padStart(5)} | ${q.latency_ms.toString().padStart(12)}`,
+          );
         }
-        
-        console.log(`\n${colors.gray}Updated at: ${new Date().toISOString()}${colors.reset}`);
+
+        console.log(`\nUpdated at: ${new Date().toISOString()}`);
       } catch (err) {
-        console.error(`${colors.red}Error fetching stats:${colors.reset}`, err);
+        printError("Error fetching stats", err);
       }
     };
 
     await renderDashboard();
     const interval = setInterval(renderDashboard, 2000);
-    
-    // Prevent the CLI from exiting immediately
-    process.on('SIGINT', () => {
+
+    process.on("SIGINT", () => {
       clearInterval(interval);
       process.exit(0);
     });
-    
-    return new Promise(() => {}); // Keep alive
+
+    return new Promise<void>(() => undefined);
   }
 
   if (command === "retry-batch") {
     if (!batchId) {
-      printError("Missing batch ID argument.", undefined, "ERR_MISSING_ARG");
-      console.log(`Usage: momo-cli retry-batch <batch_id>`);
+      printError(
+        "Missing batch ID argument.",
+        undefined,
+        CLI_ERROR_CODES.MissingArgument,
+      );
+      console.log("Usage: momo-cli retry-batch <batch_id>");
       process.exitCode = 1;
       return;
     }
@@ -185,7 +182,7 @@ export async function runCli(args: string[]): Promise<void> {
       printError(
         "Invalid batch ID format. Must be a valid UUID.",
         undefined,
-        "ERR_INVALID_FORMAT",
+        CLI_ERROR_CODES.InvalidBatchId,
       );
       process.exitCode = 1;
       return;
@@ -201,11 +198,10 @@ export async function runCli(args: string[]): Promise<void> {
     activeTransactionQueue = transactionQueueModule.transactionQueue;
 
     console.log(
-      `${colors.cyan}Searching for transactions in batch ${colors.bold}${batchId}${colors.reset}...`,
+      `Searching for transactions in batch ${batchId}...`,
     );
 
     try {
-      // Find all transactions matching the batchId in tags or metadata
       const query = `
         SELECT id, reference_number AS "referenceNumber", type, amount::text AS amount,
                phone_number AS "phoneNumber", provider, stellar_address AS "stellarAddress",
@@ -221,13 +217,10 @@ export async function runCli(args: string[]): Promise<void> {
       const transactions = result.rows;
 
       if (transactions.length === 0) {
-        console.warn(
-          `\n${colors.yellow}✗ No transactions found for batch ID: ${batchId}${colors.reset}`,
-        );
+        printWarning(`No transactions found for batch ID: ${batchId}`);
         return;
       }
 
-      // Aggregate stats
       const total = transactions.length;
       const completed = transactions.filter(
         (t) => t.status === TransactionStatus.Completed,
@@ -242,14 +235,13 @@ export async function runCli(args: string[]): Promise<void> {
         (t) => t.status === TransactionStatus.Cancelled,
       ).length;
 
-      console.log(`\n${colors.bold}Batch Summary:${colors.reset}`);
+      console.log(`\nBatch Summary:`);
       console.log(`  Total Transactions: ${total}`);
-      console.log(`  ${colors.green}✓ Completed:${colors.reset} ${completed}`);
-      console.log(`  ${colors.red}✗ Failed:${colors.reset} ${failed}`);
-      console.log(`  ${colors.yellow}⚠ Pending:${colors.reset} ${pending}`);
-      console.log(`  ${colors.gray}⊘ Cancelled:${colors.reset} ${cancelled}`);
+      console.log(`  Completed: ${completed}`);
+      console.log(`  Failed: ${failed}`);
+      console.log(`  Pending: ${pending}`);
+      console.log(`  Cancelled: ${cancelled}`);
 
-      // Filter for retry-eligible transactions (Failed and Pending/Stuck)
       const retriable = transactions.filter(
         (t) =>
           t.status === TransactionStatus.Failed ||
@@ -257,26 +249,22 @@ export async function runCli(args: string[]): Promise<void> {
       );
 
       if (retriable.length === 0) {
-        console.log(
-          `\n${colors.green}No transactions require retry in this batch.${colors.reset}`,
-        );
+        printSuccess("No transactions require retry in this batch.");
         return;
       }
 
       console.log(
-        `\n${colors.cyan}Re-queueing ${colors.bold}${retriable.length}${colors.reset} transaction(s) for retry...`,
+        `\nRe-queueing ${retriable.length} transaction(s) for retry...`,
       );
 
       for (const tx of retriable) {
         const prevStatus = tx.status;
 
-        // 1. Update status back to pending and increment retry count in DB
         await pool.query(
           "UPDATE transactions SET status = $1, retry_count = retry_count + 1, updated_at = CURRENT_TIMESTAMP WHERE id = $2",
           [TransactionStatus.Pending, tx.id],
         );
 
-        // 2. Add job back to processing queue
         await addTransactionJob({
           transactionId: tx.id,
           type: tx.type,
@@ -286,51 +274,43 @@ export async function runCli(args: string[]): Promise<void> {
           stellarAddress: tx.stellarAddress,
         });
 
-        console.log(
-          `  ${colors.green}✓${colors.reset} Re-queued Ref: ${colors.bold}${tx.referenceNumber}${colors.reset} (ID: ${tx.id}) - status: ${prevStatus} -> pending`,
+        printSuccess(
+          `Re-queued Ref: ${tx.referenceNumber} (ID: ${tx.id}) - status: ${prevStatus} -> pending`,
         );
       }
 
-      console.log(
-        `\n${colors.green}${colors.bold}Successfully re-queued all ${retriable.length} transaction(s) for batch ${batchId}.${colors.reset}`,
+      printSuccess(
+        `Successfully re-queued all ${retriable.length} transaction(s) for batch ${batchId}.`,
       );
     } catch (err) {
       printError(
         "Error executing retry-batch command",
         err,
-        "ERR_EXECUTION_FAILED",
+        CLI_ERROR_CODES.ExecutionFailed,
       );
       process.exitCode = 1;
     }
-  } else {
-    printError(
-      `Unknown command "${command}".`,
-      undefined,
-      "ERR_UNKNOWN_COMMAND",
-    );
-    showHelp();
-    process.exitCode = 1;
+    return;
   }
+
+  printError(
+    `Unknown command "${command}".`,
+    undefined,
+    CLI_ERROR_CODES.UnknownCommand,
+  );
+  showHelp();
+  process.exitCode = 1;
 }
 
-// Self-invocation logic if run directly
 if (require.main === module) {
   (async () => {
     try {
       await runCli(process.argv.slice(2));
     } finally {
-      // Cleanly shutdown pool and queue connection so CLI exits instantly
-      await pool.end().catch(() => {});
+      await activePool?.end().catch(() => undefined);
       if (process.argv[2] === "retry-batch") {
-        try {
-          const { transactionQueue } =
-            await import("../queue/transactionQueue.js");
-          await transactionQueue.close();
-        } catch {
-          // ignore
-        }
+        await activeTransactionQueue?.close().catch(() => undefined);
       } else if (process.argv[2] === "dashboard") {
-        // Exit process immediately since we don't want to wait for other lingering queue handles
         process.exit(process.exitCode || 0);
       }
     }

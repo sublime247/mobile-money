@@ -35,7 +35,6 @@ describe("momo-cli retry-batch", () => {
     jest.clearAllMocks();
     process.exitCode = undefined;
 
-    // Spy on console methods to assert logs and prevent cluttering test output
     logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
     warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
     errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
@@ -64,7 +63,9 @@ describe("momo-cli retry-batch", () => {
   it("should fail when command is retry-batch but batch ID is missing", async () => {
     await runCli(["retry-batch"]);
     expect(errorSpy).toHaveBeenCalledWith(
-      expect.stringContaining("Error: Missing batch ID argument."),
+      expect.stringContaining(
+        "Error: [CLI_MISSING_ARGUMENT] Missing batch ID argument.",
+      ),
     );
     expect(process.exitCode).toBe(1);
   });
@@ -72,7 +73,9 @@ describe("momo-cli retry-batch", () => {
   it("should fail when batch ID is not a valid UUID", async () => {
     await runCli(["retry-batch", "invalid-uuid-123"]);
     expect(errorSpy).toHaveBeenCalledWith(
-      expect.stringContaining("Error: Invalid batch ID format."),
+      expect.stringContaining(
+        "Error: [CLI_INVALID_BATCH_ID] Invalid batch ID format.",
+      ),
     );
     expect(process.exitCode).toBe(1);
   });
@@ -86,7 +89,7 @@ describe("momo-cli retry-batch", () => {
     expect(pool.query).toHaveBeenCalledTimes(1);
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining(
-        `✗ No transactions found for batch ID: ${validUuid}`,
+        `Warning: No transactions found for batch ID: ${validUuid}`,
       ),
     );
   });
@@ -94,7 +97,6 @@ describe("momo-cli retry-batch", () => {
   it("should re-queue failed and pending transactions, but ignore completed and cancelled", async () => {
     const validUuid = "460010c7-cb10-4828-86d5-bb9f0c299c27";
 
-    // Simulate finding 4 transactions: 1 completed, 1 cancelled, 1 failed, 1 pending (stuck)
     const mockTransactions = [
       {
         id: "tx-completed",
@@ -143,11 +145,10 @@ describe("momo-cli retry-batch", () => {
     ];
 
     (pool.query as jest.Mock).mockResolvedValueOnce({ rows: mockTransactions });
-    (pool.query as jest.Mock).mockResolvedValue({ rows: [] }); // For updates
+    (pool.query as jest.Mock).mockResolvedValue({ rows: [] });
 
     await runCli(["retry-batch", validUuid]);
 
-    // Should fetch transactions using batchId in tags or metadata
     expect(pool.query).toHaveBeenNthCalledWith(
       1,
       expect.stringContaining(
@@ -156,27 +157,24 @@ describe("momo-cli retry-batch", () => {
       [validUuid, JSON.stringify({ batchId: validUuid })],
     );
 
-    // Should display summary stats
     expect(logSpy).toHaveBeenCalledWith(
       expect.stringContaining("Total Transactions: 4"),
     );
     expect(logSpy).toHaveBeenCalledWith(
-      expect.stringContaining("✓ Completed: 1"),
+      expect.stringContaining("Completed: 1"),
     );
-    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("✗ Failed: 1"));
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("Failed: 1"));
     expect(logSpy).toHaveBeenCalledWith(
-      expect.stringContaining("⚠ Pending: 1"),
+      expect.stringContaining("Pending: 1"),
     );
     expect(logSpy).toHaveBeenCalledWith(
-      expect.stringContaining("⊘ Cancelled: 1"),
+      expect.stringContaining("Cancelled: 1"),
     );
 
-    // Should filter and only retry tx-failed and tx-pending (2 transactions)
     expect(logSpy).toHaveBeenCalledWith(
       expect.stringContaining("Re-queueing 2 transaction(s) for retry..."),
     );
 
-    // Should update status and retry count in database for the 2 retried transactions
     expect(pool.query).toHaveBeenCalledWith(
       expect.stringContaining(
         "UPDATE transactions SET status = $1, retry_count = retry_count + 1",
@@ -190,7 +188,6 @@ describe("momo-cli retry-batch", () => {
       [TransactionStatus.Pending, "tx-pending"],
     );
 
-    // Should re-queue using addTransactionJob
     expect(addTransactionJob).toHaveBeenCalledTimes(2);
     expect(addTransactionJob).toHaveBeenNthCalledWith(1, {
       transactionId: "tx-failed",
