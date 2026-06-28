@@ -115,3 +115,40 @@ signing {
         logger.warn("SDK: GPG signing credentials not found — artifacts will NOT be signed. Set signingKey and signingPassword for Maven Central publishing.")
     }
 }
+
+// ── Bin/src sync guard ────────────────────────────────────────────────────────
+// Keeps bin/main in sync with src/main to prevent import drift (issue #1333).
+// Run:  ./gradlew syncBinSources
+// CI:   add `syncBinSources` before `build` to fail on drift.
+
+val srcRoot = file("src/main/kotlin")
+val binRoot = file("bin/main")
+
+tasks.register<Sync>("syncBinSources") {
+    group = "build"
+    description = "Copy src/main/kotlin -> bin/main to eliminate import drift."
+    from(srcRoot)
+    into(binRoot)
+    preserve { include("**/*.kt") }
+}
+
+tasks.register<Exec>("checkBinSync") {
+    group = "verification"
+    description = "Fail the build when bin/main has drifted from src/main/kotlin."
+    dependsOn("syncBinSources")
+    commandLine("git", "diff", "--exit-code", "--name-only", binRoot.relativeTo(rootDir).path)
+    isIgnoreExitValue = false
+    doFirst {
+        logger.lifecycle("Checking bin/main for import drift...")
+    }
+    doLast {
+        if (executionResult.get().exitValue == 0) {
+            logger.lifecycle("bin/main is in sync with src/main/kotlin — no drift detected.")
+        } else {
+            throw GradleException(
+                "bin/main has drifted from src/main/kotlin. " +
+                "Run `./gradlew syncBinSources` and commit the result."
+            )
+        }
+    }
+}
