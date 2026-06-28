@@ -32,7 +32,6 @@ import (
 	"unsafe"
 
 	"github.com/getsentry/sentry-go"
-	"github.com/nats-io/nats.go"
 	"github.com/redis/go-redis/v9"
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fastjson"
@@ -268,10 +267,9 @@ func getFloatField(v *fastjson.Value, key string) (float64, error) {
 // ---------------------------------------------------------------------------
 
 var (
-	rdb *redis.Client
-	nc  *nats.Conn
-	js  nats.JetStreamContext
-	ctx = context.Background()
+	rdb          *redis.Client
+	natsCtrl     *natsController
+	ctx          = context.Background()
 )
 
 func initMessaging() error {
@@ -288,31 +286,10 @@ func initMessaging() error {
 	}
 
 	if natsEnabled {
-		var err error
-		nc, err = nats.Connect(natsURL,
-			nats.MaxReconnects(-1),
-			nats.ReconnectWait(2*time.Second),
-			nats.DisconnectErrHandler(func(nc *nats.Conn, err error) {
-				log.Printf("[nats] disconnected: %v", err)
-			}),
-			nats.ReconnectHandler(func(nc *nats.Conn) {
-				log.Printf("[nats] reconnected to %s", nc.ConnectedUrl())
-			}),
-			nats.ClosedHandler(func(nc *nats.Conn) {
-				log.Printf("[nats] connection permanently closed")
-			}),
-			nats.ErrorHandler(func(nc *nats.Conn, sub *nats.Subscription, err error) {
-				log.Printf("[nats] async error on subject %s: %v", sub.Subject, err)
-			}),
-		)
-		if err != nil {
-			return fmt.Errorf("nats connect: %w", err)
+		natsCtrl = newNatsController(natsURL)
+		if err := natsCtrl.Connect(); err != nil {
+			return err
 		}
-		js, err = nc.JetStream()
-		if err != nil {
-			return fmt.Errorf("nats jetstream: %w", err)
-		}
-		log.Printf("[nats] connected to %s", natsURL)
 	}
 	return nil
 }
@@ -347,9 +324,9 @@ func publish(p *CallbackPayload) error {
 		}
 	}
 
-	if natsEnabled && js != nil {
-		if _, err := js.Publish(natsSubject, buf); err != nil {
-			return fmt.Errorf("nats publish: %w", err)
+	if natsEnabled && natsCtrl != nil {
+		if err := natsCtrl.Publish(natsSubject, buf); err != nil {
+			return err
 		}
 	}
 
@@ -409,7 +386,7 @@ func handleHealth(ctx *fasthttp.RequestCtx) {
 
 	// Check NATS
 	if natsEnabled {
-		if nc == nil || !nc.IsConnected() {
+		if natsCtrl == nil || !natsCtrl.IsConnected() {
 			ctx.SetStatusCode(fasthttp.StatusServiceUnavailable)
 			ctx.SetBodyString(`{"status":"error","runtime":"go","detail":"nats not connected"}`)
 			return
