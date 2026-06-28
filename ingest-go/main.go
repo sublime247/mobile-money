@@ -271,8 +271,27 @@ var (
 	rdb *redis.Client
 	nc  *nats.Conn
 	js  nats.JetStreamContext
-	ctx = context.Background()
+	jsMu sync.RWMutex // guards js during reconnect
+	ctx  = context.Background()
 )
+
+// reattachJetStream re-creates the JetStreamContext after a reconnect.
+// Called inside the ReconnectHandler, which runs on the NATS client goroutine.
+func reattachJetStream() {
+	jsMu.Lock()
+	defer jsMu.Unlock()
+	if nc == nil {
+		return
+	}
+	newJS, err := nc.JetStream()
+	if err != nil {
+		log.Printf("[nats] failed to re-attach JetStream after reconnect: %v", err)
+		js = nil
+		return
+	}
+	js = newJS
+	log.Printf("[nats] JetStream context re-attached after reconnect")
+}
 
 func initMessaging() error {
 	if redisEnabled {
@@ -297,6 +316,7 @@ func initMessaging() error {
 			}),
 			nats.ReconnectHandler(func(nc *nats.Conn) {
 				log.Printf("[nats] reconnected to %s", nc.ConnectedUrl())
+				reattachJetStream()
 			}),
 			nats.ClosedHandler(func(nc *nats.Conn) {
 				log.Printf("[nats] connection permanently closed")
@@ -347,8 +367,14 @@ func publish(p *CallbackPayload) error {
 		}
 	}
 
-	if natsEnabled && js != nil {
-		if _, err := js.Publish(natsSubject, buf); err != nil {
+	if natsEnabled {
+		jsMu.RLock()
+		currentJS := js
+		jsMu.RUnlock()
+		if currentJS == nil {
+			return fmt.Errorf("nats jetstream unavailable (reconnecting)")
+		}
+		if _, err := currentJS.Publish(natsSubject, buf); err != nil {
 			return fmt.Errorf("nats publish: %w", err)
 		}
 	}
