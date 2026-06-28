@@ -1,4 +1,4 @@
-import logger from "../utils/logger";
+import logger, { requestScopedLogger } from "../utils/logger";
 import { NextFunction, Request, Response } from "express";
 import { extractFingerprint, hashString } from "../middleware/fingerprint";
 
@@ -125,9 +125,10 @@ export function buildSessionFingerprintAnomalyAuditEvent(
 
 export function logSessionAnomaly(
   event: SessionAnomalyAuditEvent,
-  logger: Pick<Console, "warn"> = console,
+  req?: Pick<Request, "id" | "headers">,
 ): void {
-  logger.warn(JSON.stringify(event));
+  const log = req ? requestScopedLogger(req) : logger;
+  log.warn({ session_anomaly: event }, event.event);
 }
 
 export interface SecurityAnomalyAuditEvent {
@@ -143,9 +144,10 @@ export interface SecurityAnomalyAuditEvent {
 
 export function logSecurityAnomaly(
   event: SecurityAnomalyAuditEvent,
-  logger: Pick<Console, "warn"> = console,
+  req?: Pick<Request, "id" | "headers">,
 ): void {
-  logger.warn(JSON.stringify(event));
+  const log = req ? requestScopedLogger(req) : logger;
+  log.warn({ security_anomaly: event }, event.event);
 }
 
 export function sessionAnomalyLogger(
@@ -182,6 +184,7 @@ export function sessionAnomalyLogger(
           currentIpHash,
           mismatchCount,
         ),
+        req,
       );
     }
   }
@@ -208,6 +211,7 @@ export function sessionAnomalyLogger(
           currentFingerprint,
           mismatchCount,
         ),
+        req,
       );
 
       req.session.destroy((err) => {

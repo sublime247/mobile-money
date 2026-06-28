@@ -195,3 +195,33 @@ export default logger;
 export function childLogger(traceId: string, extra?: Record<string, unknown>): Logger {
   return logger.child({ trace_id: traceId, ...extra });
 }
+
+/**
+ * Create a child logger bound to an Express request.
+ *
+ * Binds `request_id` (from `req.id` set by the requestId middleware or the
+ * `x-request-id` header) to every log line emitted through the returned
+ * logger, ensuring all logs produced during a request lifecycle carry the
+ * same trace identifier for easy correlation in log aggregators.
+ *
+ * Usage (inside a route handler or service call):
+ *
+ *   const reqLog = requestLogger(req);
+ *   reqLog.info({ userId }, 'Processing payment');
+ *   reqLog.error({ err }, 'Payment failed');
+ *
+ * Falls back to generating a new UUID when neither `req.id` nor
+ * `x-request-id` is present, so the logger is always usable.
+ */
+export function requestScopedLogger(
+  req: { id?: string; headers?: Record<string, string | string[] | undefined> },
+  extra?: Record<string, unknown>,
+): Logger {
+  const reqId =
+    (req as any).id ??
+    (req.headers?.['x-request-id'] as string | undefined) ??
+    undefined;
+
+  return logger.child({ request_id: reqId, ...extra });
+}
+
