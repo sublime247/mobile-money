@@ -1,0 +1,12 @@
+# edge-router local development variables
+# Copy to workers/edge-router/.dev.vars — never commit real secrets.
+# Wrangler picks this file up automatically when running `wrangler dev`.
+#
+# Values here override [env.development.vars] in wrangler.toml.
+# Useful for injecting per-developer secrets (API keys, auth tokens)
+# without touching shared config.
+
+PRIMARY_ORIGIN    = "http://localhost:3000"
+BACKUP_ORIGIN     = "http://localhost:3001"
+HEALTH_CHECK_PATH = "/health"
+GEO_ROUTING_ENABLED = "false"

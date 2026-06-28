@@ -6,19 +6,54 @@ compatibility_date = "2024-05-12"
 command = "npx esbuild src/index.ts --bundle --format=esm --platform=neutral --target=es2022 --minify --tree-shaking=true --outfile=dist/index.js"
 
 [vars]
-PRIMARY_ORIGIN = "https://api.primary.example.com"
-BACKUP_ORIGIN = "https://api.backup.example.com"
+PRIMARY_ORIGIN    = "https://api.primary.example.com"
+BACKUP_ORIGIN     = "https://api.backup.example.com"
 HEALTH_CHECK_PATH = "/health"
 
 # Geo-routing: route requests to the nearest regional hosting node.
 # Set to "false" to disable and fall back to PRIMARY_ORIGIN only.
 GEO_ROUTING_ENABLED = "true"
 
-# Regional origin nodes. Each request is routed to the nearest region
-# based on Cloudflare edge geolocation data (request.cf.country).
-# If a regional origin is unhealthy, the worker falls back to PRIMARY_ORIGIN.
-REGION_NA_ORIGIN = "https://api-na.example.com"
-REGION_EU_ORIGIN = "https://api-eu.example.com"
+# Regional origin nodes — each request is routed based on Cloudflare edge
+# geolocation data (request.cf.country). Falls back to PRIMARY_ORIGIN when
+# a regional origin is unhealthy.
+REGION_NA_ORIGIN   = "https://api-na.example.com"
+REGION_EU_ORIGIN   = "https://api-eu.example.com"
 REGION_APAC_ORIGIN = "https://api-apac.example.com"
-REGION_AF_ORIGIN = "https://api-af.example.com"
-REGION_SA_ORIGIN = "https://api-sa.example.com"
+REGION_AF_ORIGIN   = "https://api-af.example.com"
+REGION_SA_ORIGIN   = "https://api-sa.example.com"
+
+# ── Development environment ────────────────────────────────────────────────
+# Local dev: `npx wrangler dev --env development`
+# Variables override [vars] above so local runs hit local services, not prod.
+[env.development]
+name = "edge-router-dev"
+
+[env.development.vars]
+PRIMARY_ORIGIN    = "http://localhost:3000"
+BACKUP_ORIGIN     = "http://localhost:3001"
+HEALTH_CHECK_PATH = "/health"
+GEO_ROUTING_ENABLED = "false"   # single origin in local dev
+
+REGION_NA_ORIGIN   = "http://localhost:3000"
+REGION_EU_ORIGIN   = "http://localhost:3000"
+REGION_APAC_ORIGIN = "http://localhost:3000"
+REGION_AF_ORIGIN   = "http://localhost:3000"
+REGION_SA_ORIGIN   = "http://localhost:3000"
+
+# ── Staging environment ────────────────────────────────────────────────────
+# Deploy: `npx wrangler deploy --env staging`
+[env.staging]
+name = "edge-router-staging"
+
+[env.staging.vars]
+PRIMARY_ORIGIN    = "https://api-staging.example.com"
+BACKUP_ORIGIN     = "https://api-staging-backup.example.com"
+HEALTH_CHECK_PATH = "/health"
+GEO_ROUTING_ENABLED = "true"
+
+REGION_NA_ORIGIN   = "https://api-staging-na.example.com"
+REGION_EU_ORIGIN   = "https://api-staging-eu.example.com"
+REGION_APAC_ORIGIN = "https://api-staging-apac.example.com"
+REGION_AF_ORIGIN   = "https://api-staging-af.example.com"
+REGION_SA_ORIGIN   = "https://api-staging-sa.example.com"
