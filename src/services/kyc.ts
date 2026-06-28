@@ -672,4 +672,66 @@ export class KYCService {
   }
 }
 
+
+  /**
+   * validateTier2Eligibility — KYC Tier-2 Rule Engine
+   *
+   * Enforces the requirements for unlocking Tier-2 transaction limits:
+   *   1. A government-issued ID document must be present and APPROVED
+   *   2. The user's phone number must be verified
+   *
+   * Both checks run in parallel against the DB; if either fails a structured
+   * error is returned so the caller can surface actionable guidance to the user.
+   *
+   * @param userId  The user to validate
+   * @returns       { eligible: true } | { eligible: false; reasons: string[] }
+   */
+  async validateTier2Eligibility(
+    userId: string,
+  ): Promise<{ eligible: boolean; reasons: string[] }> {
+    const reasons: string[] = [];
+
+    const [docResult, userResult] = await Promise.all([
+      // Check for an approved government-ID document
+      this.db.query(
+        `SELECT status FROM kyc_uploads
+          WHERE user_id = $1
+            AND document_type IN ('passport', 'national_identity_card', 'driving_license')
+            AND status = 'approved'
+          LIMIT 1`,
+        [userId],
+      ),
+      // Check phone-verification flag on the user row
+      this.db.query(
+        `SELECT phone_verified FROM users WHERE id = $1`,
+        [userId],
+      ),
+    ]);
+
+    if (!docResult.rows.length) {
+      reasons.push(
+        'Government-issued ID document not found or not yet approved. ' +
+        'Please upload a passport, national ID card, or driving licence and wait for approval.',
+      );
+    }
+
+    const user = userResult.rows[0];
+    if (!user?.phone_verified) {
+      reasons.push(
+        'Phone number is not verified. ' +
+        'Please verify your phone number via the OTP sent to your registered number.',
+      );
+    }
+
+    const eligible = reasons.length === 0;
+
+    if (eligible) {
+      logger.info({ userId }, '[kyc] user eligible for Tier-2 limits');
+    } else {
+      logger.warn({ userId, reasons }, '[kyc] Tier-2 eligibility check failed');
+    }
+
+    return { eligible, reasons };
+  }
+
 export default KYCService;
