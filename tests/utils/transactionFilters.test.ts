@@ -117,6 +117,56 @@ describe("transactionFilters", () => {
       expect(mockRes.status).toHaveBeenCalledWith(400);
       expect(mockRes.json).toHaveBeenCalledWith(expect.objectContaining({ error: "Invalid status parameter" }));
     });
+
+    it("should accept valid startDate and endDate with UTC/timezone offset", () => {
+      mockReq.query = { startDate: "2026-06-28T14:33:52Z", endDate: "2026-06-28T15:32:52+01:00" };
+      validateTransactionFilters(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockNext).toHaveBeenCalled();
+      expect((mockReq as any).transactionFilters.startDate).toBe("2026-06-28T14:33:52Z");
+      expect((mockReq as any).transactionFilters.endDate).toBe("2026-06-28T15:32:52+01:00");
+    });
+
+    it("should accept valid dates with fractional seconds", () => {
+      mockReq.query = { startDate: "2026-06-28T14:33:52.123Z", endDate: "2026-06-28T15:32:52.456-05:00" };
+      validateTransactionFilters(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockNext).toHaveBeenCalled();
+      expect((mockReq as any).transactionFilters.startDate).toBe("2026-06-28T14:33:52.123Z");
+      expect((mockReq as any).transactionFilters.endDate).toBe("2026-06-28T15:32:52.456-05:00");
+    });
+
+    it("should reject startDate without UTC timezone offset", () => {
+      mockReq.query = { startDate: "2026-06-28T14:33:52" };
+      validateTransactionFilters(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockRes.status).toHaveBeenCalledWith(400);
+      expect(mockRes.json).toHaveBeenCalledWith(expect.objectContaining({ error: "Invalid startDate parameter" }));
+    });
+
+    it("should reject endDate without UTC timezone offset", () => {
+      mockReq.query = { endDate: "2026-06-28T15:32:52" };
+      validateTransactionFilters(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockRes.status).toHaveBeenCalledWith(400);
+      expect(mockRes.json).toHaveBeenCalledWith(expect.objectContaining({ error: "Invalid endDate parameter" }));
+    });
+
+    it("should reject simple YYYY-MM-DD date formats", () => {
+      mockReq.query = { startDate: "2026-06-28" };
+      validateTransactionFilters(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockRes.status).toHaveBeenCalledWith(400);
+      expect(mockRes.json).toHaveBeenCalledWith(expect.objectContaining({ error: "Invalid startDate parameter" }));
+    });
+
+    it("should reject invalid date strings", () => {
+      mockReq.query = { startDate: "not-a-date" };
+      validateTransactionFilters(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockRes.status).toHaveBeenCalledWith(400);
+      expect(mockRes.json).toHaveBeenCalledWith(expect.objectContaining({ error: "Invalid startDate parameter" }));
+    });
   });
 
   describe("getPaginationInfo", () => {

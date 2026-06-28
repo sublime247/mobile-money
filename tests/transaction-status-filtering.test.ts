@@ -1,3 +1,31 @@
+const mockList = jest.fn();
+const mockCount = jest.fn();
+const mockFindByStatuses = jest.fn();
+const mockCountByStatuses = jest.fn();
+
+// Mock the TransactionModel first to ensure it's mocked when controllers are imported
+jest.mock("../src/models/transaction", () => {
+  const actual = jest.requireActual("../src/models/transaction");
+  return {
+    ...actual,
+    TransactionModel: jest.fn().mockImplementation(() => {
+      return {
+        list: mockList,
+        count: mockCount,
+        findByStatuses: mockFindByStatuses,
+        countByStatuses: mockCountByStatuses,
+      };
+    }),
+  };
+});
+jest.mock("../src/middleware/timeout", () => ({
+  TimeoutPresets: {
+    quick: (req: any, res: any, next: any) => next(),
+    long: (req: any, res: any, next: any) => next(),
+  },
+  haltOnTimedout: (req: any, res: any, next: any) => next(),
+}));
+
 import request from "supertest";
 import express, { Express } from "express";
 import { Router } from "express";
@@ -12,16 +40,7 @@ import {
 import { listTransactionsHandler } from "../src/controllers/transactionController";
 import { TransactionModel } from "../src/models/transaction";
 import { TimeoutPresets, haltOnTimedout } from "../src/middleware/timeout";
-
-// Mock the TransactionModel
-jest.mock("../src/models/transaction");
-jest.mock("../src/middleware/timeout", () => ({
-  TimeoutPresets: {
-    quick: (req: any, res: any, next: any) => next(),
-    long: (req: any, res: any, next: any) => next(),
-  },
-  haltOnTimedout: (req: any, res: any, next: any) => next(),
-}));
+import { errorHandler } from "../src/middleware/errorHandler";
 
 describe("Transaction Status Filtering - Utility Functions", () => {
   describe("parseStatusFilter", () => {
@@ -42,7 +61,7 @@ describe("Transaction Status Filtering - Utility Functions", () => {
 
     it("should return empty array for empty string", () => {
       const result = parseStatusFilter("");
-      expect(result).toEqual(VALID_STATUSES);
+      expect(result).toEqual([]);
     });
 
     it("should filter out empty values", () => {
@@ -216,6 +235,64 @@ describe("Transaction Status Filtering - Middleware", () => {
         .end(done);
     });
 
+    it("should accept valid startDate and endDate parameters with timezone offsets", (done) => {
+      const router = Router();
+      router.get("/", validateTransactionFilters, (req, res) => {
+        const filters = (req as any).transactionFilters;
+        expect(filters.startDate).toBe("2026-06-28T14:33:52Z");
+        expect(filters.endDate).toBe("2026-06-28T15:32:52+01:00");
+        res.json({ success: true });
+      });
+      app.use(router);
+
+      request(app)
+        .get("/?startDate=2026-06-28T14:33:52Z&endDate=2026-06-28T15:32:52%2B01:00")
+        .expect(200)
+        .expect({ success: true }, done);
+    });
+
+    it("should reject invalid startDate format (missing timezone)", (done) => {
+      const router = Router();
+      router.get("/", validateTransactionFilters);
+      app.use(router);
+
+      request(app)
+        .get("/?startDate=2026-06-28T14:33:52")
+        .expect(400)
+        .expect((res: any) => {
+          expect(res.body.error).toContain("Invalid startDate parameter");
+        })
+        .end(done);
+    });
+
+    it("should reject invalid endDate format (missing timezone)", (done) => {
+      const router = Router();
+      router.get("/", validateTransactionFilters);
+      app.use(router);
+
+      request(app)
+        .get("/?endDate=2026-06-28T15:32:52")
+        .expect(400)
+        .expect((res: any) => {
+          expect(res.body.error).toContain("Invalid endDate parameter");
+        })
+        .end(done);
+    });
+
+    it("should reject invalid date strings", (done) => {
+      const router = Router();
+      router.get("/", validateTransactionFilters);
+      app.use(router);
+
+      request(app)
+        .get("/?startDate=invalid-date-format")
+        .expect(400)
+        .expect((res: any) => {
+          expect(res.body.error).toContain("Invalid startDate parameter");
+        })
+        .end(done);
+    });
+
     it("should set default limit to 50", (done) => {
       const router = Router();
       router.get("/", validateTransactionFilters, (req, res) => {
@@ -337,11 +414,12 @@ describe("Transaction Status Filtering - Middleware", () => {
 
 describe("Transaction Status Filtering - Handler Integration", () => {
   let app: Express;
-  const mockTransactionModel = TransactionModel as jest.MockedClass<
-    typeof TransactionModel
-  >;
-  const controllerTransactionModel = mockTransactionModel.mock
-    .instances[0] as jest.Mocked<TransactionModel>;
+  const controllerTransactionModel = {
+    list: mockList,
+    count: mockCount,
+    findByStatuses: mockFindByStatuses,
+    countByStatuses: mockCountByStatuses,
+  } as unknown as jest.Mocked<TransactionModel>;
 
   beforeEach(() => {
     app = express();
@@ -349,6 +427,15 @@ describe("Transaction Status Filtering - Handler Integration", () => {
     jest.clearAllMocks();
     controllerTransactionModel.findByStatuses.mockReset();
     controllerTransactionModel.countByStatuses.mockReset();
+    controllerTransactionModel.list.mockReset();
+    controllerTransactionModel.count.mockReset();
+
+    controllerTransactionModel.list.mockImplementation(() => {
+      return controllerTransactionModel.findByStatuses();
+    });
+    controllerTransactionModel.count.mockImplementation(() => {
+      return controllerTransactionModel.countByStatuses();
+    });
   });
 
   describe("listTransactionsHandler", () => {
@@ -473,6 +560,7 @@ describe("Transaction Status Filtering - Handler Integration", () => {
       const router = Router();
       router.get("/", validateTransactionFilters, listTransactionsHandler);
       app.use(router);
+      app.use(errorHandler);
 
       const res = await request(app).get("/?status=pending").expect(500);
 
@@ -526,6 +614,7 @@ describe("Transaction Status Filtering - Handler Integration", () => {
       const router = Router();
       router.get("/", validateTransactionFilters, listTransactionsHandler);
       app.use(router);
+      app.use(errorHandler);
 
       const res = await request(app).get("/").expect(200);
 
