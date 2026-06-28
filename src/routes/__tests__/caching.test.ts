@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, jest } from "@jest/globals";
 import { cachedQueryManager, CacheTags, QUERY_TTL_POLICIES } from "../../services/cachedQueryManager";
-import { TransactionCacheInvalidation, CacheKeyGenerators } from "../../services/cacheAside";
+import { TransactionCacheInvalidation, WebhookCacheInvalidation, CacheKeyGenerators } from "../../services/cacheAside";
 
 // Mock Redis
 jest.mock("../../config/redis", () => ({
@@ -161,6 +161,58 @@ describe("Transaction Cache Invalidation", () => {
     await TransactionCacheInvalidation.invalidateGeneralStats();
     
     expect(invalidateByTagSpy).toHaveBeenCalled();
+  });
+});
+
+describe("Webhook Cache Invalidation", () => {
+  let invalidateByTagsSpy: jest.SpiedFunction<typeof cachedQueryManager.invalidateByTags>;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    invalidateByTagsSpy = jest.spyOn(cachedQueryManager, "invalidateByTags").mockResolvedValue(2);
+  });
+
+  afterEach(() => {
+    invalidateByTagsSpy.mockRestore();
+  });
+
+  it("should invalidate merchant config caches on webhook recovery", async () => {
+    const userId = "merchant-123";
+    const webhookId = "webhook-abc";
+
+    await WebhookCacheInvalidation.invalidateOnWebhookRecovery(userId, webhookId);
+
+    expect(invalidateByTagsSpy).toHaveBeenCalledWith([
+      CacheTags.merchantConfig(userId),
+      CacheTags.merchantWebhooks(userId),
+    ]);
+  });
+
+  it("should invalidate all merchant caches", async () => {
+    const userId = "merchant-456";
+
+    await WebhookCacheInvalidation.invalidateMerchantCaches(userId);
+
+    expect(invalidateByTagsSpy).toHaveBeenCalledWith([
+      CacheTags.merchantConfig(userId),
+      CacheTags.merchantWebhooks(userId),
+    ]);
+  });
+
+  it("should generate consistent merchant config tags", () => {
+    const tag1 = CacheTags.merchantConfig("user-123");
+    const tag2 = CacheTags.merchantConfig("user-123");
+
+    expect(tag1).toBe(tag2);
+    expect(tag1).toBe("merchant:user-123:config");
+  });
+
+  it("should generate consistent merchant webhook tags", () => {
+    const tag1 = CacheTags.merchantWebhooks("user-123");
+    const tag2 = CacheTags.merchantWebhooks("user-123");
+
+    expect(tag1).toBe(tag2);
+    expect(tag1).toBe("merchant:user-123:webhooks");
   });
 });
 
