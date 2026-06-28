@@ -100,30 +100,40 @@ impl EscrowContract {
         depositor.require_auth();
 
         assert!(amount > 0, "amount must be positive");
+
         assert!(
             !env.storage().instance().has(&ESCROW),
             "already initialised"
         );
+
         assert!(
             emergency_unlock_timestamp > env.ledger().timestamp(),
             "emergency unlock must be in the future"
         );
+
         assert!(fee_bps <= 10_000, "fee basis points must be in [0, 10000]");
+
         assert!(
             depositor != beneficiary,
             "beneficiary must differ from depositor"
         );
+
         assert!(
             arbiter != depositor && arbiter != beneficiary,
             "arbiter must differ from depositor and beneficiary"
         );
 
-        // Pull funds from depositor into the contract.
-        token::Client::new(&env, &token).transfer(
-            &depositor,
-            env.current_contract_address(),
-            &amount,
-        );
+        // Dynamic token support:
+        // Any Stellar asset can be passed through the token address.
+        let token_client = token::Client::new(&env, &token);
+
+        // Validate depositor balance before locking funds.
+        let balance = token_client.balance(&depositor);
+
+        assert!(balance >= amount, "insufficient token balance");
+
+        // Transfer only after validation succeeds.
+        token_client.transfer(&depositor, &env.current_contract_address(), &amount);
 
         env.storage().instance().set(
             &ESCROW,
@@ -141,7 +151,6 @@ impl EscrowContract {
             },
         );
 
-        // Extend the TTL of the instance storage to set up state renewal rules
         env.storage().instance().extend_ttl(1000, 10000);
     }
 
