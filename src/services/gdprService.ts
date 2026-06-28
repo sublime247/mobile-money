@@ -16,6 +16,7 @@ import {
 } from "./userService";
 import { getS3Client, s3Config } from "../config/s3";
 import { pool } from "../config/database";
+import { encrypt, decrypt } from "../utils/encryption";
 
 export class GDPRService {
   private txService: TransactionService;
@@ -125,13 +126,22 @@ export class GDPRService {
   }
 
   async purgeUserData(userId: string) {
+    const client = await pool.connect();
     try {
-      // Anonymize tx records
+      await client.query("BEGIN");
+
+      // 1. Anonymize transaction records (PII and metadata)
       const transactions = await this.txService.findByUserId(userId);
       for (const tx of transactions) {
         const anonymizedTx = this.anonymizeTransaction(tx);
-        await pool.query(
-          `UPDATE transactions SET phone_number = $1, idempotency_key = $2, stellar_address = $3 WHERE id = $4`,
+        await client.query(
+          `UPDATE transactions 
+           SET phone_number = $1, 
+               idempotency_key = $2, 
+               stellar_address = $3, 
+               metadata = '{}'::jsonb,
+               tags = '{}'::text[]
+           WHERE id = $4`,
           [
             anonymizedTx.phoneNumber,
             anonymizedTx.idempotencyKey,
@@ -141,38 +151,84 @@ export class GDPRService {
         );
       }
 
-      // Purge PII from user profile
-      const user = await getUserById(userId);
-      const anonymizedUser = {
-        ...user,
-        phone_number: this.anonymizePhoneNumber(String(user?.phone_number)),
-        backup_codes: user?.backup_codes
-          ? this.anonymizeBackupCode(user?.backup_codes)
-          : [],
-      } as User;
+      // 2. Purge PII, location, and metadata from user profile
+      const userRes = await client.query(
+        `SELECT phone_number, email, stellar_address FROM users WHERE id = $1`,
+        [userId]
+      );
+      if (userRes.rows.length > 0) {
+        const dbUser = userRes.rows[0];
+        const rawPhone = decrypt(dbUser.phone_number) || "";
+        const rawEmail = dbUser.email ? decrypt(dbUser.email) : null;
+        const rawStellar = dbUser.stellar_address;
 
-      await updateUserById(userId, anonymizedUser);
+        const anonymizedPhone = this.anonymizePhoneNumber(rawPhone);
+        const encryptedPhone = encrypt(anonymizedPhone, true);
 
-      // Purge PII from audit logs
+        const anonymizedEmail = rawEmail ? encrypt(this.anonymizeEmail(rawEmail), false) : null;
+        const anonymizedStellar = rawStellar ? this.anonymizeStellaAddress(rawStellar) : null;
+
+        await client.query(
+          `UPDATE users
+           SET 
+             phone_number = $1,
+             email = $2,
+             stellar_address = $3,
+             first_name = $4,
+             last_name = $5,
+             address = NULL,
+             date_of_birth = NULL,
+             two_factor_secret = NULL,
+             backup_codes = NULL,
+             display_name = $6,
+             profile_url = NULL,
+             last_login_ip = NULL,
+             last_login_user_agent = NULL,
+             is_active = false,
+             deactivated_at = CURRENT_TIMESTAMP,
+             updated_at = CURRENT_TIMESTAMP
+           WHERE id = $7`,
+          [
+            encryptedPhone,
+            anonymizedEmail,
+            anonymizedStellar,
+            "Scrubbed",
+            "User",
+            "Scrubbed User",
+            userId,
+          ]
+        );
+      }
+
+      // 3. Purge PII from audit logs
       const auditLogs = await auditService.fetchAuditLogs(userId);
       for (const log of auditLogs) {
         const anonymizedLog: AuditLog = {
           ...log,
           action: this.hashString(log.action),
+          metadata: {},
         };
         await auditService.updateAuditLog(anonymizedLog);
       }
 
-      // Log erasure event
+      // 4. Purge from other user identity/metadata tables
+      await client.query(`DELETE FROM kyc_applicants WHERE user_id = $1`, [userId]);
+      await client.query(`DELETE FROM device_fingerprints WHERE user_id = $1`, [userId]);
+      await client.query(`DELETE FROM refresh_token_families WHERE user_id = $1`, [userId]);
+      await client.query(`DELETE FROM pii_access_audit_logs WHERE target_id = $1`, [userId]);
+
+      // 5. Log erasure event
       await logAuditEvent(userId, "RIGHT_TO_BE_FORGOTTEN_EXECUTED");
       await this.deleteUserS3Objects(userId);
       await this.deleteUserAttachments(userId);
 
-      // Disable/deactivate user account
-      await this.deactivateUserAccount(userId);
+      await client.query("COMMIT");
     } catch (err) {
+      await client.query("ROLLBACK");
       logger.error("Erasure error:", err);
       throw err;
+    } finally {
+      client.release();
     }
   }
 
@@ -198,7 +254,8 @@ export class GDPRService {
 
     for (const row of deactivatedUsers.rows) {
       const phone = row.phone_number ? String(row.phone_number) : "";
-      if (phone.length === 16 && !phone.includes("+")) continue; // Already anonymized
+      const decryptedPhone = decrypt(phone) || "";
+      if (decryptedPhone.length === 16 && !decryptedPhone.includes("+")) continue; // Already anonymized
 
       try {
         await this.purgeUserData(row.id);
