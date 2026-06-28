@@ -81,7 +81,44 @@ export const REDACT_KEYS: string[] = [
   "accountnumber",
   "account-number",
   "account_number",
+  // ── PII master keys (#1335) ───────────────────────────────────────────────
+  // Government-issued identifiers
+  "ssn", "national_id", "national-id", "national_id_number",
+  "passport_number", "passport-number",
+  "tax_id", "tax-id", "taxpayer_id",
+  "drivers_license", "driving_license", "driver_license",
+  "voter_id", "voter-id",
+  // Financial / payment PII
+  "iban", "sort_code", "sort-code", "routing_number", "routing-number",
+  "bank_account", "bank-account",
+  "swift_code", "swift-code", "bic",
+  // Biometric / health
+  "dob", "date_of_birth", "date-of-birth", "birth_date", "birthdate",
+  "biometric", "fingerprint", "face_id", "face-id",
+  // Contact PII
+  "email", "phone", "phone_number", "phone-number",
+  "address", "street", "postcode", "postal_code", "postal-code", "zip",
+  "full_name", "full-name", "first_name", "last_name",
+  // Crypto / wallet
+  "stellar_address", "stellar-address",
+  "wallet_address", "wallet-address",
+  "private_key", "public_key",
+  "transaction_hash", "tx_hash",
+  // Session / device
+  "session_id", "session-id",
+  "device_id", "device-id",
+  "ip_address", "ip-address",
+  "user_agent", "user-agent",
 ];
+
+/**
+ * PII_MASTER_KEYS — the complete set of field names that must NEVER appear
+ * in logs at any verbosity level, including DEBUG.
+ *
+ * This is the authoritative source of truth for the log scrubbing config.
+ * Any new PII field MUST be added here before being used in code.
+ */
+export const PII_MASTER_KEYS: ReadonlySet<string> = new Set(REDACT_KEYS);
 
 /**
  * Patterns that identify sensitive field names.
