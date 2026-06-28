@@ -84,7 +84,17 @@ export class CacheTags {
   }
   
   static auditHistory(userId: string): string {
-    return `user:${userId}:audit-history`;
+    return `user:\${userId}:audit-history`;
+  }
+
+  /** Merchant webhook configuration — invalidated on webhook reconnect/recovery */
+  static merchantWebhookConfig(userId: string): string {
+    return `merchant:\${userId}:webhook-config`;
+  }
+
+  /** All merchant configs for a broadcast invalidation */
+  static allMerchantWebhookConfigs(): string {
+    return `merchant:webhook-config:all`;
   }
 }
 

@@ -1,4 +1,6 @@
 import { createHmac } from "crypto";
+import { cachedQueryManager, CacheTags } from "./cachedQueryManager";
+import logger from "../utils/logger";
 import {
   MerchantWebhookModel,
   MerchantWebhook,
@@ -121,8 +123,43 @@ export class MerchantWebhookService {
   }
 
   /**
+   * onWebhookDeliveryRecovered — invalidate merchant config caches after a
+   * webhook client recovers a failed connection.
+   *
+   * When a webhook target registers a successful delivery after prior failures
+   * (i.e. a "reconnect recovery"), any cached merchant configuration must be
+   * flushed so that subsequent requests load the fresh, current settings from
+   * the database rather than stale values from before the outage.
+   *
+   * @param userId  The merchant whose webhook just recovered
+   * @param webhookId  The specific webhook endpoint that recovered
+   */
+  async onWebhookDeliveryRecovered(userId: string, webhookId: string): Promise<void> {
+    const tags = [
+      CacheTags.merchantWebhookConfig(userId),
+      CacheTags.allMerchantWebhookConfigs(),
+    ];
+
+    try {
+      await cachedQueryManager.invalidateByTags(tags);
+      logger.info(
+        { userId, webhookId, tags },
+        "[webhook] Cache invalidated after delivery recovery",
+      );
+    } catch (err) {
+      logger.warn(
+        { userId, webhookId, err },
+        "[webhook] Cache invalidation failed after recovery (non-fatal)",
+      );
+    }
+  }
+
+  /**
    * Deliver a real event to all active webhooks for a user that subscribe to the event.
    * Called by the transaction worker after status changes.
+   *
+   * When a previously-failed webhook delivers successfully, the merchant
+   * config cache is invalidated so subsequent reads pick up the latest settings.
    */
   async dispatchEvent(
     userId: string,
