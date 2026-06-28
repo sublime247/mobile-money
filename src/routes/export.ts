@@ -3,7 +3,8 @@ import { Router, Request, Response } from 'express';
 import { Transform } from 'stream';
 import { pipeline } from 'stream/promises';
 
-const CSV_HEADERS = [
+/** All columns available for export — full transaction schema. */
+const ALL_EXPORT_COLUMNS = [
   'id',
   'user_id',
   'amount',
@@ -11,8 +12,60 @@ const CSV_HEADERS = [
   'type',
   'status',
   'created_at',
-  'description'
+  'updated_at',
+  'description',
+  'reference',
+  'fee',
+  'net_amount',
+  'provider',
+  'channel',
+  'country',
+  'phone_number',
+  'external_id',
+  'metadata',
+] as const;
+
+type ExportColumn = (typeof ALL_EXPORT_COLUMNS)[number];
+
+/** Default column set — matches the original CSV_HEADERS for backwards compat. */
+const DEFAULT_EXPORT_COLUMNS: ExportColumn[] = [
+  'id',
+  'user_id',
+  'amount',
+  'currency',
+  'type',
+  'status',
+  'created_at',
+  'description',
 ];
+
+// Keep backwards-compatible alias used by transactionRowToCsv
+const CSV_HEADERS = DEFAULT_EXPORT_COLUMNS;
+
+/**
+ * Parse the ?columns= query parameter into a validated column list.
+ *
+ * Accepts a comma-separated string of column names.
+ * Any unknown column names are silently dropped.
+ * Falls back to DEFAULT_EXPORT_COLUMNS when the param is absent or empty.
+ *
+ * @example
+ *   ?columns=id,amount,currency,status
+ */
+function parseColumnSelection(raw: string | undefined): ExportColumn[] {
+  if (!raw || !raw.trim()) return DEFAULT_EXPORT_COLUMNS;
+
+  const requested = raw
+    .split(',')
+    .map((c) => c.trim().toLowerCase())
+    .filter(Boolean);
+
+  const valid = requested.filter((c): c is ExportColumn =>
+    (ALL_EXPORT_COLUMNS as readonly string[]).includes(c),
+  );
+
+  return valid.length > 0 ? valid : DEFAULT_EXPORT_COLUMNS;
+}
 
 function parseTransactionExportFilters(query: any) {
   return {
@@ -99,6 +152,9 @@ export function createExportRoutes(options?: {
     };
 
     try {
+      // Parse requested columns — defaults to DEFAULT_EXPORT_COLUMNS
+      const selectedColumns = parseColumnSelection(req.query.columns as string | undefined);
+
       const filters = parseTransactionExportFilters(req.query);
       const scopedUserId = getScopedUserId(req);
 
@@ -129,11 +185,22 @@ export function createExportRoutes(options?: {
       let transform: Transform;
 
       if (format === "csv") {
-        res.write(`${CSV_HEADERS.join(",")}\n`);
+        res.write(selectedColumns.join(",") + "\n");
         transform = new Transform({
           objectMode: true,
           transform(chunk: Record<string, unknown>, _encoding, callback) {
-            callback(null, transactionRowToCsv(chunk));
+            // Render only the user-selected columns, with RFC 4180 CSV escaping
+            const vals = selectedColumns.map((col) => {
+              const v = chunk[col];
+              if (v === null || v === undefined) return "";
+              const s = typeof v === "object" ? JSON.stringify(v) : String(v);
+              return s.includes(",") || s.includes('"') || s.includes("
+")
+                ? `"${s.replace(/"/g, '""')}"`
+                : s;
+            });
+            callback(null, vals.join(",") + "
+");
           },
         });
       } else {
