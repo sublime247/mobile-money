@@ -543,6 +543,85 @@ export class StellarService {
       // Don't throw - audit logging failure shouldn't break the operation
     }
   }
+
+  /**
+   * Fetch the current network base fee from Horizon, using the cache if valid.
+   */
+  private async getNetworkBaseFee(): Promise<number> {
+    if (this.feeCache && this.feeCache.expires > Date.now()) {
+      return this.feeCache.baseFee;
+    }
+
+    try {
+      const feeStats = await this.server.feeStats();
+      const baseFee = parseInt(feeStats.fee_charged.max, 10) || 100;
+      this.feeCache = {
+        baseFee,
+        expires: Date.now() + this.FEE_CACHE_TTL_MS,
+      };
+      return baseFee;
+    } catch (error) {
+      console.warn("Failed to fetch fee stats from Horizon, falling back to default base fee", error);
+      return 100; // Default base fee on Stellar is 100 stroops
+    }
+  }
+
+  /**
+   * Creates and funds a new Stellar account on the testnet.
+   * Checks funding balance bounds before calling Horizon.
+   * Throws an error if the funding key is empty.
+   */
+  async createTestnetAccount(
+    destinationAddress: string,
+    startingBalance: string,
+  ): Promise<{ hash: string }> {
+    if (!this.issuerKeypair) {
+      throw new Error("Funding key is empty.");
+    }
+
+    const startingBalanceNum = parseFloat(startingBalance);
+    if (isNaN(startingBalanceNum) || startingBalanceNum < 1.0) {
+      throw new Error("Starting balance must be at least 1.0 XLM.");
+    }
+
+    // Check funding balance bounds before calling Horizon
+    const baseFee = await this.getNetworkBaseFee();
+    const baseFeeXlm = baseFee / 10_000_000;
+
+    let fundingAccount;
+    try {
+      fundingAccount = await this.server.loadAccount(this.issuerKeypair.publicKey());
+    } catch (error) {
+      throw new Error(`Failed to load funding account: ${error instanceof Error ? error.message : "unknown error"}`);
+    }
+
+    const nativeBalanceObj = fundingAccount.balances.find((b) => b.asset_type === "native");
+    const nativeBalance = nativeBalanceObj ? parseFloat(nativeBalanceObj.balance) : 0;
+
+    if (nativeBalance < startingBalanceNum + baseFeeXlm) {
+      throw new Error(
+        `Insufficient funds in funding account. Required: ${startingBalanceNum + baseFeeXlm} XLM, Available: ${nativeBalance} XLM.`
+      );
+    }
+
+    // Create the transaction
+    const transaction = new StellarSdk.TransactionBuilder(fundingAccount, {
+      fee: baseFee.toString(),
+      networkPassphrase: getNetworkPassphrase(),
+    })
+      .addOperation(
+        StellarSdk.Operation.createAccount({
+          destination: destinationAddress,
+          startingBalance: startingBalance,
+        }),
+      )
+      .setTimeout(30)
+      .build();
+
+    transaction.sign(this.issuerKeypair);
+    const response = await this.server.submitTransaction(transaction);
+    return { hash: response.hash };
+  }
 }
 
 // Added startEventSubscription to initialize Horizon event subscription
