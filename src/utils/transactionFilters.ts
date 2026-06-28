@@ -1,6 +1,58 @@
 import { Request, Response, NextFunction } from "express";
 
 /**
+ * ISO 8601 UTC offset regex.
+ *
+ * Accepts:
+ *   - "Z"           (UTC, zero offset)
+ *   - "+HH:MM"      e.g. "+05:30"
+ *   - "-HH:MM"      e.g. "-07:00"
+ *   - "+HH"         bare hour offset (non-standard but widely seen)
+ *   - "+HHMM"       compact form without colon
+ *
+ * The full datetime string must also satisfy a basic ISO 8601 shape so that
+ * callers cannot pass a bare offset like "+05:30" without a date component.
+ *
+ * Valid examples:
+ *   "2024-01-15T10:30:00Z"
+ *   "2024-01-15T10:30:00+00:00"
+ *   "2024-01-15T10:30:00-05:30"
+ *
+ * Invalid examples (rejected with 400):
+ *   "2024-01-15T10:30:00"        – missing timezone
+ *   "2024-01-15T10:30:00+25:00"  – hour out of range
+ *   "not-a-date"                 – not ISO 8601
+ */
+const ISO8601_WITH_OFFSET_RE =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-](?:0\d|1[0-4]):[0-5]\d)$/;
+
+/**
+ * Validate that a date string is ISO 8601 with a strict UTC offset.
+ *
+ * Returns `true` when the string is valid, `false` otherwise.
+ * A `null` / `undefined` input is treated as "not provided" and returns `true`
+ * (callers decide whether the field is required).
+ */
+export function isValidIsoWithOffset(value: string | null | undefined): boolean {
+  if (value == null) return true;
+  return ISO8601_WITH_OFFSET_RE.test(value);
+}
+
+/**
+ * Extract a human-readable error message for an invalid date parameter.
+ *
+ * @param paramName Query parameter name (e.g. "startDate")
+ * @param value     The bad value supplied by the client
+ */
+export function dateOffsetError(paramName: string, value: string): string {
+  return (
+    `"${paramName}" must be a valid ISO 8601 datetime with a UTC offset ` +
+    `(e.g. "2024-01-15T10:30:00Z" or "2024-01-15T10:30:00+05:30"). ` +
+    `Received: "${value}"`
+  );
+}
+
+/**
  * Transaction Status Enum
  */
 export enum TransactionStatus {
@@ -87,7 +139,23 @@ export const validateTransactionFilters = (
   next: NextFunction
 ) => {
   try {
-    const { status, limit = 50, offset = 0, reference } = req.query;
+    const { status, limit = 50, offset = 0, reference, startDate, endDate } = req.query;
+
+    // Validate UTC timezone offsets in date range parameters
+    // ISO 8601 dates without a UTC offset (e.g. "2024-01-15T10:30:00") are
+    // rejected to prevent ambiguous local-time queries reaching the database.
+    if (startDate && !isValidIsoWithOffset(startDate as string)) {
+      return res.status(400).json({
+        error: "Invalid startDate parameter",
+        message: dateOffsetError("startDate", startDate as string),
+      });
+    }
+    if (endDate && !isValidIsoWithOffset(endDate as string)) {
+      return res.status(400).json({
+        error: "Invalid endDate parameter",
+        message: dateOffsetError("endDate", endDate as string),
+      });
+    }
 
     // Validate limit
     const limitNum = parseInt(limit as string, 10);
