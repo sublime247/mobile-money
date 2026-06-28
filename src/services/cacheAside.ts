@@ -151,6 +151,53 @@ export class TransactionCacheInvalidation {
 }
 
 /**
+ * Webhook recovery cache invalidation helpers
+ * Handles cache invalidation when webhook clients reconnect successfully
+ */
+export class WebhookCacheInvalidation {
+  /**
+   * Invalidate merchant configuration caches when webhook recovers
+   * This ensures fresh settings are loaded after a webhook client reconnects
+   */
+  static async invalidateOnWebhookRecovery(userId: string, webhookId: string): Promise<void> {
+    const tags = [
+      CacheTags.merchantConfig(userId),
+      CacheTags.merchantWebhooks(userId),
+    ];
+    
+    const invalidatedCount = await cachedQueryManager.invalidateByTags(tags);
+    
+    logger.info({
+      userId,
+      webhookId,
+      tags,
+      invalidatedCount,
+      event: "webhook_recovery",
+    }, "Merchant configuration caches invalidated on webhook recovery");
+  }
+  
+  /**
+   * Invalidate all merchant-related caches for a specific user
+   * Used when webhook configuration changes or when webhook is deleted
+   */
+  static async invalidateMerchantCaches(userId: string): Promise<void> {
+    const tags = [
+      CacheTags.merchantConfig(userId),
+      CacheTags.merchantWebhooks(userId),
+    ];
+    
+    const invalidatedCount = await cachedQueryManager.invalidateByTags(tags);
+    
+    logger.info({
+      userId,
+      tags,
+      invalidatedCount,
+      event: "merchant_cache_invalidation",
+    }, "All merchant caches invalidated");
+  }
+}
+
+/**
  * Cache key generator helpers
  */
 export const CacheKeyGenerators = {

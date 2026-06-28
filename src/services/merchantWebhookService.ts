@@ -5,6 +5,7 @@ import {
   WebhookDeliveryLog,
 } from "../models/merchantWebhook";
 import { SAMPLE_WEBHOOK_PAYLOAD } from "../routes/webhooks";
+import { WebhookCacheInvalidation } from "./cacheAside";
 
 const model = new MerchantWebhookModel();
 
@@ -135,6 +136,7 @@ export class MerchantWebhookService {
     await Promise.allSettled(
       active.map(async (webhook) => {
         const result = await deliver(webhook.url, webhook.secret, payload, this.fetchImpl);
+        
         await model.insertDeliveryLog({
           webhookId: webhook.id,
           eventType,
@@ -146,6 +148,12 @@ export class MerchantWebhookService {
           durationMs: result.durationMs,
           isTest: false,
         });
+
+        // Invalidate merchant config caches on successful webhook delivery
+        // This ensures fresh settings are loaded after webhook recovery
+        if (result.status === "delivered") {
+          await WebhookCacheInvalidation.invalidateOnWebhookRecovery(userId, webhook.id);
+        }
       }),
     );
   }

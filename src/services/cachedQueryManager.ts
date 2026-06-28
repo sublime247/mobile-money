@@ -86,6 +86,14 @@ export class CacheTags {
   static auditHistory(userId: string): string {
     return `user:${userId}:audit-history`;
   }
+  
+  static merchantConfig(userId: string): string {
+    return `merchant:${userId}:config`;
+  }
+  
+  static merchantWebhooks(userId: string): string {
+    return `merchant:${userId}:webhooks`;
+  }
 }
 
 /**
