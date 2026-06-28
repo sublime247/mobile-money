@@ -10,11 +10,19 @@ export interface EndpointUsage {
   resetTime: string;
 }
 
+export interface DailyMetric {
+  date: string;
+  queryCount: number;
+  avgLatencyMs: number;
+  successRate: number;
+}
+
 export interface DashboardStats {
   partnerId: string;
   totalRequests: number;
   endpoints: EndpointUsage[];
   generatedAt: string;
+  historicalUsage: DailyMetric[];
 }
 
 const ENDPOINT_CONFIGS: Record<string, { limit: number; windowMs: number }> = {
@@ -57,11 +65,32 @@ export class DeveloperDashboardService {
       });
     }
 
+    // Generate 30 days of simulated query counts and latency datasets for interactive charts
+    const historicalUsage: DailyMetric[] = [];
+    const now = new Date();
+    for (let i = 29; i >= 0; i--) {
+      const date = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+      const dateString = date.toISOString().split("T")[0];
+      
+      const seed = (partnerId.length + i) % 10;
+      const queryCount = 5000 + (seed * 800) + Math.floor(Math.sin(i) * 1000);
+      const avgLatencyMs = 80 + (seed * 15) + Math.floor(Math.cos(i) * 20);
+      const successRate = 98.5 + (seed * 0.15);
+
+      historicalUsage.push({
+        date: dateString,
+        queryCount,
+        avgLatencyMs: Math.round(avgLatencyMs * 10) / 10,
+        successRate: Math.round(successRate * 100) / 100,
+      });
+    }
+
     return {
       partnerId,
       totalRequests,
       endpoints,
       generatedAt: new Date().toISOString(),
+      historicalUsage,
     };
   }
 }

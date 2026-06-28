@@ -569,28 +569,6 @@ export function createProviderMockApp() {
 
   // ─── Tigo Mock Endpoints ─────────────────────────────────────────────────────
 
-  
- // Example assumes a standard Express.js style route
-app.post('/tigo/transaction', (req, res) => {
-  const authScenario = req.scenario['payment']; 
-  
-  if (!authScenario) {
-    return res.status(401).json({ error: 'Unauthorized: Missing token' });
-  }
-  
-  // simply parse a date string if it's passed directly.
-  const tokenDateString = extractDateFromToken(authScenario); // You'll need to see how the repo does this
-  const tokenExpiryDate = new Date(tokenDateString).getTime();
-  const currentDate = Date.now();
-
-  // The validation block sending the 401 response
-  if (tokenExpiryDate < currentDate) {
-    return res.status(401).json({ 
-      error: 'Unauthorized', 
-      message: 'Token has expired' 
-    });
-  }
-
   app.post(
     "/tigo/auth/token",
     async (req: Request, res: Response) => {
@@ -713,9 +691,6 @@ app.post('/tigo/transaction', (req, res) => {
 
   return app;
 }
-
-  // ...  transaction logic continues down here ...
-});
 
 
 

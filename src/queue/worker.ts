@@ -244,6 +244,7 @@ async function processTransaction(
   // ───────────────────────────────────────────────────────────────────────────
 
   console.log(`[RabbitMQ] Processing ${type} transaction: ${transactionId}`);
+  const {
     requestId,
     _traceId,
   } = data;

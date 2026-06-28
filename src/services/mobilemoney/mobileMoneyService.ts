@@ -7,6 +7,8 @@ import {
 } from "../../utils/metrics";
 import logger from "../../utils/logger";
 import { providerSettingsService } from "../providerSettingsService";
+import { createError } from "../../middleware/errorHandler";
+import { ERROR_CODES } from "../../constants/errorCodes";
 
 export type ProviderTransactionStatus =
   | "completed"
@@ -57,16 +59,37 @@ const {
 } = require("./mobileMoneyService_impl.js");
 
 const SENEGAL_PHONE_REGEX = /^\+221\d{9}$/;
+const CAMEROON_PHONE_REGEX = /^\+237\d{9}$/;
+const UGANDA_PHONE_REGEX = /^\+256\d{9}$/;
 
 export function isValidSenegalPhoneNumber(phoneNumber: string): boolean {
   return SENEGAL_PHONE_REGEX.test(phoneNumber.trim());
 }
 
+export function isValidCameroonPhoneNumber(phoneNumber: string): boolean {
+  return CAMEROON_PHONE_REGEX.test(phoneNumber.trim());
+}
+
+export function isValidUgandaPhoneNumber(phoneNumber: string): boolean {
+  return UGANDA_PHONE_REGEX.test(phoneNumber.trim());
+}
+
 function isSenegalPhoneNumberCandidate(phoneNumber: string): boolean {
   const trimmed = phoneNumber.trim();
   const digits = trimmed.replace(/\D/g, "");
-
   return trimmed.startsWith("+221") || digits.startsWith("221");
+}
+
+function isCameroonPhoneNumberCandidate(phoneNumber: string): boolean {
+  const trimmed = phoneNumber.trim();
+  const digits = trimmed.replace(/\D/g, "");
+  return trimmed.startsWith("+237") || digits.startsWith("237");
+}
+
+function isUgandaPhoneNumberCandidate(phoneNumber: string): boolean {
+  const trimmed = phoneNumber.trim();
+  const digits = trimmed.replace(/\D/g, "");
+  return trimmed.startsWith("+256") || digits.startsWith("256");
 }
 
 function assertSupportedPhoneNumberFormat(phoneNumber: string): void {
@@ -74,8 +97,27 @@ function assertSupportedPhoneNumberFormat(phoneNumber: string): void {
     isSenegalPhoneNumberCandidate(phoneNumber) &&
     !isValidSenegalPhoneNumber(phoneNumber)
   ) {
-    throw new Error(
+    throw createError(
+      ERROR_CODES.INVALID_PHONE_FORMAT,
       "Invalid Senegal phone number format. Use +221 followed by 9 digits.",
+    );
+  }
+  if (
+    isCameroonPhoneNumberCandidate(phoneNumber) &&
+    !isValidCameroonPhoneNumber(phoneNumber)
+  ) {
+    throw createError(
+      ERROR_CODES.INVALID_PHONE_FORMAT,
+      "Invalid Cameroon phone number format. Use +237 followed by 9 digits.",
+    );
+  }
+  if (
+    isUgandaPhoneNumberCandidate(phoneNumber) &&
+    !isValidUgandaPhoneNumber(phoneNumber)
+  ) {
+    throw createError(
+      ERROR_CODES.INVALID_PHONE_FORMAT,
+      "Invalid Uganda phone number format. Use +256 followed by 9 digits.",
     );
   }
 }

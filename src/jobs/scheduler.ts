@@ -119,6 +119,15 @@ const JOBS: JobConfig[] = [
     schedule: "0 0 1 * *",
     handler: runMonthlyInvoiceJob,
   },
+  {
+    name: "monthly-reconciliation-report",
+    // 1st of every month at midnight
+    schedule: "0 0 1 * *",
+    handler: async () => {
+      const { runMonthlyReconciliationReportJob } = await import("./monthlyReconciliationReportJob");
+      return runMonthlyReconciliationReportJob();
+    },
+  },
   ...(INDEX_REINDEX_JOB_ENABLED
     ? [
         {

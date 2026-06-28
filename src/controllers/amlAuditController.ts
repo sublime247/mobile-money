@@ -3,6 +3,9 @@ import { Request, Response } from "express";
 import { AMLAlertModel, AMLAlertFilter } from "../models/amlAlert";
 import { TransactionModel } from "../models/transaction";
 import { UserModel } from "../models/users";
+import { pool } from "../config/database";
+import { encryptAES, decryptAES, deriveKey } from "../utils/encryption";
+import { env } from "../config/env";
 
 const amlAlertModel = new AMLAlertModel();
 const transactionModel = new TransactionModel();
@@ -469,5 +472,175 @@ export const markAlertForSAR = async (
   } catch (error) {
     logger.error("Failed to mark alert for SAR:", error);
     res.status(500).json({ error: "Failed to generate SAR reports" });
+  }
+};
+
+/**
+ * Rejection reason codes schema mapping (Issue 1490)
+ */
+export const RejectionReasonCodes = {
+  SANCTIONS_HIT: "SANCTIONS_HIT",
+  VELOCITY_LIMIT_EXCEEDED: "VELOCITY_LIMIT_EXCEEDED",
+  SUSPICIOUS_STRUCTURING: "SUSPICIOUS_STRUCTURING",
+  INVALID_PHONE_FORMAT: "INVALID_PHONE_FORMAT",
+} as const;
+
+const getEncryptionKey = (): Buffer => {
+  return deriveKey(env.DB_ENCRYPTION_KEY || "dev-key-material-at-least-32-chars-long");
+};
+
+export const encryptPiiData = (plaintext: string): any => {
+  const key = getEncryptionKey();
+  return encryptAES(plaintext, key);
+};
+
+export const decryptPiiData = (encrypted: any): string => {
+  const key = getEncryptionKey();
+  return decryptAES(encrypted, key);
+};
+
+/**
+ * Helper to log a rejected transaction
+ */
+export const logTransactionRejection = async (
+  userId: string,
+  transactionId: string | null,
+  reasonCode: string,
+  rulesMatched: any,
+  piiDetails: Record<string, string>,
+  ipAddress?: string,
+  userAgent?: string,
+): Promise<void> => {
+  try {
+    const encryptedPii: Record<string, any> = {};
+    for (const [key, value] of Object.entries(piiDetails)) {
+      encryptedPii[key] = encryptPiiData(value);
+    }
+
+    const diff = {
+      rejection_reason_code: reasonCode,
+      rules_matched: rulesMatched,
+      encrypted_pii: encryptedPii,
+      transaction_id: transactionId,
+      user_id: userId,
+    };
+
+    await pool.query(
+      `INSERT INTO audit_logs (admin_id, action, resource, resource_id, diff, ip_address, user_agent)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [
+        userId,
+        "TRANSACTION_REJECTED",
+        "transaction_rejection",
+        transactionId || null,
+        JSON.stringify(diff),
+        ipAddress || null,
+        userAgent || null,
+      ]
+    );
+  } catch (err) {
+    logger.error("Failed to log transaction rejection:", err);
+  }
+};
+
+/**
+ * Fetch list of blocked/rejected transaction audits with decrypted PII
+ * GET /api/audit/rejections
+ */
+export const getTransactionRejections = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const limit = parseInt(req.query.limit as string || "50", 10);
+    const offset = parseInt(req.query.offset as string || "0", 10);
+
+    const query = `
+      SELECT id, admin_id AS "adminId", action, resource, resource_id AS "resourceId", diff, ip_address AS "ipAddress", user_agent AS "userAgent", created_at AS "createdAt"
+      FROM audit_logs
+      WHERE resource = 'transaction_rejection'
+      ORDER BY created_at DESC
+      LIMIT $1 OFFSET $2
+    `;
+    const result = await pool.query(query, [limit, offset]);
+    
+    const rejections = result.rows.map((row) => {
+      const diff = row.diff;
+      const decryptedPii: Record<string, string> = {};
+      if (diff.encrypted_pii) {
+        for (const [key, value] of Object.entries(diff.encrypted_pii)) {
+          try {
+            decryptedPii[key] = decryptPiiData(value);
+          } catch (e) {
+            decryptedPii[key] = "[DECRYPTION_FAILED]";
+          }
+        }
+      }
+
+      return {
+        id: row.id,
+        userId: diff.user_id || row.adminId,
+        transactionId: diff.transaction_id || row.resourceId,
+        reasonCode: diff.rejection_reason_code,
+        rulesMatched: diff.rules_matched,
+        piiDetails: decryptedPii,
+        ipAddress: row.ipAddress,
+        userAgent: row.userAgent,
+        createdAt: row.createdAt,
+      };
+    });
+
+    const countQuery = `SELECT COUNT(*) FROM audit_logs WHERE resource = 'transaction_rejection'`;
+    const countResult = await pool.query(countQuery);
+    const total = parseInt(countResult.rows[0].count, 10);
+
+    res.json({
+      data: rejections,
+      pagination: {
+        total,
+        limit,
+        offset,
+      },
+    });
+  } catch (error) {
+    logger.error("Failed to fetch transaction rejections:", error);
+    res.status(500).json({ error: "Failed to fetch transaction rejections" });
+  }
+};
+
+/**
+ * Fetch audited statistics for blocked transactions
+ * GET /api/audit/rejections/stats
+ */
+export const getTransactionRejectionStats = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const query = `
+      SELECT diff->>'rejection_reason_code' AS reason_code, COUNT(*) AS count
+      FROM audit_logs
+      WHERE resource = 'transaction_rejection'
+      GROUP BY diff->>'rejection_reason_code'
+    `;
+    const result = await pool.query(query);
+    
+    const stats: Record<string, number> = {};
+    let total = 0;
+    
+    result.rows.forEach((row) => {
+      const code = row.reason_code || "UNKNOWN";
+      const count = parseInt(row.count, 10);
+      stats[code] = count;
+      total += count;
+    });
+
+    res.json({
+      total,
+      breakdown: stats,
+    });
+  } catch (error) {
+    logger.error("Failed to fetch transaction rejection stats:", error);
+    res.status(500).json({ error: "Failed to fetch transaction rejection stats" });
   }
 };
