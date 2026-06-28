@@ -430,6 +430,94 @@ export class ExchangeRateBufferService {
       logger.warn({ err }, "[ERB] Failed to log audit entry");
     }
   }
+  /**
+   * applyMarginAutomatically — applies the correct spread buffer to a raw rate
+   * and persists the resolved configuration so future calls benefit from a
+   * warm cache. This is the single entry-point for all pricing code paths.
+   *
+   * 1. Resolves buffer config (exact match → wildcard fallback → zero-buffer default)
+   * 2. Computes the effective buffer % (static or volatility-adjusted dynamic)
+   * 3. Applies the spread and returns a BufferedRate
+   * 4. Upserts the resolved config to the DB so it is visible in the admin UI
+   *    and subsequent reads skip the computation entirely.
+   *
+   * @param rawRate     Mid-market rate from upstream provider
+   * @param provider    Provider identifier (e.g. "stellar", "flutterwave")
+   * @param fromCurrency Source ISO-4217 code
+   * @param toCurrency  Destination ISO-4217 code
+   * @param direction   "sell" (user receives less) | "buy" (user pays more)
+   * @param changedBy   Actor for audit log (defaults to "system")
+   */
+  async applyMarginAutomatically(
+    rawRate: number,
+    provider: string,
+    fromCurrency: string,
+    toCurrency: string,
+    direction: "sell" | "buy" = "sell",
+    changedBy = "system",
+  ): Promise<BufferedRate> {
+    const buffered = await this.applyBuffer(rawRate, provider, fromCurrency, toCurrency, direction);
+
+    // Persist the resolved configuration so it is auditable and cached
+    await this.saveMarginConfig(
+      {
+        provider: buffered.providerUsed === "none" ? provider : buffered.providerUsed,
+        currencyPair: buffered.currencyPair,
+        bufferPercent: buffered.bufferApplied,
+        volatilityMode: buffered.mode,
+      },
+      changedBy,
+    ).catch((err) =>
+      logger.warn({ err }, "[ERB] applyMarginAutomatically: saveMarginConfig failed (non-fatal)"),
+    );
+
+    logger.info(
+      {
+        provider,
+        currencyPair: buffered.currencyPair,
+        rawRate,
+        bufferedRate: buffered.bufferedRate,
+        bufferApplied: buffered.bufferApplied,
+        mode: buffered.mode,
+        direction,
+      },
+      "[ERB] Margin applied automatically",
+    );
+
+    return buffered;
+  }
+
+  /**
+   * saveMarginConfig — upserts a buffer pricing configuration.
+   *
+   * If a record already exists for the provider + currency_pair it is updated
+   * in-place; otherwise a new row is inserted. The cache entry for the pair
+   * is invalidated so the next applyBuffer() call picks up the fresh values.
+   *
+   * @param config    The buffer configuration to persist
+   * @param changedBy Actor for audit log (defaults to "system")
+   */
+  async saveMarginConfig(
+    config: CreateBufferRequest & { volatilityMode?: "static" | "dynamic" },
+    changedBy = "system",
+  ): Promise<ExchangeRateBuffer> {
+    const existing = await this.resolveBuffer(config.provider, config.currencyPair);
+
+    if (existing) {
+      return this.updateBuffer(
+        existing.id,
+        {
+          bufferPercent: config.bufferPercent,
+          volatilityMode: config.volatilityMode ?? existing.volatilityMode,
+          minBufferPct: config.minBufferPct ?? existing.minBufferPct,
+          maxBufferPct: config.maxBufferPct ?? existing.maxBufferPct,
+        },
+        changedBy,
+      );
+    }
+
+    return this.createBuffer(config, changedBy);
+  }
 }
 
 export const exchangeRateBufferService = new ExchangeRateBufferService();
