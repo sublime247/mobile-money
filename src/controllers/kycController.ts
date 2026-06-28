@@ -6,7 +6,13 @@ import { z } from 'zod';
 import { UserModel } from '../models/users';
 import { createError } from "../middleware/errorHandler";
 import { ERROR_CODES } from "../constants/errorCodes";
+import { commit, commitWithBlinding, verifyEqualOpenings } from '../crypto/zkBalanceProof';
+import { signCommitment, verifyCommitmentSignature, verifyRange } from '../crypto/zkKycProof';
+import elliptic from 'elliptic';
 import logger from "../utils/logger";
+
+const ecInstance = new elliptic.ec("secp256k1");
+const FALLBACK_PRIVATE_KEY = ecInstance.genKeyPair().getPrivate("hex");
 
 // Validation schemas
 const CreateApplicantSchema = z.object({
@@ -501,6 +507,99 @@ export class KYCController {
     const rawBody = (req as Request & { rawBody?: Buffer }).rawBody;
     return rawBody?.toString('utf8') ?? JSON.stringify(req.body ?? {});
   }
+
+  /**
+   * Issue ZK credential ( Pedersen commitment + signature )
+   * POST /api/kyc/zk/issue-credential
+   */
+  issueZkCredential = async (req: Request, res: Response) => {
+    try {
+      const userId = req.jwtUser?.userId;
+      if (!userId) {
+        throw createError(ERROR_CODES.UNAUTHORIZED, "User not authenticated");
+      }
+
+      const { attribute_type, attribute_value } = req.body;
+      if (!attribute_type || attribute_value === undefined) {
+        throw createError(ERROR_CODES.INVALID_INPUT, "attribute_type and attribute_value are required");
+      }
+
+      const value = BigInt(attribute_value);
+      const { commitment, opening } = commit(value);
+
+      const authorityPrivateKey = process.env.KYC_AUTHORITY_PRIVATE_KEY || FALLBACK_PRIVATE_KEY;
+      const signature = signCommitment(authorityPrivateKey, commitment.hex, attribute_type);
+
+      res.status(201).json({
+        success: true,
+        data: {
+          commitment: commitment.hex,
+          blinding: opening.blinding.toString(),
+          value: opening.value.toString(),
+          attribute_type,
+          signature,
+        }
+      });
+    } catch (error) {
+      logger.error("Issue ZK credential error:", error);
+      if ((error as any).statusCode) throw error;
+      throw createError(ERROR_CODES.INTERNAL_ERROR, "Failed to issue ZK credential");
+    }
+  };
+
+  /**
+   * Verify ZK proof (range proof or equality proof)
+   * POST /api/kyc/zk/verify-proof
+   */
+  verifyZkProof = async (req: Request, res: Response) => {
+    try {
+      const userId = req.jwtUser?.userId;
+      if (!userId) {
+        throw createError(ERROR_CODES.UNAUTHORIZED, "User not authenticated");
+      }
+
+      const { commitment, attribute_type, signature, proof, expected_value } = req.body;
+      if (!commitment || !attribute_type || !signature || !proof || expected_value === undefined) {
+        throw createError(ERROR_CODES.INVALID_INPUT, "Missing required fields");
+      }
+
+      // Verify signature on commitment
+      const authorityPrivateKey = process.env.KYC_AUTHORITY_PRIVATE_KEY || FALLBACK_PRIVATE_KEY;
+      const authorityPublicKey = process.env.KYC_AUTHORITY_PUBLIC_KEY || ecInstance.keyFromPrivate(authorityPrivateKey, "hex").getPublic("hex");
+
+      const isSignatureValid = verifyCommitmentSignature(authorityPublicKey, commitment, attribute_type, signature);
+      if (!isSignatureValid) {
+        throw createError(ERROR_CODES.INVALID_INPUT, "Invalid authority signature on credential");
+      }
+
+      const point = ecInstance.curve.decodePoint(Buffer.from(commitment, "hex"));
+      const commitObj = { point, hex: commitment };
+
+      let isProofValid = false;
+      if (attribute_type === "age") {
+        const threshold = BigInt(expected_value);
+        isProofValid = verifyRange(commitObj, proof, threshold, 8);
+      } else if (attribute_type === "nationality") {
+        isProofValid = verifyEqualOpenings(commitObj, commitWithBlinding(BigInt(expected_value), 0n), proof);
+      }
+
+      if (!isProofValid) {
+        throw createError(ERROR_CODES.INVALID_INPUT, "ZK proof verification failed");
+      }
+
+      // Proof verified, update user to Tier-3 (Full)
+      await this.kycService.updateUserKYCLevel(userId, KYCLevel.FULL);
+
+      res.status(200).json({
+        success: true,
+        message: "KYC Tier-3 verified successfully via ZK proof",
+      });
+    } catch (error) {
+      logger.error("Verify ZK proof error:", error);
+      if ((error as any).statusCode) throw error;
+      throw createError(ERROR_CODES.INTERNAL_ERROR, "Failed to verify ZK proof");
+    }
+  };
 
   // Private helper methods
 

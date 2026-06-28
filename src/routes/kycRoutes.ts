@@ -441,6 +441,10 @@ export const createKYCRoutes = (db: Pool): Router => {
   // User KYC status
   router.get("/status", kycController.getUserKYCStatus);
 
+  // ZK-KYC Tier-3 Verification Routes
+  router.post("/zk/issue-credential", kycController.issueZkCredential);
+  router.post("/zk/verify-proof", kycController.verifyZkProof);
+
   return router;
 };
 
