@@ -1,11 +1,13 @@
 import logger from "../utils/logger";
 import axios from "axios";
 import { redisClient } from "../config/redis";
+import geoip from "geoip-lite";
+import { Request, Response, NextFunction } from "express";
 
 /**
  * GeolocationService
  *
- * Resolves IP addresses to location metadata using ip-api.com.
+ * Resolves IP addresses to location metadata using geoip-lite and ip-api.com.
  * - Caches results in Redis (or in-memory fallback) for 24 hours
  * - Returns a safe "Unknown" result on any failure (graceful degradation)
  * - Anonymizes IPs before caching to aid GDPR compliance
@@ -64,6 +66,7 @@ export function isRoutableIp(ip: string): boolean {
     /^192\.168\./,
     /^172\.(1[6-9]|2\d|3[01])\./,
     /^::1$/,
+    /^fe80:/i,
     /^fc/i,
     /^fd/i,
   ];
@@ -119,7 +122,27 @@ export class GeolocationService {
     const cached = await cacheGet(cacheKey);
     if (cached) return cached;
 
-    // 2. API call
+    // 2. Local GeoIP lookup
+    try {
+      const geo = geoip.lookup(ip);
+      if (geo) {
+        const result: LocationMetadata = {
+          country: geo.country || "Unknown",
+          countryCode: geo.country || "XX",
+          city: geo.city || "Unknown",
+          isp: "Unknown",
+          lat: geo.ll ? geo.ll[0] : 0,
+          lon: geo.ll ? geo.ll[1] : 0,
+          status: "resolved",
+        };
+        await cacheSet(cacheKey, result);
+        return result;
+      }
+    } catch (err) {
+      logger.error("[GeolocationService] Local geoip-lite lookup failed, falling back to API", err);
+    }
+
+    // 3. API call fallback
     try {
       const url = API_KEY
         ? `${API_BASE}/${ip}?key=${API_KEY}&fields=status,country,countryCode,city,isp,lat,lon`
@@ -165,3 +188,60 @@ export class GeolocationService {
 }
 
 export const geolocationService = new GeolocationService();
+
+/**
+ * Route restriction middleware for administrative routes.
+ * Blocks unauthorized locations and IPs.
+ */
+export const adminGeofenceMiddleware = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const clientIp = req.headers["x-forwarded-for"]
+      ? (Array.isArray(req.headers["x-forwarded-for"])
+          ? req.headers["x-forwarded-for"][0]
+          : req.headers["x-forwarded-for"].split(",")[0]
+        ).trim()
+      : (req.ip ?? req.socket?.remoteAddress ?? "");
+
+    if (!clientIp) {
+      res.status(403).json({ error: "Forbidden", message: "Client IP required" });
+      return;
+    }
+
+    // 1. IP Whitelist check
+    const whitelistIps = (process.env.ADMIN_WHITELIST_IPS ?? "")
+      .split(",")
+      .map((ip) => ip.trim())
+      .filter(Boolean);
+
+    if (whitelistIps.includes(clientIp)) {
+      next();
+      return;
+    }
+
+    // 2. Geofencing check
+    const geo = await geolocationService.lookup(clientIp);
+    
+    const allowedCountries = (process.env.ALLOWED_ADMIN_COUNTRIES ?? "US,CA,GB")
+      .split(",")
+      .map((c) => c.trim().toUpperCase())
+      .filter(Boolean);
+
+    if (geo.status === "resolved" && allowedCountries.includes(geo.countryCode)) {
+      next();
+      return;
+    }
+
+    logger.warn(`[ADMIN GEOFENCE] Blocked admin access from IP: ${clientIp}, Country: ${geo.countryCode}`);
+    res.status(403).json({
+      error: "Forbidden",
+      message: "Access denied from this IP/Region",
+    });
+  } catch (error) {
+    logger.error("[ADMIN GEOFENCE] Error in admin geofence middleware:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
