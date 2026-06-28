@@ -165,3 +165,90 @@ export class GeolocationService {
 }
 
 export const geolocationService = new GeolocationService();
+
+
+// ── Admin Geofencing (#1294) ─────────────────────────────────────────────────
+
+/**
+ * ADMIN_ALLOWED_COUNTRIES
+ *
+ * ISO-3166-1 alpha-2 country codes permitted to access admin routes.
+ * Override at deploy time via ADMIN_ALLOWED_COUNTRIES env var
+ * (comma-separated: "US,GB,NG").
+ *
+ * When empty or unset ALL countries are allowed (open mode).
+ */
+const ADMIN_ALLOWED_COUNTRIES: Set<string> = (() => {
+  const raw = process.env.ADMIN_ALLOWED_COUNTRIES || "";
+  return new Set(
+    raw
+      .split(",")
+      .map((c) => c.trim().toUpperCase())
+      .filter(Boolean),
+  );
+})();
+
+/**
+ * adminGeofence — Express middleware that blocks admin route access
+ * from countries not in the ADMIN_ALLOWED_COUNTRIES allowlist.
+ *
+ * Skips enforcement when:
+ *   - The allowlist is empty (ADMIN_ALLOWED_COUNTRIES not configured)
+ *   - The GeoIP lookup resolves to "Unknown" (fail-open so infra issues
+ *     never lock out legitimate admins)
+ *   - The request is from a private/loopback IP range
+ *
+ * Usage:
+ *   router.use('/admin', adminGeofence, adminRouter);
+ */
+export async function adminGeofence(
+  req: import("express").Request,
+  res: import("express").Response,
+  next: import("express").NextFunction,
+): Promise<void> {
+  // No-op when allowlist is not configured
+  if (ADMIN_ALLOWED_COUNTRIES.size === 0) {
+    next();
+    return;
+  }
+
+  const rawIp =
+    (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim() ||
+    req.socket.remoteAddress ||
+    "";
+
+  // Fail-open for private/loopback addresses (localhost, internal load-balancer)
+  const isPrivate =
+    /^(127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|::1$|^$)/.test(rawIp);
+  if (isPrivate) {
+    next();
+    return;
+  }
+
+  const location = await geolocationService.getLocation(rawIp);
+
+  // Fail-open when GeoIP is unavailable so infra outages never lock out admins
+  if (location.status === "unknown" || location.countryCode === "XX") {
+    logger.warn({ ip: rawIp }, "[geofence] country lookup failed — allowing admin access");
+    next();
+    return;
+  }
+
+  if (!ADMIN_ALLOWED_COUNTRIES.has(location.countryCode)) {
+    logger.warn(
+      { ip: rawIp, countryCode: location.countryCode, country: location.country },
+      "[geofence] blocked admin access from unlisted country",
+    );
+    res.status(403).json({
+      error: "GEOFENCE_BLOCKED",
+      message: `Admin access is not permitted from ${location.country} (${location.countryCode}).`,
+    });
+    return;
+  }
+
+  logger.info(
+    { ip: rawIp, countryCode: location.countryCode },
+    "[geofence] admin access permitted",
+  );
+  next();
+}
