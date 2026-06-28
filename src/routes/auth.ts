@@ -34,6 +34,16 @@ import {
 } from "../middleware/authRateLimit";
 import { ERROR_CODES } from "../constants/errorCodes";
 import { createError } from "../middleware/errorHandler";
+import {
+  checkDeviceVerification,
+  generateVerificationOTP,
+  verifyOTP,
+  setVerificationPending,
+  clearVerificationPending,
+  getPendingVerificationId,
+} from "../services/deviceVerification";
+import { extractFingerprint } from "../middleware/fingerprint";
+import { getCurrentRequestIp } from "../services/loginAnomaly";
 
 const emailService = new EmailService();
 
@@ -216,6 +226,51 @@ authRoutes.post(
               anomaly: anomaly.reason,
             },
           );
+        }
+      }
+
+      // Device verification check for all users
+      const ipAddress = getCurrentRequestIp(req);
+      const fingerprint = extractFingerprint(req);
+      
+      if (ipAddress && fingerprint) {
+        const deviceCheck = await checkDeviceVerification(
+          user.id,
+          ipAddress,
+          fingerprint,
+        );
+
+        if (deviceCheck.requiresVerification && deviceCheck.verificationId) {
+          // Generate OTP
+          const otp = await generateVerificationOTP(deviceCheck.verificationId);
+          
+          if (otp) {
+            // Mark verification as pending for this user
+            await setVerificationPending(user.id, deviceCheck.verificationId);
+            
+            // In production, send OTP via email/SMS
+            // For now, return it in response for testing
+            logger.info({
+              userId: user.id,
+              verificationId: deviceCheck.verificationId,
+              reason: deviceCheck.reason,
+            }, "Device verification required - OTP generated");
+
+            throw createError(
+              ERROR_CODES.FORBIDDEN,
+              "New device or IP detected. Please verify your identity using the code sent to your registered contact.",
+              {
+                error: "Device verification required",
+                requiresDeviceVerification: true,
+                verificationId: deviceCheck.verificationId,
+                reason: deviceCheck.reason,
+                isNewDevice: deviceCheck.isNewDevice,
+                isNewIp: deviceCheck.isNewIp,
+                // In production, remove this and send via email/SMS
+                otp: process.env.NODE_ENV === "development" ? otp : undefined,
+              },
+            );
+          }
         }
       }
 
@@ -452,6 +507,162 @@ authRoutes.get(
         {
           error: "Unable to fetch user info",
           message: error instanceof Error ? error.message : "Unknown error",
+        },
+      );
+    }
+  },
+);
+
+/**
+ * POST /api/auth/verify-device
+ *
+ * Verify device OTP code and release session
+ * This endpoint allows users to complete device verification after login
+ */
+authRoutes.post(
+  "/verify-device",
+  authenticateToken,
+  async (req: Request, res: Response) => {
+    const payload = req.jwtUser as JWTPayload;
+    
+    if (!payload) {
+      throw createError(ERROR_CODES.UNAUTHORIZED, "Authentication required", {
+        error: "Authentication required",
+      });
+    }
+
+    const { verificationId, otp } = req.body;
+
+    if (!verificationId || !otp) {
+      throw createError(ERROR_CODES.MISSING_FIELD, "Verification ID and OTP are required", {
+        error: "Missing required fields",
+      });
+    }
+
+    try {
+      // Verify the OTP
+      const result = await verifyOTP(verificationId, otp);
+
+      if (result.success) {
+        // Clear pending verification for this user
+        await clearVerificationPending(payload.userId);
+
+        // Generate new tokens for the verified session
+        const token = generateToken({
+          userId: payload.userId,
+          email: payload.email,
+          role: payload.role,
+        });
+        const refreshToken = await generateRefreshToken(payload.userId);
+        const permissions = await getUserPermissions(payload.userId);
+
+        logger.info({
+          userId: payload.userId,
+          verificationId,
+        }, "Device verification successful");
+
+        res.json({
+          message: "Device verification successful",
+          token,
+          refreshToken,
+          user: {
+            userId: payload.userId,
+            email: payload.email,
+            role: payload.role,
+            permissions,
+          },
+        });
+      } else {
+        throw createError(
+          ERROR_CODES.UNAUTHORIZED,
+          result.message || "Verification failed",
+          {
+            error: "Verification failed",
+          },
+        );
+      }
+    } catch (error) {
+      if (error && typeof error === "object" && "statusCode" in error) {
+        throw error;
+      }
+      
+      throw createError(
+        ERROR_CODES.INTERNAL_ERROR,
+        error instanceof Error ? error.message : "Unknown error",
+        {
+          error: "Verification failed",
+        },
+      );
+    }
+  },
+);
+
+/**
+ * POST /api/auth/resend-verification
+ *
+ * Resend verification OTP code
+ */
+authRoutes.post(
+  "/resend-verification",
+  authenticateToken,
+  async (req: Request, res: Response) => {
+    const payload = req.jwtUser as JWTPayload;
+    
+    if (!payload) {
+      throw createError(ERROR_CODES.UNAUTHORIZED, "Authentication required", {
+        error: "Authentication required",
+      });
+    }
+
+    try {
+      // Get pending verification ID for this user
+      const verificationId = await getPendingVerificationId(payload.userId);
+
+      if (!verificationId) {
+        throw createError(
+          ERROR_CODES.NOT_FOUND,
+          "No pending verification found",
+          {
+            error: "No pending verification",
+          },
+        );
+      }
+
+      // Generate new OTP
+      const otp = await generateVerificationOTP(verificationId);
+
+      if (!otp) {
+        throw createError(
+          ERROR_CODES.INTERNAL_ERROR,
+          "Failed to generate verification code",
+          {
+            error: "Code generation failed",
+          },
+        );
+      }
+
+      logger.info({
+        userId: payload.userId,
+        verificationId,
+      }, "Verification code resent");
+
+      // In production, send OTP via email/SMS
+      res.json({
+        message: "Verification code resent",
+        verificationId,
+        // In production, remove this and send via email/SMS
+        otp: process.env.NODE_ENV === "development" ? otp : undefined,
+      });
+    } catch (error) {
+      if (error && typeof error === "object" && "statusCode" in error) {
+        throw error;
+      }
+      
+      throw createError(
+        ERROR_CODES.INTERNAL_ERROR,
+        error instanceof Error ? error.message : "Unknown error",
+        {
+          error: "Failed to resend verification code",
         },
       );
     }
