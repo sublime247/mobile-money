@@ -4,6 +4,7 @@ import { Transaction, TransactionStatus } from '../models/transaction';
 import { TransactionModel } from '../models/transaction';
 import { UserModel } from '../models/users';
 import { redisClient } from '../config/redis';
+import { queryRead } from '../config/database';
 
 /**
  * Enhanced Fraud Detection Service
@@ -539,6 +540,118 @@ export class FraudService {
       throw error;
     }
   }
+
+  // ========= AML STRUCTURING DETECTION (#1291) ==============================
+
+  /**
+   * detectStructuring — AML sliding-window smurfing / structuring check.
+   *
+   * Flags a user when they execute N or more transactions within a 24-hour
+   * window that individually stay below the reporting threshold but cumulatively
+   * exceed it.  This matches the classic "smurfing" / structuring pattern that
+   * regulators require financial platforms to detect.
+   *
+   * @param userId     The user under review
+   * @param threshold  Reporting threshold in the base currency (default: USD 10,000)
+   * @param windowHours Lookback window in hours (default: 24)
+   * @param minCount   Minimum number of sub-threshold transactions to trigger (default: 3)
+   */
+  async detectStructuring(
+    userId: string,
+    threshold = parseFloat(process.env.AML_STRUCTURING_THRESHOLD || '10000'),
+    windowHours = 24,
+    minCount = 3,
+  ): Promise<{ flagged: boolean; totalAmount: number; transactionCount: number; reason?: string }> {
+    const subThreshold = threshold * 0.95; // transactions just below the limit
+
+    const result = await queryRead(
+      `SELECT COUNT(*)::int AS count, COALESCE(SUM(amount), 0)::numeric AS total
+         FROM transactions
+        WHERE user_id = $1
+          AND amount < $2
+          AND created_at >= NOW() - ($3 * INTERVAL '1 hour')
+          AND status NOT IN ('failed', 'cancelled')`,
+      [userId, subThreshold, windowHours],
+    );
+
+    const { count, total } = result.rows[0];
+    const totalAmount = parseFloat(total);
+    const transactionCount = parseInt(count, 10);
+
+    const flagged = transactionCount >= minCount && totalAmount >= threshold;
+
+    if (flagged) {
+      logger.warn(
+        { userId, totalAmount, transactionCount, threshold },
+        '[fraud/aml] structuring pattern detected — flagging for manual review',
+      );
+    }
+
+    return {
+      flagged,
+      totalAmount,
+      transactionCount,
+      reason: flagged
+        ? `${transactionCount} transactions totalling ${totalAmount.toFixed(2)} in ${windowHours}h window (threshold: ${threshold})`
+        : undefined,
+    };
+  }
+
+  // ========= IP REPUTATION ENGINE (#1453) ====================================
+
+  /**
+   * checkIpReputation — Dynamic IP reputation + bot mitigation.
+   *
+   * Queries ip-api.com to determine whether a request IP originates from
+   * a hosting facility, anonymous VPN, or known malicious proxy.
+   * Results are cached in Redis for 24 hours to minimise API calls.
+   *
+   * @param ip  The raw request IP address
+   * @returns   { blocked: boolean; reason?: string; cached: boolean }
+   */
+  async checkIpReputation(
+    ip: string,
+  ): Promise<{ blocked: boolean; reason?: string; cached: boolean }> {
+    const CACHE_TTL = 24 * 60 * 60;
+    const cacheKey = `ip-rep:${ip}`;
+
+    // Serve cached verdict when available
+    const cached = await (redisClient as any).get(cacheKey);
+    if (cached) {
+      const verdict = JSON.parse(cached);
+      return { ...verdict, cached: true };
+    }
+
+    try {
+      const url = `http://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,hosting,proxy,vpn,tor,query`;
+      const res  = await fetch(url, { signal: AbortSignal.timeout(3000) });
+      const data = (await res.json()) as Record<string, unknown>;
+
+      const blocked = !!(data.hosting || data.proxy || data.vpn || data.tor);
+      const reason  = blocked
+        ? [
+            data.hosting ? 'hosting/datacenter IP' : null,
+            data.proxy   ? 'anonymous proxy'       : null,
+            data.vpn     ? 'VPN detected'          : null,
+            data.tor     ? 'Tor exit node'         : null,
+          ].filter(Boolean).join(', ')
+        : undefined;
+
+      const verdict = { blocked, reason };
+      await (redisClient as any).set(cacheKey, JSON.stringify(verdict), { EX: CACHE_TTL });
+
+      if (blocked) {
+        logger.warn({ ip, reason }, '[fraud/ip-rep] blocked request from flagged IP');
+      }
+
+      return { ...verdict, cached: false };
+    } catch (err) {
+      // Fail open — never block legitimate users due to a reputation-API outage
+      logger.warn({ ip, err }, '[fraud/ip-rep] IP reputation lookup failed — allowing request');
+      return { blocked: false, cached: false };
+    }
+  }
+
 }
 
 // Export singleton instance
