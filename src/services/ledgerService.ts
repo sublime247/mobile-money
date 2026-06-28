@@ -174,6 +174,41 @@ export const decodeLedgerEntryCursor = (cursor: string): LedgerEntryCursor => {
   }
 };
 
+/**
+ * assertTransactionBalanced — public guard for external callers.
+ *
+ * Throws immediately when debits != credits within tolerance.
+ * Use this at API boundary before calling postTransaction() to surface
+ * balance errors before any DB round-trip.
+ *
+ * @param entries  The proposed ledger entries to validate
+ * @throws Error   When the transaction would not balance
+ */
+export const assertTransactionBalanced = (entries: LedgerEntry[]): void => {
+  validateLedgerEntries(entries);
+};
+
+/**
+ * verifyPostedBalance — post-write integrity check.
+ *
+ * Recalculates debits and credits from already-persisted PostedEntry rows
+ * and throws when the DB-written values deviate beyond LEDGER_BALANCE_TOLERANCE.
+ * Called internally by postTransaction but also available for audit tooling.
+ *
+ * @param posted  The rows returned from the DB after posting
+ * @throws Error  When written totals are unbalanced (e.g. FX rounding)
+ */
+export const verifyPostedBalance = (posted: PostedEntry[]): void => {
+  const totalDebits  = posted.reduce((s, e) => s + e.debit,  0);
+  const totalCredits = posted.reduce((s, e) => s + e.credit, 0);
+  if (Math.abs(totalDebits - totalCredits) > LEDGER_BALANCE_TOLERANCE) {
+    throw new Error(
+      `Post-write balance verification failed: ` +
+      `debits=${totalDebits} credits=${totalCredits}`
+    );
+  }
+};
+
 export class LedgerService {
   private pool: Pool;
 
@@ -194,14 +229,22 @@ export class LedgerService {
     currency?: SupportedCurrency,
     conversionRate?: number
   ): Promise<PostedEntry[]> {
+    // Phase 1: validate balance at the application layer — fast, no DB round-trip
     validateLedgerEntries(entries);
+
+    // Enrich entries with optional currency metadata
+    const enrichedEntries = entries.map(entry => ({
+      ...entry,
+      ...(currency ? { currency } : {}),
+      ...(conversionRate ? { conversion_rate: conversionRate } : {}),
+    }));
 
     const client = await this.pool.connect();
 
     try {
       await client.query('BEGIN');
 
-      // Call the database function to post atomically
+      // Phase 2: post atomically via DB stored procedure
       const result = await client.query(
         `SELECT * FROM post_transaction($1, $2, $3, $4, $5)`,
         [
@@ -213,14 +256,26 @@ export class LedgerService {
         ]
       );
 
-      await client.query('COMMIT');
-
-      return result.rows.map(row => ({
+      // Phase 3: re-verify the written rows satisfy the double-entry invariant.
+      // This catches any rounding or DB-level conversion that could skew totals.
+      const posted: PostedEntry[] = result.rows.map(row => ({
         entry_id: row.entry_id,
         account_code: row.account_code,
         debit: parseFloat(row.debit),
         credit: parseFloat(row.credit)
       }));
+
+      const writtenDebits  = posted.reduce((s, e) => s + e.debit,  0);
+      const writtenCredits = posted.reduce((s, e) => s + e.credit, 0);
+      if (Math.abs(writtenDebits - writtenCredits) > LEDGER_BALANCE_TOLERANCE) {
+        throw new Error(
+          `Post-write balance assertion failed: ` +
+          `debits=${writtenDebits} credits=${writtenCredits} — rolling back`
+        );
+      }
+
+      await client.query('COMMIT');
+      return posted;
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
