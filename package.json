@@ -50,7 +50,7 @@
     "test:load:legacy": "k6 run tests/load/k6/load_test_scenarios.js",
     "test:bench": "node tests/load/autocannon/benchmark.js",
     "bench:soroban-gas": "node benchmarks/soroban-gas-bench.js",
-    "sdk:generate": "echo 'Start dev server first (npm run dev), then run: openapi-generator-cli generate -i http://localhost:3000/docs/openapi.json -c sdk-config.yaml -o sdk'",
+    "sdk:generate": "openapi-generator-cli generate --generator-key kotlin",
     "sdk:generate:python": "openapi-generator-cli generate --generator-key python",
     "sdk:build": "cd sdk && ./gradlew build",
     "sdk:generate:ts": "openapi-generator-cli generate -i http://localhost:3000/docs/openapi.json -c sdk-config-ts.yaml -o sdk-ts",
