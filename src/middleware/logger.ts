@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { UAParser } from "ua-parser-js";
-import logger, { childLogger } from "../utils/logger";
+import logger, { childLogger, requestContext } from "../utils/logger";
 
 /**
  * Request pathname without query string (avoids logging ?api_key=…, ?token=…, etc.).
@@ -103,5 +103,13 @@ export function requestLogger(
   res.on("finish", writeLog);
   res.on("close", writeLog);
 
-  next();
+  const traceId =
+    (req.headers["x-trace-id"] as string | undefined) ??
+    (req.headers["x-request-id"] as string | undefined);
+
+  if (traceId) {
+    requestContext.run({ trace_id: traceId }, () => next());
+  } else {
+    next();
+  }
 }
