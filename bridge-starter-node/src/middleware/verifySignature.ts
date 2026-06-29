@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import crypto from "crypto";
 import { config } from "../config/env";
 import logger from "../logger";
+import { formatErrorResponse } from "../utils/errors";
 
 /**
  * Verifies the HMAC-SHA256 signature on incoming webhook requests.
@@ -23,7 +24,7 @@ export const verifyWebhookSignature = (
       { path: req.path, method: req.method },
       "Webhook rejected: missing x-bridge-signature header",
     );
-    res.status(401).json({ error: "Missing signature" });
+    res.status(401).json(formatErrorResponse(401, "UNAUTHORIZED", "Missing signature"));
     return;
   }
 
@@ -53,7 +54,7 @@ export const verifyWebhookSignature = (
       { path: req.path, method: req.method },
       "Webhook rejected: invalid signature",
     );
-    res.status(401).json({ error: "Invalid signature" });
+    res.status(401).json(formatErrorResponse(401, "UNAUTHORIZED", "Invalid signature"));
     return;
   }
 
