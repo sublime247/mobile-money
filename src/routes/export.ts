@@ -1,17 +1,17 @@
 import logger from "../utils/logger";
-import { Router, Request, Response } from 'express';
-import { Transform } from 'stream';
-import { pipeline } from 'stream/promises';
+import { Router, Request, Response } from "express";
+import { Transform } from "stream";
+import { pipeline } from "stream/promises";
 
-const CSV_HEADERS = [
-  'id',
-  'user_id',
-  'amount',
-  'currency',
-  'type',
-  'status',
-  'created_at',
-  'description'
+const ALLOWED_HEADERS = [
+  "id",
+  "user_id",
+  "amount",
+  "currency",
+  "type",
+  "status",
+  "created_at",
+  "description",
 ];
 
 function parseTransactionExportFilters(query: any) {
@@ -21,6 +21,11 @@ function parseTransactionExportFilters(query: any) {
     status: query.status,
     type: query.type,
     userId: query.userId,
+    fields: query.fields
+      ? String(query.fields)
+          .split(",")
+          .map((f) => f.trim())
+      : undefined,
   };
 }
 
@@ -29,7 +34,7 @@ function getScopedUserId(req: Request): string | null {
   return (req as any).user?.id || null;
 }
 
-function buildTransactionExportQuery(filters: any) {
+function buildTransactionExportQuery(filters: any, exportHeaders: string[]) {
   const conditions = [];
   const values = [];
   let paramCount = 1;
@@ -59,24 +64,33 @@ function buildTransactionExportQuery(filters: any) {
     values.push(filters.type);
   }
 
-  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-  const text = `SELECT * FROM transactions ${whereClause} ORDER BY created_at DESC`;
+  const whereClause =
+    conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+  const selectFields = exportHeaders.join(", ");
+  const text = `SELECT ${selectFields} FROM transactions ${whereClause} ORDER BY created_at DESC`;
 
   return { text, values };
 }
 
-function transactionRowToCsv(row: Record<string, unknown>): string {
-  const values = CSV_HEADERS.map(header => {
+function transactionRowToCsv(
+  row: Record<string, unknown>,
+  headers: string[],
+): string {
+  const values = headers.map((header) => {
     const value = row[header];
-    if (value === null || value === undefined) return '';
+    if (value === null || value === undefined) return "";
     const stringValue = String(value);
     // Escape commas and quotes
-    if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
+    if (
+      stringValue.includes(",") ||
+      stringValue.includes('"') ||
+      stringValue.includes("\n")
+    ) {
       return `"${stringValue.replace(/"/g, '""')}"`;
     }
     return stringValue;
   });
-  return values.join(',') + '\n';
+  return values.join(",") + "\n";
 }
 
 export function createExportRoutes(options?: {
@@ -84,7 +98,8 @@ export function createExportRoutes(options?: {
   createQueryStream?: any;
 }) {
   const db = options?.db || require("../config/database").pool;
-  const createQueryStream = options?.createQueryStream || require("pg-query-stream");
+  const createQueryStream =
+    options?.createQueryStream || require("pg-query-stream");
 
   const router = Router();
 
@@ -106,7 +121,18 @@ export function createExportRoutes(options?: {
         filters.userId = scopedUserId;
       }
 
-      const { text, values } = buildTransactionExportQuery(filters);
+      const requestedFields = filters.fields?.filter((f: string) =>
+        ALLOWED_HEADERS.includes(f),
+      );
+      const exportHeaders =
+        requestedFields && requestedFields.length > 0
+          ? requestedFields
+          : ALLOWED_HEADERS;
+
+      const { text, values } = buildTransactionExportQuery(
+        filters,
+        exportHeaders,
+      );
 
       client = await db.connect();
       releaseClient = () => client.release();
@@ -129,11 +155,11 @@ export function createExportRoutes(options?: {
       let transform: Transform;
 
       if (format === "csv") {
-        res.write(`${CSV_HEADERS.join(",")}\n`);
+        res.write(`\uFEFF${exportHeaders.join(",")}\n`);
         transform = new Transform({
           objectMode: true,
           transform(chunk: Record<string, unknown>, _encoding, callback) {
-            callback(null, transactionRowToCsv(chunk));
+            callback(null, transactionRowToCsv(chunk, exportHeaders));
           },
         });
       } else {
@@ -142,8 +168,7 @@ export function createExportRoutes(options?: {
         transform = new Transform({
           objectMode: true,
           transform(chunk: Record<string, unknown>, _encoding, callback) {
-            const data =
-              (first ? "" : ",\n") + JSON.stringify(chunk, null, 2);
+            const data = (first ? "" : ",\n") + JSON.stringify(chunk, null, 2);
             first = false;
             callback(null, data);
           },
