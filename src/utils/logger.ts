@@ -3,6 +3,9 @@ import path from 'path';
 import os from 'os';
 import pino, { DestinationStream, Level, Logger, StreamEntry } from 'pino';
 import { REDACT_KEYS } from './redact';
+import { AsyncLocalStorage } from 'async_hooks';
+
+export const requestContext = new AsyncLocalStorage<{ trace_id: string }>();
 
 /**
  * Centralized Pino Logger — feature/centralized-logging
@@ -234,6 +237,11 @@ const logger: Logger = pino(
     base: {
       service: SERVICE_NAME,
       instance_id: INSTANCE_ID,
+    },
+
+    mixin() {
+      const store = requestContext.getStore();
+      return store && store.trace_id ? { trace_id: store.trace_id } : {};
     },
 
     // Format the level as uppercase string for Loki/Grafana label filters
