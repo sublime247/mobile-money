@@ -146,6 +146,65 @@ export class StellarService {
     }
   }
 
+  /**
+   * Creates a new account on the Stellar network.
+   * Verifies minimum deposit and funding bounds.
+   */
+  async createAccount(newAccountAddress: string, startingBalance: string): Promise<{ hash?: string }> {
+    if (!this.issuerKeypair) {
+      throw new Error("Funding key is empty");
+    }
+
+    if (parseFloat(startingBalance) < 1) {
+      throw new Error("Minimum deposit amount must be at least 1 XLM");
+    }
+
+    const funderBalance = await this.getBalance(this.issuerKeypair.publicKey());
+    if (parseFloat(funderBalance) < parseFloat(startingBalance) + 1) {
+      throw new Error("Insufficient funding balance bounds");
+    }
+
+    if (this.isMockMode) {
+      console.log("Mock Stellar account creation:", {
+        destination: newAccountAddress,
+        startingBalance,
+      });
+      return { hash: "mock_create_account_hash" };
+    }
+
+    try {
+      const account = await this.server.loadAccount(
+        this.issuerKeypair.publicKey(),
+      );
+      const baseFee = await this.getNetworkBaseFee();
+
+      const transaction = new StellarSdk.TransactionBuilder(account, {
+        fee: baseFee.toString(),
+        networkPassphrase: getNetworkPassphrase(),
+      })
+        .addOperation(
+          StellarSdk.Operation.createAccount({
+            destination: newAccountAddress,
+            startingBalance: startingBalance,
+          }),
+        )
+        .setTimeout(30)
+        .build();
+
+      transaction.sign(this.issuerKeypair);
+      const response = await this.server.submitTransaction(transaction);
+
+      console.log("Stellar account creation successful", {
+        hash: response.hash,
+      });
+
+      return { hash: response.hash };
+    } catch (error) {
+      logger.error("Stellar account creation failed:", error);
+      throw error;
+    }
+  }
+
   async sendPayment(
     destinationAddress: string,
     amount: string,
