@@ -217,3 +217,11 @@ export const systemHeartbeat = new Gauge({
   labelNames: ["service"],
   registers: [register],
 });
+
+// AML and KYC Metrics
+export const kycRequestsTotal = new Counter({
+  name: "kyc_requests_total",
+  help: "Total number of KYC and AML check requests",
+  labelNames: ["provider", "status"],
+  registers: [register],
+});
