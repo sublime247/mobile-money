@@ -29,7 +29,7 @@ export class AdminStellarKeyModel {
   async isAdminKey(publicKey: string): Promise<boolean> {
     const result = await queryRead(
       "SELECT id FROM admin_stellar_keys WHERE public_key = $1 AND is_active = true",
-      [publicKey]
+      [publicKey],
     );
     return result.rows.length > 0;
   }
@@ -39,10 +39,10 @@ export class AdminStellarKeyModel {
    */
   async findAllActive(): Promise<AdminStellarKey[]> {
     const result = await queryRead(
-      "SELECT * FROM admin_stellar_keys WHERE is_active = true ORDER BY created_at DESC"
+      "SELECT * FROM admin_stellar_keys WHERE is_active = true ORDER BY created_at DESC",
     );
 
-    return result.rows.map(row => ({
+    return result.rows.map((row) => ({
       id: row.id,
       publicKey: row.public_key,
       description: row.description,
@@ -60,7 +60,7 @@ export class AdminStellarKeyModel {
   async findByPublicKey(publicKey: string): Promise<AdminStellarKey | null> {
     const result = await queryRead(
       "SELECT * FROM admin_stellar_keys WHERE public_key = $1",
-      [publicKey]
+      [publicKey],
     );
 
     if (result.rows.length === 0) return null;
@@ -86,7 +86,7 @@ export class AdminStellarKeyModel {
       `INSERT INTO admin_stellar_keys (public_key, description, created_by)
        VALUES ($1, $2, $3)
        RETURNING *`,
-      [input.publicKey, input.description, input.createdBy]
+      [input.publicKey, input.description, input.createdBy],
     );
 
     const row = result.rows[0];
@@ -105,7 +105,10 @@ export class AdminStellarKeyModel {
   /**
    * Update an admin Stellar key
    */
-  async update(publicKey: string, input: AdminStellarKeyUpdateInput): Promise<AdminStellarKey | null> {
+  async update(
+    publicKey: string,
+    input: AdminStellarKeyUpdateInput,
+  ): Promise<AdminStellarKey | null> {
     const updates: string[] = [];
     const values: any[] = [];
     let paramIndex = 1;
@@ -131,10 +134,10 @@ export class AdminStellarKeyModel {
 
     const result = await queryWrite(
       `UPDATE admin_stellar_keys
-       SET ${updates.join(', ')}
+       SET ${updates.join(", ")}
        WHERE public_key = $${paramIndex}
        RETURNING *`,
-      values
+      values,
     );
 
     if (result.rows.length === 0) return null;
@@ -160,7 +163,7 @@ export class AdminStellarKeyModel {
       `UPDATE admin_stellar_keys
        SET is_active = false, deactivated_at = CURRENT_TIMESTAMP
        WHERE public_key = $1 AND is_active = true`,
-      [publicKey]
+      [publicKey],
     );
     return result.rowCount > 0;
   }
@@ -171,7 +174,7 @@ export class AdminStellarKeyModel {
   async delete(publicKey: string): Promise<boolean> {
     const result = await queryWrite(
       "DELETE FROM admin_stellar_keys WHERE public_key = $1",
-      [publicKey]
+      [publicKey],
     );
     return result.rowCount > 0;
   }

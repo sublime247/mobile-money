@@ -38,27 +38,27 @@ export interface AccountingRetryJobResult {
  * This allows operators to investigate issues and retry without blocking
  * the primary sync queue.
  */
-export const accountingRetryQueue = new Queue<AccountingRetryJobData, AccountingRetryJobResult>(
-  ACCOUNTING_RETRY_QUEUE_NAME,
-  {
-    ...queueOptions,
-    defaultJobOptions: {
-      ...queueOptions.defaultJobOptions,
-      // Longer retry attempts with exponential backoff for retry queue
-      attempts: 10,
-      backoff: {
-        type: "exponential",
-        delay: 60000, // Start with 60 seconds, exponentially increase
-      },
-      removeOnComplete: {
-        age: 3600, // Remove successful jobs after 1 hour
-      },
-      removeOnFail: {
-        age: 86400, // Keep failed jobs for 24 hours for investigation
-      },
+export const accountingRetryQueue = new Queue<
+  AccountingRetryJobData,
+  AccountingRetryJobResult
+>(ACCOUNTING_RETRY_QUEUE_NAME, {
+  ...queueOptions,
+  defaultJobOptions: {
+    ...queueOptions.defaultJobOptions,
+    // Longer retry attempts with exponential backoff for retry queue
+    attempts: 10,
+    backoff: {
+      type: "exponential",
+      delay: 60000, // Start with 60 seconds, exponentially increase
+    },
+    removeOnComplete: {
+      age: 3600, // Remove successful jobs after 1 hour
+    },
+    removeOnFail: {
+      age: 86400, // Keep failed jobs for 24 hours for investigation
     },
   },
-);
+});
 
 /**
  * Add a failed sync job to the retry queue for manual or scheduled retry.
@@ -80,11 +80,7 @@ export async function addAccountingRetryJob(
     delay: options?.delay ?? 0,
   };
 
-  await accountingRetryQueue.add(
-    `retry-${data.platform}`,
-    data,
-    jobOptions,
-  );
+  await accountingRetryQueue.add(`retry-${data.platform}`, data, jobOptions);
 
   logger.info(
     {
@@ -131,20 +127,17 @@ export async function getAccountingRetryQueueStats() {
  */
 export async function retryAccountingOperation(jobId: string): Promise<void> {
   const job = await getAccountingRetryJobById(jobId);
-  
+
   if (!job) {
     throw new Error(`Retry job ${jobId} not found in queue`);
   }
 
   // Move the job back to waiting state with immediate processing
-  await job.update({
+  await job.updateData({
     ...job.data,
   });
 
-  logger.info(
-    { jobId },
-    "Manually triggered retry for accounting operation",
-  );
+  logger.info({ jobId }, "Manually triggered retry for accounting operation");
 }
 
 /**

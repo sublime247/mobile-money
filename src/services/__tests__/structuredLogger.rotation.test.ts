@@ -55,7 +55,10 @@ describe("structured logger rolling mirror", () => {
     logStructured("info", payload);
     closeStructuredLogStream();
 
-    const shardPath = getStructuredLogShardPath(new Date().toISOString().slice(0, 10), 1);
+    const shardPath = getStructuredLogShardPath(
+      new Date().toISOString().slice(0, 10),
+      1,
+    );
 
     expect(fs.existsSync(logFilePath)).toBe(true);
     expect(fs.existsSync(`${shardPath}.gz`)).toBe(true);

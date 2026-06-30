@@ -64,11 +64,18 @@ describe("cancelTransactionRateLimiter", () => {
 
     expect(next).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(429);
-    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
-      error: "Too Many Requests",
-      message: expect.stringContaining("Too many transaction cancellation requests"),
-    }));
-    expect(res.setHeader).toHaveBeenCalledWith("Retry-After", expect.any(String));
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error: "Too Many Requests",
+        message: expect.stringContaining(
+          "Too many transaction cancellation requests",
+        ),
+      }),
+    );
+    expect(res.setHeader).toHaveBeenCalledWith(
+      "Retry-After",
+      expect.any(String),
+    );
   });
 
   it("passes through when Redis is unavailable", async () => {

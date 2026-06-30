@@ -53,14 +53,14 @@ node benchmarks/soroban-gas-bench.js --contracts ./my-contracts --output ./my-re
 
 The tool reads each contract's `src/lib.rs` and counts specific Soroban operations:
 
-| Operation            | CPU Cost (est.)    | Memory Cost (est.) |
-|---------------------|--------------------|--------------------|
-| Storage read (`.get`)    | 6,500 instructions  | 512 bytes           |
-| Storage write (`.set`)   | 12,000 instructions | 768 bytes           |
-| Token transfer       | 45,000 instructions | 1,024 bytes         |
-| `require_auth()`     | 8,500 instructions  | 256 bytes           |
-| SHA-256 hash         | 12,800 instructions | 512 bytes           |
-| TTL extend           | 3,800 instructions  | 48 bytes            |
+| Operation              | CPU Cost (est.)     | Memory Cost (est.) |
+| ---------------------- | ------------------- | ------------------ |
+| Storage read (`.get`)  | 6,500 instructions  | 512 bytes          |
+| Storage write (`.set`) | 12,000 instructions | 768 bytes          |
+| Token transfer         | 45,000 instructions | 1,024 bytes        |
+| `require_auth()`       | 8,500 instructions  | 256 bytes          |
+| SHA-256 hash           | 12,800 instructions | 512 bytes          |
+| TTL extend             | 3,800 instructions  | 48 bytes           |
 
 > Cost constants are based on Soroban's Protocol 20 fee schedule.
 > Actual on-chain gas may vary with runtime state and data sizes.
@@ -119,12 +119,12 @@ Clean structured output in `benchmarks/results/soroban-gas-report.json`:
 
 ## Environment Variables
 
-| Variable            | Description                                   | Default  |
-|--------------------|-----------------------------------------------|----------|
-| `SOROBAN_NETWORK`   | Soroban network name for CLI-based benchmarks | `local`  |
-| `SOROBAN_RPC_URL`   | RPC URL (overrides network)                   | —        |
-| `SOROBAN_SECRET_KEY` | Secret key for contract invocation            | —        |
-| `SKIP_BUILD`        | Set to `1` to skip WASM build step            | —        |
+| Variable             | Description                                   | Default |
+| -------------------- | --------------------------------------------- | ------- |
+| `SOROBAN_NETWORK`    | Soroban network name for CLI-based benchmarks | `local` |
+| `SOROBAN_RPC_URL`    | RPC URL (overrides network)                   | —       |
+| `SOROBAN_SECRET_KEY` | Secret key for contract invocation            | —       |
+| `SKIP_BUILD`         | Set to `1` to skip WASM build step            | —       |
 
 ## Notes
 

@@ -17,7 +17,11 @@ export interface TaxReportOptions {
   format: "CSV" | "XML";
 }
 
-export async function generateTaxReport({ country, transactions, format }: TaxReportOptions): Promise<string> {
+export async function generateTaxReport({
+  country,
+  transactions,
+  format,
+}: TaxReportOptions): Promise<string> {
   const tax = await getTaxConfig(country);
   const reportRows = transactions.map((tx) => {
     const vat = tx.amount * tax.vatRate;

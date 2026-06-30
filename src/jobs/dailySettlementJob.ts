@@ -11,16 +11,20 @@
  *   - Persists a settlement record for audit tracing
  */
 
-import { providerReconciliationService } from "../services/providerReconciliationService";
+import { providerSettlementService } from "../services/providerSettlementService";
 
 export async function runDailySettlementJob(): Promise<void> {
   console.log("[settlement] Daily settlement job triggered");
 
-  const summary = await providerReconciliationService.runDailySettlement();
+  const summary = await providerSettlementService.runDailySettlement();
 
-  const settled = summary.providers.filter((p) => p.status === "settled").length;
-  const skipped = summary.providers.filter((p) => p.status === "skipped").length;
-  const failed  = summary.providers.filter((p) => p.status === "failed").length;
+  const settled = summary.providers.filter(
+    (p) => p.status === "settled",
+  ).length;
+  const skipped = summary.providers.filter(
+    (p) => p.status === "skipped",
+  ).length;
+  const failed = summary.providers.filter((p) => p.status === "failed").length;
 
   console.log(
     `[settlement] Summary for ${summary.settlementDate}: ` +
@@ -31,9 +35,7 @@ export async function runDailySettlementJob(): Promise<void> {
   );
 
   if (summary.issues.length > 0) {
-    console.warn(
-      `[settlement] Issues encountered (${summary.issues.length}):`,
-    );
+    console.warn(`[settlement] Issues encountered (${summary.issues.length}):`);
     summary.issues.forEach((issue, i) => {
       console.warn(`[settlement]   ${i + 1}. ${issue}`);
     });

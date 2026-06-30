@@ -88,7 +88,10 @@ jest.mock("../../config/s3", () => ({
             next: () => {
               if (!delivered) {
                 delivered = true;
-                return Promise.resolve({ value: Buffer.from("test content"), done: false });
+                return Promise.resolve({
+                  value: Buffer.from("test content"),
+                  done: false,
+                });
               }
               return Promise.resolve({ value: undefined, done: true });
             },
@@ -136,8 +139,10 @@ describe("KYC Document Upload", () => {
   let mockKycService: { uploadDocumentBinary: jest.Mock };
 
   beforeEach(() => {
-     mockKycService = {
-      uploadDocumentBinary: jest.fn().mockResolvedValue({ id: "provider-doc-id" }),
+    mockKycService = {
+      uploadDocumentBinary: jest
+        .fn()
+        .mockResolvedValue({ id: "provider-doc-id" }),
     };
     (KYCService as jest.MockedClass<typeof KYCService>).mockImplementation(
       () => mockKycService as any,
@@ -280,7 +285,9 @@ describe("KYC Document Upload", () => {
         verifyWithDigestCheck: jest.fn(),
         dispose: jest.fn(),
       };
-      (hsmService.createFileSignerFromEnv as jest.Mock).mockReturnValue(mockSigner);
+      (hsmService.createFileSignerFromEnv as jest.Mock).mockReturnValue(
+        mockSigner,
+      );
 
       mockPool.query
         .mockResolvedValueOnce({ rows: [{ id: 1 }] } as any)
@@ -394,7 +401,9 @@ describe("KYC Document Upload", () => {
         key: "kyc-documents/2024/03/user-id/file.pdf",
       });
       mockKycService.uploadDocumentBinary.mockRejectedValueOnce(
-        new Error("Entrust request failed after a transient network error: socket hang up"),
+        new Error(
+          "Entrust request failed after a transient network error: socket hang up",
+        ),
       );
 
       const response = await request(app)
@@ -505,7 +514,9 @@ describe("KYC Document Upload", () => {
     it("should return 404 for non-existent document", async () => {
       mockPool.query.mockResolvedValueOnce({ rows: [] } as any);
 
-      const response = await request(app).get("/api/kyc/documents/bad-id/verify");
+      const response = await request(app).get(
+        "/api/kyc/documents/bad-id/verify",
+      );
 
       expect(response.status).toBe(404);
     });
@@ -523,7 +534,9 @@ describe("KYC Document Upload", () => {
 
       (hsmService.createFileSignerFromEnv as jest.Mock).mockReturnValue(null);
 
-      const response = await request(app).get("/api/kyc/documents/doc-1/verify");
+      const response = await request(app).get(
+        "/api/kyc/documents/doc-1/verify",
+      );
 
       expect(response.status).toBe(200);
       expect(response.body.data).toMatchObject({

@@ -3,7 +3,7 @@ export const formatErrorResponse = (
   code: string,
   message: string,
   requestId?: string,
-  details?: Record<string, unknown>
+  details?: Record<string, unknown>,
 ) => ({
   code,
   message,

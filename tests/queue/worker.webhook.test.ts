@@ -85,7 +85,9 @@ jest.mock("../../src/models/transaction", () => {
 });
 
 jest.mock("../../src/services/mobilemoney/mobileMoneyService", () => ({
-  MobileMoneyService: jest.fn().mockImplementation(() => mockMobileMoneyService),
+  MobileMoneyService: jest
+    .fn()
+    .mockImplementation(() => mockMobileMoneyService),
 }));
 
 jest.mock("../../src/services/stellar/stellarService", () => ({
@@ -106,14 +108,18 @@ function getProcessor() {
   return async (job: any) => {
     let result: any;
     await consumers[0].processor(job.data, {});
-    if (mockTransactionModel.updateStatus.mock.calls.some(
-      ([, status]) => status === TransactionStatus.Failed,
-    )) {
+    if (
+      mockTransactionModel.updateStatus.mock.calls.some(
+        ([, status]) => status === TransactionStatus.Failed,
+      )
+    ) {
       throw new Error("provider outage");
     }
-    if (mockTransactionModel.updateStatus.mock.calls.some(
-      ([, status]) => status === TransactionStatus.Completed,
-    )) {
+    if (
+      mockTransactionModel.updateStatus.mock.calls.some(
+        ([, status]) => status === TransactionStatus.Completed,
+      )
+    ) {
       result = { success: true, transactionId: job.data.transactionId };
     }
     return result;

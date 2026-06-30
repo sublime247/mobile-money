@@ -4,7 +4,10 @@ import { pool } from "../config/database";
 import { encrypt, decrypt } from "../utils/encryption";
 import { flushUserSessions } from "../config/redis";
 import { UserModel } from "../models/users";
-import { isValidMerchantMCC, requireValidMerchantMCC } from "../utils/merchantMcc";
+import {
+  isValidMerchantMCC,
+  requireValidMerchantMCC,
+} from "../utils/merchantMcc";
 
 export interface User {
   id: string;
@@ -64,7 +67,7 @@ export async function getUserByPhoneNumber(
 
   const result = await pool.query(query, [encryptedPhone]);
   if (result.rows.length === 0) return null;
-  
+
   const row = result.rows[0];
   return {
     ...row,
@@ -121,13 +124,16 @@ export async function createUser(userData: CreateUserRequest): Promise<User> {
     display_name = null,
   } = userData;
 
-  const merchantMcc = role_name === "merchant"
-    ? requireValidMerchantMCC(mcc)
-    : mcc
-      ? isValidMerchantMCC(mcc)
-        ? mcc.trim()
-        : (() => { throw new Error(`Invalid Merchant MCC code '${mcc}'.`); })()
-      : null;
+  const merchantMcc =
+    role_name === "merchant"
+      ? requireValidMerchantMCC(mcc)
+      : mcc
+        ? isValidMerchantMCC(mcc)
+          ? mcc.trim()
+          : (() => {
+              throw new Error(`Invalid Merchant MCC code '${mcc}'.`);
+            })()
+        : null;
 
   // Get role ID
   const roleQuery = "SELECT id FROM roles WHERE name = $1";
@@ -202,7 +208,7 @@ export async function updateUserRole(
     ...row,
     phone_number: decrypt(row.phone_number) as string,
     two_factor_secret: decrypt(row.two_factor_secret),
-    role_name: roleName
+    role_name: roleName,
   };
 
   return user;
@@ -215,7 +221,13 @@ export async function updateUserById(
   userId: string,
   userUpdate: Partial<User>,
 ): Promise<User> {
-  const allowedKeys = ["name", "email", "phone_number", "mcc", "display_name"] as const;
+  const allowedKeys = [
+    "name",
+    "email",
+    "phone_number",
+    "mcc",
+    "display_name",
+  ] as const;
   const keys = Object.keys(userUpdate).filter((k) =>
     allowedKeys.includes(k as any),
   ) as (keyof typeof userUpdate)[];
@@ -375,7 +387,7 @@ export async function getAllUsers(): Promise<User[]> {
   `;
 
   const result = await pool.query(query);
-  return result.rows.map(row => ({
+  return result.rows.map((row) => ({
     ...row,
     phone_number: decrypt(row.phone_number) as string,
     two_factor_secret: decrypt(row.two_factor_secret),
@@ -398,20 +410,25 @@ export async function getUserPermissions(userId: string): Promise<string[]> {
   return result.rows.map((row) => row.permission_name);
 }
 
-export async function invalidateUserOnPasswordChange(userId: string): Promise<void> {
+export async function invalidateUserOnPasswordChange(
+  userId: string,
+): Promise<void> {
   const userModel = new UserModel();
-  
+
   // 1. Increment DB token version (persisted invalidation)
   try {
     await userModel.incrementTokenVersion(userId);
   } catch (error: any) {
     // Graceful fallback: Ignore missing column error if the DB migration hasn't run yet
-    if (error.code !== '42703') throw error; 
+    if (error.code !== "42703") throw error;
   }
 
   // 2. Revoke all refresh token families
   try {
-    await pool.query(`UPDATE refresh_token_families SET is_revoked = true WHERE user_id = $1`, [userId]);
+    await pool.query(
+      `UPDATE refresh_token_families SET is_revoked = true WHERE user_id = $1`,
+      [userId],
+    );
   } catch (error) {
     logger.error("Failed to revoke refresh tokens:", error);
   }

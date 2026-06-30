@@ -1,6 +1,9 @@
 import { Worker, Job } from "bullmq";
 import { queueOptions } from "./config";
-import { ACCOUNTING_TOKEN_REFRESH_QUEUE_NAME, AccountingTokenRefreshJobData } from "./accountingTokenRefreshQueue";
+import {
+  ACCOUNTING_TOKEN_REFRESH_QUEUE_NAME,
+  AccountingTokenRefreshJobData,
+} from "./accountingTokenRefreshQueue";
 import { AccountingService } from "../services/accounting";
 import logger from "../utils/logger";
 
@@ -15,9 +18,11 @@ export function startAccountingTokenRefreshWorker(): void {
     ACCOUNTING_TOKEN_REFRESH_QUEUE_NAME,
     async (job: Job<AccountingTokenRefreshJobData>) => {
       const { connectionId, provider } = job.data;
-      
-      logger.info(`Processing token refresh for ${provider} connection ${connectionId}`);
-      
+
+      logger.info(
+        `Processing token refresh for ${provider} connection ${connectionId}`,
+      );
+
       try {
         if (provider === "quickbooks") {
           await accountingService.refreshQuickBooksToken(connectionId);
@@ -26,14 +31,19 @@ export function startAccountingTokenRefreshWorker(): void {
         } else {
           throw new Error(`Unsupported accounting provider: ${provider}`);
         }
-        
-        logger.info(`Successfully refreshed tokens for ${provider} connection ${connectionId}`);
+
+        logger.info(
+          `Successfully refreshed tokens for ${provider} connection ${connectionId}`,
+        );
       } catch (error) {
-        logger.error(error, `Failed to refresh tokens for ${provider} connection ${connectionId}`);
+        logger.error(
+          error,
+          `Failed to refresh tokens for ${provider} connection ${connectionId}`,
+        );
         throw error; // Re-throw to trigger BullMQ retry
       }
     },
-    queueOptions
+    queueOptions,
   );
 
   worker.on("failed", (job, err) => {

@@ -14,7 +14,10 @@ export interface RateResult {
 }
 
 export interface IRateProvider {
-  getIndicativePrice(sellAsset: string, buyAsset: string): Promise<RateResult | null>;
+  getIndicativePrice(
+    sellAsset: string,
+    buyAsset: string,
+  ): Promise<RateResult | null>;
   getFirmPrice(sellAsset: string, buyAsset: string): Promise<RateResult | null>;
 }
 
@@ -39,7 +42,8 @@ function parseStellarAsset(asset: string): StellarSdk.Asset | null {
   if (asset === "stellar:native") return StellarSdk.Asset.native();
   if (asset.startsWith("stellar:")) {
     const parts = asset.split(":");
-    if (parts.length === 2 && parts[1] === "XLM") return StellarSdk.Asset.native();
+    if (parts.length === 2 && parts[1] === "XLM")
+      return StellarSdk.Asset.native();
     if (parts.length === 3 && parts[1] && parts[2]) {
       return new StellarSdk.Asset(parts[1], parts[2]);
     }
@@ -61,7 +65,9 @@ function getConfiguredUsdcAsset(): StellarSdk.Asset {
   if (code === "USDC" && issuer) {
     return new StellarSdk.Asset("USDC", issuer);
   }
-  const usdcIssuer = process.env.SEP38_USDC_ISSUER || "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN";
+  const usdcIssuer =
+    process.env.SEP38_USDC_ISSUER ||
+    "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN";
   return new StellarSdk.Asset("USDC", usdcIssuer);
 }
 
@@ -88,7 +94,8 @@ async function queryStrictSendPath(
     if (records.length === 0) return null;
 
     const best = records.sort(
-      (a: any, b: any) => parseFloat(b.destination_amount) - parseFloat(a.destination_amount),
+      (a: any, b: any) =>
+        parseFloat(b.destination_amount) - parseFloat(a.destination_amount),
     )[0];
 
     return { price: best.destination_amount };
@@ -116,11 +123,17 @@ export class StellarPathPaymentRateProvider implements IRateProvider {
     this.spreadBps = spreadBps;
   }
 
-  async getIndicativePrice(sellAsset: string, buyAsset: string): Promise<RateResult | null> {
+  async getIndicativePrice(
+    sellAsset: string,
+    buyAsset: string,
+  ): Promise<RateResult | null> {
     return this.resolvePrice(sellAsset, buyAsset, true);
   }
 
-  async getFirmPrice(sellAsset: string, buyAsset: string): Promise<RateResult | null> {
+  async getFirmPrice(
+    sellAsset: string,
+    buyAsset: string,
+  ): Promise<RateResult | null> {
     return this.resolvePrice(sellAsset, buyAsset, false);
   }
 
@@ -139,7 +152,10 @@ export class StellarPathPaymentRateProvider implements IRateProvider {
       if (isFiatAsset(sellAsset) && isFiatAsset(buyAsset)) {
         baseRate = this.resolveFiatRate(sellCode, buyCode);
       } else if (isStellarAsset(sellAsset) && isStellarAsset(buyAsset)) {
-        const pathRate = await this.resolveStellarToStellar(sellAsset, buyAsset);
+        const pathRate = await this.resolveStellarToStellar(
+          sellAsset,
+          buyAsset,
+        );
         if (pathRate === null) return null;
         baseRate = pathRate;
       } else if (isStellarAsset(sellAsset) && isFiatAsset(buyAsset)) {
@@ -164,7 +180,8 @@ export class StellarPathPaymentRateProvider implements IRateProvider {
 
       let price: number;
       if (indicative) {
-        const spread = (this.spreadBps / 10000) * (Math.random() < 0.5 ? -1 : 1);
+        const spread =
+          (this.spreadBps / 10000) * (Math.random() < 0.5 ? -1 : 1);
         price = buffered.bufferedRate * (1 + spread);
       } else {
         price = buffered.bufferedRate;
@@ -183,7 +200,11 @@ export class StellarPathPaymentRateProvider implements IRateProvider {
   // ── Rate resolvers ──────────────────────────────────────────────────────────
 
   private resolveFiatRate(sellCode: string, buyCode: string): number {
-    return currencyService.convert(1, sellCode as SupportedCurrency, buyCode as SupportedCurrency).rate;
+    return currencyService.convert(
+      1,
+      sellCode as SupportedCurrency,
+      buyCode as SupportedCurrency,
+    ).rate;
   }
 
   private async resolveStellarToStellar(
@@ -212,7 +233,11 @@ export class StellarPathPaymentRateProvider implements IRateProvider {
     if (!pathToUsdc) return null;
 
     const sellToUsdc = parseFloat(pathToUsdc.price);
-    const usdcToFiat = currencyService.convert(1, "USD", buyCode as SupportedCurrency).rate;
+    const usdcToFiat = currencyService.convert(
+      1,
+      "USD",
+      buyCode as SupportedCurrency,
+    ).rate;
     return sellToUsdc * usdcToFiat;
   }
 
@@ -223,7 +248,11 @@ export class StellarPathPaymentRateProvider implements IRateProvider {
     const buySdk = parseStellarAsset(buyAsset);
     if (!buySdk) return null;
 
-    const fiatToUsdc = currencyService.convert(1, sellCode as SupportedCurrency, "USD").rate;
+    const fiatToUsdc = currencyService.convert(
+      1,
+      sellCode as SupportedCurrency,
+      "USD",
+    ).rate;
     const usdc = getConfiguredUsdcAsset();
     const pathFromUsdc = await queryStrictSendPath(usdc, buySdk);
     if (!pathFromUsdc) return null;

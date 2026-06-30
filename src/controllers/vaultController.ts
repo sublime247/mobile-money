@@ -6,11 +6,7 @@ import {
   CreateVaultInput,
   VaultTransferInput,
 } from "../models/vault";
-import {
-  isLockAcquisitionError,
-  lockManager,
-  LockKeys,
-} from "../utils/lock";
+import { isLockAcquisitionError, lockManager, LockKeys } from "../utils/lock";
 import { createError } from "../middleware/errorHandler";
 import { ERROR_CODES } from "../constants/errorCodes";
 

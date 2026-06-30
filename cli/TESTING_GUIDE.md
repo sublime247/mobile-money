@@ -9,6 +9,7 @@ This guide provides step-by-step instructions to verify that the CLI Configurati
 ## Prerequisites
 
 Before starting, ensure:
+
 - Node.js 20+ is installed
 - You're in the `/workspaces/mobile-money/cli` directory
 - You've run `npm install` in the cli directory
@@ -27,6 +28,7 @@ npm run build
 ```
 
 **Expected Output**:
+
 - No compilation errors
 - `dist/` folder is created with compiled JavaScript files
 
@@ -43,6 +45,7 @@ npm run dev -- profile --help
 ```
 
 **Expected Output**:
+
 ```
 Usage: momo-cli profile [options] [command]
 
@@ -79,6 +82,7 @@ npm run dev -- profile save production --url https://api.example.com --key prod-
 ```
 
 **Expected Output** (for each command):
+
 ```
 ✓ Profile "dev" saved successfully
 ✓ Profile "staging" saved successfully
@@ -98,6 +102,7 @@ npm run dev -- profile list
 ```
 
 **Expected Output**:
+
 ```
 Available profiles:
   dev — http://localhost:3000 (dev-api-...)
@@ -121,6 +126,7 @@ npm run dev -- profile use dev
 ```
 
 **Expected Output**:
+
 ```
 ✓ Switched to profile "dev"
   URL: http://localhost:3000
@@ -140,6 +146,7 @@ npm run dev -- profile list
 ```
 
 **Expected Output**:
+
 ```
 Available profiles:
   dev ← active — http://localhost:3000 (dev-api-...)
@@ -164,6 +171,7 @@ npm run dev -- profile list
 ```
 
 **Expected Output** (after using staging):
+
 ```
 ✓ Switched to profile "staging"
   URL: https://staging-api.example.com
@@ -190,6 +198,7 @@ npm run dev -- profile list
 ```
 
 **Expected Output**:
+
 ```
 ✓ Switched to profile "production"
   URL: https://api.example.com
@@ -219,6 +228,7 @@ npm run dev -- profile list
 ```
 
 **Expected Output**:
+
 ```
 ✓ Profile "staging" deleted successfully
 
@@ -241,6 +251,7 @@ npm run dev -- profile use nonexistent
 ```
 
 **Expected Output**:
+
 ```
 ✗ Profile "nonexistent" not found
 ```
@@ -258,6 +269,7 @@ npm run dev -- profile delete nonexistent
 ```
 
 **Expected Output**:
+
 ```
 ✗ Profile "nonexistent" not found
 ```
@@ -276,6 +288,7 @@ npm run dev -- profile list
 ```
 
 **Expected Output**:
+
 ```
 Available profiles:
   dev — http://localhost:3000 (dev-api-...)
@@ -295,6 +308,7 @@ cat /workspaces/mobile-money/cli/.momo-profiles.json
 ```
 
 **Expected Output** (sample):
+
 ```json
 {
   "profiles": [
@@ -326,6 +340,7 @@ npm run dev -- --help
 ```
 
 **Expected Output** (should include):
+
 ```
 Commands:
   auth                    Authentication commands
@@ -368,7 +383,7 @@ Your implementation should now pass all of the following criteria:
 ✅ **Error Handling**: Proper error messages for invalid operations  
 ✅ **Data Persistence**: Profiles saved to `.momo-profiles.json`  
 ✅ **CLI Integration**: Profile command integrated with existing CLI structure  
-✅ **Help Documentation**: All commands display helpful information  
+✅ **Help Documentation**: All commands display helpful information
 
 ---
 
@@ -377,17 +392,20 @@ Your implementation should now pass all of the following criteria:
 After passing all tests:
 
 1. **Clean up test profiles**:
+
    ```bash
    rm /workspaces/mobile-money/cli/.momo-profiles.json
    ```
 
 2. **Update .momorc for production use**:
+
    ```bash
    echo "MOMO_API_URL=https://your-production-url" > cli/.momorc
    echo "MOMO_API_KEY=your-admin-api-key" >> cli/.momorc
    ```
 
 3. **Build distribution version**:
+
    ```bash
    npm run build
    ```
@@ -405,17 +423,21 @@ After passing all tests:
 The feature was implemented with the following components:
 
 ### Modified Files:
+
 - `cli/src/config.ts` - Added profile management functions
 - `cli/src/index.ts` - Registered profile command
 - `cli/README.md` - Updated documentation
 
 ### New Files:
+
 - `cli/src/commands/profile.ts` - Profile command implementation
 
 ### Data Storage:
+
 - `.momo-profiles.json` - JSON file storing profiles locally
 
 ### Features:
+
 - Save separate credential profiles for different environments
 - Switch between profiles using `profile use <name>`
 - List all profiles with active profile indicator

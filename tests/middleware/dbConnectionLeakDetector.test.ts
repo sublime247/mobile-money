@@ -109,7 +109,10 @@ describe("DB Connection Leak Detector Middleware", () => {
         release: jest.fn().mockReturnValue({}),
       } as unknown as PoolClient;
 
-      trackConnectionCheckout(mockClient, { endpoint: "test.ts", method: "GET" });
+      trackConnectionCheckout(mockClient, {
+        endpoint: "test.ts",
+        method: "GET",
+      });
 
       const wrappedRelease = (mockClient as any).release;
       const tracked = getTrackedConnections().get(mockClient.processID);
@@ -124,7 +127,10 @@ describe("DB Connection Leak Detector Middleware", () => {
         release: jest.fn().mockReturnValue({}),
       } as unknown as PoolClient;
 
-      trackConnectionCheckout(mockClient, { endpoint: "test.ts", method: "GET" });
+      trackConnectionCheckout(mockClient, {
+        endpoint: "test.ts",
+        method: "GET",
+      });
       expect(getConnectionTrackerCount()).toBe(1);
 
       (mockClient as any).release();
@@ -139,7 +145,10 @@ describe("DB Connection Leak Detector Middleware", () => {
 
       const originalRelease = mockClient.release.bind(mockClient);
 
-      trackConnectionCheckout(mockClient, { endpoint: "test.ts", method: "GET" });
+      trackConnectionCheckout(mockClient, {
+        endpoint: "test.ts",
+        method: "GET",
+      });
 
       (mockClient as any).release = jest.fn().mockReturnValue({});
 
@@ -250,7 +259,9 @@ describe("DB Connection Leak Detector Middleware", () => {
       const released = forceReleaseAllConnections();
 
       expect(released).toBe(1);
-      expect(require("../../src/utils/logger").default.error).toHaveBeenCalled();
+      expect(
+        require("../../src/utils/logger").default.error,
+      ).toHaveBeenCalled();
     });
   });
 

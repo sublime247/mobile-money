@@ -215,12 +215,10 @@ export function sessionAnomalyLogger(
           logger.error("Failed to destroy hijacked session:", err);
         }
       });
-      res
-        .status(401)
-        .json({
-          error:
-            "Session invalidated due to suspicious activity. Please log in again.",
-        });
+      res.status(401).json({
+        error:
+          "Session invalidated due to suspicious activity. Please log in again.",
+      });
       return;
     }
   }

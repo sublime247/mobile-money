@@ -179,9 +179,7 @@ describe("HorizonPool", () => {
     servers[URLS[0]].transactions.mockReturnValue(
       makeChain(undefined, serverError()),
     );
-    servers[URLS[1]].transactions.mockReturnValue(
-      makeChain({ records: [] }),
-    );
+    servers[URLS[1]].transactions.mockReturnValue(makeChain({ records: [] }));
 
     const proxy = pool.getProxiedServer();
     const res = await proxy

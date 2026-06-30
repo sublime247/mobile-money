@@ -18,59 +18,59 @@ import crypto from "crypto";
 export const ApiKeyScope = {
   // ── Transactions ─────────────────────────────────────────────────────────
   /** Query transaction history, status, and receipts */
-  TRANSACTIONS_READ:    0x00000001,
+  TRANSACTIONS_READ: 0x00000001,
   /** Initiate new transactions (deposit / withdrawal initiation) */
-  TRANSACTIONS_WRITE:   0x00000002,
+  TRANSACTIONS_WRITE: 0x00000002,
   /** Void or refund an existing transaction */
-  TRANSACTIONS_REFUND:  0x00000004,
+  TRANSACTIONS_REFUND: 0x00000004,
   /** Export transaction data as CSV / PDF */
-  TRANSACTIONS_EXPORT:  0x00000008,
+  TRANSACTIONS_EXPORT: 0x00000008,
 
   // ── Balance & Accounts ───────────────────────────────────────────────────
   /** Read account balances and statements */
-  BALANCE_READ:         0x00000010,
+  BALANCE_READ: 0x00000010,
   /** Trigger balance top-ups (e.g. manual liquidity injection) */
-  BALANCE_WRITE:        0x00000020,
+  BALANCE_WRITE: 0x00000020,
 
   // ── Deposits ─────────────────────────────────────────────────────────────
   /** Read deposit records */
-  DEPOSITS_READ:        0x00000040,
+  DEPOSITS_READ: 0x00000040,
   /** Initiate a mobile-money → Stellar deposit */
-  DEPOSITS_INITIATE:    0x00000080,
+  DEPOSITS_INITIATE: 0x00000080,
 
   // ── Withdrawals ──────────────────────────────────────────────────────────
   /** Read withdrawal records */
-  WITHDRAWALS_READ:     0x00000100,
+  WITHDRAWALS_READ: 0x00000100,
   /** Initiate a Stellar → mobile-money withdrawal */
   WITHDRAWALS_INITIATE: 0x00000200,
 
   // ── Users & KYC ──────────────────────────────────────────────────────────
   /** Read user profiles (own) */
-  USERS_READ:           0x00000400,
+  USERS_READ: 0x00000400,
   /** Update user profile fields */
-  USERS_WRITE:          0x00000800,
+  USERS_WRITE: 0x00000800,
   /** Submit or review KYC documents */
-  KYC_WRITE:            0x00001000,
+  KYC_WRITE: 0x00001000,
 
   // ── Webhooks ─────────────────────────────────────────────────────────────
   /** List and inspect webhook subscriptions */
-  WEBHOOKS_READ:        0x00002000,
+  WEBHOOKS_READ: 0x00002000,
   /** Create, update, or delete webhook endpoints */
-  WEBHOOKS_WRITE:       0x00004000,
+  WEBHOOKS_WRITE: 0x00004000,
 
   // ── Exchange Rates ───────────────────────────────────────────────────────
   /** Read live and historical exchange rates */
-  RATES_READ:           0x00008000,
+  RATES_READ: 0x00008000,
 
   // ── Reporting & Analytics ────────────────────────────────────────────────
   /** Access reporting / analytics dashboards */
-  REPORTS_READ:         0x00010000,
+  REPORTS_READ: 0x00010000,
 
   // ── Admin ────────────────────────────────────────────────────────────────
   /** Manage other API keys (create / revoke / list) */
-  KEYS_MANAGE:          0x00020000,
+  KEYS_MANAGE: 0x00020000,
   /** System-level admin operations (user management, config) */
-  ADMIN:                0x00040000,
+  ADMIN: 0x00040000,
 } as const;
 
 export type ApiKeyScopeName = keyof typeof ApiKeyScope;
@@ -113,9 +113,7 @@ export const ScopeGroup = {
     ApiKeyScope.BALANCE_READ,
 
   /** Webhook management (CI/CD pipeline key) */
-  WEBHOOKS_ONLY:
-    ApiKeyScope.WEBHOOKS_READ |
-    ApiKeyScope.WEBHOOKS_WRITE,
+  WEBHOOKS_ONLY: ApiKeyScope.WEBHOOKS_READ | ApiKeyScope.WEBHOOKS_WRITE,
 
   /** Key management – allows creating / revoking child keys */
   KEY_ADMIN:
@@ -142,7 +140,10 @@ export const ScopeSets = {
 
   DEPOSITS: ["DEPOSITS_READ", "DEPOSITS_INITIATE"] as ApiKeyScopeName[],
 
-  WITHDRAWALS: ["WITHDRAWALS_READ", "WITHDRAWALS_INITIATE"] as ApiKeyScopeName[],
+  WITHDRAWALS: [
+    "WITHDRAWALS_READ",
+    "WITHDRAWALS_INITIATE",
+  ] as ApiKeyScopeName[],
 
   USERS: ["USERS_READ", "USERS_WRITE", "KYC_WRITE"] as ApiKeyScopeName[],
 
@@ -338,8 +339,7 @@ export function validateTimeWindow(tw: TimeWindow): string | null {
     return "startHour must be between 0 and 23";
   if (tw.endHour < 0 || tw.endHour > 23)
     return "endHour must be between 0 and 23";
-  if (tw.startHour === tw.endHour)
-    return "startHour and endHour must differ";
+  if (tw.startHour === tw.endHour) return "startHour and endHour must differ";
   return null;
 }
 
@@ -376,11 +376,11 @@ export function rotateApiKey(
  * Kept for backward compatibility with Issue #518 callers.
  */
 export const ApiKeyPermission = {
-  READ:     ApiKeyScope.TRANSACTIONS_READ,
-  DEPOSIT:  ApiKeyScope.DEPOSITS_INITIATE,
+  READ: ApiKeyScope.TRANSACTIONS_READ,
+  DEPOSIT: ApiKeyScope.DEPOSITS_INITIATE,
   WITHDRAW: ApiKeyScope.WITHDRAWALS_INITIATE,
-  ADMIN:    ApiKeyScope.ADMIN,
-  ALL:      ScopeGroup.FULL_ACCESS,
+  ADMIN: ApiKeyScope.ADMIN,
+  ALL: ScopeGroup.FULL_ACCESS,
 } as const;
 
 /** @deprecated Use `hasScope` */
@@ -398,10 +398,7 @@ export function describePermissions(permissions: number): string[] {
 function resolvePermissions(options: CreateApiKeyOptions): number {
   if (options.permissions !== undefined) return options.permissions;
   if (options.scopes && options.scopes.length > 0) {
-    return options.scopes.reduce(
-      (acc, name) => acc | ApiKeyScope[name],
-      0,
-    );
+    return options.scopes.reduce((acc, name) => acc | ApiKeyScope[name], 0);
   }
   return ScopeGroup.FULL_ACCESS;
 }

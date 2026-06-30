@@ -17,7 +17,11 @@ import logger from "../utils/logger";
 
 import { Router, Request, Response } from "express";
 import { requireAuth } from "../middleware/auth";
-import { MerchantWebhookModel, CreateWebhookInput, UpdateWebhookInput } from "../models/merchantWebhook";
+import {
+  MerchantWebhookModel,
+  CreateWebhookInput,
+  UpdateWebhookInput,
+} from "../models/merchantWebhook";
 import { MerchantWebhookService } from "../services/merchantWebhookService";
 
 const router = Router();
@@ -35,8 +39,13 @@ function getUserId(req: Request): string | null {
 
 const URL_REGEX = /^https?:\/\/.+/i;
 
-function validateCreateBody(body: unknown): { data: CreateWebhookInput; error?: never } | { error: string; data?: never } {
-  if (!body || typeof body !== "object") return { error: "Request body required" };
+function validateCreateBody(
+  body: unknown,
+):
+  | { data: CreateWebhookInput; error?: never }
+  | { error: string; data?: never } {
+  if (!body || typeof body !== "object")
+    return { error: "Request body required" };
   const b = body as Record<string, unknown>;
 
   if (typeof b.url !== "string" || !URL_REGEX.test(b.url)) {
@@ -46,7 +55,10 @@ function validateCreateBody(body: unknown): { data: CreateWebhookInput; error?: 
     return { error: "secret must be a string of at least 16 characters" };
   }
   if (b.events !== undefined) {
-    if (!Array.isArray(b.events) || b.events.some((e) => typeof e !== "string")) {
+    if (
+      !Array.isArray(b.events) ||
+      b.events.some((e) => typeof e !== "string")
+    ) {
       return { error: "events must be an array of strings" };
     }
   }
@@ -59,7 +71,8 @@ function validateCreateBody(body: unknown): { data: CreateWebhookInput; error?: 
       userId: "", // filled in by route handler
       url: b.url,
       secret: b.secret,
-      description: typeof b.description === "string" ? b.description : undefined,
+      description:
+        typeof b.description === "string" ? b.description : undefined,
       events: Array.isArray(b.events) ? (b.events as string[]) : undefined,
     },
   };
@@ -89,7 +102,8 @@ router.post("/", async (req: Request, res: Response) => {
   if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
   const validation = validateCreateBody(req.body);
-  if (validation.error) return res.status(400).json({ error: validation.error });
+  if (validation.error)
+    return res.status(400).json({ error: validation.error });
 
   try {
     const webhook = await webhookModel.create({ ...validation.data!, userId });
@@ -97,7 +111,8 @@ router.post("/", async (req: Request, res: Response) => {
     return res.status(201).json({ webhook: safe });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Internal server error";
-    const status = msg.startsWith("Maximum") || msg.startsWith("Unknown event") ? 400 : 500;
+    const status =
+      msg.startsWith("Maximum") || msg.startsWith("Unknown event") ? 400 : 500;
     return res.status(status).json({ error: msg });
   }
 });
@@ -130,26 +145,33 @@ router.patch("/:id", async (req: Request, res: Response) => {
 
   if (b.url !== undefined) {
     if (typeof b.url !== "string" || !URL_REGEX.test(b.url)) {
-      return res.status(400).json({ error: "url must be a valid HTTP/HTTPS URL" });
+      return res
+        .status(400)
+        .json({ error: "url must be a valid HTTP/HTTPS URL" });
     }
     input.url = b.url;
   }
   if (b.secret !== undefined) {
     if (typeof b.secret !== "string" || b.secret.length < 16) {
-      return res.status(400).json({ error: "secret must be at least 16 characters" });
+      return res
+        .status(400)
+        .json({ error: "secret must be at least 16 characters" });
     }
     input.secret = b.secret;
   }
   if (b.description !== undefined) {
-    if (typeof b.description !== "string") return res.status(400).json({ error: "description must be a string" });
+    if (typeof b.description !== "string")
+      return res.status(400).json({ error: "description must be a string" });
     input.description = b.description;
   }
   if (b.events !== undefined) {
-    if (!Array.isArray(b.events)) return res.status(400).json({ error: "events must be an array" });
+    if (!Array.isArray(b.events))
+      return res.status(400).json({ error: "events must be an array" });
     input.events = b.events as string[];
   }
   if (b.is_active !== undefined) {
-    if (typeof b.is_active !== "boolean") return res.status(400).json({ error: "is_active must be a boolean" });
+    if (typeof b.is_active !== "boolean")
+      return res.status(400).json({ error: "is_active must be a boolean" });
     input.isActive = b.is_active;
   }
 
@@ -188,7 +210,10 @@ router.post("/:id/test", async (req: Request, res: Response) => {
   if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
   try {
-    const { log, webhook } = await webhookService.testWebhook(req.params.id, userId);
+    const { log, webhook } = await webhookService.testWebhook(
+      req.params.id,
+      userId,
+    );
     return res.json({
       success: log.status === "delivered",
       delivery: {
@@ -214,7 +239,10 @@ router.get("/:id/deliveries", async (req: Request, res: Response) => {
   const userId = getUserId(req);
   if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
-  const limit = Math.min(parseInt(String(req.query.limit ?? "50"), 10) || 50, 100);
+  const limit = Math.min(
+    parseInt(String(req.query.limit ?? "50"), 10) || 50,
+    100,
+  );
   const offset = parseInt(String(req.query.offset ?? "0"), 10) || 0;
 
   try {

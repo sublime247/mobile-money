@@ -13,7 +13,7 @@
    the dark theme inherits the lighter greens above; Docusaurus only
    generates a separate `[data-theme='dark']` primary scale automatically
    when `--ifm-color-primary` is left unset at `:root`. */
-[data-theme='dark'] {
+[data-theme="dark"] {
   --ifm-color-primary: #25c2a0;
   --ifm-color-primary-dark: #21af90;
   --ifm-color-primary-darker: #1fa588;
@@ -24,7 +24,8 @@
 }
 
 /* Code block copy button styling */
-div.codeBlockContainer_node_modules-\@docusaurus-theme-classic-src-theme-CodeBlock-styles-module:hover .copyButton_node_modules-\@docusaurus-theme-classic-src-theme-CodeBlock-styles-module {
+div.codeBlockContainer_node_modules-\@docusaurus-theme-classic-src-theme-CodeBlock-styles-module:hover
+  .copyButton_node_modules-\@docusaurus-theme-classic-src-theme-CodeBlock-styles-module {
   opacity: 1;
 }
 
@@ -97,8 +98,13 @@ pre code {
 }
 
 @keyframes graphql-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
 }
 
 .graphql-config-bar__toggle {
@@ -162,10 +168,12 @@ pre code {
   border: 1px solid var(--ifm-color-emphasis-300);
   border-radius: 8px;
   color: var(--ifm-font-color-base);
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-family: "JetBrains Mono", "Fira Code", monospace;
   font-size: 0.85rem;
   outline: none;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .graphql-config-bar__input:focus {
@@ -219,7 +227,9 @@ pre code {
 }
 
 @keyframes graphql-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* ── Dark-mode "control panel" override ─────────────────────────────────────────
@@ -227,54 +237,54 @@ pre code {
    single auditable block so the rules above stay token-driven. Without this,
    the dark theme would collapse to a generic primary-tinted bar and lose the
    deliberate operator-UI feel that was the original design intent. */
-[data-theme='dark'] .graphql-config-bar {
+[data-theme="dark"] .graphql-config-bar {
   background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
   border-bottom: 1px solid rgba(99, 102, 241, 0.25);
   color: #e0e0ff;
 }
 
-[data-theme='dark'] .graphql-config-bar__badge {
+[data-theme="dark"] .graphql-config-bar__badge {
   color: #c4b5fd;
 }
 
-[data-theme='dark'] .graphql-config-bar__dot {
+[data-theme="dark"] .graphql-config-bar__dot {
   background: #34d399;
   box-shadow: 0 0 6px rgba(52, 211, 153, 0.6);
 }
 
-[data-theme='dark'] .graphql-config-bar__toggle {
+[data-theme="dark"] .graphql-config-bar__toggle {
   background: rgba(99, 102, 241, 0.15);
   border: 1px solid rgba(99, 102, 241, 0.3);
   color: #a5b4fc;
 }
 
-[data-theme='dark'] .graphql-config-bar__toggle:hover {
+[data-theme="dark"] .graphql-config-bar__toggle:hover {
   background: rgba(99, 102, 241, 0.3);
   color: #e0e7ff;
 }
 
-[data-theme='dark'] .graphql-config-bar__input {
+[data-theme="dark"] .graphql-config-bar__input {
   background: rgba(15, 23, 42, 0.6);
   border: 1px solid rgba(99, 102, 241, 0.25);
   color: #e2e8f0;
 }
 
-[data-theme='dark'] .graphql-config-bar__input:focus {
+[data-theme="dark"] .graphql-config-bar__input:focus {
   border-color: #6366f1;
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
 }
 
-[data-theme='dark'] .graphql-config-bar__button {
+[data-theme="dark"] .graphql-config-bar__button {
   background: linear-gradient(135deg, #6366f1, #8b5cf6);
   color: #fff;
 }
 
-[data-theme='dark'] .graphql-config-bar__button:hover:not(:disabled) {
+[data-theme="dark"] .graphql-config-bar__button:hover:not(:disabled) {
   background: linear-gradient(135deg, #818cf8, #a78bfa);
   box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
 }
 
-[data-theme='dark'] .graphql-playground-loading__spinner {
+[data-theme="dark"] .graphql-playground-loading__spinner {
   border-color: rgba(99, 102, 241, 0.2);
   border-top-color: #6366f1;
 }

@@ -46,7 +46,12 @@ const isIpAllowed = (rawIp: string): boolean => {
 };
 
 // Haversine formula to calculate distance between two coordinates in km
-function calculateDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+function calculateDistanceKm(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number,
+): number {
   const R = 6371; // Earth's radius in km
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
   const dLon = ((lon2 - lon1) * Math.PI) / 180;
@@ -69,7 +74,9 @@ export const ipWhitelist = async (
     const clientIp = resolveClientIp(req);
 
     if (!clientIp) {
-      res.status(403).json({ error: "Forbidden", message: "Client IP required" });
+      res
+        .status(403)
+        .json({ error: "Forbidden", message: "Client IP required" });
       return;
     }
 
@@ -78,15 +85,24 @@ export const ipWhitelist = async (
 
     // 1. Geofencing check: Must be in an explicitly whitelisted CIDR OR an allowed region
     if (!isCidrMatched) {
-      if (geo.status !== "resolved" || !ALLOWED_PROVIDER_COUNTRIES.includes(geo.countryCode)) {
-        console.warn(`[GEOFENCE] Blocked provider IP ${clientIp} from country ${geo.countryCode}`);
-        res.status(403).json({ error: "Forbidden", message: "Access denied from this IP/Region" });
+      if (
+        geo.status !== "resolved" ||
+        !ALLOWED_PROVIDER_COUNTRIES.includes(geo.countryCode)
+      ) {
+        console.warn(
+          `[GEOFENCE] Blocked provider IP ${clientIp} from country ${geo.countryCode}`,
+        );
+        res.status(403).json({
+          error: "Forbidden",
+          message: "Access denied from this IP/Region",
+        });
         return;
       }
     }
 
     // 2. Impossible Travel Check for Providers
-    const providerId = req.params.provider || req.body?.provider || req.headers["x-provider-id"];
+    const providerId =
+      req.params.provider || req.body?.provider || req.headers["x-provider-id"];
 
     if (providerId && geo.status === "resolved") {
       const cacheKey = `provider:geofence:location:${providerId}`;
@@ -94,34 +110,53 @@ export const ipWhitelist = async (
 
       if (lastLocationRaw) {
         const lastLocation = JSON.parse(lastLocationRaw.toString());
-        const timeDiffHours = (Date.now() - lastLocation.timestamp) / (1000 * 60 * 60);
+        const timeDiffHours =
+          (Date.now() - lastLocation.timestamp) / (1000 * 60 * 60);
 
         // Check if multiple requests happened in a reasonable timeframe (< 24 hours) but with a gap (> 0)
         if (timeDiffHours > 0.01 && timeDiffHours < 24) {
-          const distanceKm = calculateDistanceKm(lastLocation.lat, lastLocation.lon, geo.lat, geo.lon);
+          const distanceKm = calculateDistanceKm(
+            lastLocation.lat,
+            lastLocation.lon,
+            geo.lat,
+            geo.lon,
+          );
           const speedKmph = distanceKm / timeDiffHours;
 
           // Speed > 1000 km/h is physically impossible via standard commercial travel
           if (speedKmph > 1000) {
-            logger.error(`[GEOFENCE] Impossible travel blocked for provider ${providerId}. Speed: ${speedKmph.toFixed(2)} km/h.`);
-            res.status(403).json({ error: "Forbidden", message: "Impossible travel detected. Provider credentials may be compromised." });
+            logger.error(
+              `[GEOFENCE] Impossible travel blocked for provider ${providerId}. Speed: ${speedKmph.toFixed(2)} km/h.`,
+            );
+            res.status(403).json({
+              error: "Forbidden",
+              message:
+                "Impossible travel detected. Provider credentials may be compromised.",
+            });
             return;
           }
         }
       }
 
       // Update last known location (cache expires in 24 hrs)
-      await redisClient.setEx(cacheKey, 86400, JSON.stringify({
-        ip: clientIp,
-        lat: geo.lat,
-        lon: geo.lon,
-        timestamp: Date.now()
-      }));
+      await redisClient.setEx(
+        cacheKey,
+        86400,
+        JSON.stringify({
+          ip: clientIp,
+          lat: geo.lat,
+          lon: geo.lon,
+          timestamp: Date.now(),
+        }),
+      );
     }
 
     next();
   } catch (error) {
-    logger.error("[GEOFENCE] Error in IP Whitelist/Geofence middleware:", error);
+    logger.error(
+      "[GEOFENCE] Error in IP Whitelist/Geofence middleware:",
+      error,
+    );
     res.status(500).json({ error: "Internal Server Error" });
   }
 };

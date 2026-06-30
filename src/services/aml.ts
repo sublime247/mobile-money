@@ -142,9 +142,13 @@ const defaultConfig: AMLConfig = {
   profileScoreThreshold: Number(process.env.AML_PROFILE_SCORE_THRESHOLD || 50),
   velocityHourlyCap: Number(process.env.AML_VELOCITY_HOURLY_CAP || 5),
   velocityDailyCap: Number(process.env.AML_VELOCITY_DAILY_CAP || 15),
-  movingAverageWindowDays: Number(process.env.AML_MOVING_AVERAGE_WINDOW_DAYS || 30),
+  movingAverageWindowDays: Number(
+    process.env.AML_MOVING_AVERAGE_WINDOW_DAYS || 30,
+  ),
   amountMultiplierLimit: Number(process.env.AML_AMOUNT_MULTIPLIER_LIMIT || 3),
-  frequencySpikeMultiplier: Number(process.env.AML_FREQUENCY_SPIKE_MULTIPLIER || 3),
+  frequencySpikeMultiplier: Number(
+    process.env.AML_FREQUENCY_SPIKE_MULTIPLIER || 3,
+  ),
   geoHopMaxKm: Number(process.env.AML_GEO_HOP_MAX_KM || 250),
   geoHopMaxHours: Number(process.env.AML_GEO_HOP_MAX_HOURS || 6),
 };
@@ -360,7 +364,9 @@ export class AMLService {
     }
 
     const currentLocation = normalizeLocationMetadata(current.locationMetadata);
-    const lastLocation = normalizeLocationMetadata(snapshot.lastLocationMetadata);
+    const lastLocation = normalizeLocationMetadata(
+      snapshot.lastLocationMetadata,
+    );
     if (currentLocation && lastLocation && snapshot.lastLocationAt) {
       geographicHopDistanceKm = getDistanceKm(lastLocation, currentLocation);
       geographicHopHours =
@@ -697,10 +703,16 @@ export class AMLService {
         try {
           const { generateSAR } = require("../compliance/sar");
           generateSAR(alert.userId, alert.id).catch((err: any) => {
-            logger.error(`[SAR AUTO-PREPARE ERROR] Failed for alert ${alert.id}:`, err);
+            logger.error(
+              `[SAR AUTO-PREPARE ERROR] Failed for alert ${alert.id}:`,
+              err,
+            );
           });
         } catch (err) {
-          logger.error(`[SAR AUTO-PREPARE ERROR] Failed to load sar service:`, err);
+          logger.error(
+            `[SAR AUTO-PREPARE ERROR] Failed to load sar service:`,
+            err,
+          );
         }
       }
     } catch (error) {

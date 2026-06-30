@@ -4,10 +4,7 @@ import {
   systemUptimeSeconds,
   systemLastHeartbeatTimestamp,
 } from "../../utils/metrics";
-import {
-  startHeartbeat,
-  stopHeartbeat,
-} from "../../services/metrics";
+import { startHeartbeat, stopHeartbeat } from "../../services/metrics";
 
 describe("System Heartbeat Metrics", () => {
   beforeEach(() => {
@@ -44,12 +41,14 @@ describe("System Heartbeat Metrics", () => {
 
   it("should update heartbeat on startHeartbeat()", () => {
     vi.useFakeTimers();
-    const initialTimestamp = (systemLastHeartbeatTimestamp as any).get().values[0].value;
+    const initialTimestamp = (systemLastHeartbeatTimestamp as any).get()
+      .values[0].value;
 
     startHeartbeat(1000);
     vi.advanceTimersByTime(1000);
 
-    const updatedTimestamp = (systemLastHeartbeatTimestamp as any).get().values[0].value;
+    const updatedTimestamp = (systemLastHeartbeatTimestamp as any).get()
+      .values[0].value;
     expect(updatedTimestamp).toBeGreaterThanOrEqual(initialTimestamp);
 
     vi.useRealTimers();

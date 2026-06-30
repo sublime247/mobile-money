@@ -22,7 +22,9 @@ function parseOptionalDate(value: unknown): Date | undefined {
 function requireAdmin(req: Request, res: Response): boolean {
   const user = (req as AuthRequest).user;
   if (!user || user.role !== "admin") {
-    createError(ERROR_CODES.FORBIDDEN,"Admin access required", {error:"Forbidden"})
+    createError(ERROR_CODES.FORBIDDEN, "Admin access required", {
+      error: "Forbidden",
+    });
     return false;
   }
   return true;
@@ -85,8 +87,13 @@ travelRuleRoutes.get("/", requireAuth, async (req: Request, res: Response) => {
 
     res.json({ count: records.length, records: records.map(serializeRecord) });
   } catch (err) {
-    logger.error("[travel-rule] export error:", err instanceof Error ? err.message : err);
-    throw createError(ERROR_CODES.INTERNAL_ERROR,"Export failed", {error:"Export failed"})
+    logger.error(
+      "[travel-rule] export error:",
+      err instanceof Error ? err.message : err,
+    );
+    throw createError(ERROR_CODES.INTERNAL_ERROR, "Export failed", {
+      error: "Export failed",
+    });
   }
 });
 
@@ -94,79 +101,126 @@ travelRuleRoutes.get("/", requireAuth, async (req: Request, res: Response) => {
  * GET /api/v1/compliance/travel-rule/export.csv
  * Same filters as above but streams a CSV file.
  */
-travelRuleRoutes.get("/export.csv", requireAuth, async (req: Request, res: Response) => {
-  if (!requireAdmin(req, res)) return;
+travelRuleRoutes.get(
+  "/export.csv",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    if (!requireAdmin(req, res)) return;
 
-  try {
-    const from = parseOptionalDate(req.query.from);
-    const to = parseOptionalDate(req.query.to);
-    const onlyUnexported = req.query.onlyUnexported === "true";
-    const exportedBy = (req as AuthRequest).user!.id;
+    try {
+      const from = parseOptionalDate(req.query.from);
+      const to = parseOptionalDate(req.query.to);
+      const onlyUnexported = req.query.onlyUnexported === "true";
+      const exportedBy = (req as AuthRequest).user!.id;
 
-    const records = await travelRuleService.exportForCompliance({
-      from,
-      to,
-      exportedBy,
-      onlyUnexported,
-    });
+      const records = await travelRuleService.exportForCompliance({
+        from,
+        to,
+        exportedBy,
+        onlyUnexported,
+      });
 
-    const filename = `travel-rule-${new Date().toISOString().slice(0, 10)}.csv`;
-    res.setHeader("Content-Type", "text/csv; charset=utf-8");
-    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      const filename = `travel-rule-${new Date().toISOString().slice(0, 10)}.csv`;
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${filename}"`,
+      );
 
-    const headers = [
-      "ID", "Transaction ID", "Amount", "Currency",
-      "Sender Name", "Sender Account", "Sender Address", "Sender DOB", "Sender ID Number",
-      "Receiver Name", "Receiver Account", "Receiver Address",
-      "Originating VASP", "Beneficiary VASP",
-      "Created At", "Exported At", "Exported By",
-    ];
-
-    const escape = (v: unknown) => {
-      if (v === null || v === undefined) return "";
-      const s = String(v).replace(/"/g, '""');
-      return /[",\r\n]/.test(s) ? `"${s}"` : s;
-    };
-
-    res.write(`${headers.map(escape).join(",")}\n`);
-
-    for (const r of records) {
-      const row = [
-        r.id, r.transactionId, r.amount, r.currency,
-        r.sender.name, r.sender.account, r.sender.address ?? "",
-        r.sender.dob ?? "", r.sender.idNumber ?? "",
-        r.receiver.name, r.receiver.account, r.receiver.address ?? "",
-        r.originatingVasp ?? "", r.beneficiaryVasp ?? "",
-        r.createdAt.toISOString(), r.exportedAt?.toISOString() ?? "",
-        r.exportedBy ?? "",
+      const headers = [
+        "ID",
+        "Transaction ID",
+        "Amount",
+        "Currency",
+        "Sender Name",
+        "Sender Account",
+        "Sender Address",
+        "Sender DOB",
+        "Sender ID Number",
+        "Receiver Name",
+        "Receiver Account",
+        "Receiver Address",
+        "Originating VASP",
+        "Beneficiary VASP",
+        "Created At",
+        "Exported At",
+        "Exported By",
       ];
-      res.write(`${row.map(escape).join(",")}\n`);
-    }
 
-    res.end();
-  } catch (err) {
-    logger.error("[travel-rule] csv export error:", err instanceof Error ? err.message : err);
-    if (!res.headersSent) {
-       throw createError(ERROR_CODES.INTERNAL_ERROR,"CSV export failed", {error:"CSV export failed"})
+      const escape = (v: unknown) => {
+        if (v === null || v === undefined) return "";
+        const s = String(v).replace(/"/g, '""');
+        return /[",\r\n]/.test(s) ? `"${s}"` : s;
+      };
+
+      res.write(`${headers.map(escape).join(",")}\n`);
+
+      for (const r of records) {
+        const row = [
+          r.id,
+          r.transactionId,
+          r.amount,
+          r.currency,
+          r.sender.name,
+          r.sender.account,
+          r.sender.address ?? "",
+          r.sender.dob ?? "",
+          r.sender.idNumber ?? "",
+          r.receiver.name,
+          r.receiver.account,
+          r.receiver.address ?? "",
+          r.originatingVasp ?? "",
+          r.beneficiaryVasp ?? "",
+          r.createdAt.toISOString(),
+          r.exportedAt?.toISOString() ?? "",
+          r.exportedBy ?? "",
+        ];
+        res.write(`${row.map(escape).join(",")}\n`);
+      }
+
+      res.end();
+    } catch (err) {
+      logger.error(
+        "[travel-rule] csv export error:",
+        err instanceof Error ? err.message : err,
+      );
+      if (!res.headersSent) {
+        throw createError(ERROR_CODES.INTERNAL_ERROR, "CSV export failed", {
+          error: "CSV export failed",
+        });
+      }
     }
-  }
-});
+  },
+);
 
 /**
  * GET /api/v1/compliance/travel-rule/:transactionId
  * Fetch a single Travel Rule record by transaction ID.
  */
-travelRuleRoutes.get("/:transactionId", requireAuth, async (req: Request, res: Response) => {
-  if (!requireAdmin(req, res)) return;
+travelRuleRoutes.get(
+  "/:transactionId",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    if (!requireAdmin(req, res)) return;
 
-  try {
-    const record = await travelRuleService.findByTransactionId(req.params.transactionId);
-    if (!record) {
-      return res.status(404).json({ error: "No Travel Rule record for this transaction" });
+    try {
+      const record = await travelRuleService.findByTransactionId(
+        req.params.transactionId,
+      );
+      if (!record) {
+        return res
+          .status(404)
+          .json({ error: "No Travel Rule record for this transaction" });
+      }
+      res.json(serializeRecord(record));
+    } catch (err) {
+      logger.error(
+        "[travel-rule] lookup error:",
+        err instanceof Error ? err.message : err,
+      );
+      throw createError(ERROR_CODES.INTERNAL_ERROR, "Lookup failed", {
+        error: "Lookup failed",
+      });
     }
-    res.json(serializeRecord(record));
-  } catch (err) {
-    logger.error("[travel-rule] lookup error:", err instanceof Error ? err.message : err);
-     throw createError(ERROR_CODES.INTERNAL_ERROR,"Lookup failed", {error:"Lookup failed"})
-  }
-});
+  },
+);

@@ -1,4 +1,12 @@
-import { describe, expect, it, beforeAll, afterAll, beforeEach, jest } from "@jest/globals";
+import {
+  describe,
+  expect,
+  it,
+  beforeAll,
+  afterAll,
+  beforeEach,
+  jest,
+} from "@jest/globals";
 import { UserModel } from "../models/users";
 import { pool } from "../config/database";
 
@@ -15,7 +23,7 @@ describe("UserModel PII Encryption and RBAC Access", () => {
       `INSERT INTO users (phone_number, kyc_level) 
        VALUES ($1, $2) 
        RETURNING id`,
-      ["+19998887777", "basic"]
+      ["+19998887777", "basic"],
     );
     testUserId = userResult.rows[0].id;
   });
@@ -45,14 +53,14 @@ describe("UserModel PII Encryption and RBAC Access", () => {
     // Read directly from DB to verify raw strings are encrypted/unreadable
     const rawResult = await pool.query(
       "SELECT first_name, last_name, address, date_of_birth, id_number FROM users WHERE id = $1",
-      [testUserId]
+      [testUserId],
     );
 
     const row = rawResult.rows[0];
     expect(row.first_name).toBeDefined();
     expect(row.first_name).not.toBe(sensitiveData.firstName);
     expect(row.first_name).toContain(":"); // Encrypted payload format: iv:tag:ciphertext
-    
+
     expect(row.last_name).not.toBe(sensitiveData.lastName);
     expect(row.address).not.toBe(sensitiveData.address);
     expect(row.date_of_birth).not.toBe(sensitiveData.dateOfBirth);
@@ -61,12 +69,12 @@ describe("UserModel PII Encryption and RBAC Access", () => {
 
   it("should store and return merchant MCC codes for merchant user records", async () => {
     const merchantRoleResult = await pool.query(
-      `INSERT INTO roles (name, description) VALUES ('merchant', 'Merchant account') ON CONFLICT (name) DO NOTHING RETURNING id`
+      `INSERT INTO roles (name, description) VALUES ('merchant', 'Merchant account') ON CONFLICT (name) DO NOTHING RETURNING id`,
     );
     let merchantRoleId = merchantRoleResult.rows[0]?.id;
     if (!merchantRoleId) {
       const existingRole = await pool.query(
-        `SELECT id FROM roles WHERE name = 'merchant' LIMIT 1`
+        `SELECT id FROM roles WHERE name = 'merchant' LIMIT 1`,
       );
       merchantRoleId = existingRole.rows[0].id;
     }
@@ -79,7 +87,10 @@ describe("UserModel PII Encryption and RBAC Access", () => {
     );
 
     const merchantId = merchantResult.rows[0].id;
-    const merchant = await userModel.findById(merchantId, { id: "admin-id", role: "admin" });
+    const merchant = await userModel.findById(merchantId, {
+      id: "admin-id",
+      role: "admin",
+    });
 
     expect(merchant).toBeDefined();
     expect(merchant?.mcc).toBe("5411");
@@ -100,7 +111,10 @@ describe("UserModel PII Encryption and RBAC Access", () => {
     await userModel.updateSensitiveData(testUserId, sensitiveData);
 
     // Authorized Role: admin
-    const userAsAdmin = await userModel.findById(testUserId, { id: "admin-id", role: "admin" });
+    const userAsAdmin = await userModel.findById(testUserId, {
+      id: "admin-id",
+      role: "admin",
+    });
     expect(userAsAdmin).toBeDefined();
     expect(userAsAdmin!.firstName).toBe(sensitiveData.firstName);
     expect(userAsAdmin!.lastName).toBe(sensitiveData.lastName);
@@ -109,17 +123,26 @@ describe("UserModel PII Encryption and RBAC Access", () => {
     expect(userAsAdmin!.idNumber).toBe(sensitiveData.idNumber);
 
     // Authorized Role: compliance_officer
-    const userAsCompliance = await userModel.findById(testUserId, { id: "comp-id", role: "compliance_officer" });
+    const userAsCompliance = await userModel.findById(testUserId, {
+      id: "comp-id",
+      role: "compliance_officer",
+    });
     expect(userAsCompliance!.firstName).toBe(sensitiveData.firstName);
 
     // Authorized: User themselves
-    const userAsSelf = await userModel.findById(testUserId, { id: testUserId, role: "user" });
+    const userAsSelf = await userModel.findById(testUserId, {
+      id: testUserId,
+      role: "user",
+    });
     expect(userAsSelf!.firstName).toBe(sensitiveData.firstName);
   });
 
   it("should restrict decryption and return raw encrypted strings for unauthorized roles", async () => {
     // Unauthorized: another normal user
-    const userAsOther = await userModel.findById(testUserId, { id: "another-user-id", role: "user" });
+    const userAsOther = await userModel.findById(testUserId, {
+      id: "another-user-id",
+      role: "user",
+    });
     expect(userAsOther).toBeDefined();
     expect(userAsOther!.firstName).toBeDefined();
     expect(userAsOther!.firstName).not.toBe("Alice");
@@ -142,11 +165,17 @@ describe("UserModel PII Encryption and RBAC Access", () => {
     await userModel.updateSensitiveData(testUserId, sensitiveData);
 
     // 2. Read directly from DB to verify version prefix
-    const rawResult = await pool.query("SELECT first_name FROM users WHERE id = $1", [testUserId]);
+    const rawResult = await pool.query(
+      "SELECT first_name FROM users WHERE id = $1",
+      [testUserId],
+    );
     expect(rawResult.rows[0].first_name.startsWith("v1:")).toBe(true);
 
     // 3. Read via UserModel (authorized) to verify seamless decryption
-    const user = await userModel.findById(testUserId, { id: "admin-id", role: "admin" });
+    const user = await userModel.findById(testUserId, {
+      id: "admin-id",
+      role: "admin",
+    });
     expect(user!.firstName).toBe(sensitiveData.firstName);
   });
 });

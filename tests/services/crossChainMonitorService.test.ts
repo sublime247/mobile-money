@@ -1,4 +1,7 @@
-import { CrossChainMonitorService, ChainAssetSnapshot } from "../../src/services/crossChainMonitorService";
+import {
+  CrossChainMonitorService,
+  ChainAssetSnapshot,
+} from "../../src/services/crossChainMonitorService";
 import * as stellarConfig from "../../src/config/stellar";
 import * as metrics from "../../src/utils/metrics";
 
@@ -91,7 +94,9 @@ describe("CrossChainMonitorService", () => {
       const snapshots = await service.snapshot();
       const after = new Date();
       for (const snap of snapshots) {
-        expect(snap.capturedAt.getTime()).toBeGreaterThanOrEqual(before.getTime());
+        expect(snap.capturedAt.getTime()).toBeGreaterThanOrEqual(
+          before.getTime(),
+        );
         expect(snap.capturedAt.getTime()).toBeLessThanOrEqual(after.getTime());
       }
     });
@@ -103,7 +108,11 @@ describe("CrossChainMonitorService", () => {
       mockLoadAccount.mockResolvedValue({
         balances: [
           { asset_type: "native", balance: "100.5000000" },
-          { asset_type: "credit_alphanum4", asset_code: "USDC", balance: "50.0000000" },
+          {
+            asset_type: "credit_alphanum4",
+            asset_code: "USDC",
+            balance: "50.0000000",
+          },
         ],
       });
 

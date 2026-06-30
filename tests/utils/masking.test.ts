@@ -1,19 +1,24 @@
-import { maskPhoneNumber, maskEmail, maskStellarAddress, maskSensitiveData } from "../../src/utils/masking";
+import {
+  maskPhoneNumber,
+  maskEmail,
+  maskStellarAddress,
+  maskSensitiveData,
+} from "../../src/utils/masking";
 
 describe("masking utils", () => {
   describe("maskPhoneNumber", () => {
     it("should mask a standard phone number", () => {
       expect(maskPhoneNumber("+237677123456")).toBe("+237***56");
     });
-    
+
     it("should handle an empty string", () => {
       expect(maskPhoneNumber("")).toBe("");
     });
-    
+
     it("should not mask a phone number of length 6 or less", () => {
       expect(maskPhoneNumber("123456")).toBe("123456");
     });
-    
+
     it("should trim the phone number before masking", () => {
       expect(maskPhoneNumber(" +237677123456 ")).toBe("+237***56");
     });
@@ -59,7 +64,9 @@ describe("masking utils", () => {
     });
 
     it("should mask emails", () => {
-      expect(maskSensitiveData("johndoe@example.com", "email")).toBe("jo***@example.com");
+      expect(maskSensitiveData("johndoe@example.com", "email")).toBe(
+        "jo***@example.com",
+      );
     });
 
     it("should mask stellar addresses", () => {

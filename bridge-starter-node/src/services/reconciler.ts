@@ -31,9 +31,7 @@ import type {
  */
 export async function fetchLocalPayouts(): Promise<LocalPayoutRecord[]> {
   // TODO: Replace with your actual local data source (database, CSV, etc.)
-  logger.info(
-    "Fetching local payout records …"
-  );
+  logger.info("Fetching local payout records …");
   return [];
 }
 
@@ -48,9 +46,7 @@ export async function fetchRemotePayouts(): Promise<RemotePayoutRecord[]> {
   logger.info("Fetching remote payout records …");
 
   if (!config.bridgeApiUrl) {
-    logger.warn(
-      "BRIDGE_API_URL is not set — returning empty remote list."
-    );
+    logger.warn("BRIDGE_API_URL is not set — returning empty remote list.");
     return [];
   }
 
@@ -62,7 +58,7 @@ export async function fetchRemotePayouts(): Promise<RemotePayoutRecord[]> {
           Authorization: `Bearer ${config.bridgeApiKey}`,
           "Content-Type": "application/json",
         },
-      }
+      },
     );
     return response.data;
   } catch (error: any) {
@@ -74,7 +70,7 @@ export async function fetchRemotePayouts(): Promise<RemotePayoutRecord[]> {
           responseData: error.response?.data,
         },
       },
-      "Failed to fetch remote payouts"
+      "Failed to fetch remote payouts",
     );
     return [];
   }
@@ -88,7 +84,7 @@ export async function fetchRemotePayouts(): Promise<RemotePayoutRecord[]> {
  */
 function compareRecords(
   local: LocalPayoutRecord | null,
-  remote: RemotePayoutRecord | null
+  remote: RemotePayoutRecord | null,
 ): ReconciliationEntry {
   // Record exists only on one side
   if (!local) {
@@ -120,13 +116,13 @@ function compareRecords(
 
   if (local.status !== remote.status) {
     discrepancies.push(
-      `status mismatch: local="${local.status}" remote="${remote.status}"`
+      `status mismatch: local="${local.status}" remote="${remote.status}"`,
     );
   }
 
   if (local.amount !== remote.amount) {
     discrepancies.push(
-      `amount mismatch: local=${local.amount} remote=${remote.amount}`
+      `amount mismatch: local=${local.amount} remote=${remote.amount}`,
     );
   }
 

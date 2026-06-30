@@ -27,7 +27,6 @@ import { TransactionModel, TransactionStatus } from "../../models/transaction";
 import { generateTransactionPdfBuffer } from "../../services/pdfReceipt";
 import { validate2FAForWithdrawal } from "../../services/twoFactorWithdrawalService";
 
-
 export const transactionRoutesV1 = Router();
 transactionRoutesV1.use(createExportRoutes());
 
@@ -123,7 +122,8 @@ transactionRoutesV1.get(
 
       if (transaction.status !== TransactionStatus.Completed)
         return res.status(400).json({
-          error: "Invoice download is available only for completed transactions",
+          error:
+            "Invoice download is available only for completed transactions",
         });
 
       const pdf = await generateTransactionPdfBuffer(transaction, {

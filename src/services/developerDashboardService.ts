@@ -1,7 +1,10 @@
 import { redisClient } from "../config/redis";
 import { RATE_LIMIT_CONFIG } from "../middleware/rateLimit";
-import { merchantWebhookModel, WebhookDeliveryLog, MerchantWebhook } from "../models/merchantWebhook";
-import { merchantWebhookService } from "./merchantWebhookService";
+import { WebhookDeliveryLog, MerchantWebhook } from "../models/merchantWebhook";
+import {
+  merchantWebhookService,
+  merchantWebhookModel,
+} from "./merchantWebhookService";
 
 export interface EndpointUsage {
   endpoint: string;
@@ -64,10 +67,22 @@ export interface WebhookListEntry {
 }
 
 const ENDPOINT_CONFIGS: Record<string, { limit: number; windowMs: number }> = {
-  SEP24: { limit: RATE_LIMIT_CONFIG.SEP24_LIMIT, windowMs: RATE_LIMIT_CONFIG.SEP24_WINDOW_MS },
-  SEP31: { limit: RATE_LIMIT_CONFIG.SEP31_LIMIT, windowMs: RATE_LIMIT_CONFIG.SEP31_WINDOW_MS },
-  SEP12: { limit: RATE_LIMIT_CONFIG.SEP12_LIMIT, windowMs: RATE_LIMIT_CONFIG.SEP12_WINDOW_MS },
-  EXPORT: { limit: RATE_LIMIT_CONFIG.EXPORT_LIMIT, windowMs: RATE_LIMIT_CONFIG.EXPORT_WINDOW_MS },
+  SEP24: {
+    limit: RATE_LIMIT_CONFIG.SEP24_LIMIT,
+    windowMs: RATE_LIMIT_CONFIG.SEP24_WINDOW_MS,
+  },
+  SEP31: {
+    limit: RATE_LIMIT_CONFIG.SEP31_LIMIT,
+    windowMs: RATE_LIMIT_CONFIG.SEP31_WINDOW_MS,
+  },
+  SEP12: {
+    limit: RATE_LIMIT_CONFIG.SEP12_LIMIT,
+    windowMs: RATE_LIMIT_CONFIG.SEP12_WINDOW_MS,
+  },
+  EXPORT: {
+    limit: RATE_LIMIT_CONFIG.EXPORT_LIMIT,
+    windowMs: RATE_LIMIT_CONFIG.EXPORT_WINDOW_MS,
+  },
 };
 
 export class DeveloperDashboardService {
@@ -109,11 +124,11 @@ export class DeveloperDashboardService {
     for (let i = 29; i >= 0; i--) {
       const date = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
       const dateString = date.toISOString().split("T")[0];
-      
+
       const seed = (partnerId.length + i) % 10;
-      const queryCount = 5000 + (seed * 800) + Math.floor(Math.sin(i) * 1000);
-      const avgLatencyMs = 80 + (seed * 15) + Math.floor(Math.cos(i) * 20);
-      const successRate = 98.5 + (seed * 0.15);
+      const queryCount = 5000 + seed * 800 + Math.floor(Math.sin(i) * 1000);
+      const avgLatencyMs = 80 + seed * 15 + Math.floor(Math.cos(i) * 20);
+      const successRate = 98.5 + seed * 0.15;
 
       historicalUsage.push({
         date: dateString,
@@ -168,7 +183,9 @@ export class DeveloperDashboardService {
       offset,
     );
 
-    const successfulDeliveries = logs.filter((l) => l.status === "delivered").length;
+    const successfulDeliveries = logs.filter(
+      (l) => l.status === "delivered",
+    ).length;
     const failedDeliveries = logs.filter((l) => l.status === "failed").length;
     const latencies = logs
       .filter((l) => l.durationMs !== undefined)
@@ -210,12 +227,16 @@ export class DeveloperDashboardService {
   async retryWebhookDelivery(
     userId: string,
     deliveryLogId: string,
-  ): Promise<{ success: boolean; message: string; newLog?: WebhookDeliveryLogEntry }> {
+  ): Promise<{
+    success: boolean;
+    message: string;
+    newLog?: WebhookDeliveryLogEntry;
+  }> {
     // Get the delivery log to extract the original payload
     const logs = await merchantWebhookModel.getDeliveryLogs("", userId, 1, 0);
-    
+
     // Since getDeliveryLogs requires webhookId, we need to query directly
-    const { queryRead } = await import("../config/database");
+    const { queryRead } = await import("../config/database.js");
     const logResult = await queryRead(
       `SELECT wdl.*, mw.user_id 
        FROM webhook_delivery_logs wdl
@@ -229,7 +250,10 @@ export class DeveloperDashboardService {
     }
 
     const logRow = logResult.rows[0];
-    const webhook = await merchantWebhookModel.findById(logRow.webhook_id, userId);
+    const webhook = await merchantWebhookModel.findById(
+      logRow.webhook_id,
+      userId,
+    );
     if (!webhook) {
       throw new Error("Webhook not found");
     }

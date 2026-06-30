@@ -17,13 +17,19 @@ jest.mock("../../config/env", () => ({
 // Prevent real Redis / SEP-10 / geo initialisation in tests
 jest.mock("../../config/redis", () => ({ redisClient: { isOpen: false } }));
 jest.mock("../../stellar/adminSep10", () => ({
-  getAdminSep10Service: () => ({ verifyToken: () => { throw new Error("no"); } }),
+  getAdminSep10Service: () => ({
+    verifyToken: () => {
+      throw new Error("no");
+    },
+  }),
 }));
 jest.mock("../../auth/geo", () => ({
   evaluateGeoLoginAccess: jest.fn().mockResolvedValue({ allowed: true }),
 }));
 jest.mock("../../auth/oauth", () => ({
-  verifyOAuthAccessToken: () => { throw new Error("no oauth"); },
+  verifyOAuthAccessToken: () => {
+    throw new Error("no oauth");
+  },
 }));
 
 import { queryRead } from "../../config/database";
@@ -44,7 +50,13 @@ function makeApp(requiredScope?: number) {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const dbRow = (overrides: Partial<{ permissions: number; is_active: boolean; expires_at: Date | null }> = {}) => ({
+const dbRow = (
+  overrides: Partial<{
+    permissions: number;
+    is_active: boolean;
+    expires_at: Date | null;
+  }> = {},
+) => ({
   permissions: ScopeGroup.READ_ONLY,
   is_active: true,
   expires_at: null,
@@ -52,7 +64,10 @@ const dbRow = (overrides: Partial<{ permissions: number; is_active: boolean; exp
 });
 
 const mockDb = (row: object | null) => {
-  mockQueryRead.mockResolvedValueOnce({ rows: row ? [row] : [], rowCount: row ? 1 : 0 } as any);
+  mockQueryRead.mockResolvedValueOnce({
+    rows: row ? [row] : [],
+    rowCount: row ? 1 : 0,
+  } as any);
 };
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -62,34 +77,44 @@ beforeEach(() => jest.clearAllMocks());
 describe("requireAuth – API key DB lookup", () => {
   it("grants access and attaches DB permissions for a valid active key", async () => {
     mockDb(dbRow({ permissions: ScopeGroup.READ_ONLY }));
-    const res = await request(makeApp()).get("/protected").set("X-API-Key", "valid-key");
+    const res = await request(makeApp())
+      .get("/protected")
+      .set("X-API-Key", "valid-key");
     expect(res.status).toBe(200);
     expect(mockQueryRead).toHaveBeenCalledTimes(1);
   });
 
   it("rejects an inactive key", async () => {
     mockDb(dbRow({ is_active: false }));
-    const res = await request(makeApp()).get("/protected").set("X-API-Key", "inactive-key");
+    const res = await request(makeApp())
+      .get("/protected")
+      .set("X-API-Key", "inactive-key");
     expect(res.status).toBe(401);
     expect(res.body.message).toMatch(/inactive/i);
   });
 
   it("rejects an expired key", async () => {
     mockDb(dbRow({ expires_at: new Date("2000-01-01") }));
-    const res = await request(makeApp()).get("/protected").set("X-API-Key", "expired-key");
+    const res = await request(makeApp())
+      .get("/protected")
+      .set("X-API-Key", "expired-key");
     expect(res.status).toBe(401);
     expect(res.body.message).toMatch(/expired/i);
   });
 
   it("returns 401 for an unknown key not in DB and not the system key", async () => {
     mockDb(null); // DB returns no row
-    const res = await request(makeApp()).get("/protected").set("X-API-Key", "unknown-key");
+    const res = await request(makeApp())
+      .get("/protected")
+      .set("X-API-Key", "unknown-key");
     expect(res.status).toBe(401);
   });
 
   it("falls back to ADMIN_API_KEY env var with FULL_ACCESS when key not in DB", async () => {
     mockDb(null);
-    const res = await request(makeApp()).get("/protected").set("X-API-Key", "system-admin-key");
+    const res = await request(makeApp())
+      .get("/protected")
+      .set("X-API-Key", "system-admin-key");
     expect(res.status).toBe(200);
   });
 
@@ -97,7 +122,9 @@ describe("requireAuth – API key DB lookup", () => {
     mockDb(null);
     // A scope that only exists in FULL_ACCESS, not READ_ONLY
     const app = makeApp(ApiKeyScope.ADMIN);
-    const res = await request(app).get("/protected").set("X-API-Key", "system-admin-key");
+    const res = await request(app)
+      .get("/protected")
+      .set("X-API-Key", "system-admin-key");
     expect(res.status).toBe(200);
   });
 
@@ -117,7 +144,9 @@ describe("requireAuth + checkApiKeyScope – scope enforcement", () => {
   it("allows request when key has the required scope bit", async () => {
     mockDb(dbRow({ permissions: ApiKeyScope.TRANSACTIONS_READ }));
     const app = makeApp(ApiKeyScope.TRANSACTIONS_READ);
-    const res = await request(app).get("/protected").set("X-API-Key", "read-key");
+    const res = await request(app)
+      .get("/protected")
+      .set("X-API-Key", "read-key");
     expect(res.status).toBe(200);
   });
 
@@ -125,7 +154,9 @@ describe("requireAuth + checkApiKeyScope – scope enforcement", () => {
     // Key has only READ, but route needs ADMIN
     mockDb(dbRow({ permissions: ScopeGroup.READ_ONLY }));
     const app = makeApp(ApiKeyScope.ADMIN);
-    const res = await request(app).get("/protected").set("X-API-Key", "read-only-key");
+    const res = await request(app)
+      .get("/protected")
+      .set("X-API-Key", "read-only-key");
     expect(res.status).toBe(403);
     expect(res.body.message).toMatch(/required permission/i);
   });
@@ -134,7 +165,9 @@ describe("requireAuth + checkApiKeyScope – scope enforcement", () => {
     const perms = ApiKeyScope.DEPOSITS_INITIATE | ApiKeyScope.DEPOSITS_READ;
     mockDb(dbRow({ permissions: perms }));
     const app = makeApp(ApiKeyScope.DEPOSITS_INITIATE);
-    const res = await request(app).get("/protected").set("X-API-Key", "deposit-key");
+    const res = await request(app)
+      .get("/protected")
+      .set("X-API-Key", "deposit-key");
     expect(res.status).toBe(200);
   });
 
@@ -143,7 +176,10 @@ describe("requireAuth + checkApiKeyScope – scope enforcement", () => {
     // (tested indirectly: if apiKeyPermissions is undefined, checkApiKeyScope calls next())
     // This is a unit-level assertion rather than an HTTP test:
     const mockReq = { header: () => undefined } as any;
-    const mockRes = { status: jest.fn().mockReturnThis(), json: jest.fn() } as any;
+    const mockRes = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
+    } as any;
     const mockNext = jest.fn();
 
     checkApiKeyScope(ApiKeyScope.ADMIN)(mockReq, mockRes, mockNext);

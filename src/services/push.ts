@@ -2,7 +2,6 @@ import logger from "../utils/logger";
 import * as admin from "firebase-admin";
 import { pool } from "../config/database";
 
-
 export interface PushToken {
   id: string;
   userId: string;
@@ -29,16 +28,17 @@ export interface TransactionNotificationData {
   data?: Record<string, string>;
 }
 
-
 /**
  * Initialize Firebase Admin SDK
  * Uses FIREBASE_SERVICE_ACCOUNT_KEY environment variable (JSON string or path)
  */
 function initializeFirebase(): admin.app.App | null {
   const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
-  
+
   if (!serviceAccountKey) {
-    console.warn("Firebase Admin: FIREBASE_SERVICE_ACCOUNT_KEY not configured. Push notifications disabled.");
+    console.warn(
+      "Firebase Admin: FIREBASE_SERVICE_ACCOUNT_KEY not configured. Push notifications disabled.",
+    );
     return null;
   }
 
@@ -68,7 +68,6 @@ function initializeFirebase(): admin.app.App | null {
 
 // Initialize Firebase on module load
 const firebaseApp = initializeFirebase();
-
 
 export class PushTokenModel {
   /**
@@ -172,7 +171,6 @@ export class PushTokenModel {
   }
 }
 
-
 export class PushNotificationService {
   private tokenModel: PushTokenModel;
   private isEnabled: boolean;
@@ -274,7 +272,7 @@ export class PushNotificationService {
     notification: PushNotification,
   ): Promise<number> {
     const tokens = await this.tokenModel.getTokensByUserId(userId);
-    
+
     if (tokens.length === 0) {
       console.warn("No push tokens found for user:", userId);
       return 0;
@@ -299,7 +297,8 @@ export class PushNotificationService {
     data: TransactionNotificationData,
   ): Promise<number> {
     const notification: PushNotification = {
-      title: data.type === "deposit" ? "Deposit Successful" : "Withdrawal Complete",
+      title:
+        data.type === "deposit" ? "Deposit Successful" : "Withdrawal Complete",
       body: `${data.type === "deposit" ? "Received" : "Sent"} ${data.amount} - Ref: ${data.referenceNumber}`,
       data: {
         type: "transaction_complete",
@@ -322,7 +321,8 @@ export class PushNotificationService {
   ): Promise<number> {
     const notification: PushNotification = {
       title: data.type === "deposit" ? "Deposit Failed" : "Withdrawal Failed",
-      body: data.error || `Your ${data.type} transaction could not be completed.`,
+      body:
+        data.error || `Your ${data.type} transaction could not be completed.`,
       data: {
         type: "transaction_failed",
         transactionId: data.transactionId,

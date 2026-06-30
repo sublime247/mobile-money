@@ -26,8 +26,8 @@ describe("redact utility", () => {
         password: "secretpassword",
         nested: {
           token: "abc123token",
-          public: "info"
-        }
+          public: "info",
+        },
       };
 
       const result = redact(input);
@@ -36,21 +36,21 @@ describe("redact utility", () => {
         password: REDACTED,
         nested: {
           token: REDACTED,
-          public: "info"
-        }
+          public: "info",
+        },
       });
     });
 
     it("should redact arrays", () => {
       const input = [
         { password: "123", id: 1 },
-        { token: "abc", id: 2 }
+        { token: "abc", id: 2 },
       ];
 
       const result = redact(input);
       expect(result).toEqual([
         { password: REDACTED, id: 1 },
-        { token: REDACTED, id: 2 }
+        { token: REDACTED, id: 2 },
       ]);
     });
 
@@ -69,11 +69,11 @@ describe("redact utility", () => {
     it("should parse and redact stringified JSON", () => {
       const input = JSON.stringify({ password: "123", name: "John" });
       const result = redact(input);
-      
+
       expect(typeof result).toBe("string");
       expect(JSON.parse(result as string)).toEqual({
         password: REDACTED,
-        name: "John"
+        name: "John",
       });
     });
 

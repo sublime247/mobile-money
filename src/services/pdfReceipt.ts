@@ -15,12 +15,19 @@ export async function generateTransactionPdfBuffer(
   transaction: Transaction,
   options: TransactionPdfOptions = {},
 ): Promise<Buffer> {
-  const merchantName = options.merchantName || process.env.ORG_NAME || "Mobile Money";
+  const merchantName =
+    options.merchantName || process.env.ORG_NAME || "Mobile Money";
   const merchantUrl = options.merchantUrl || process.env.ORG_URL || "";
-  const merchantAddress = options.merchantAddress || process.env.ORG_ADDRESS || "";
-  const merchantDescription = options.merchantDescription || process.env.ORG_DESCRIPTION || "Mobile money to Stellar";
+  const merchantAddress =
+    options.merchantAddress || process.env.ORG_ADDRESS || "";
+  const merchantDescription =
+    options.merchantDescription ||
+    process.env.ORG_DESCRIPTION ||
+    "Mobile money to Stellar";
   const title = options.title || "Transaction Receipt";
-  const idLabel = title.toLowerCase().includes("invoice") ? "Invoice ID" : "Receipt ID";
+  const idLabel = title.toLowerCase().includes("invoice")
+    ? "Invoice ID"
+    : "Receipt ID";
 
   return new Promise((resolve, reject) => {
     try {
@@ -32,10 +39,7 @@ export async function generateTransactionPdfBuffer(
       doc.on("error", (err) => reject(err));
 
       // Header with merchant branding
-      doc
-        .fillColor("#333")
-        .fontSize(18)
-        .text(merchantName, { align: "left" });
+      doc.fillColor("#333").fontSize(18).text(merchantName, { align: "left" });
 
       if (merchantUrl) {
         doc
@@ -61,10 +65,7 @@ export async function generateTransactionPdfBuffer(
         doc.moveDown(0.5);
       }
 
-      doc
-        .fontSize(16)
-        .fillColor("#000")
-        .text(title, { align: "left" });
+      doc.fontSize(16).fillColor("#000").text(title, { align: "left" });
 
       doc.moveDown(0.25);
       doc
@@ -91,9 +92,14 @@ export async function generateTransactionPdfBuffer(
       doc.text(`Provider: ${transaction.provider}`, leftX);
       doc.text(`Phone: ${maskPhoneNumber(transaction.phoneNumber)}`, leftX);
       if (transaction.stellarAddress)
-        doc.text(`Stellar: ${maskStellarAddress(transaction.stellarAddress)}`, leftX);
+        doc.text(
+          `Stellar: ${maskStellarAddress(transaction.stellarAddress)}`,
+          leftX,
+        );
 
-      const metadata = (transaction as any).metadata as Record<string, any> | undefined;
+      const metadata = (transaction as any).metadata as
+        | Record<string, any>
+        | undefined;
       const txHash =
         metadata?.transactionHash ||
         metadata?.stellarTransactionId ||
@@ -125,11 +131,14 @@ export async function generateTransactionPdfBuffer(
         if (!isNaN(numericAmount)) {
           amountStr = CurrencyFormatter.format(
             numericAmount,
-            transaction.currency || "USD"
+            transaction.currency || "USD",
           );
         }
       } catch (err) {
-        console.warn("[pdfReceipt] Failed to format amount with CurrencyFormatter:", err);
+        console.warn(
+          "[pdfReceipt] Failed to format amount with CurrencyFormatter:",
+          err,
+        );
       }
 
       doc.fontSize(12).text(`Amount`, rightX, 140, { continued: false });
@@ -141,7 +150,10 @@ export async function generateTransactionPdfBuffer(
         .fontSize(10)
         .fillColor("#333")
         .text(`Status: ${transaction.status}`, leftX);
-      doc.text(`Created: ${new Date(transaction.createdAt).toLocaleString()}`, leftX);
+      doc.text(
+        `Created: ${new Date(transaction.createdAt).toLocaleString()}`,
+        leftX,
+      );
 
       if (transaction.notes) {
         doc.moveDown(0.5);

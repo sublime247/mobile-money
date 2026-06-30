@@ -11,7 +11,10 @@ const env = { ...process.env };
 function mockTokenRequest() {
   axiosMock.request.mockImplementation(async (config) => {
     if (String(config.url).includes("/oauth/token")) {
-      return { data: { access_token: "test-token", expires_in: 3600 }, status: 200 } as any;
+      return {
+        data: { access_token: "test-token", expires_in: 3600 },
+        status: 200,
+      } as any;
     }
     return { data: {}, status: 200 } as any;
   });
@@ -39,10 +42,16 @@ describe("OrangeMadagascarProvider", () => {
       axiosMock.request.mockImplementation(async (config) => {
         if (String(config.url).includes("/oauth/token")) {
           callCount++;
-          return { data: { access_token: "token-1", expires_in: 3600 }, status: 200 } as any;
+          return {
+            data: { access_token: "token-1", expires_in: 3600 },
+            status: 200,
+          } as any;
         }
         if (String(config.url).includes("/account/balance")) {
-          return { data: { balance: 1000, currency: "MGA" }, status: 200 } as any;
+          return {
+            data: { balance: 1000, currency: "MGA" },
+            status: 200,
+          } as any;
         }
         return { data: {}, status: 200 } as any;
       });
@@ -58,10 +67,16 @@ describe("OrangeMadagascarProvider", () => {
       axiosMock.request.mockImplementation(async (config) => {
         if (String(config.url).includes("/oauth/token")) {
           callCount++;
-          return { data: { access_token: `token-${callCount}`, expires_in: 0 }, status: 200 } as any;
+          return {
+            data: { access_token: `token-${callCount}`, expires_in: 0 },
+            status: 200,
+          } as any;
         }
         if (String(config.url).includes("/account/balance")) {
-          return { data: { balance: 1000, currency: "MGA" }, status: 200 } as any;
+          return {
+            data: { balance: 1000, currency: "MGA" },
+            status: 200,
+          } as any;
         }
         return { data: {}, status: 200 } as any;
       });
@@ -78,10 +93,16 @@ describe("OrangeMadagascarProvider", () => {
         if (String(config.url).includes("/oauth/token")) {
           callCount++;
           await new Promise((r) => setTimeout(r, 50));
-          return { data: { access_token: "token-1", expires_in: 3600 }, status: 200 } as any;
+          return {
+            data: { access_token: "token-1", expires_in: 3600 },
+            status: 200,
+          } as any;
         }
         if (String(config.url).includes("/account/balance")) {
-          return { data: { balance: 1000, currency: "MGA" }, status: 200 } as any;
+          return {
+            data: { balance: 1000, currency: "MGA" },
+            status: 200,
+          } as any;
         }
         return { data: {}, status: 200 } as any;
       });
@@ -102,10 +123,16 @@ describe("OrangeMadagascarProvider", () => {
       axiosMock.request.mockImplementation(async (config) => {
         if (String(config.url).includes("/oauth/token")) {
           tokenCalls++;
-          return { data: { access_token: "pay-token", expires_in: 3600 }, status: 200 } as any;
+          return {
+            data: { access_token: "pay-token", expires_in: 3600 },
+            status: 200,
+          } as any;
         }
         if (String(config.url).includes("/payments/collect")) {
-          return { data: { reference: "ref-1", status: "SUCCESSFUL" }, status: 200 } as any;
+          return {
+            data: { reference: "ref-1", status: "SUCCESSFUL" },
+            status: 200,
+          } as any;
         }
         return { data: {}, status: 200 } as any;
       });
@@ -121,7 +148,10 @@ describe("OrangeMadagascarProvider", () => {
       mockTokenRequest();
       axiosMock.request.mockImplementation(async (config) => {
         if (String(config.url).includes("/oauth/token")) {
-          return { data: { access_token: "token", expires_in: 3600 }, status: 200 } as any;
+          return {
+            data: { access_token: "token", expires_in: 3600 },
+            status: 200,
+          } as any;
         }
         return { data: { error: "insufficient_balance" }, status: 402 } as any;
       });
@@ -137,14 +167,20 @@ describe("OrangeMadagascarProvider", () => {
       axiosMock.request.mockImplementation(async (config) => {
         if (String(config.url).includes("/oauth/token")) {
           authAttempts++;
-          return { data: { access_token: `token-${authAttempts}`, expires_in: 3600 }, status: 200 } as any;
+          return {
+            data: { access_token: `token-${authAttempts}`, expires_in: 3600 },
+            status: 200,
+          } as any;
         }
         if (String(config.url).includes("/payments/collect")) {
           apiAttempts++;
           if (apiAttempts === 1) {
             return { data: { error: "unauthorized" }, status: 401 } as any;
           }
-          return { data: { reference: "ref-2", status: "SUCCESSFUL" }, status: 200 } as any;
+          return {
+            data: { reference: "ref-2", status: "SUCCESSFUL" },
+            status: 200,
+          } as any;
         }
         return { data: {}, status: 200 } as any;
       });
@@ -162,10 +198,16 @@ describe("OrangeMadagascarProvider", () => {
       mockTokenRequest();
       axiosMock.request.mockImplementation(async (config) => {
         if (String(config.url).includes("/oauth/token")) {
-          return { data: { access_token: "token", expires_in: 3600 }, status: 200 } as any;
+          return {
+            data: { access_token: "token", expires_in: 3600 },
+            status: 200,
+          } as any;
         }
         if (String(config.url).includes("/payments/disburse")) {
-          return { data: { reference: "payout-1", status: "PENDING" }, status: 202 } as any;
+          return {
+            data: { reference: "payout-1", status: "PENDING" },
+            status: 202,
+          } as any;
         }
         return { data: {}, status: 200 } as any;
       });
@@ -181,7 +223,10 @@ describe("OrangeMadagascarProvider", () => {
       mockTokenRequest();
       axiosMock.request.mockImplementation(async (config) => {
         if (String(config.url).includes("/oauth/token")) {
-          return { data: { access_token: "token", expires_in: 3600 }, status: 200 } as any;
+          return {
+            data: { access_token: "token", expires_in: 3600 },
+            status: 200,
+          } as any;
         }
         if (String(config.url).includes("/payments/ref-1")) {
           return { data: { status: "SUCCESSFUL" }, status: 200 } as any;
@@ -198,7 +243,10 @@ describe("OrangeMadagascarProvider", () => {
       mockTokenRequest();
       axiosMock.request.mockImplementation(async (config) => {
         if (String(config.url).includes("/oauth/token")) {
-          return { data: { access_token: "token", expires_in: 3600 }, status: 200 } as any;
+          return {
+            data: { access_token: "token", expires_in: 3600 },
+            status: 200,
+          } as any;
         }
         if (String(config.url).includes("/payments/ref-1")) {
           return { data: { status: "FAILED" }, status: 200 } as any;
@@ -215,7 +263,10 @@ describe("OrangeMadagascarProvider", () => {
       mockTokenRequest();
       axiosMock.request.mockImplementation(async (config) => {
         if (String(config.url).includes("/oauth/token")) {
-          return { data: { access_token: "token", expires_in: 3600 }, status: 200 } as any;
+          return {
+            data: { access_token: "token", expires_in: 3600 },
+            status: 200,
+          } as any;
         }
         if (String(config.url).includes("/payments/ref-1")) {
           return { data: { status: "PENDING" }, status: 200 } as any;
@@ -232,7 +283,10 @@ describe("OrangeMadagascarProvider", () => {
       mockTokenRequest();
       axiosMock.request.mockImplementation(async (config) => {
         if (String(config.url).includes("/oauth/token")) {
-          return { data: { access_token: "token", expires_in: 3600 }, status: 200 } as any;
+          return {
+            data: { access_token: "token", expires_in: 3600 },
+            status: 200,
+          } as any;
         }
         if (String(config.url).includes("/payments/ref-1")) {
           return { data: { status: "UNKNOWN_CODE" }, status: 200 } as any;
@@ -259,10 +313,16 @@ describe("OrangeMadagascarProvider", () => {
       mockTokenRequest();
       axiosMock.request.mockImplementation(async (config) => {
         if (String(config.url).includes("/oauth/token")) {
-          return { data: { access_token: "token", expires_in: 3600 }, status: 200 } as any;
+          return {
+            data: { access_token: "token", expires_in: 3600 },
+            status: 200,
+          } as any;
         }
         if (String(config.url).includes("/account/balance")) {
-          return { data: { balance: 500000, currency: "MGA" }, status: 200 } as any;
+          return {
+            data: { balance: 500000, currency: "MGA" },
+            status: 200,
+          } as any;
         }
         return { data: {}, status: 200 } as any;
       });
@@ -306,15 +366,27 @@ describe("OrangeMadagascarProvider", () => {
       mockTokenRequest();
       axiosMock.request.mockImplementation(async (config) => {
         if (String(config.url).includes("/oauth/token")) {
-          return { data: { access_token: "token", expires_in: 3600 }, status: 200 } as any;
+          return {
+            data: { access_token: "token", expires_in: 3600 },
+            status: 200,
+          } as any;
         }
         if (String(config.url).includes("/disburse/batch")) {
           return {
             data: {
               batchId: "BATCH-1",
               items: [
-                { referenceId: "tx1", status: "SUCCESSFUL", transactionId: "pmt-1" },
-                { referenceId: "tx2", status: "FAILED", errorReason: "blocked", transactionId: "pmt-2" },
+                {
+                  referenceId: "tx1",
+                  status: "SUCCESSFUL",
+                  transactionId: "pmt-1",
+                },
+                {
+                  referenceId: "tx2",
+                  status: "FAILED",
+                  errorReason: "blocked",
+                  transactionId: "pmt-2",
+                },
               ],
             },
             status: 200,
@@ -331,14 +403,22 @@ describe("OrangeMadagascarProvider", () => {
       expect(result.success).toBe(true);
       expect(result.results).toEqual([
         { referenceId: "tx1", success: true, providerReference: "pmt-1" },
-        { referenceId: "tx2", success: false, error: "blocked", providerReference: "pmt-2" },
+        {
+          referenceId: "tx2",
+          success: false,
+          error: "blocked",
+          providerReference: "pmt-2",
+        },
       ]);
     });
   });
 
   describe("verifyCallbackSignature", () => {
     const secret = "test-callback-secret";
-    const payload = JSON.stringify({ reference: "ref-1", status: "SUCCESSFUL" });
+    const payload = JSON.stringify({
+      reference: "ref-1",
+      status: "SUCCESSFUL",
+    });
     const rawBody = Buffer.from(payload);
 
     beforeEach(() => {
@@ -347,7 +427,8 @@ describe("OrangeMadagascarProvider", () => {
     });
 
     it("returns true for a valid HMAC-SHA256 hex signature", () => {
-      const sig = "sha256=" + createHmac("sha256", secret).update(rawBody).digest("hex");
+      const sig =
+        "sha256=" + createHmac("sha256", secret).update(rawBody).digest("hex");
       expect(provider.verifyCallbackSignature(rawBody, sig)).toBe(true);
     });
 
@@ -357,7 +438,9 @@ describe("OrangeMadagascarProvider", () => {
     });
 
     it("returns false for a tampered signature", () => {
-      const sig = createHmac("sha256", "wrong-secret").update(rawBody).digest("hex");
+      const sig = createHmac("sha256", "wrong-secret")
+        .update(rawBody)
+        .digest("hex");
       expect(provider.verifyCallbackSignature(rawBody, sig)).toBe(false);
     });
 
@@ -366,7 +449,9 @@ describe("OrangeMadagascarProvider", () => {
     });
 
     it("returns false when signature length differs", () => {
-      expect(provider.verifyCallbackSignature(rawBody, "too-short")).toBe(false);
+      expect(provider.verifyCallbackSignature(rawBody, "too-short")).toBe(
+        false,
+      );
     });
 
     it("returns false when callback secret is empty", () => {

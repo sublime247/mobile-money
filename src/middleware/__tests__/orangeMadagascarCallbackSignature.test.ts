@@ -16,7 +16,9 @@ jest.mock("../../services/logger", () => ({
 
 import { verifyOrangeMadagascarCallbackSignature } from "../orangeMadagascarCallbackSignature";
 
-function makeReq(overrides: Partial<Request> & { rawBody?: Buffer } = {}): Request {
+function makeReq(
+  overrides: Partial<Request> & { rawBody?: Buffer } = {},
+): Request {
   return {
     headers: {},
     body: {},
@@ -49,7 +51,8 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockGetConfigValue.mockImplementation((key: string) => {
     if (key === "providers.orangeMadagascar.callbackSecret") return SECRET;
-    if (key === "providers.orangeMadagascar.callbackSignatureHeader") return "x-callback-signature";
+    if (key === "providers.orangeMadagascar.callbackSignatureHeader")
+      return "x-callback-signature";
     return undefined;
   });
 });
@@ -74,7 +77,9 @@ describe("verifyOrangeMadagascarCallbackSignature", () => {
       });
       expect(next).not.toHaveBeenCalled();
       expect(mockLogSecurityAnomaly).toHaveBeenCalledWith(
-        expect.objectContaining({ reason: "orange_madagascar_callback_secret_not_configured" }),
+        expect.objectContaining({
+          reason: "orange_madagascar_callback_secret_not_configured",
+        }),
       );
     });
   });
@@ -90,7 +95,9 @@ describe("verifyOrangeMadagascarCallbackSignature", () => {
 
       expect(next).not.toHaveBeenCalled();
       expect(mockLogSecurityAnomaly).toHaveBeenCalledWith(
-        expect.objectContaining({ reason: "orange_madagascar_callback_signature_missing" }),
+        expect.objectContaining({
+          reason: "orange_madagascar_callback_signature_missing",
+        }),
       );
     });
   });
@@ -99,7 +106,10 @@ describe("verifyOrangeMadagascarCallbackSignature", () => {
     it("calls next() for a valid base64 HMAC signature using rawBody", async () => {
       const rawBody = Buffer.from(PAYLOAD);
       const sig = hmacBase64(PAYLOAD, SECRET);
-      const req = makeReq({ headers: { "x-callback-signature": sig }, rawBody });
+      const req = makeReq({
+        headers: { "x-callback-signature": sig },
+        rawBody,
+      });
       const next: NextFunction = jest.fn();
 
       await verifyOrangeMadagascarCallbackSignature(req, makeRes(), next);
@@ -111,7 +121,10 @@ describe("verifyOrangeMadagascarCallbackSignature", () => {
     it("calls next() for a valid sha256= prefixed hex signature", async () => {
       const rawBody = Buffer.from(PAYLOAD);
       const sig = hmacHex(PAYLOAD, SECRET);
-      const req = makeReq({ headers: { "x-callback-signature": sig }, rawBody });
+      const req = makeReq({
+        headers: { "x-callback-signature": sig },
+        rawBody,
+      });
       const next: NextFunction = jest.fn();
 
       await verifyOrangeMadagascarCallbackSignature(req, makeRes(), next);
@@ -133,7 +146,8 @@ describe("verifyOrangeMadagascarCallbackSignature", () => {
     it("accepts signature via the alt header x-orange-signature", async () => {
       mockGetConfigValue.mockImplementation((key: string) => {
         if (key === "providers.orangeMadagascar.callbackSecret") return SECRET;
-        if (key === "providers.orangeMadagascar.callbackSignatureHeader") return "x-other-header";
+        if (key === "providers.orangeMadagascar.callbackSignatureHeader")
+          return "x-other-header";
         return undefined;
       });
 
@@ -152,7 +166,10 @@ describe("verifyOrangeMadagascarCallbackSignature", () => {
     it("throws 401 for a tampered payload", async () => {
       const rawBody = Buffer.from(PAYLOAD);
       const sig = hmacBase64("different-payload", SECRET);
-      const req = makeReq({ headers: { "x-callback-signature": sig }, rawBody });
+      const req = makeReq({
+        headers: { "x-callback-signature": sig },
+        rawBody,
+      });
       const next: NextFunction = jest.fn();
 
       await expect(
@@ -161,14 +178,19 @@ describe("verifyOrangeMadagascarCallbackSignature", () => {
 
       expect(next).not.toHaveBeenCalled();
       expect(mockLogSecurityAnomaly).toHaveBeenCalledWith(
-        expect.objectContaining({ reason: "orange_madagascar_callback_signature_invalid" }),
+        expect.objectContaining({
+          reason: "orange_madagascar_callback_signature_invalid",
+        }),
       );
     });
 
     it("throws 401 for a wrong secret", async () => {
       const rawBody = Buffer.from(PAYLOAD);
       const sig = hmacBase64(PAYLOAD, "wrong-secret");
-      const req = makeReq({ headers: { "x-callback-signature": sig }, rawBody });
+      const req = makeReq({
+        headers: { "x-callback-signature": sig },
+        rawBody,
+      });
       const next: NextFunction = jest.fn();
 
       await expect(
@@ -180,7 +202,10 @@ describe("verifyOrangeMadagascarCallbackSignature", () => {
 
     it("throws 401 for a signature with mismatched length", async () => {
       const rawBody = Buffer.from(PAYLOAD);
-      const req = makeReq({ headers: { "x-callback-signature": "short" }, rawBody });
+      const req = makeReq({
+        headers: { "x-callback-signature": "short" },
+        rawBody,
+      });
       const next: NextFunction = jest.fn();
 
       await expect(

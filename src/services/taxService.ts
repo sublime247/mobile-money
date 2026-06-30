@@ -18,7 +18,11 @@ export async function getTaxConfig(countryCode: string): Promise<TaxConfig> {
 
   if (result.rows.length === 0) {
     // No specific config – return zero rates so callers can handle gracefully.
-    return { country: countryCode.toUpperCase(), vatRate: 0, transferTaxRate: 0 };
+    return {
+      country: countryCode.toUpperCase(),
+      vatRate: 0,
+      transferTaxRate: 0,
+    };
   }
 
   const row = result.rows[0];

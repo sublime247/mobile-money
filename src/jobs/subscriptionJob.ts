@@ -28,7 +28,9 @@ export async function runSubscriptionJob(): Promise<void> {
     try {
       // Create a transaction record linked to this subscription
       const phoneEncrypted = s.phone_number ? s.phone_number : null;
-      const phoneNumber = phoneEncrypted ? decrypt(String(phoneEncrypted)) : null;
+      const phoneNumber = phoneEncrypted
+        ? decrypt(String(phoneEncrypted))
+        : null;
       const tx = await transactionModel.create({
         type: "deposit",
         amount: s.amount,
@@ -55,10 +57,18 @@ export async function runSubscriptionJob(): Promise<void> {
       });
 
       // Advance next_run_at according to interval
-      await queryWrite(`UPDATE subscriptions SET last_run_at = NOW(), next_run_at = ${computeNextRun(s.interval)}, updated_at = NOW() WHERE id = $1`, [s.id]);
-      console.log(`[subscriptions] Scheduled transaction ${tx.id} for subscription ${s.id}`);
+      await queryWrite(
+        `UPDATE subscriptions SET last_run_at = NOW(), next_run_at = ${computeNextRun(s.interval)}, updated_at = NOW() WHERE id = $1`,
+        [s.id],
+      );
+      console.log(
+        `[subscriptions] Scheduled transaction ${tx.id} for subscription ${s.id}`,
+      );
     } catch (err) {
-      logger.error(`[subscriptions] Error processing subscription ${s.id}:`, err);
+      logger.error(
+        `[subscriptions] Error processing subscription ${s.id}:`,
+        err,
+      );
     }
   }
 }

@@ -11,7 +11,10 @@ import {
 } from "stellar-sdk";
 import { createSep8Router } from "../sep8";
 import { Sep12Service, Sep12CustomerStatus } from "../sep12";
-import { sanctionService, SanctionScreeningError } from "../../services/sanctionService";
+import {
+  sanctionService,
+  SanctionScreeningError,
+} from "../../services/sanctionService";
 
 jest.mock("../sep12");
 jest.mock("../../services/sanctionService", () => ({
@@ -33,11 +36,13 @@ const DEST_KEYPAIR = Keypair.random();
 
 const TEST_ASSET = new Asset("USDC", Keypair.random().publicKey());
 
-function buildTestTx(options: {
-  sourceKeypair?: Keypair;
-  includePayment?: boolean;
-  destination?: string;
-} = {}): string {
+function buildTestTx(
+  options: {
+    sourceKeypair?: Keypair;
+    includePayment?: boolean;
+    destination?: string;
+  } = {},
+): string {
   const sourceKeypair = options.sourceKeypair ?? CLIENT_KEYPAIR;
   const account = new Account(sourceKeypair.publicKey(), "12345");
   const builder = new TransactionBuilder(account, {
@@ -51,13 +56,11 @@ function buildTestTx(options: {
         destination: options.destination ?? DEST_KEYPAIR.publicKey(),
         asset: TEST_ASSET,
         amount: "10",
-      })
+      }),
     );
   } else {
     // A change_trust op — non-payment operation
-    builder.addOperation(
-      Operation.changeTrust({ asset: TEST_ASSET })
-    );
+    builder.addOperation(Operation.changeTrust({ asset: TEST_ASSET }));
   }
 
   return builder.build().toEnvelope().toXDR("base64");
@@ -77,10 +80,12 @@ describe("SEP-08 Regulated Asset Approval", () => {
       getCustomer: jest.fn(),
     } as any;
     (Sep12Service as jest.MockedClass<typeof Sep12Service>).mockImplementation(
-      () => mockSep12Service
+      () => mockSep12Service,
     );
 
-    (sanctionService.checkPartiesByAddress as jest.Mock).mockResolvedValue(undefined);
+    (sanctionService.checkPartiesByAddress as jest.Mock).mockResolvedValue(
+      undefined,
+    );
 
     app = express();
     app.use(express.json());
@@ -183,7 +188,7 @@ describe("SEP-08 Regulated Asset Approval", () => {
 
     it("rejects when source account is sanctioned", async () => {
       (sanctionService.checkPartiesByAddress as jest.Mock).mockRejectedValue(
-        new SanctionScreeningError()
+        new SanctionScreeningError(),
       );
 
       const res = await request(app)
@@ -203,7 +208,7 @@ describe("SEP-08 Regulated Asset Approval", () => {
 
       expect(sanctionService.checkPartiesByAddress).toHaveBeenCalledWith(
         CLIENT_KEYPAIR.publicKey(),
-        customDest
+        customDest,
       );
     });
 
@@ -214,7 +219,7 @@ describe("SEP-08 Regulated Asset Approval", () => {
 
       expect(sanctionService.checkPartiesByAddress).toHaveBeenCalledWith(
         CLIENT_KEYPAIR.publicKey(),
-        CLIENT_KEYPAIR.publicKey()
+        CLIENT_KEYPAIR.publicKey(),
       );
     });
   });
@@ -255,8 +260,10 @@ describe("SEP-08 Regulated Asset Approval", () => {
 
       const signedTx = new Transaction(res.body.tx, SDKNetworks.TESTNET);
       const signers = signedTx.signatures.map((s: any) =>
-        Keypair.fromPublicKey(SERVER_KEYPAIR.publicKey())
-          .verify(signedTx.hash(), s.signature())
+        Keypair.fromPublicKey(SERVER_KEYPAIR.publicKey()).verify(
+          signedTx.hash(),
+          s.signature(),
+        ),
       );
       expect(signers.some(Boolean)).toBe(true);
     });

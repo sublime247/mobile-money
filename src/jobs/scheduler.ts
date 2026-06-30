@@ -22,10 +22,7 @@ import { runDailyProviderReconciliation } from "./providerReconciliationJob";
 import { runReconciliationJob } from "./reconciliationJob";
 import { runDatabaseBackupJob } from "./databaseBackupJob";
 import { runDatabaseBackupVerifyJob } from "./databaseBackupVerifyJob";
-import {
-  INDEX_REINDEX_CRON,
-  INDEX_REINDEX_JOB_ENABLED,
-} from "../config/env";
+import { INDEX_REINDEX_CRON, INDEX_REINDEX_JOB_ENABLED } from "../config/env";
 import { runIndexReindexJob } from "./indexReindexJob";
 import { runSanctionSyncJob } from "./sanctionSyncJob";
 import { startNotificationWorker } from "../workers/notificationWorker";
@@ -108,6 +105,8 @@ const JOBS: JobConfig[] = [
     // Daily at 01:00 AM UTC — sweeps merchant fees and settles provider balances
     schedule: process.env.DAILY_SETTLEMENT_CRON || "0 1 * * *",
     handler: runDailySettlementJob,
+  },
+  {
     name: "provider-reconciliation",
     // Daily at 4:00 AM - runs automated reconciliation against provider CSV reports
     schedule: process.env.PROVIDER_RECONCILIATION_CRON || "0 4 * * *",
@@ -124,7 +123,8 @@ const JOBS: JobConfig[] = [
     // 1st of every month at midnight
     schedule: "0 0 1 * *",
     handler: async () => {
-      const { runMonthlyReconciliationReportJob } = await import("./monthlyReconciliationReportJob");
+      const { runMonthlyReconciliationReportJob } =
+        await import("./monthlyReconciliationReportJob.js");
       return runMonthlyReconciliationReportJob();
     },
   },

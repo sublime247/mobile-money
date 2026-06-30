@@ -42,42 +42,69 @@ describe("WhatsappService", () => {
   it("should send a WhatsApp message when enabled", async () => {
     mockTwilioClient.messages.create.mockResolvedValue({ sid: "SM123" });
 
-    const result = await whatsappService.sendWithFallback("+237670000000", "Hello Test");
+    const result = await whatsappService.sendWithFallback(
+      "+237670000000",
+      "Hello Test",
+    );
 
-    expect(mockTwilioClient.messages.create).toHaveBeenCalledWith(expect.objectContaining({
-      to: "whatsapp:+237670000000",
-      body: "Hello Test"
-    }));
-    expect(result).toEqual({ 
-      sent: true, 
-      provider: "whatsapp", 
-      messageSid: "SM123" 
+    expect(mockTwilioClient.messages.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: "whatsapp:+237670000000",
+        body: "Hello Test",
+      }),
+    );
+    expect(result).toEqual({
+      sent: true,
+      provider: "whatsapp",
+      messageSid: "SM123",
     });
     expect(mockSmsService.notifyTransactionEvent).not.toHaveBeenCalled();
   });
 
   it("should fallback to SMS when WhatsApp fails", async () => {
-    mockTwilioClient.messages.create.mockRejectedValue(new Error("WhatsApp Failed"));
-    mockSmsService.sendToPhone.mockResolvedValue({ sent: true, messageSid: "SMS123" });
+    mockTwilioClient.messages.create.mockRejectedValue(
+      new Error("WhatsApp Failed"),
+    );
+    mockSmsService.sendToPhone.mockResolvedValue({
+      sent: true,
+      messageSid: "SMS123",
+    });
 
-    const result = await whatsappService.sendWithFallback("+237670000000", "Hello Fallback");
+    const result = await whatsappService.sendWithFallback(
+      "+237670000000",
+      "Hello Fallback",
+    );
 
     expect(mockTwilioClient.messages.create).toHaveBeenCalled();
     expect(mockSmsService.sendToPhone).toHaveBeenCalledWith(
       "+237670000000",
-      "Hello Fallback"
+      "Hello Fallback",
     );
-    expect(result).toEqual({ sent: true, provider: "sms", messageSid: "SMS123" });
+    expect(result).toEqual({
+      sent: true,
+      provider: "sms",
+      messageSid: "SMS123",
+    });
   });
 
   it("should fallback to SMS directly when WhatsApp is disabled", async () => {
     process.env.WHATSAPP_ENABLED = "false";
-    mockSmsService.sendToPhone.mockResolvedValue({ sent: true, messageSid: "SMS123" });
+    mockSmsService.sendToPhone.mockResolvedValue({
+      sent: true,
+      messageSid: "SMS123",
+    });
 
-    const result = await whatsappService.sendWithFallback("+237670000000", "SMS Only");
+    const result = await whatsappService.sendWithFallback(
+      "+237670000000",
+      "SMS Only",
+    );
 
     expect(mockTwilioClient.messages.create).not.toHaveBeenCalled();
     expect(mockSmsService.sendToPhone).toHaveBeenCalled();
-    expect(result).toEqual({ sent: true, provider: "sms", messageSid: "SMS123" });
+    expect(result).toEqual({
+      sent: true,
+      provider: "sms",
+      messageSid: "SMS123",
+    });
   });
 });

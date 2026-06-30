@@ -3,7 +3,8 @@ describe("OIDC payload validation", () => {
     jest.resetModules();
     process.env.SSO_GOOGLE_CLIENT_ID = "google-client-id";
     process.env.SSO_AZURE_OIDC_CLIENT_ID = "azure-client-id";
-    process.env.SSO_AZURE_OIDC_ISSUER = "https://login.microsoftonline.com/test-tenant/v2.0";
+    process.env.SSO_AZURE_OIDC_ISSUER =
+      "https://login.microsoftonline.com/test-tenant/v2.0";
     return await import("../../src/auth/oidc");
   };
 

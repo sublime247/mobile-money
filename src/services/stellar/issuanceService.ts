@@ -18,7 +18,10 @@ export class AssetIssuanceService {
   /**
    * Orchestrates the setup of a new anchored asset on Stellar.
    */
-  async setupAnchoredAsset(assetCode: string, limit: string): Promise<IssuanceSetupResult> {
+  async setupAnchoredAsset(
+    assetCode: string,
+    limit: string,
+  ): Promise<IssuanceSetupResult> {
     logger.info(`[stellar-issuance] Starting setup for asset ${assetCode}`);
 
     // 1. Generate Keypairs
@@ -31,16 +34,28 @@ export class AssetIssuanceService {
       await this.fundWithFriendbot(issuerKeypair.publicKey());
       await this.fundWithFriendbot(distributionKeypair.publicKey());
     } else {
-      throw new Error("Mainnet issuance automation requires a funding source account (not implemented in this wizard)");
+      throw new Error(
+        "Mainnet issuance automation requires a funding source account (not implemented in this wizard)",
+      );
     }
 
     // 3. Create Trustline from Distribution to Issuer
-    await this.createTrustline(distributionKeypair, issuerKeypair.publicKey(), assetCode, limit);
+    await this.createTrustline(
+      distributionKeypair,
+      issuerKeypair.publicKey(),
+      assetCode,
+      limit,
+    );
 
     // 4. Issue Asset (Payment from Issuer to Distribution)
     // We'll issue 10% of the limit as initial supply
     const initialSupply = (parseFloat(limit) * 0.1).toFixed(7);
-    await this.issueAsset(issuerKeypair, distributionKeypair.publicKey(), assetCode, initialSupply);
+    await this.issueAsset(
+      issuerKeypair,
+      distributionKeypair.publicKey(),
+      assetCode,
+      initialSupply,
+    );
 
     logger.info(`[stellar-issuance] Successfully setup asset ${assetCode}`);
 
@@ -57,7 +72,10 @@ export class AssetIssuanceService {
     try {
       await axios.get(`https://friendbot.stellar.org?addr=${publicKey}`);
     } catch (error) {
-      logger.error(error, `[stellar-issuance] Friendbot funding failed for ${publicKey}`);
+      logger.error(
+        error,
+        `[stellar-issuance] Friendbot funding failed for ${publicKey}`,
+      );
       throw new Error("Failed to fund account via Friendbot");
     }
   }
@@ -66,9 +84,11 @@ export class AssetIssuanceService {
     distributionKeypair: StellarSdk.Keypair,
     issuerPublicKey: string,
     assetCode: string,
-    limit: string
+    limit: string,
   ): Promise<void> {
-    const account = await this.server.loadAccount(distributionKeypair.publicKey());
+    const account = await this.server.loadAccount(
+      distributionKeypair.publicKey(),
+    );
     const asset = new StellarSdk.Asset(assetCode, issuerPublicKey);
 
     const tx = new StellarSdk.TransactionBuilder(account, {
@@ -79,7 +99,7 @@ export class AssetIssuanceService {
         StellarSdk.Operation.changeTrust({
           asset,
           limit,
-        })
+        }),
       )
       .setTimeout(60)
       .build();
@@ -92,7 +112,7 @@ export class AssetIssuanceService {
     issuerKeypair: StellarSdk.Keypair,
     destinationPublicKey: string,
     assetCode: string,
-    amount: string
+    amount: string,
   ): Promise<void> {
     const account = await this.server.loadAccount(issuerKeypair.publicKey());
     const asset = new StellarSdk.Asset(assetCode, issuerKeypair.publicKey());
@@ -106,7 +126,7 @@ export class AssetIssuanceService {
           destination: destinationPublicKey,
           asset,
           amount,
-        })
+        }),
       )
       .setTimeout(60)
       .build();

@@ -1,7 +1,10 @@
 import { describe, it, expect, beforeEach, jest } from "@jest/globals";
 import { Request, Response } from "express";
 import { travelRuleCheckHandler } from "../complianceController";
-import { travelRuleService, TRAVEL_RULE_THRESHOLD_USD } from "../../compliance/travelRule";
+import {
+  travelRuleService,
+  TRAVEL_RULE_THRESHOLD_USD,
+} from "../../compliance/travelRule";
 
 jest.mock("../../compliance/travelRule", () => ({
   travelRuleService: {
@@ -11,8 +14,12 @@ jest.mock("../../compliance/travelRule", () => ({
   TRAVEL_RULE_THRESHOLD_USD: 1000,
 }));
 
-const mockApplies = travelRuleService.applies as jest.MockedFunction<typeof travelRuleService.applies>;
-const mockCapture = travelRuleService.capture as jest.MockedFunction<typeof travelRuleService.capture>;
+const mockApplies = travelRuleService.applies as jest.MockedFunction<
+  typeof travelRuleService.applies
+>;
+const mockCapture = travelRuleService.capture as jest.MockedFunction<
+  typeof travelRuleService.capture
+>;
 
 function makeReqRes(body: unknown) {
   const req = { body } as Request;
@@ -49,7 +56,10 @@ describe("travelRuleCheckHandler", () => {
     await travelRuleCheckHandler(req, res);
     expect(mockApplies).toHaveBeenCalledWith(500);
     expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ applies: false, threshold: TRAVEL_RULE_THRESHOLD_USD }),
+      expect.objectContaining({
+        applies: false,
+        threshold: TRAVEL_RULE_THRESHOLD_USD,
+      }),
     );
     expect(mockCapture).not.toHaveBeenCalled();
   });
@@ -70,12 +80,17 @@ describe("travelRuleCheckHandler", () => {
     const { req, res } = makeReqRes(validBody);
     await travelRuleCheckHandler(req, res);
 
-    expect(mockCapture).toHaveBeenCalledWith(expect.objectContaining({ transactionId: "tx-001", amount: 1500 }));
+    expect(mockCapture).toHaveBeenCalledWith(
+      expect.objectContaining({ transactionId: "tx-001", amount: 1500 }),
+    );
     expect(res.status).toHaveBeenCalledWith(201);
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({
         applies: true,
-        record: expect.objectContaining({ id: "rec-1", transactionId: "tx-001" }),
+        record: expect.objectContaining({
+          id: "rec-1",
+          transactionId: "tx-001",
+        }),
       }),
     );
   });
@@ -88,6 +103,8 @@ describe("travelRuleCheckHandler", () => {
     await travelRuleCheckHandler(req, res);
 
     expect(res.status).toHaveBeenCalledWith(500);
-    expect(res.json).toHaveBeenCalledWith({ error: "Travel Rule check failed" });
+    expect(res.json).toHaveBeenCalledWith({
+      error: "Travel Rule check failed",
+    });
   });
 });

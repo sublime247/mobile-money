@@ -1,9 +1,9 @@
-import { pool } from '../config/database';
-import { TransactionModel } from '../models/transaction';
-import { UserModel } from '../models/users';
-import { EmailService } from '../services/email';
-import { InvoiceService } from '../services/invoiceService';
-import logger from '../utils/logger';
+import { pool } from "../config/database";
+import { TransactionModel } from "../models/transaction";
+import { UserModel } from "../models/users";
+import { EmailService } from "../services/email";
+import { InvoiceService } from "../services/invoiceService";
+import logger from "../utils/logger";
 
 export async function runMonthlyInvoiceJob() {
   const transactionModel = new TransactionModel();
@@ -15,7 +15,7 @@ export async function runMonthlyInvoiceJob() {
   const now = new Date();
   const year = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
   const month = now.getMonth() === 0 ? 12 : now.getMonth();
-  
+
   const startDate = new Date(Date.UTC(year, month - 1, 1));
   const endDate = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
 
@@ -31,7 +31,7 @@ export async function runMonthlyInvoiceJob() {
       AND status = 'active'
     `);
 
-    const userIds = businessUsersResult.rows.map(r => r.id);
+    const userIds = businessUsersResult.rows.map((r) => r.id);
     logger.info(`Found ${userIds.length} potential business clients`);
 
     for (const userId of userIds) {
@@ -40,35 +40,51 @@ export async function runMonthlyInvoiceJob() {
         if (!user || !user.email) continue;
 
         // 2. Fetch completed transactions for the previous month
-        const transactions = await transactionModel.findCompletedByUserSince(userId, startDate);
+        const transactions = await transactionModel.findCompletedByUserSince(
+          userId,
+          startDate,
+        );
         // Filter those that are BEFORE endDate (since findCompletedByUserSince only has 'since')
-        const monthTransactions = transactions.filter(tx => tx.createdAt <= endDate);
+        const monthTransactions = transactions.filter(
+          (tx) => tx.createdAt <= endDate,
+        );
 
         if (monthTransactions.length === 0) {
-          logger.info(`No transactions for user ${userId} in ${month}/${year}, skipping invoice.`);
+          logger.info(
+            `No transactions for user ${userId} in ${month}/${year}, skipping invoice.`,
+          );
           continue;
         }
 
         // 3. Generate PDF
-        const pdfBuffer = await invoiceService.generateMonthlyInvoicePDF(user, month, year, monthTransactions);
+        const pdfBuffer = await invoiceService.generateMonthlyInvoicePDF(
+          user,
+          month,
+          year,
+          monthTransactions,
+        );
 
         // 4. Send Email
         await emailService.sendEmail({
           to: user.email,
-          templateId: process.env.SENDGRID_INVOICE_TEMPLATE_ID || 'd-generic-invoice-template',
+          templateId:
+            process.env.SENDGRID_INVOICE_TEMPLATE_ID ||
+            "d-generic-invoice-template",
           dynamicTemplateData: {
-            month: new Date(year, month - 1).toLocaleString('default', { month: 'long' }),
+            month: new Date(year, month - 1).toLocaleString("default", {
+              month: "long",
+            }),
             year: year,
             name: user.phoneNumber, // We don't have first_name in User model yet
           },
           attachments: [
             {
-              content: pdfBuffer.toString('base64'),
+              content: pdfBuffer.toString("base64"),
               filename: `Invoice_${month}_${year}.pdf`,
-              type: 'application/pdf',
-              disposition: 'attachment',
-            }
-          ]
+              type: "application/pdf",
+              disposition: "attachment",
+            },
+          ],
         });
 
         logger.info(`Sent monthly invoice to user ${userId} (${user.email})`);
@@ -77,8 +93,8 @@ export async function runMonthlyInvoiceJob() {
       }
     }
 
-    logger.info('Monthly invoice job completed successfully');
+    logger.info("Monthly invoice job completed successfully");
   } catch (err) {
-    logger.error(err, 'Monthly invoice job failed');
+    logger.error(err, "Monthly invoice job failed");
   }
 }

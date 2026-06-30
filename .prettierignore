@@ -3,3 +3,9 @@ dist
 coverage
 package-lock.json
 *.log
+k8s/
+.vs/
+contracts/target/
+sdk/.gradle/
+**/*.wasm
+**/*.bin

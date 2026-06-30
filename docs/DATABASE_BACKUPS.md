@@ -5,6 +5,7 @@ Automated daily database backups with encryption and 30-day retention.
 ## Overview
 
 This system provides:
+
 - **Daily automated backups** of the production PostgreSQL database
 - **AES-256-GCM encryption** before S3 upload
 - **30-day retention** with automatic cleanup via S3 lifecycle policies
@@ -44,6 +45,7 @@ npm run backup:create
 ```
 
 Output:
+
 ```
 ================================================
 🔄 Database Backup Script
@@ -91,26 +93,26 @@ metadata:
   name: database-backup
   namespace: mobile-money
 spec:
-  schedule: "0 2 * * *"  # Daily at 2 AM UTC
+  schedule: "0 2 * * *" # Daily at 2 AM UTC
   jobTemplate:
     spec:
       template:
         spec:
           serviceAccountName: mobile-money
           containers:
-          - name: backup
-            image: mobile-money:latest
-            command: ["npm", "run", "backup:create"]
-            env:
-            - name: DATABASE_URL
-              valueFrom:
-                secretKeyRef:
-                  name: mobile-money-secrets
-                  key: database-url
-            - name: BACKUP_BUCKET
-              value: mobile-money-backups
-            - name: AWS_REGION
-              value: us-east-1
+            - name: backup
+              image: mobile-money:latest
+              command: ["npm", "run", "backup:create"]
+              env:
+                - name: DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: mobile-money-secrets
+                      key: database-url
+                - name: BACKUP_BUCKET
+                  value: mobile-money-backups
+                - name: AWS_REGION
+                  value: us-east-1
           restartPolicy: OnFailure
 ```
 
@@ -234,11 +236,13 @@ resource "aws_cloudwatch_metric_alarm" "backup_bucket_size" {
 ### Access Logs
 
 S3 access logs stored in separate bucket:
+
 ```
 s3://mobile-money-backups-logs/backups/
 ```
 
 Useful for:
+
 - Auditing who accessed backups
 - Detecting unauthorized access
 - Compliance reporting
@@ -286,6 +290,7 @@ npm run test -- tests/services/backupService.test.ts
 ```
 
 Test coverage includes:
+
 - Encryption/decryption round-trips
 - Metadata validation
 - Backup integrity checks

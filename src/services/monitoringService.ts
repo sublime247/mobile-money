@@ -24,7 +24,8 @@ export class MonitoringService {
   private static readonly WINDOW_MS = 5 * 60 * 1000; // 5 minutes
 
   private static pagerDutyService: PagerDutyService | null = null;
-  private static providerMetricsWindow: Map<string, ProviderMetrics> = new Map();
+  private static providerMetricsWindow: Map<string, ProviderMetrics> =
+    new Map();
   private static metricsHistory: Map<
     string,
     Array<{ timestamp: number; errorCount: number; totalCount: number }>
@@ -73,7 +74,10 @@ export class MonitoringService {
    * Check performance metrics and alert on degradation
    */
   private static checkPerformanceMetrics(
-    metrics: Array<{ name: string; values: Array<{ labels: Record<string, unknown>; value: number }> }>,
+    metrics: Array<{
+      name: string;
+      values: Array<{ labels: Record<string, unknown>; value: number }>;
+    }>,
   ) {
     // 1. Check for slow average responses in Histogram
     const histogram = metrics.find(
@@ -91,10 +95,7 @@ export class MonitoringService {
     );
     if (summary && Array.isArray(summary.values)) {
       for (const val of summary.values) {
-        if (
-          val.labels.quantile === 0.95 &&
-          val.value > this.P95_THRESHOLD_S
-        ) {
+        if (val.labels.quantile === 0.95 && val.value > this.P95_THRESHOLD_S) {
           logger.error(
             JSON.stringify({
               timestamp: new Date().toISOString(),
@@ -116,7 +117,10 @@ export class MonitoringService {
    * Triggers PagerDuty incidents when error rate exceeds 15%
    */
   private static checkProviderErrorRates(
-    metrics: Array<{ name: string; values: Array<{ labels: Record<string, unknown>; value: number }> }>,
+    metrics: Array<{
+      name: string;
+      values: Array<{ labels: Record<string, unknown>; value: number }>;
+    }>,
   ) {
     if (!this.pagerDutyService) return;
 
@@ -151,7 +155,10 @@ export class MonitoringService {
     }
 
     // Calculate error rates and trigger/resolve incidents
-    const providers = new Set([...providerErrors.keys(), ...providerTotals.keys()]);
+    const providers = new Set([
+      ...providerErrors.keys(),
+      ...providerTotals.keys(),
+    ]);
 
     for (const provider of providers) {
       const errorCount = providerErrors.get(provider) || 0;
@@ -177,10 +184,7 @@ export class MonitoringService {
 
       // Decision logic for PagerDuty
       if (errorRate > this.ERROR_RATE_THRESHOLD) {
-        this.pagerDutyService.recordProviderError(
-          provider,
-          now,
-        );
+        this.pagerDutyService.recordProviderError(provider, now);
 
         console.warn(
           JSON.stringify({

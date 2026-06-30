@@ -44,10 +44,16 @@ export async function scheduleProviderBalanceAlertJob(): Promise<void> {
         count: 500,
         age: 7 * 24 * 3600,
       },
-      attempts: Number.parseInt(process.env.PROVIDER_BALANCE_ALERT_ATTEMPTS || "3", 10),
+      attempts: Number.parseInt(
+        process.env.PROVIDER_BALANCE_ALERT_ATTEMPTS || "3",
+        10,
+      ),
       backoff: {
         type: "exponential",
-        delay: Number.parseInt(process.env.PROVIDER_BALANCE_ALERT_BACKOFF_MS || "5000", 10),
+        delay: Number.parseInt(
+          process.env.PROVIDER_BALANCE_ALERT_BACKOFF_MS || "5000",
+          10,
+        ),
       },
     },
   );

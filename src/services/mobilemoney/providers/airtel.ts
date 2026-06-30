@@ -55,6 +55,7 @@ interface AirtelProviderConfig {
   mode?: AirtelMode;
   webBaseUrl: string;
   directBaseUrl: string;
+  sandboxBaseUrl?: string;
   loginPath: string;
   refreshPath: string;
   paymentPath: string;
@@ -88,6 +89,7 @@ interface AirtelProviderOptions extends Partial<AirtelProviderConfig> {
   proxyHttpClient?: AirtelHttpClient;
   directHttpClient?: AirtelHttpClient;
   clock?: () => number;
+  region?: string;
 }
 
 const DEFAULT_SESSION_TTL_MS = 20 * 60 * 1000;
@@ -122,7 +124,10 @@ export class AirtelService {
   private sessionPromise: Promise<AirtelSessionState> | null = null;
   private readonly clock: () => number;
 
-  constructor(regionOrOptions?: string | AirtelProviderOptions, options?: AirtelProviderOptions) {
+  constructor(
+    regionOrOptions?: string | AirtelProviderOptions,
+    options?: AirtelProviderOptions,
+  ) {
     let region: string | undefined;
     let opts: AirtelProviderOptions = {};
 
@@ -138,10 +143,27 @@ export class AirtelService {
     this.config = this.buildConfig(opts);
 
     // Resolve dynamic region configuration
-    this.countryCode = (region || opts.country || process.env.AIRTEL_COUNTRY || "NG").toUpperCase();
-    this.currency = process.env[`AIRTEL_CURRENCY_${this.countryCode}`] || opts.currency || process.env.AIRTEL_CURRENCY || this.getDefaultCurrency(this.countryCode);
-    this.apiKey = process.env[`AIRTEL_API_KEY_${this.countryCode}`] || opts.apiKey || process.env.AIRTEL_API_KEY || "";
-    this.apiSecret = process.env[`AIRTEL_API_SECRET_${this.countryCode}`] || opts.apiSecret || process.env.AIRTEL_API_SECRET || "";
+    this.countryCode = (
+      region ||
+      opts.country ||
+      process.env.AIRTEL_COUNTRY ||
+      "NG"
+    ).toUpperCase();
+    this.currency =
+      process.env[`AIRTEL_CURRENCY_${this.countryCode}`] ||
+      opts.currency ||
+      process.env.AIRTEL_CURRENCY ||
+      this.getDefaultCurrency(this.countryCode);
+    this.apiKey =
+      process.env[`AIRTEL_API_KEY_${this.countryCode}`] ||
+      opts.apiKey ||
+      process.env.AIRTEL_API_KEY ||
+      "";
+    this.apiSecret =
+      process.env[`AIRTEL_API_SECRET_${this.countryCode}`] ||
+      opts.apiSecret ||
+      process.env.AIRTEL_API_SECRET ||
+      "";
 
     // Update config with resolved region values
     this.config.country = this.countryCode;
@@ -151,7 +173,10 @@ export class AirtelService {
 
     // Apply country prefix routing to config paths
     const prefix = `/${this.countryCode.toLowerCase()}`;
-    if (this.config.paymentPath && !this.config.paymentPath.startsWith(prefix)) {
+    if (
+      this.config.paymentPath &&
+      !this.config.paymentPath.startsWith(prefix)
+    ) {
       this.config.paymentPath = `${prefix}${this.config.paymentPath}`;
     }
     if (this.config.payoutPath && !this.config.payoutPath.startsWith(prefix)) {
@@ -190,16 +215,24 @@ export class AirtelService {
         });
     }
 
-    logger.info({ mode: this.mode, country: this.countryCode }, "AirtelService initialized");
+    logger.info(
+      { mode: this.mode, country: this.countryCode },
+      "AirtelService initialized",
+    );
   }
 
   private getDefaultCurrency(country: string): string {
     switch (country.toUpperCase()) {
-      case "KE": return "KES";
-      case "UG": return "UGX";
-      case "TZ": return "TZS";
-      case "NG": return "NGN";
-      default: return "NGN";
+      case "KE":
+        return "KES";
+      case "UG":
+        return "UGX";
+      case "TZ":
+        return "TZS";
+      case "NG":
+        return "NGN";
+      default:
+        return "NGN";
     }
   }
 
@@ -210,8 +243,8 @@ export class AirtelService {
     if (this.currency !== expectedCurrency) {
       throw new Error(
         `Airtel East Africa: country "${country}" requires currency "${expectedCurrency}" ` +
-        `but is configured with "${this.currency}". ` +
-        `Set AIRTEL_CURRENCY_${country}=${expectedCurrency} or pass currency: "${expectedCurrency}" in options.`,
+          `but is configured with "${this.currency}". ` +
+          `Set AIRTEL_CURRENCY_${country}=${expectedCurrency} or pass currency: "${expectedCurrency}" in options.`,
       );
     }
   }
@@ -234,7 +267,11 @@ export class AirtelService {
         options.baseUrl ??
         process.env.AIRTEL_DIRECT_BASE_URL ??
         "https://openapi.airtel.africa",
-      sandboxBaseUrl: options.sandboxBaseUrl ?? options.baseUrl ?? process.env.AIRTEL_SANDBOX_BASE_URL ?? "",
+      sandboxBaseUrl:
+        options.sandboxBaseUrl ??
+        options.baseUrl ??
+        process.env.AIRTEL_SANDBOX_BASE_URL ??
+        "",
       loginPath: options.loginPath ?? process.env.AIRTEL_LOGIN_PATH ?? "/login",
       refreshPath:
         options.refreshPath ??
@@ -391,7 +428,12 @@ export class AirtelService {
 
       const response =
         this.mode === "proxy"
-          ? await this.executeViaProxy("payout", formattedPhoneNumber, amount, reference)
+          ? await this.executeViaProxy(
+              "payout",
+              formattedPhoneNumber,
+              amount,
+              reference,
+            )
           : this.mode === "web"
             ? await this.executeViaWebSession(
                 "payout",
@@ -483,9 +525,7 @@ export class AirtelService {
 
     const authHeader =
       "Basic " +
-      Buffer.from(`${this.apiKey}:${this.apiSecret}`).toString(
-        "base64",
-      );
+      Buffer.from(`${this.apiKey}:${this.apiSecret}`).toString("base64");
 
     const response = await this.sendRequest(this.directClient, {
       method: "POST",

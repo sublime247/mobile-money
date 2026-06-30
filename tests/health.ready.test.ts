@@ -25,13 +25,13 @@ describe("GET /ready", () => {
     // For now, we just verify the structure when healthy.
     const response = await request(app).get("/ready");
     expect([200, 503]).toContain(response.status);
-    
+
     if (response.status === 503) {
       expect(response.body).toHaveProperty("status", "not ready");
     } else {
       expect(response.body).toHaveProperty("status", "ready");
     }
-    
+
     expect(response.body).toHaveProperty("checks");
     expect(response.body).toHaveProperty("timestamp");
   });
@@ -40,7 +40,7 @@ describe("GET /ready", () => {
     const response = await request(app).get("/ready");
     expect([200, 503]).toContain(response.status);
     expect(response.body).toHaveProperty("checks");
-    
+
     // DR replica info should be included in checks if DR is active
     const checks = response.body.checks;
     if (checks.hasOwnProperty("dr_replica")) {
@@ -67,12 +67,12 @@ describe("GET /ready", () => {
 
   it("should respond with appropriate HTTP status code", async () => {
     const response = await request(app).get("/ready");
-    
+
     // When status is "ready", HTTP status should be 200
     if (response.body.status === "ready") {
       expect(response.status).toBe(200);
     }
-    
+
     // When status is "not ready", HTTP status should be 503
     if (response.body.status === "not ready") {
       expect(response.status).toBe(503);

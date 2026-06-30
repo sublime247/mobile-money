@@ -42,7 +42,11 @@ export const verifyWebhookSignature = (
       { path: req.path, method: req.method },
       "Webhook rejected: missing signature header",
     );
-    return res.status(401).json(formatErrorResponse(401, "UNAUTHORIZED", "Missing signature header"));
+    return res
+      .status(401)
+      .json(
+        formatErrorResponse(401, "UNAUTHORIZED", "Missing signature header"),
+      );
   }
 
   if (!config.webhookSecret) {
@@ -50,7 +54,9 @@ export const verifyWebhookSignature = (
       { path: req.path, method: req.method },
       "WEBHOOK_SECRET not configured; rejecting webhook request",
     );
-    return res.status(500).json(formatErrorResponse(500, "INTERNAL_ERROR", "Server misconfigured"));
+    return res
+      .status(500)
+      .json(formatErrorResponse(500, "INTERNAL_ERROR", "Server misconfigured"));
   }
 
   const raw = getRawBody(req);
@@ -84,7 +90,9 @@ export const verifyWebhookSignature = (
     { path: req.path, method: req.method },
     "Webhook rejected: invalid signature",
   );
-  return res.status(401).json(formatErrorResponse(401, "UNAUTHORIZED", "Invalid signature"));
+  return res
+    .status(401)
+    .json(formatErrorResponse(401, "UNAUTHORIZED", "Invalid signature"));
 };
 
 export default verifyWebhookSignature;

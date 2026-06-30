@@ -213,7 +213,9 @@ describe("AMLService", () => {
 
     expect(report.summary.totalAlerts).toBe(1);
     expect(report.summary.dismissed).toBe(1);
-    expect(report.byRule.single_transaction_threshold).toBeGreaterThanOrEqual(1);
+    expect(report.byRule.single_transaction_threshold).toBeGreaterThanOrEqual(
+      1,
+    );
     expect(report.byRule.dynamic_profile_score).toBe(0);
     expect(report.daily.length).toBeGreaterThan(0);
   });

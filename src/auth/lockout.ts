@@ -7,16 +7,12 @@ import { redisClient } from "../config/redis";
 const MAX_LOGIN_ATTEMPTS = parseInt(process.env.MAX_LOGIN_ATTEMPTS ?? "5", 10);
 
 // Sliding window during which failed attempts are counted (seconds).
-const LOCKOUT_WINDOW_SECONDS = parseInt(
-  process.env.LOCKOUT_WINDOW_MINUTES ?? "10",
-  10,
-) * 60;
+const LOCKOUT_WINDOW_SECONDS =
+  parseInt(process.env.LOCKOUT_WINDOW_MINUTES ?? "10", 10) * 60;
 
 // How long an account stays locked after crossing the threshold (seconds).
-const LOCKOUT_DURATION_SECONDS = parseInt(
-  process.env.LOCKOUT_DURATION_MINUTES ?? "30",
-  10,
-) * 60;
+const LOCKOUT_DURATION_SECONDS =
+  parseInt(process.env.LOCKOUT_DURATION_MINUTES ?? "30", 10) * 60;
 
 // ─── Redis key helpers ────────────────────────────────────────────────────────
 

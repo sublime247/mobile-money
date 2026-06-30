@@ -11,7 +11,10 @@ import {
 import { ERROR_CODES } from "../constants/errorCodes";
 import { createError } from "../middleware/errorHandler";
 import { enqueueSepWebhook } from "../services/stellar/webhooks";
-import { generateSignedSep24Url, verifySep24Signature } from "../utils/sep24Signature";
+import {
+  generateSignedSep24Url,
+  verifySep24Signature,
+} from "../utils/sep24Signature";
 
 function isValidStellarPublicKey(key: string): boolean {
   try {
@@ -237,7 +240,10 @@ export const generateInteractiveUrl = async (
 
   try {
     // Sign the interactive URL with HMAC-SHA256 for query hash validation
-    const signedUrl = generateSignedSep24Url(baseUrl, Object.fromEntries(params));
+    const signedUrl = generateSignedSep24Url(
+      baseUrl,
+      Object.fromEntries(params),
+    );
 
     return {
       url: signedUrl,
@@ -342,8 +348,13 @@ export const updateTransactionStatus = (
   }
 
   if (statusChanged && transaction.callback) {
-    enqueueSepWebhook(transaction.id, status, transaction.callback, transaction).catch((err) =>
-      logger.error(`[sep24-webhook] Error enqueuing webhook:`, err)
+    enqueueSepWebhook(
+      transaction.id,
+      status,
+      transaction.callback,
+      transaction,
+    ).catch((err) =>
+      logger.error(`[sep24-webhook] Error enqueuing webhook:`, err),
     );
   }
 
@@ -393,8 +404,13 @@ export const processCallback = async (
   transactions.set(transaction_id, transaction);
 
   if (statusChanged && transaction.callback) {
-    enqueueSepWebhook(transaction.id, status, transaction.callback, transaction).catch((err) =>
-      logger.error(`[sep24-webhook] Error enqueuing webhook:`, err)
+    enqueueSepWebhook(
+      transaction.id,
+      status,
+      transaction.callback,
+      transaction,
+    ).catch((err) =>
+      logger.error(`[sep24-webhook] Error enqueuing webhook:`, err),
     );
   }
 
@@ -525,37 +541,44 @@ sep24Router.put("/transaction/:id", async (req: Request, res: Response) => {
 });
 
 // GET callback with SEP-24 query hash validation
-sep24Router.get("/callback/:id", verifySep24Signature, async (req: Request, res: Response) => {
-  try {
-    const { status, message } = req.query;
-    const callbackData: CallbackData = {
-      transaction_id: req.params.id,
-      status: status as Sep24TransactionStatus,
-      message: message as string | undefined,
-    };
-    const transaction = await processCallback(callbackData);
-    if (!transaction) {
-      throw createError(ERROR_CODES.NOT_FOUND, "Not found", {
-        error: "Not found",
+sep24Router.get(
+  "/callback/:id",
+  verifySep24Signature,
+  async (req: Request, res: Response) => {
+    try {
+      const { status, message } = req.query;
+      const callbackData: CallbackData = {
+        transaction_id: req.params.id,
+        status: status as Sep24TransactionStatus,
+        message: message as string | undefined,
+      };
+      const transaction = await processCallback(callbackData);
+      if (!transaction) {
+        throw createError(ERROR_CODES.NOT_FOUND, "Not found", {
+          error: "Not found",
+        });
+      }
+
+      const baseUrl = `${req.protocol}://${req.get("host")}`;
+      let redirectUrl = null;
+      if (transaction.status === "completed")
+        redirectUrl = `${baseUrl}/sep24/success?id=${req.params.id}`;
+      if (["failed", "expired"].includes(transaction.status))
+        redirectUrl = `${baseUrl}/sep24/failure?id=${req.params.id}`;
+
+      res.json({
+        success: true,
+        transaction,
+        ...(redirectUrl && { redirect: redirectUrl }),
       });
+    } catch (_error) {
+      throw createError(
+        ERROR_CODES.INTERNAL_ERROR,
+        "Failed to process callback",
+      );
     }
-
-    const baseUrl = `${req.protocol}://${req.get("host")}`;
-    let redirectUrl = null;
-    if (transaction.status === "completed")
-      redirectUrl = `${baseUrl}/sep24/success?id=${req.params.id}`;
-    if (["failed", "expired"].includes(transaction.status))
-      redirectUrl = `${baseUrl}/sep24/failure?id=${req.params.id}`;
-
-    res.json({
-      success: true,
-      transaction,
-      ...(redirectUrl && { redirect: redirectUrl }),
-    });
-  } catch (_error) {
-    throw createError(ERROR_CODES.INTERNAL_ERROR, "Failed to process callback");
-  }
-});
+  },
+);
 
 sep24Router.post("/callback/:id", async (req: Request, res: Response) => {
   try {

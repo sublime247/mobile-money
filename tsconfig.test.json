@@ -3,5 +3,10 @@
   "compilerOptions": {
     "types": ["node", "jest"]
   },
-  "include": ["src/**/*.test.ts", "src/**/*.spec.ts", "tests/**/*.ts", "src/**/__tests__/**"]
+  "include": [
+    "src/**/*.test.ts",
+    "src/**/*.spec.ts",
+    "tests/**/*.ts",
+    "src/**/__tests__/**"
+  ]
 }

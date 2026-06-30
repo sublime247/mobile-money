@@ -21,6 +21,9 @@ describe("ipWhitelist middleware", () => {
       .post("/webhook")
       .set("X-Forwarded-For", "203.0.113.1")
       .send({})
-      .expect(403, { error: "Forbidden", message: "Access denied from this IP/Region" });
+      .expect(403, {
+        error: "Forbidden",
+        message: "Access denied from this IP/Region",
+      });
   });
 });

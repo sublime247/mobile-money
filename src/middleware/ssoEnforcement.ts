@@ -15,7 +15,7 @@ import { pool } from "../config/database";
 export async function enforceSSOOnly(
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> {
   try {
     // Skip if SSO is not enabled
@@ -65,7 +65,7 @@ export async function enforceSSOOnly(
 export function enforceSSOForEmployees(
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): void {
   // Skip if SSO enforcement is not enabled
   if (!ssoConfig.enabled || !ssoConfig.enforceSSOForEmployees) {
@@ -103,7 +103,7 @@ export function enforceSSOForEmployees(
 export async function checkSSOUserStatus(
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> {
   try {
     const userId = req.jwtUser?.userId;
@@ -144,7 +144,7 @@ export async function checkSSOUserStatus(
 export async function attachSSOContext(
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> {
   try {
     const userId = req.jwtUser?.userId;
@@ -176,7 +176,7 @@ export async function attachSSOContext(
 export async function validateSSOProvider(
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> {
   const providerId = req.params.providerId;
 
@@ -224,7 +224,7 @@ export async function validateSSOProvider(
  */
 export function logSSOEvent(
   eventType: string,
-  getUserId: (req: Request) => string | null
+  getUserId: (req: Request) => string | null,
 ) {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -245,7 +245,7 @@ export function logSSOEvent(
             }),
             req.ip,
             req.get("user-agent"),
-          ]
+          ],
         );
       }
     } catch (error) {

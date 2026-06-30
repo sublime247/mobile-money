@@ -61,7 +61,7 @@ function createTestServiceWithMockedServer(
       homeDomain: TEST_HOME_DOMAIN,
       ...overrides,
     },
-    mockServer
+    mockServer,
   );
 }
 
@@ -93,7 +93,7 @@ function createMockAccountSingleSig(publicKey: string): any {
  */
 function createMockAccountMultiSig(
   masterPublicKey: string,
-  additionalSigners: Array<{ publicKey: string; weight: number }>
+  additionalSigners: Array<{ publicKey: string; weight: number }>,
 ): any {
   return {
     id: masterPublicKey,
@@ -316,7 +316,9 @@ describe("SEP-10 Stellar Authentication", () => {
 
     describe("verifyChallenge", () => {
       it("should issue a valid JWT for a properly signed challenge", async () => {
-        const mockAccount = createMockAccountSingleSig(clientKeypair.publicKey());
+        const mockAccount = createMockAccountSingleSig(
+          clientKeypair.publicKey(),
+        );
         const mockServer = createMockHorizonServer(mockAccount);
         const service = createTestServiceWithMockedServer(mockServer);
 
@@ -345,7 +347,9 @@ describe("SEP-10 Stellar Authentication", () => {
       });
 
       it("should work without passing clientAccountID explicitly", async () => {
-        const mockAccount = createMockAccountSingleSig(clientKeypair.publicKey());
+        const mockAccount = createMockAccountSingleSig(
+          clientKeypair.publicKey(),
+        );
         const mockServer = createMockHorizonServer(mockAccount);
         const service = createTestServiceWithMockedServer(mockServer);
 
@@ -362,7 +366,9 @@ describe("SEP-10 Stellar Authentication", () => {
       });
 
       it("should reject invalid XDR", async () => {
-        const mockAccount = createMockAccountSingleSig(clientKeypair.publicKey());
+        const mockAccount = createMockAccountSingleSig(
+          clientKeypair.publicKey(),
+        );
         const mockServer = createMockHorizonServer(mockAccount);
         const service = createTestServiceWithMockedServer(mockServer);
 
@@ -372,7 +378,9 @@ describe("SEP-10 Stellar Authentication", () => {
       });
 
       it("should reject transactions with non-zero sequence number", async () => {
-        const mockAccount = createMockAccountSingleSig(clientKeypair.publicKey());
+        const mockAccount = createMockAccountSingleSig(
+          clientKeypair.publicKey(),
+        );
         const mockServer = createMockHorizonServer(mockAccount);
         const service = createTestServiceWithMockedServer(mockServer);
 
@@ -389,7 +397,9 @@ describe("SEP-10 Stellar Authentication", () => {
       });
 
       it("should reject expired transactions", async () => {
-        const mockAccount = createMockAccountSingleSig(clientKeypair.publicKey());
+        const mockAccount = createMockAccountSingleSig(
+          clientKeypair.publicKey(),
+        );
         const mockServer = createMockHorizonServer(mockAccount);
         const service = createTestServiceWithMockedServer(mockServer);
 
@@ -406,7 +416,9 @@ describe("SEP-10 Stellar Authentication", () => {
       });
 
       it("should reject transactions not yet valid", async () => {
-        const mockAccount = createMockAccountSingleSig(clientKeypair.publicKey());
+        const mockAccount = createMockAccountSingleSig(
+          clientKeypair.publicKey(),
+        );
         const mockServer = createMockHorizonServer(mockAccount);
         const service = createTestServiceWithMockedServer(mockServer);
 
@@ -451,7 +463,9 @@ describe("SEP-10 Stellar Authentication", () => {
       });
 
       it("should reject transactions not signed by the server", async () => {
-        const mockAccount = createMockAccountSingleSig(clientKeypair.publicKey());
+        const mockAccount = createMockAccountSingleSig(
+          clientKeypair.publicKey(),
+        );
         const mockServer = createMockHorizonServer(mockAccount);
         const service = createTestServiceWithMockedServer(mockServer);
 
@@ -468,7 +482,9 @@ describe("SEP-10 Stellar Authentication", () => {
       });
 
       it("should reject transactions not signed by the client", async () => {
-        const mockAccount = createMockAccountSingleSig(clientKeypair.publicKey());
+        const mockAccount = createMockAccountSingleSig(
+          clientKeypair.publicKey(),
+        );
         const mockServer = createMockHorizonServer(mockAccount);
         const service = createTestServiceWithMockedServer(mockServer);
 
@@ -484,7 +500,9 @@ describe("SEP-10 Stellar Authentication", () => {
       });
 
       it("should reject transactions with non-manageData operations", async () => {
-        const mockAccount = createMockAccountSingleSig(clientKeypair.publicKey());
+        const mockAccount = createMockAccountSingleSig(
+          clientKeypair.publicKey(),
+        );
         const mockServer = createMockHorizonServer(mockAccount);
         const service = createTestServiceWithMockedServer(mockServer);
 
@@ -497,11 +515,15 @@ describe("SEP-10 Stellar Authentication", () => {
 
         await expect(
           service.verifyChallenge(tx.toXDR(), clientKeypair.publicKey()),
-        ).rejects.toThrow("Transaction must contain only manageData operations");
+        ).rejects.toThrow(
+          "Transaction must contain only manageData operations",
+        );
       });
 
       it("should reject when manageData source does not match client account", async () => {
-        const mockAccount = createMockAccountSingleSig(clientKeypair.publicKey());
+        const mockAccount = createMockAccountSingleSig(
+          clientKeypair.publicKey(),
+        );
         const mockServer = createMockHorizonServer(mockAccount);
         const service = createTestServiceWithMockedServer(mockServer);
 
@@ -537,7 +559,9 @@ describe("SEP-10 Stellar Authentication", () => {
       });
 
       it("should include jti (JWT ID) in the token", async () => {
-        const mockAccount = createMockAccountSingleSig(clientKeypair.publicKey());
+        const mockAccount = createMockAccountSingleSig(
+          clientKeypair.publicKey(),
+        );
         const mockServer = createMockHorizonServer(mockAccount);
         const service = createTestServiceWithMockedServer(mockServer);
 
@@ -562,7 +586,9 @@ describe("SEP-10 Stellar Authentication", () => {
       });
 
       it("should include iat and exp claims in the token", async () => {
-        const mockAccount = createMockAccountSingleSig(clientKeypair.publicKey());
+        const mockAccount = createMockAccountSingleSig(
+          clientKeypair.publicKey(),
+        );
         const mockServer = createMockHorizonServer(mockAccount);
         const service = createTestServiceWithMockedServer(mockServer);
 
@@ -590,7 +616,9 @@ describe("SEP-10 Stellar Authentication", () => {
 
     describe("verifyToken", () => {
       it("should throw for expired tokens", async () => {
-        const mockAccount = createMockAccountSingleSig(clientKeypair.publicKey());
+        const mockAccount = createMockAccountSingleSig(
+          clientKeypair.publicKey(),
+        );
         const mockServer = createMockHorizonServer(mockAccount);
         const service = createTestServiceWithMockedServer(mockServer, {
           jwtExpiresIn: "1s",
@@ -620,7 +648,9 @@ describe("SEP-10 Stellar Authentication", () => {
       });
 
       it("should throw for tokens signed with different secret", async () => {
-        const mockAccount = createMockAccountSingleSig(clientKeypair.publicKey());
+        const mockAccount = createMockAccountSingleSig(
+          clientKeypair.publicKey(),
+        );
         const mockServer = createMockHorizonServer(mockAccount);
         const service = createTestService();
         const otherService = createTestServiceWithMockedServer(mockServer, {
@@ -661,10 +691,17 @@ describe("SEP-10 Stellar Authentication", () => {
         ) as Transaction;
 
         // Sign with both master and signer (weight = 2, threshold = 2)
-        tx.sign(masterPublicKey === clientKeypair.publicKey() ? clientKeypair : otherKeypair);
+        tx.sign(
+          masterPublicKey === clientKeypair.publicKey()
+            ? clientKeypair
+            : otherKeypair,
+        );
         tx.sign(signer1Keypair);
 
-        const response = await service.verifyChallenge(tx.toXDR(), masterPublicKey);
+        const response = await service.verifyChallenge(
+          tx.toXDR(),
+          masterPublicKey,
+        );
         expect(response.token).toBeDefined();
         expect(typeof response.token).toBe("string");
       });
@@ -710,7 +747,10 @@ describe("SEP-10 Stellar Authentication", () => {
         tx.sign(signer1Keypair);
         tx.sign(signer2Keypair);
 
-        const response = await service.verifyChallenge(tx.toXDR(), masterPublicKey);
+        const response = await service.verifyChallenge(
+          tx.toXDR(),
+          masterPublicKey,
+        );
         expect(response.token).toBeDefined();
       });
 
@@ -756,7 +796,10 @@ describe("SEP-10 Stellar Authentication", () => {
         tx.sign(signer1Keypair);
         tx.sign(signer2Keypair);
 
-        const response = await service.verifyChallenge(tx.toXDR(), masterPublicKey);
+        const response = await service.verifyChallenge(
+          tx.toXDR(),
+          masterPublicKey,
+        );
         expect(response.token).toBeDefined();
       });
 
@@ -793,9 +836,9 @@ describe("SEP-10 Stellar Authentication", () => {
 
       it("should reject when account is not found on Horizon", async () => {
         const mockServer = {
-          loadAccount: jest.fn().mockRejectedValue(
-            new Error("Account not found")
-          ),
+          loadAccount: jest
+            .fn()
+            .mockRejectedValue(new Error("Account not found")),
         };
         const service = createTestServiceWithMockedServer(mockServer);
 

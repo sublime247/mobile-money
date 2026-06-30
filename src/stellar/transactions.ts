@@ -58,11 +58,17 @@ function getConfiguredBaseFee(networkBaseFee: number): number {
   return Math.max(config.baseFeeStroops, networkBaseFee);
 }
 
-function getInnerTransactionFee(operationCount: number, baseFee: number): number {
+function getInnerTransactionFee(
+  operationCount: number,
+  baseFee: number,
+): number {
   return operationCount * baseFee;
 }
 
-function getRequiredFeeBumpFee(operationCount: number, baseFee: number): number {
+function getRequiredFeeBumpFee(
+  operationCount: number,
+  baseFee: number,
+): number {
   return getChargedOperationCount(operationCount) * baseFee;
 }
 
@@ -106,7 +112,8 @@ async function buildInnerTransaction(
   const server = getStellarServer();
   const networkPassphrase = getNetworkPassphrase();
   const sourceAccountRecord = await server.loadAccount(options.sourceAccount);
-  const txTimebounds = options.timebounds ?? (await server.fetchTimebounds(300));
+  const txTimebounds =
+    options.timebounds ?? (await server.fetchTimebounds(300));
 
   let builder = new TransactionBuilder(sourceAccountRecord, {
     fee: String(getInnerTransactionFee(options.operations.length, baseFee)),

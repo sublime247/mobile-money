@@ -36,17 +36,12 @@ const CONFIGS: TableConfig[] = [
   {
     name: "disputes",
     primaryKey: "id",
-    columns: [
-      { name: "reason" },
-      { name: "resolution" },
-    ],
+    columns: [{ name: "reason" }, { name: "resolution" }],
   },
   {
     name: "dispute_notes",
     primaryKey: "id",
-    columns: [
-      { name: "note" },
-    ],
+    columns: [{ name: "note" }],
   },
   {
     name: "travel_rule_records",
@@ -76,11 +71,17 @@ const BATCH_SIZE = 100;
 
 async function runRotation() {
   console.log("=== PII Database Key Rotation Job ===");
-  console.log(`Current DB_ENCRYPTION_KEY length: ${env.DB_ENCRYPTION_KEY ? env.DB_ENCRYPTION_KEY.length : 0} chars`);
-  console.log(`Fallback keys configured: ${process.env.DB_ENCRYPTION_KEYS_FALLBACK ? "Yes" : "No"}`);
+  console.log(
+    `Current DB_ENCRYPTION_KEY length: ${env.DB_ENCRYPTION_KEY ? env.DB_ENCRYPTION_KEY.length : 0} chars`,
+  );
+  console.log(
+    `Fallback keys configured: ${process.env.DB_ENCRYPTION_KEYS_FALLBACK ? "Yes" : "No"}`,
+  );
 
   if (!env.DB_ENCRYPTION_KEY) {
-    console.error("Error: DB_ENCRYPTION_KEY environment variable is not defined!");
+    console.error(
+      "Error: DB_ENCRYPTION_KEY environment variable is not defined!",
+    );
     process.exit(1);
   }
 
@@ -88,19 +89,24 @@ async function runRotation() {
   try {
     for (const tableConfig of CONFIGS) {
       console.log(`\nProcessing table: ${tableConfig.name}...`);
-      
+
       // Check if table exists
       const tableCheck = await client.query(
         "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = $1)",
-        [tableConfig.name]
+        [tableConfig.name],
       );
       if (!tableCheck.rows[0].exists) {
-        console.log(`Table ${tableConfig.name} does not exist in this database, skipping.`);
+        console.log(
+          `Table ${tableConfig.name} does not exist in this database, skipping.`,
+        );
         continue;
       }
 
       // Build SELECT query to retrieve primary key and all encrypted columns
-      const selectCols = [tableConfig.primaryKey, ...tableConfig.columns.map(c => c.name)].join(", ");
+      const selectCols = [
+        tableConfig.primaryKey,
+        ...tableConfig.columns.map((c) => c.name),
+      ].join(", ");
       const query = `SELECT ${selectCols} FROM ${tableConfig.name}`;
       const { rows } = await client.query(query);
       console.log(`Found ${rows.length} rows to check in ${tableConfig.name}.`);
@@ -112,7 +118,7 @@ async function runRotation() {
       // Process in batches
       for (let i = 0; i < rows.length; i += BATCH_SIZE) {
         const batch = rows.slice(i, i + BATCH_SIZE);
-        
+
         // Start a transaction for the batch
         await client.query("BEGIN");
         try {
@@ -131,7 +137,10 @@ async function runRotation() {
                 if (decrypted === null || decrypted === undefined) continue;
 
                 // Re-encrypt using the new active master key
-                const reEncrypted = encrypt(decrypted, !!colConfig.deterministic);
+                const reEncrypted = encrypt(
+                  decrypted,
+                  !!colConfig.deterministic,
+                );
 
                 // Only perform update if ciphertext changed (i.e. if it was actually re-encrypted with a different key)
                 if (reEncrypted !== encryptedVal) {
@@ -139,14 +148,19 @@ async function runRotation() {
                   needsUpdate = true;
                 }
               } catch (err: any) {
-                console.error(`[Error] Failed to decrypt/re-encrypt row ${pkVal} column ${colConfig.name} in ${tableConfig.name}:`, err.message);
+                console.error(
+                  `[Error] Failed to decrypt/re-encrypt row ${pkVal} column ${colConfig.name} in ${tableConfig.name}:`,
+                  err.message,
+                );
                 errorCount++;
               }
             }
 
             if (needsUpdate && updates.length > 0) {
-              const setClause = updates.map((u, idx) => `${u.col} = $${idx + 2}`).join(", ");
-              const params = [pkVal, ...updates.map(u => u.val)];
+              const setClause = updates
+                .map((u, idx) => `${u.col} = $${idx + 2}`)
+                .join(", ");
+              const params = [pkVal, ...updates.map((u) => u.val)];
               const updateQuery = `UPDATE ${tableConfig.name} SET ${setClause} WHERE ${tableConfig.primaryKey} = $1`;
               await client.query(updateQuery, params);
               rotatedCount++;
@@ -157,7 +171,10 @@ async function runRotation() {
           await client.query("COMMIT");
         } catch (batchErr) {
           await client.query("ROLLBACK");
-          console.error(`Batch starting at index ${i} failed and was rolled back:`, batchErr);
+          console.error(
+            `Batch starting at index ${i} failed and was rolled back:`,
+            batchErr,
+          );
           throw batchErr;
         }
       }
@@ -167,7 +184,7 @@ async function runRotation() {
       console.log(` - Already up-to-date: ${skippedCount} rows`);
       console.log(` - Errors: ${errorCount} fields`);
     }
-    
+
     console.log("\n=== Key Rotation Completed Successfully ===");
   } catch (err) {
     console.error("\n[Fatal Error] Key rotation job failed:", err);

@@ -1,5 +1,10 @@
 import { pool, queryRead, queryWrite } from "../config/database";
-import { encrypt, decrypt, encryptField, decryptField } from "../utils/encryption";
+import {
+  encrypt,
+  decrypt,
+  encryptField,
+  decryptField,
+} from "../utils/encryption";
 
 export interface User {
   id: string;
@@ -11,7 +16,7 @@ export interface User {
   mcc?: string | null;
   two_factor_secret?: string | null;
   backup_codes?: string[] | null;
-  status: 'active' | 'frozen' | 'suspended';
+  status: "active" | "frozen" | "suspended";
   tokenVersion?: number;
   createdAt: Date;
   updatedAt: Date;
@@ -20,7 +25,7 @@ export interface User {
   settlementDelayDays?: number;
   // TODO: The `User` type and database table needs to
   // be update with these fields:  is_active: boolean,   deactivated_at:Date`
-  
+
   // New sensitive fields
   firstName?: string;
   lastName?: string;
@@ -30,16 +35,18 @@ export interface User {
 }
 
 export class UserModel {
-  async findById(id: string, requester?: { id: string; role: string }): Promise<User | null> {
+  async findById(
+    id: string,
+    requester?: { id: string; role: string },
+  ): Promise<User | null> {
     const result = await queryRead("SELECT * FROM users WHERE id = $1", [id]);
     if (result.rows.length === 0) return null;
 
     const row = result.rows[0];
     const AUTHORIZED_ROLES = ["admin", "super-admin", "compliance_officer"];
-    const isAuthorized = requester && (
-      AUTHORIZED_ROLES.includes(requester.role) || 
-      requester.id === id
-    );
+    const isAuthorized =
+      requester &&
+      (AUTHORIZED_ROLES.includes(requester.role) || requester.id === id);
 
     return {
       id: row.id,
@@ -56,21 +63,37 @@ export class UserModel {
       updatedAt: row.updated_at,
       smsOptOut: row.sms_opt_out ?? false,
       mandatory2FAWithdrawals: row.mandatory_2fa_withdrawals ?? false,
-      
-      firstName: isAuthorized ? (decryptField(row.first_name) as string ?? undefined) : row.first_name ?? undefined,
-      lastName: isAuthorized ? (decryptField(row.last_name) as string ?? undefined) : row.last_name ?? undefined,
-      address: isAuthorized ? (decryptField(row.address) as string ?? undefined) : row.address ?? undefined,
-      dateOfBirth: isAuthorized ? (decryptField(row.date_of_birth) as string ?? undefined) : row.date_of_birth ?? undefined,
-      idNumber: isAuthorized ? (decryptField(row.id_number) as string ?? undefined) : row.id_number ?? undefined,
+
+      firstName: isAuthorized
+        ? ((decryptField(row.first_name) as string) ?? undefined)
+        : (row.first_name ?? undefined),
+      lastName: isAuthorized
+        ? ((decryptField(row.last_name) as string) ?? undefined)
+        : (row.last_name ?? undefined),
+      address: isAuthorized
+        ? ((decryptField(row.address) as string) ?? undefined)
+        : (row.address ?? undefined),
+      dateOfBirth: isAuthorized
+        ? ((decryptField(row.date_of_birth) as string) ?? undefined)
+        : (row.date_of_birth ?? undefined),
+      idNumber: isAuthorized
+        ? ((decryptField(row.id_number) as string) ?? undefined)
+        : (row.id_number ?? undefined),
     };
   }
 
   async updateEmail(id: string, email: string): Promise<void> {
     const encryptedEmail = encrypt(email);
-    await queryWrite("UPDATE users SET email = $1 WHERE id = $2", [encryptedEmail, id]);
+    await queryWrite("UPDATE users SET email = $1 WHERE id = $2", [
+      encryptedEmail,
+      id,
+    ]);
   }
 
-  async updateDisplayName(id: string, displayName: string | null): Promise<void> {
+  async updateDisplayName(
+    id: string,
+    displayName: string | null,
+  ): Promise<void> {
     await queryWrite(
       "UPDATE users SET display_name = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2",
       [displayName, id],
@@ -85,7 +108,7 @@ export class UserModel {
       address?: string;
       dateOfBirth?: string;
       idNumber?: string;
-    }
+    },
   ): Promise<void> {
     const fields: string[] = [];
     const values: any[] = [];
@@ -121,44 +144,50 @@ export class UserModel {
 
   async updateStatus(
     id: string,
-    status: 'active' | 'frozen' | 'suspended',
+    status: "active" | "frozen" | "suspended",
     changedBy: string,
     reason?: string,
     ipAddress?: string,
-    userAgent?: string
+    userAgent?: string,
   ): Promise<User | null> {
     const client = await pool.connect();
-    
+
     try {
-      await client.query('BEGIN');
-      
+      await client.query("BEGIN");
+
       // Get current user status for audit
       const currentUser = await this.findById(id);
       if (!currentUser) {
-        await client.query('ROLLBACK');
+        await client.query("ROLLBACK");
         return null;
       }
-      
+
       // Update user status
-      const updateQuery = "UPDATE users SET status = $1 WHERE id = $2 RETURNING *";
+      const updateQuery =
+        "UPDATE users SET status = $1 WHERE id = $2 RETURNING *";
       const result = await client.query(updateQuery, [status, id]);
-      
+
       if (result.rows.length === 0) {
-        await client.query('ROLLBACK');
+        await client.query("ROLLBACK");
         return null;
       }
-      
+
       // Log audit entry
       const auditQuery = `
         INSERT INTO user_status_audit (
           user_id, action, old_status, new_status, reason, changed_by, ip_address, user_agent
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       `;
-      
-      const action = status === 'frozen' ? 'FREEZE' : 
-                     status === 'suspended' ? 'SUSPEND' : 
-                     currentUser.status === 'frozen' ? 'UNFREEZE' : 'UNSUSPEND';
-      
+
+      const action =
+        status === "frozen"
+          ? "FREEZE"
+          : status === "suspended"
+            ? "SUSPEND"
+            : currentUser.status === "frozen"
+              ? "UNFREEZE"
+              : "UNSUSPEND";
+
       await client.query(auditQuery, [
         id,
         action,
@@ -167,11 +196,11 @@ export class UserModel {
         reason,
         changedBy,
         ipAddress,
-        userAgent
+        userAgent,
       ]);
-      
-      await client.query('COMMIT');
-      
+
+      await client.query("COMMIT");
+
       // Return updated user
       const row = result.rows[0];
       return {
@@ -190,7 +219,7 @@ export class UserModel {
         settlementDelayDays: row.settlement_delay_days ?? 0,
       };
     } catch (error) {
-      await client.query('ROLLBACK');
+      await client.query("ROLLBACK");
       throw error;
     } finally {
       client.release();
@@ -229,10 +258,13 @@ export class UserModel {
     return result.rows[0]?.token_version || 0;
   }
 
-  async updateMandatory2FAWithdrawals(id: string, enabled: boolean): Promise<void> {
+  async updateMandatory2FAWithdrawals(
+    id: string,
+    enabled: boolean,
+  ): Promise<void> {
     await queryWrite(
       "UPDATE users SET mandatory_2fa_withdrawals = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2",
-      [enabled, id]
+      [enabled, id],
     );
   }
 }

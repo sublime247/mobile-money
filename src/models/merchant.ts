@@ -99,8 +99,11 @@ export class MerchantModel {
 
   async createMany(
     merchants: CreateMerchantInput[],
-    createdBy: string
-  ): Promise<{ created: Merchant[]; errors: Array<{ row: number; error: string; email?: string }> }> {
+    createdBy: string,
+  ): Promise<{
+    created: Merchant[];
+    errors: Array<{ row: number; error: string; email?: string }>;
+  }> {
     const created: Merchant[] = [];
     const errors: Array<{ row: number; error: string; email?: string }> = [];
 
@@ -144,7 +147,8 @@ export class MerchantModel {
 
           created.push(this.mapRowToMerchant(result.rows[0]));
         } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : "Unknown error";
+          const errorMessage =
+            error instanceof Error ? error.message : "Unknown error";
           errors.push({
             row: rowNum,
             error: errorMessage,
@@ -165,24 +169,34 @@ export class MerchantModel {
   }
 
   async findById(id: string): Promise<Merchant | null> {
-    const result = await queryRead("SELECT * FROM merchants WHERE id = $1", [id]);
+    const result = await queryRead("SELECT * FROM merchants WHERE id = $1", [
+      id,
+    ]);
     if (result.rows.length === 0) return null;
     return this.mapRowToMerchant(result.rows[0]);
   }
 
   async findByEmail(email: string): Promise<Merchant | null> {
-    const result = await queryRead("SELECT * FROM merchants WHERE email = $1", [email.toLowerCase().trim()]);
+    const result = await queryRead("SELECT * FROM merchants WHERE email = $1", [
+      email.toLowerCase().trim(),
+    ]);
     if (result.rows.length === 0) return null;
     return this.mapRowToMerchant(result.rows[0]);
   }
 
   async findByInvitationToken(token: string): Promise<Merchant | null> {
-    const result = await queryRead("SELECT * FROM merchants WHERE invitation_token = $1", [token]);
+    const result = await queryRead(
+      "SELECT * FROM merchants WHERE invitation_token = $1",
+      [token],
+    );
     if (result.rows.length === 0) return null;
     return this.mapRowToMerchant(result.rows[0]);
   }
 
-  async update(id: string, input: UpdateMerchantInput): Promise<Merchant | null> {
+  async update(
+    id: string,
+    input: UpdateMerchantInput,
+  ): Promise<Merchant | null> {
     const sets: string[] = [];
     const values: any[] = [];
     let paramIndex = 1;
@@ -245,7 +259,7 @@ export class MerchantModel {
   async markInvitationSent(id: string): Promise<void> {
     await queryWrite(
       "UPDATE merchants SET invitation_sent_at = CURRENT_TIMESTAMP WHERE id = $1",
-      [id]
+      [id],
     );
   }
 
@@ -288,7 +302,8 @@ export class MerchantModel {
       values.push(options.kycStatus);
     }
 
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    const whereClause =
+      conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
     const countQuery = `SELECT COUNT(*) as total FROM merchants ${whereClause}`;
     const countResult = await queryRead(countQuery, values);
@@ -310,7 +325,7 @@ export class MerchantModel {
   async getBatchJob(jobId: string): Promise<MerchantBatchJob | null> {
     const result = await queryRead(
       "SELECT * FROM merchant_batch_jobs WHERE job_id = $1",
-      [jobId]
+      [jobId],
     );
     if (result.rows.length === 0) return null;
 
@@ -333,7 +348,7 @@ export class MerchantModel {
   async createBatchJob(
     jobId: string,
     totalRecords: number,
-    createdBy: string
+    createdBy: string,
   ): Promise<MerchantBatchJob> {
     const id = uuidv4();
     const query = `
@@ -345,7 +360,12 @@ export class MerchantModel {
       RETURNING *
     `;
 
-    const result = await queryWrite(query, [id, jobId, totalRecords, createdBy]);
+    const result = await queryWrite(query, [
+      id,
+      jobId,
+      totalRecords,
+      createdBy,
+    ]);
     const row = result.rows[0];
 
     return {
@@ -372,7 +392,7 @@ export class MerchantModel {
       failedRecords?: number;
       errors?: Array<{ row: number; error: string; email?: string }>;
       completedAt?: Date;
-    }
+    },
   ): Promise<void> {
     const sets: string[] = [];
     const values: any[] = [];

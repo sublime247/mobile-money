@@ -57,13 +57,13 @@ describe("Statements Routes", () => {
 
   beforeAll(async () => {
     (pool.query as jest.Mock).mockResolvedValueOnce({
-      rows: [{ id: "user-123" }]
+      rows: [{ id: "user-123" }],
     });
 
     // Create a test user
     const userResult = await pool.query(
       "INSERT INTO users (phone_number, kyc_level) VALUES ($1, $2) RETURNING id",
-      ["1234567890", "basic"]
+      ["1234567890", "basic"],
     );
     userId = userResult.rows[0].id;
 
@@ -71,7 +71,7 @@ describe("Statements Routes", () => {
     authToken = jwt.sign(
       { id: userId, phoneNumber: "1234567890" },
       process.env.JWT_SECRET || "test-secret",
-      { expiresIn: "1h" }
+      { expiresIn: "1h" },
     );
   });
 
@@ -107,13 +107,15 @@ describe("Statements Routes", () => {
         .set("Authorization", `Bearer ${authToken}`)
         .expect(404);
 
-      expect(response.body.error).toBe("No data found for the specified period");
+      expect(response.body.error).toBe(
+        "No data found for the specified period",
+      );
     });
 
     it("should generate PDF statement when data exists", async () => {
       // 1. User query
       mockClient.query.mockResolvedValueOnce({
-        rows: [{ id: userId, phone_number: "1234567890", kyc_level: "basic" }]
+        rows: [{ id: userId, phone_number: "1234567890", kyc_level: "basic" }],
       });
       // 2. Transactions query
       mockClient.query.mockResolvedValueOnce({
@@ -127,12 +129,12 @@ describe("Statements Routes", () => {
             provider: "test-provider",
             status: "completed",
             createdAt: new Date("2024-01-15"),
-          }
-        ]
+          },
+        ],
       });
       // 3. Opening balance query
       mockClient.query.mockResolvedValueOnce({
-        rows: [{ opening_balance: "0.00" }]
+        rows: [{ opening_balance: "0.00" }],
       });
 
       // Create a test transaction
@@ -150,7 +152,7 @@ describe("Statements Routes", () => {
           "GTEST123",
           "completed",
           new Date("2024-01-15"),
-        ]
+        ],
       );
 
       const response = await request(app)
@@ -159,7 +161,9 @@ describe("Statements Routes", () => {
         .expect(200);
 
       expect(response.headers["content-type"]).toBe("application/pdf");
-      expect(response.headers["content-disposition"]).toContain("statement-2024-01.pdf");
+      expect(response.headers["content-disposition"]).toContain(
+        "statement-2024-01.pdf",
+      );
     });
   });
 });

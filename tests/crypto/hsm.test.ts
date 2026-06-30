@@ -1,5 +1,12 @@
 import { KMSClient } from "@aws-sdk/client-kms";
-import { Keypair, TransactionBuilder, Networks, Asset, Operation, Account } from "stellar-sdk";
+import {
+  Keypair,
+  TransactionBuilder,
+  Networks,
+  Asset,
+  Operation,
+  Account,
+} from "stellar-sdk";
 import hsm, {
   LocalSigner,
   KmsAsymmetricSigner,
@@ -32,19 +39,16 @@ describe("HSM Client Wrapper Interfaces", () => {
   const buildTestTransaction = () => {
     const destinationAccount = Keypair.random();
     const sourceAccount = new Account(Keypair.random().publicKey(), "123");
-    return new TransactionBuilder(
-      sourceAccount,
-      {
-        fee: "100",
-        networkPassphrase: testNetwork,
-      }
-    )
+    return new TransactionBuilder(sourceAccount, {
+      fee: "100",
+      networkPassphrase: testNetwork,
+    })
       .addOperation(
         Operation.payment({
           destination: destinationAccount.publicKey(),
           asset: Asset.native(),
           amount: "10",
-        })
+        }),
       )
       .setTimeout(30)
       .build();
@@ -71,13 +75,16 @@ describe("HSM Client Wrapper Interfaces", () => {
       expect(tx.signatures.length).toBe(1);
 
       // Verify the signature on the transaction
-      const parsedTx = TransactionBuilder.fromXDR(result.envelopeXdr, testNetwork);
+      const parsedTx = TransactionBuilder.fromXDR(
+        result.envelopeXdr,
+        testNetwork,
+      );
       expect(parsedTx.signatures.length).toBe(1);
     });
 
     it("throws HsmConfigurationError if secret key is missing", () => {
       expect(() => new LocalSigner({ secretKey: "" })).toThrow(
-        HsmConfigurationError
+        HsmConfigurationError,
       );
     });
   });
@@ -196,7 +203,7 @@ describe("HSM Client Wrapper Interfaces", () => {
       const result = await KmsEnvelopeSigner.generateAndWrapSeed("mock-arn");
       expect(result.publicKey).toBe(testKeypair.publicKey());
       expect(result.encryptedSeed).toBe(
-        Buffer.from("new-mock-encrypted-seed").toString("base64")
+        Buffer.from("new-mock-encrypted-seed").toString("base64"),
       );
     });
   });
@@ -209,19 +216,22 @@ describe("HSM Client Wrapper Interfaces", () => {
           slotId: 1,
           keyId: "key-1",
         },
-        testKeypair.publicKey()
+        testKeypair.publicKey(),
       );
 
       expect(signer.publicKey).toBe(testKeypair.publicKey());
       await expect(signer.sign(Buffer.alloc(32))).rejects.toThrow(
-        HsmSigningError
+        HsmSigningError,
       );
     });
   });
 
   describe("Factory Helpers", () => {
     it("creates signer cleanly using createSigner configurations", async () => {
-      const localSignerConfig = { provider: "local" as const, secretKey: testKeypair.secret() };
+      const localSignerConfig = {
+        provider: "local" as const,
+        secretKey: testKeypair.secret(),
+      };
       const signer = await createSigner(localSignerConfig);
       expect(signer).toBeInstanceOf(LocalSigner);
     });

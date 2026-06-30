@@ -37,7 +37,9 @@ export interface VulnerabilityReport {
 
 export class EmailService {
   private resolveTemplateId(
-    baseEnvName: "SENDGRID_RECEIPT_TEMPLATE_ID" | "SENDGRID_FAILURE_TEMPLATE_ID",
+    baseEnvName:
+      | "SENDGRID_RECEIPT_TEMPLATE_ID"
+      | "SENDGRID_FAILURE_TEMPLATE_ID",
     locale: string,
   ): string {
     const resolvedLocale = resolveLocale(locale).toUpperCase();
@@ -54,7 +56,8 @@ export class EmailService {
 
     try {
       await sgMail.send({
-        from: process.env.EMAIL_FROM || '"Mobile Money" <no-reply@mobilemoney.com>',
+        from:
+          process.env.EMAIL_FROM || '"Mobile Money" <no-reply@mobilemoney.com>',
         to: options.to,
         templateId: options.templateId,
         dynamicTemplateData: options.dynamicTemplateData,
@@ -97,7 +100,9 @@ export class EmailService {
           ? `https://stellar.expert/explorer/public/tx/${transactionHash}`
           : undefined,
         merchantDisplayName: merchantDisplayName ?? undefined,
-        createdAt: new Date(transaction.createdAt).toLocaleString(resolvedLocale),
+        createdAt: new Date(transaction.createdAt).toLocaleString(
+          resolvedLocale,
+        ),
         locale: resolvedLocale,
         year: new Date().getFullYear(),
       },
@@ -204,7 +209,12 @@ export class EmailService {
     });
   }
 
-  async sendSubscriptionPaused(email: string, subscriptionId: string, attempts: number, locale = "en") {
+  async sendSubscriptionPaused(
+    email: string,
+    subscriptionId: string,
+    attempts: number,
+    locale = "en",
+  ) {
     if (process.env.NODE_ENV === "test") {
       console.log("Skipping subscription paused email in test environment");
       return;
@@ -234,7 +244,11 @@ export class EmailService {
     }
   }
 
-  async sendSubscriptionResumed(email: string, subscriptionId: string, locale = "en") {
+  async sendSubscriptionResumed(
+    email: string,
+    subscriptionId: string,
+    locale = "en",
+  ) {
     if (process.env.NODE_ENV === "test") {
       console.log("Skipping subscription resumed email in test environment");
       return;
@@ -251,7 +265,12 @@ export class EmailService {
     });
   }
 
-  async sendSubscriptionFailure(email: string, subscriptionId: string, reason: string, locale = "en") {
+  async sendSubscriptionFailure(
+    email: string,
+    subscriptionId: string,
+    reason: string,
+    locale = "en",
+  ) {
     if (process.env.NODE_ENV === "test") {
       console.log("Skipping subscription failure email in test environment");
       return;
@@ -275,7 +294,8 @@ export class EmailService {
     growth: GrowthMetrics,
   ): Promise<void> {
     const templateId = process.env.SENDGRID_MANAGEMENT_SUMMARY_TEMPLATE_ID;
-    const from = process.env.EMAIL_FROM || '"Mobile Money" <no-reply@mobilemoney.com>';
+    const from =
+      process.env.EMAIL_FROM || '"Mobile Money" <no-reply@mobilemoney.com>';
 
     if (templateId) {
       await this.sendEmail({
@@ -337,7 +357,8 @@ export class EmailService {
     report: VulnerabilityReport,
   ): Promise<void> {
     const templateId = process.env.SENDGRID_VULNERABILITY_REPORT_TEMPLATE_ID;
-    const from = process.env.EMAIL_FROM || '"Mobile Money" <no-reply@mobilemoney.com>';
+    const from =
+      process.env.EMAIL_FROM || '"Mobile Money" <no-reply@mobilemoney.com>';
 
     if (templateId) {
       await this.sendEmail({

@@ -63,11 +63,14 @@ export class HighThroughputReconciliationService {
 
     try {
       // Create reconciliation run record
-      const runResult = await queryWrite(`
+      const runResult = await queryWrite(
+        `
         INSERT INTO provider_reconciliation_runs (provider, report_date, status)
         VALUES ($1, $2, 'running')
         RETURNING *
-      `, [config.provider, config.reportDate.toISOString().split("T")[0]]);
+      `,
+        [config.provider, config.reportDate.toISOString().split("T")[0]],
+      );
 
       const runId = runResult.rows[0].id;
 
@@ -109,7 +112,10 @@ export class HighThroughputReconciliationService {
         executionTimeMs: endTime - startTime,
       };
     } catch (error) {
-      logger.error(error, `High-throughput reconciliation failed for ${config.provider}`);
+      logger.error(
+        error,
+        `High-throughput reconciliation failed for ${config.provider}`,
+      );
       throw error;
     }
   }
@@ -205,9 +211,7 @@ export class HighThroughputReconciliationService {
         },
       });
 
-      csvStream
-        .pipe(csvParser())
-        .pipe(transformStream);
+      csvStream.pipe(csvParser()).pipe(transformStream);
 
       transformStream.resume();
 
@@ -228,7 +232,8 @@ export class HighThroughputReconciliationService {
             // Wait for all batch operations to complete
             await Promise.all(batchPromises);
 
-            const orphanedProviderCount = processedRows - matchedProviderRefs.size;
+            const orphanedProviderCount =
+              processedRows - matchedProviderRefs.size;
             let orphanedDbCount = 0;
             for (const ref of dbByReference.keys()) {
               if (!matchedProviderRefs.has(ref)) {
@@ -254,10 +259,13 @@ export class HighThroughputReconciliationService {
   /**
    * Fetch database records for a date range
    */
-  private async fetchDatabaseRecords(config: StreamingReconciliationConfig): Promise<any[]> {
+  private async fetchDatabaseRecords(
+    config: StreamingReconciliationConfig,
+  ): Promise<any[]> {
     const dateStr = config.reportDate.toISOString().split("T")[0];
 
-    const result = await queryRead(`
+    const result = await queryRead(
+      `
       SELECT 
         id, 
         reference_number, 
@@ -271,7 +279,9 @@ export class HighThroughputReconciliationService {
         created_at::date = $1
         AND provider = $2
       ORDER BY created_at DESC
-    `, [dateStr, config.provider]);
+    `,
+      [dateStr, config.provider],
+    );
 
     return result.rows;
   }
@@ -381,12 +391,15 @@ export class HighThroughputReconciliationService {
         alert.provider_data,
       ]);
 
-      await queryWrite(`
+      await queryWrite(
+        `
         INSERT INTO provider_reconciliation_alerts (
           reconciliation_run_id, alert_type, severity, reference_number,
           expected_amount, actual_amount, expected_status, actual_status, provider_data
         ) VALUES ${values}
-      `, params);
+      `,
+        params,
+      );
     }
   }
 
@@ -397,7 +410,8 @@ export class HighThroughputReconciliationService {
     runId: string,
     results: any,
   ): Promise<void> {
-    await queryWrite(`
+    await queryWrite(
+      `
       UPDATE provider_reconciliation_runs
       SET
         status = 'completed',
@@ -409,15 +423,17 @@ export class HighThroughputReconciliationService {
         match_rate = $6,
         completed_at = CURRENT_TIMESTAMP
       WHERE id = $7
-    `, [
-      results.totalProviderRows,
-      results.totalDbRecords,
-      results.matchedCount,
-      results.discrepanciesCount,
-      results.orphanedProviderCount,
-      parseFloat(results.matchRate),
-      runId,
-    ]);
+    `,
+      [
+        results.totalProviderRows,
+        results.totalDbRecords,
+        results.matchedCount,
+        results.discrepanciesCount,
+        results.orphanedProviderCount,
+        parseFloat(results.matchRate),
+        runId,
+      ],
+    );
   }
 
   /**

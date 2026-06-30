@@ -27,7 +27,10 @@ export class LockAcquisitionError extends Error {
   readonly isContention: boolean;
   readonly cause?: unknown;
 
-  constructor(resource: string, options: { cause?: unknown; isContention?: boolean } = {}) {
+  constructor(
+    resource: string,
+    options: { cause?: unknown; isContention?: boolean } = {},
+  ) {
     super(
       options.isContention
         ? `Resource is already locked: ${resource}`
@@ -82,7 +85,7 @@ class LockManager {
     this.redlock = new Redlock([redisClient as any], settings);
 
     this.redlock.on("error", (error) => {
-      logger.error("Redlock error:", error);
+      logger.error(error, "Redlock error:");
     });
   }
 
@@ -106,7 +109,7 @@ class LockManager {
       console.log(`Lock acquired: ${resource} (TTL: ${ttl}ms)`);
       return lock;
     } catch (error) {
-      logger.error(`Failed to acquire lock: ${resource}`, error);
+      logger.error(error, `Failed to acquire lock: ${resource}`);
 
       const isContention =
         error instanceof ResourceLockedError ||
@@ -133,7 +136,7 @@ class LockManager {
       await lock.release();
       console.log(`Lock released: ${lock.resources}`);
     } catch (error) {
-      logger.error("Failed to release lock:", error);
+      logger.error(error, "Failed to release lock:");
       throw error;
     }
   }
@@ -151,7 +154,7 @@ class LockManager {
       console.log(`Lock extended: ${lock.resources} (+${ttl}ms)`);
       return extendedLock;
     } catch (error) {
-      logger.error("Failed to extend lock:", error);
+      logger.error(error, "Failed to extend lock:");
       throw error;
     }
   }
@@ -228,5 +231,6 @@ export const LockKeys = {
     `provider:${provider}:${phone}`,
   vault: (vaultId: string) => `vault:${vaultId}`,
   userVaults: (userId: string) => `user-vaults:${userId}`,
-  vaultTransfer: (userId: string, vaultId: string) => `vault-transfer:${userId}:${vaultId}`,
+  vaultTransfer: (userId: string, vaultId: string) =>
+    `vault-transfer:${userId}:${vaultId}`,
 };

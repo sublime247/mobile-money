@@ -62,20 +62,33 @@ export class OrangeMadagascarProvider {
   constructor() {
     this.clock = Date.now;
     this.baseUrl = process.env.ORANGE_MADAGASCAR_BASE_URL ?? DEFAULT_BASE_URL;
-    this.authPath = process.env.ORANGE_MADAGASCAR_AUTH_PATH ?? DEFAULT_AUTH_PATH;
-    this.paymentPath = process.env.ORANGE_MADAGASCAR_PAYMENT_PATH ?? DEFAULT_PAYMENT_PATH;
-    this.payoutPath = process.env.ORANGE_MADAGASCAR_PAYOUT_PATH ?? DEFAULT_PAYOUT_PATH;
-    this.statusPath = process.env.ORANGE_MADAGASCAR_STATUS_PATH ?? DEFAULT_STATUS_PATH;
+    this.authPath =
+      process.env.ORANGE_MADAGASCAR_AUTH_PATH ?? DEFAULT_AUTH_PATH;
+    this.paymentPath =
+      process.env.ORANGE_MADAGASCAR_PAYMENT_PATH ?? DEFAULT_PAYMENT_PATH;
+    this.payoutPath =
+      process.env.ORANGE_MADAGASCAR_PAYOUT_PATH ?? DEFAULT_PAYOUT_PATH;
+    this.statusPath =
+      process.env.ORANGE_MADAGASCAR_STATUS_PATH ?? DEFAULT_STATUS_PATH;
     this.apiKey = process.env.ORANGE_MADAGASCAR_API_KEY ?? "";
     this.apiSecret = process.env.ORANGE_MADAGASCAR_API_SECRET ?? "";
     this.currency = process.env.ORANGE_MADAGASCAR_CURRENCY ?? DEFAULT_CURRENCY;
-    this.timeoutMs = Number(process.env.ORANGE_MADAGASCAR_TIMEOUT_MS ?? DEFAULT_TIMEOUT_MS);
-    this.maxAttempts = Number(process.env.ORANGE_MADAGASCAR_MAX_ATTEMPTS ?? DEFAULT_MAX_ATTEMPTS);
-    this.refreshSkewMs = Number(process.env.ORANGE_MADAGASCAR_REFRESH_SKEW_MS ?? DEFAULT_REFRESH_SKEW_MS);
-    this.sessionTtlMs = Number(process.env.ORANGE_MADAGASCAR_SESSION_TTL_MS ?? DEFAULT_SESSION_TTL_MS);
+    this.timeoutMs = Number(
+      process.env.ORANGE_MADAGASCAR_TIMEOUT_MS ?? DEFAULT_TIMEOUT_MS,
+    );
+    this.maxAttempts = Number(
+      process.env.ORANGE_MADAGASCAR_MAX_ATTEMPTS ?? DEFAULT_MAX_ATTEMPTS,
+    );
+    this.refreshSkewMs = Number(
+      process.env.ORANGE_MADAGASCAR_REFRESH_SKEW_MS ?? DEFAULT_REFRESH_SKEW_MS,
+    );
+    this.sessionTtlMs = Number(
+      process.env.ORANGE_MADAGASCAR_SESSION_TTL_MS ?? DEFAULT_SESSION_TTL_MS,
+    );
     this.callbackSecret = process.env.ORANGE_MADAGASCAR_CALLBACK_SECRET ?? "";
     this.callbackSignatureHeader =
-      process.env.ORANGE_MADAGASCAR_CALLBACK_SIGNATURE_HEADER?.toLowerCase() ?? "x-callback-signature";
+      process.env.ORANGE_MADAGASCAR_CALLBACK_SIGNATURE_HEADER?.toLowerCase() ??
+      "x-callback-signature";
 
     this.httpClient = axios.create({
       baseURL: this.baseUrl,
@@ -89,7 +102,12 @@ export class OrangeMadagascarProvider {
     amount: string | number,
     requestId?: string,
   ): Promise<OrangeMadagascarResult> {
-    return this.executeOperation("payment", phoneNumber, String(amount), requestId);
+    return this.executeOperation(
+      "payment",
+      phoneNumber,
+      String(amount),
+      requestId,
+    );
   }
 
   async sendPayout(
@@ -97,7 +115,12 @@ export class OrangeMadagascarProvider {
     amount: string | number,
     requestId?: string,
   ): Promise<OrangeMadagascarResult> {
-    return this.executeOperation("payout", phoneNumber, String(amount), requestId);
+    return this.executeOperation(
+      "payout",
+      phoneNumber,
+      String(amount),
+      requestId,
+    );
   }
 
   async sendBatchPayout(items: BatchPayoutItem[]): Promise<{
@@ -117,11 +140,16 @@ export class OrangeMadagascarProvider {
           success: false,
           error: `Batch size exceeds maximum of ${MAX_BATCH_SIZE}`,
         })),
-        error: new Error(`Batch size ${items.length} exceeds maximum of ${MAX_BATCH_SIZE}`),
+        error: new Error(
+          `Batch size ${items.length} exceeds maximum of ${MAX_BATCH_SIZE}`,
+        ),
       };
     }
 
-    logger.info({ itemCount: items.length }, "OrangeMadagascar: Starting batch payout");
+    logger.info(
+      { itemCount: items.length },
+      "OrangeMadagascar: Starting batch payout",
+    );
     const startTime = Date.now();
 
     try {
@@ -152,30 +180,45 @@ export class OrangeMadagascarProvider {
           (r: { referenceId: string }) => r.referenceId === item.referenceId,
         );
         if (!respItem) {
-          return { referenceId: item.referenceId, success: false, error: "No response for item" };
+          return {
+            referenceId: item.referenceId,
+            success: false,
+            error: "No response for item",
+          };
         }
         const ok = String(respItem.status ?? "").toUpperCase() === "SUCCESSFUL";
         return {
           referenceId: item.referenceId,
           success: ok,
-          error: ok ? undefined : respItem.errorReason ?? `Status: ${respItem.status}`,
+          error: ok
+            ? undefined
+            : (respItem.errorReason ?? `Status: ${respItem.status}`),
           providerReference: respItem.transactionId,
         };
       });
 
       const successCount = results.filter((r) => r.success).length;
       logger.info(
-        { duration: Date.now() - startTime, successCount, failureCount: results.length - successCount, batchId },
+        {
+          duration: Date.now() - startTime,
+          successCount,
+          failureCount: results.length - successCount,
+          batchId,
+        },
         "OrangeMadagascar: Batch payout completed",
       );
 
       return {
         success: successCount > 0,
         results,
-        error: successCount === 0 ? new Error("All batch items failed") : undefined,
+        error:
+          successCount === 0 ? new Error("All batch items failed") : undefined,
       };
     } catch (error: any) {
-      logger.error({ error: error.message, itemCount: items.length }, "OrangeMadagascar: Batch payout failed");
+      logger.error(
+        { error: error.message, itemCount: items.length },
+        "OrangeMadagascar: Batch payout failed",
+      );
       return {
         success: false,
         results: items.map((item) => ({
@@ -202,14 +245,19 @@ export class OrangeMadagascarProvider {
       const providerStatus = String(response.data?.status ?? "").toUpperCase();
       if (providerStatus === "SUCCESSFUL") return { status: "completed" };
       if (providerStatus === "FAILED") return { status: "failed" };
-      if (providerStatus === "PENDING" || providerStatus === "IN_PROGRESS") return { status: "pending" };
+      if (providerStatus === "PENDING" || providerStatus === "IN_PROGRESS")
+        return { status: "pending" };
       return { status: "unknown" };
     } catch {
       return { status: "unknown" };
     }
   }
 
-  async getOperationalBalance(): Promise<{ success: boolean; data?: unknown; error?: unknown }> {
+  async getOperationalBalance(): Promise<{
+    success: boolean;
+    data?: unknown;
+    error?: unknown;
+  }> {
     try {
       const token = await this.getAccessToken();
       const response = await this.sendRequest({
@@ -221,14 +269,20 @@ export class OrangeMadagascarProvider {
       if (response.status >= 200 && response.status < 300) {
         return { success: true, data: response.data };
       }
-      return { success: false, error: { status: response.status, data: response.data } };
+      return {
+        success: false,
+        error: { status: response.status, data: response.data },
+      };
     } catch (error) {
       return { success: false, error };
     }
   }
 
   /** Verify an incoming callback payload signature. */
-  verifyCallbackSignature(rawBody: Buffer, signatureHeader: string | undefined): boolean {
+  verifyCallbackSignature(
+    rawBody: Buffer,
+    signatureHeader: string | undefined,
+  ): boolean {
     if (!this.callbackSecret || !signatureHeader) {
       return false;
     }
@@ -271,12 +325,16 @@ export class OrangeMadagascarProvider {
     requestId?: string,
   ): Promise<OrangeMadagascarResult> {
     const log = requestId ? logger.child({ requestId }) : logger;
-    log.info(maskPII({ phoneNumber, amount, operation }), "OrangeMadagascar: Executing operation");
+    log.info(
+      maskPII({ phoneNumber, amount, operation }),
+      "OrangeMadagascar: Executing operation",
+    );
     const startTime = Date.now();
 
     try {
       const reference = this.createReference(operation);
-      const endpoint = operation === "payment" ? this.paymentPath : this.payoutPath;
+      const endpoint =
+        operation === "payment" ? this.paymentPath : this.payoutPath;
 
       const response = await this.executeWithRetry({
         method: "POST",
@@ -302,13 +360,23 @@ export class OrangeMadagascarProvider {
       });
 
       const duration = Date.now() - startTime;
-      log.info(maskPII({ duration, status: response.status }), "OrangeMadagascar: Operation completed");
+      log.info(
+        maskPII({ duration, status: response.status }),
+        "OrangeMadagascar: Operation completed",
+      );
 
       return this.toProviderResult(response, reference);
     } catch (error: any) {
       const duration = Date.now() - startTime;
-      log.error({ duration, error: error.message }, "OrangeMadagascar: Operation failed");
-      return { success: false, error, reference: this.createReference(operation) };
+      log.error(
+        { duration, error: error.message },
+        "OrangeMadagascar: Operation failed",
+      );
+      return {
+        success: false,
+        error,
+        reference: this.createReference(operation),
+      };
     }
   }
 
@@ -321,13 +389,17 @@ export class OrangeMadagascarProvider {
     for (let attempt = 1; attempt <= this.maxAttempts; attempt++) {
       try {
         const token = await this.getAccessToken();
-        const requestHeaders = (request.headers ?? {}) as Record<string, string>;
+        const requestHeaders = (request.headers ?? {}) as Record<
+          string,
+          string
+        >;
         const response = await this.sendRequest({
           ...request,
           headers: {
             ...requestHeaders,
             Authorization: `Bearer ${token}`,
-            "Content-Type": requestHeaders["Content-Type"] ?? "application/json",
+            "Content-Type":
+              requestHeaders["Content-Type"] ?? "application/json",
           },
         });
 
@@ -357,7 +429,11 @@ export class OrangeMadagascarProvider {
 
   private async getAccessToken(forceRefresh = false): Promise<string> {
     const now = this.clock();
-    if (!forceRefresh && this.accessToken && now < this.tokenExpiry - this.refreshSkewMs) {
+    if (
+      !forceRefresh &&
+      this.accessToken &&
+      now < this.tokenExpiry - this.refreshSkewMs
+    ) {
       return this.accessToken;
     }
 
@@ -418,9 +494,7 @@ export class OrangeMadagascarProvider {
       this.prefetchTimer = null;
     }
 
-    const delay = isRetry
-      ? ttlMs
-      : Math.max(1000, ttlMs - this.refreshSkewMs);
+    const delay = isRetry ? ttlMs : Math.max(1000, ttlMs - this.refreshSkewMs);
 
     this.prefetchTimer = setTimeout(async () => {
       if (this.destroyed) return;
@@ -429,7 +503,10 @@ export class OrangeMadagascarProvider {
         await this.getAccessToken(true);
       } catch (error: any) {
         if (this.destroyed) return;
-        logger.error({ error: error.message }, "OrangeMadagascar: Token pre-fetch failed, retrying");
+        logger.error(
+          { error: error.message },
+          "OrangeMadagascar: Token pre-fetch failed, retrying",
+        );
         this.schedulePrefetch(5000, true);
       }
     }, delay);

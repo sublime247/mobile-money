@@ -34,7 +34,9 @@ jest.mock("fs", () => {
     ...actual,
     existsSync: jest.fn().mockReturnValue(false),
     readFileSync: jest.fn(),
-    writeFile: jest.fn((_p: unknown, _d: unknown, _e: unknown, cb: () => void) => cb()),
+    writeFile: jest.fn(
+      (_p: unknown, _d: unknown, _e: unknown, cb: () => void) => cb(),
+    ),
     mkdirSync: jest.fn(),
   };
 });

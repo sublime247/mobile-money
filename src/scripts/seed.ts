@@ -6,7 +6,9 @@ import { Pool } from "pg";
 dotenv.config();
 
 if (process.env.NODE_ENV !== "development") {
-  printError("Seeding is allowed only in development environment. Set NODE_ENV=development to proceed.");
+  printError(
+    "Seeding is allowed only in development environment. Set NODE_ENV=development to proceed.",
+  );
   process.exit(1);
 }
 
@@ -22,7 +24,16 @@ async function upsertUser(phone: string, kyc: string) {
   return res.rows[0].id;
 }
 
-async function insertTransaction(ref: string, type: string, amount: number, phone: string, provider: string, stellar: string, status: string, userId: string | null) {
+async function insertTransaction(
+  ref: string,
+  type: string,
+  amount: number,
+  phone: string,
+  provider: string,
+  stellar: string,
+  status: string,
+  userId: string | null,
+) {
   const res = await pool.query(
     `INSERT INTO transactions (reference_number, type, amount, phone_number, provider, stellar_address, status, user_id)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
@@ -33,16 +44,35 @@ async function insertTransaction(ref: string, type: string, amount: number, phon
   return res.rows[0].id;
 }
 
-async function upsertFeeConfig(name: string, percentage: number, min: number, max: number, userId: string) {
+async function upsertFeeConfig(
+  name: string,
+  percentage: number,
+  min: number,
+  max: number,
+  userId: string,
+) {
   await pool.query(
     `INSERT INTO fee_configurations (name, description, fee_percentage, fee_minimum, fee_maximum, created_by, updated_by)
      VALUES ($1, $2, $3, $4, $5, $6, $7)
      ON CONFLICT (name) DO NOTHING`,
-    [name, `Automatically seeded ${name} fee configuration`, percentage, min, max, userId, userId],
+    [
+      name,
+      `Automatically seeded ${name} fee configuration`,
+      percentage,
+      min,
+      max,
+      userId,
+      userId,
+    ],
   );
 }
 
-async function insertDispute(txId: string, reason: string, status: string, reportedBy: string) {
+async function insertDispute(
+  txId: string,
+  reason: string,
+  status: string,
+  reportedBy: string,
+) {
   await pool.query(
     `INSERT INTO disputes (transaction_id, reason, status, reported_by)
      VALUES ($1, $2, $3, $4)
@@ -99,24 +129,49 @@ async function seed() {
       const ref = `SEED-${counter}-${provider.toUpperCase()}`;
       const stellar = `GSEED${String(counter).padStart(52, "0").slice(0, 56)}`;
 
-      const txId = await insertTransaction(ref, type, amount, user.phone, provider, stellar, status, userIds[user.phone]);
+      const txId = await insertTransaction(
+        ref,
+        type,
+        amount,
+        user.phone,
+        provider,
+        stellar,
+        status,
+        userIds[user.phone],
+      );
       seededTxIds.push(txId);
       counter++;
     }
 
     // 4. Create sample disputes for varied statuses
     const disputeSample = [
-      { reason: "Amount mismatch on provider side", status: "open", reportedBy: "Customer" },
-      { reason: "Transaction not reflected in mobile wallet", status: "investigating", reportedBy: "Customer" },
-      { reason: "Double charge reported", status: "resolved", reportedBy: "Internal Audit" },
-      { reason: "Incorrect mobile number provided", status: "rejected", reportedBy: "Customer" },
+      {
+        reason: "Amount mismatch on provider side",
+        status: "open",
+        reportedBy: "Customer",
+      },
+      {
+        reason: "Transaction not reflected in mobile wallet",
+        status: "investigating",
+        reportedBy: "Customer",
+      },
+      {
+        reason: "Double charge reported",
+        status: "resolved",
+        reportedBy: "Internal Audit",
+      },
+      {
+        reason: "Incorrect mobile number provided",
+        status: "rejected",
+        reportedBy: "Customer",
+      },
     ];
 
     console.log("Seeding disputes...");
     for (let i = 0; i < disputeSample.length; i++) {
-        const txId = seededTxIds[i % seededTxIds.length];
-        const d = disputeSample[i];
-        await insertDispute(txId, d.reason, d.status, d.reportedBy);
+      const txId = seededTxIds[i % seededTxIds.length];
+      const d = disputeSample[i];
+      await insertDispute(txId, d.reason, d.status, d.reportedBy);
     }
 
     console.log("Seeding complete.");
@@ -129,4 +184,3 @@ async function seed() {
 }
 
 seed();
-

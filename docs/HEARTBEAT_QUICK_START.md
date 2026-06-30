@@ -26,16 +26,19 @@ system_heartbeat{service="mobile-money"} 1
 ### Prometheus Queries
 
 **Is the service available?**
+
 ```promql
 system_heartbeat{service="mobile-money"} == 1
 ```
 
 **Is the service down?**
+
 ```promql
 system_heartbeat{service="mobile-money"} == 0
 ```
 
 **Service availability percentage (5-minute window):**
+
 ```promql
 avg_over_time(system_heartbeat{service="mobile-money"}[5m]) * 100
 ```
@@ -49,6 +52,7 @@ system_heartbeat{service="mobile-money"}
 ```
 
 Configure the panel:
+
 - **Visualization:** Stat or Gauge
 - **Thresholds:** 0 (red), 1 (green)
 - **Unit:** None
@@ -108,12 +112,12 @@ npm test -- tests/metrics.heartbeat.test.ts
 
 ## Troubleshooting
 
-| Issue | Solution |
-|-------|----------|
+| Issue              | Solution                                                          |
+| ------------------ | ----------------------------------------------------------------- |
 | Metric not showing | Check if service is running and `/metrics` endpoint is accessible |
-| Metric stuck at 0 | Service may be shutting down; check logs |
-| Metric stuck at 1 | Normal; heartbeat updates every 30 seconds |
-| High CPU usage | Increase `HEARTBEAT_INTERVAL_MS` to reduce update frequency |
+| Metric stuck at 0  | Service may be shutting down; check logs                          |
+| Metric stuck at 1  | Normal; heartbeat updates every 30 seconds                        |
+| High CPU usage     | Increase `HEARTBEAT_INTERVAL_MS` to reduce update frequency       |
 
 ## Related Files
 

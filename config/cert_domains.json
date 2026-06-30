@@ -1,7 +1,3 @@
 {
-  "domains": [
-    "google.com",
-    "github.com",
-    "stellar.org"
-  ]
+  "domains": ["google.com", "github.com", "stellar.org"]
 }

@@ -19,7 +19,10 @@ const COINGECKO_BASE_URL =
   process.env.COINGECKO_API_BASE || "https://api.coingecko.com/api/v3";
 const EXCHANGERATE_API_BASE =
   process.env.EXCHANGERATE_API_BASE || "https://v6.exchangerate-api.com/v6";
-const FETCH_TIMEOUT_MS = parseInt(process.env.PRICE_TICKER_TIMEOUT_MS || "10000", 10);
+const FETCH_TIMEOUT_MS = parseInt(
+  process.env.PRICE_TICKER_TIMEOUT_MS || "10000",
+  10,
+);
 
 /** All pairs captured per cron run. Order matters: derived pair comes last. */
 export const TRACKED_PAIRS: Array<{
@@ -124,7 +127,9 @@ async function fetchUsdXafFromExchangeRateApi(): Promise<number> {
  * Best-effort: failures on one pair do not prevent the others from being
  * stored. Returns the stored snapshots and any per-pair errors.
  */
-export async function captureSnapshot(at: Date = new Date()): Promise<CaptureResult> {
+export async function captureSnapshot(
+  at: Date = new Date(),
+): Promise<CaptureResult> {
   const recordedAt = truncateToHour(at);
   const snapshots: HistoricalPriceRow[] = [];
   const errors: CaptureResult["errors"] = [];

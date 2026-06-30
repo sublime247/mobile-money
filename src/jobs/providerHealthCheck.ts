@@ -46,10 +46,14 @@ interface PagerDutyPayload {
 
 async function sendPagerDutyEvent(body: PagerDutyPayload): Promise<void> {
   if (!INTEGRATION_KEY) {
-    log("warn", "PAGERDUTY_INTEGRATION_KEY not set — skipping PagerDuty event", {
-      event_action: body.event_action,
-      provider: body.payload.custom_details.provider,
-    });
+    log(
+      "warn",
+      "PAGERDUTY_INTEGRATION_KEY not set — skipping PagerDuty event",
+      {
+        event_action: body.event_action,
+        provider: body.payload.custom_details.provider,
+      },
+    );
     return;
   }
 
@@ -286,7 +290,10 @@ export async function runProviderHealthCheckJob(): Promise<void> {
 // ─── Exported for testing ─────────────────────────────────────────────────────
 
 /** Returns a snapshot of currently active incidents (provider → record). */
-export function getActiveIncidents(): ReadonlyMap<ProviderName, IncidentRecord> {
+export function getActiveIncidents(): ReadonlyMap<
+  ProviderName,
+  IncidentRecord
+> {
   return activeIncidents;
 }
 

@@ -177,7 +177,7 @@ describe("Accounting Integration (QuickBooks & Xero Sync Retry Queue)", () => {
 
       // Verify BullMQ job.discard was invoked to cancel retries permanently
       expect(mockJob.discard).toHaveBeenCalledTimes(1);
-      
+
       // Verify logger.error was called for permanent error
       expect(logger.error).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -197,7 +197,7 @@ describe("Accounting Integration (QuickBooks & Xero Sync Retry Queue)", () => {
       ).rejects.toThrow(ValidationError);
 
       expect(mockJob.discard).toHaveBeenCalledTimes(1);
-      
+
       // Verify logger.error was called for permanent error
       expect(logger.error).toHaveBeenCalledWith(
         expect.objectContaining({

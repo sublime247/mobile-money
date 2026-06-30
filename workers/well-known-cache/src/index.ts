@@ -22,7 +22,11 @@ interface ErrorResponse {
   timestamp: string;
 }
 
-function errorResponse(status: number, error: string, message: string): Response {
+function errorResponse(
+  status: number,
+  error: string,
+  message: string,
+): Response {
   const body: ErrorResponse = {
     status,
     error,
@@ -63,7 +67,7 @@ function logMetrics(metrics: RequestMetrics): void {
       level: "info",
       type: "edge_request_metrics",
       ...metrics,
-    })
+    }),
   );
 }
 
@@ -82,7 +86,7 @@ export default {
       return errorResponse(
         405,
         "Method Not Allowed",
-        `HTTP method ${request.method} is not supported. Use GET or HEAD.`
+        `HTTP method ${request.method} is not supported. Use GET or HEAD.`,
       );
     }
 
@@ -112,7 +116,8 @@ export default {
       if (cached) {
         const res = new Response(cached.body, cached);
         res.headers.set("cf-cache-status", "HIT");
-        for (const [k, v] of Object.entries(CORS_HEADERS)) res.headers.set(k, v);
+        for (const [k, v] of Object.entries(CORS_HEADERS))
+          res.headers.set(k, v);
         cacheStatus = "HIT";
         logMetrics(getMetrics(res));
         return res;
@@ -137,7 +142,9 @@ export default {
         failoverMode = env.DR_FAILOVER_MODE || "PROXY";
         const drUrl = new URL(url.pathname + url.search, env.DR_FAILOVER_URL);
 
-        console.warn(`DR Failover active: routing to ${drUrl.toString()} using mode ${failoverMode}`);
+        console.warn(
+          `DR Failover active: routing to ${drUrl.toString()} using mode ${failoverMode}`,
+        );
 
         if (failoverMode === "REDIRECT") {
           const res = Response.redirect(drUrl.toString(), 307);
@@ -154,7 +161,8 @@ export default {
               res.headers.set("Cache-Control", cacheControlFor(url.pathname));
               res.headers.set("cf-cache-status", "MISS");
               res.headers.set("x-dr-failover", "true");
-              for (const [k, v] of Object.entries(CORS_HEADERS)) res.headers.set(k, v);
+              for (const [k, v] of Object.entries(CORS_HEADERS))
+                res.headers.set(k, v);
 
               cacheStatus = "MISS";
               await cache.put(request, res.clone());
@@ -164,14 +172,21 @@ export default {
               const res = errorResponse(
                 drOrigin.status,
                 drOrigin.statusText || "DR Upstream Error",
-                `Disaster Recovery server returned ${drOrigin.status} for ${url.pathname}.`
+                `Disaster Recovery server returned ${drOrigin.status} for ${url.pathname}.`,
               );
               logMetrics(getMetrics(res));
               return res;
             }
           } catch (drErr) {
-            const drMessage = drErr instanceof Error ? drErr.message : "An unexpected error occurred.";
-            const res = errorResponse(502, "Bad Gateway", `Failed to fetch Disaster Recovery server: ${drMessage}`);
+            const drMessage =
+              drErr instanceof Error
+                ? drErr.message
+                : "An unexpected error occurred.";
+            const res = errorResponse(
+              502,
+              "Bad Gateway",
+              `Failed to fetch Disaster Recovery server: ${drMessage}`,
+            );
             logMetrics(getMetrics(res));
             return res;
           }
@@ -185,9 +200,13 @@ export default {
           ? errorResponse(
               origin.status,
               origin.statusText || "Upstream Error",
-              `Origin server returned ${origin.status} for ${url.pathname}.`
+              `Origin server returned ${origin.status} for ${url.pathname}.`,
             )
-          : errorResponse(502, "Bad Gateway", `Failed to fetch origin: ${originError?.message}`);
+          : errorResponse(
+              502,
+              "Bad Gateway",
+              `Failed to fetch origin: ${originError?.message}`,
+            );
         logMetrics(getMetrics(res));
         return res;
       }
@@ -199,7 +218,7 @@ export default {
         const res = errorResponse(
           primaryRes.status,
           primaryRes.statusText || "Upstream Error",
-          `Origin server returned ${primaryRes.status} for ${primaryRes.status >= 400 ? url.pathname : ""}.`
+          `Origin server returned ${primaryRes.status} for ${primaryRes.status >= 400 ? url.pathname : ""}.`,
         );
         logMetrics(getMetrics(res));
         return res;
@@ -215,8 +234,13 @@ export default {
       logMetrics(getMetrics(res));
       return res;
     } catch (err) {
-      const message = err instanceof Error ? err.message : "An unexpected error occurred.";
-      const res = errorResponse(502, "Bad Gateway", `Failed to fetch origin: ${message}`);
+      const message =
+        err instanceof Error ? err.message : "An unexpected error occurred.";
+      const res = errorResponse(
+        502,
+        "Bad Gateway",
+        `Failed to fetch origin: ${message}`,
+      );
       logMetrics(getMetrics(res));
       return res;
     }

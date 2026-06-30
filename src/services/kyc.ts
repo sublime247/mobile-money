@@ -1,39 +1,39 @@
 import logger from "../utils/logger";
-import axios, { AxiosInstance } from 'axios';
-import { Pool } from 'pg';
-import { z } from 'zod';
-import { AccountingService } from './accounting';
-import { type KYCRejectionReason } from '../config/kycRejectionReasons';
+import axios, { AxiosInstance } from "axios";
+import { Pool } from "pg";
+import { z } from "zod";
+import { AccountingService } from "./accounting";
+import { type KYCRejectionReason } from "../config/kycRejectionReasons";
 import {
   KYCLevel as AppKYCLevel,
   MAX_TRANSACTION_AMOUNT,
   MIN_TRANSACTION_AMOUNT,
   TRANSACTION_LIMITS,
-} from '../config/limits';
-import { isTransientError, withRetry } from './retry';
+} from "../config/limits";
+import { isTransientError, withRetry } from "./retry";
 
 // KYC Provider: Entrust Identity Verification (formerly Onfido)
 // Documentation: https://documentation.identity.entrust.com/api/latest/
 
 export enum KYCLevel {
-  NONE = 'none',
-  UNVERIFIED = 'none',
-  BASIC = 'basic',
-  FULL = 'full',
+  NONE = "none",
+  UNVERIFIED = "none",
+  BASIC = "basic",
+  FULL = "full",
 }
 
 export enum KYCStatus {
-  PENDING = 'pending',
-  APPROVED = 'approved',
-  REJECTED = 'rejected',
-  REVIEW = 'review',
+  PENDING = "pending",
+  APPROVED = "approved",
+  REJECTED = "rejected",
+  REVIEW = "review",
 }
 
 export enum DocumentType {
-  PASSPORT = 'passport',
-  DRIVING_LICENSE = 'driving_license',
-  NATIONAL_IDENTITY_CARD = 'national_identity_card',
-  RESIDENCE_PERMIT = 'residence_permit',
+  PASSPORT = "passport",
+  DRIVING_LICENSE = "driving_license",
+  NATIONAL_IDENTITY_CARD = "national_identity_card",
+  RESIDENCE_PERMIT = "residence_permit",
 }
 
 export interface KYCApplicant {
@@ -131,7 +131,7 @@ export interface VerificationStatusResponse {
 export interface BinaryDocumentUploadInput {
   applicant_id: string;
   type: DocumentType;
-  side?: 'front' | 'back';
+  side?: "front" | "back";
   filename: string;
   mimeType: string;
   fileBuffer: Buffer;
@@ -164,7 +164,7 @@ const CreateApplicantSchema = z.object({
 const UploadDocumentSchema = z.object({
   applicant_id: z.string(),
   type: z.nativeEnum(DocumentType),
-  side: z.enum(['front', 'back']).optional(),
+  side: z.enum(["front", "back"]).optional(),
   filename: z.string(),
   data: z.string(),
   mime_type: z.string().optional(),
@@ -173,14 +173,15 @@ const UploadDocumentSchema = z.object({
 const TRANSIENT_RETRY_OPTIONS = {
   maxAttempts: 3,
   baseDelayMs: 400,
-  provider: 'entrust',
+  provider: "entrust",
 } as const;
 
 const IDENTITY_REPORT_HINTS = /document|identity|proof|id/i;
 const ADVANCED_REPORT_HINTS = /facial|face|selfie|biometric|address|enhanced/i;
 const APPROVED_HINTS = /approve|approved|clear|pass|passed|success|successful/i;
 const REVIEW_HINTS = /review|consider|caution|suspect|pending|manual/i;
-const REJECTED_HINTS = /reject|rejected|decline|declined|fail|failed|denied|mismatch|expired|unsupported|fraud|forg/i;
+const REJECTED_HINTS =
+  /reject|rejected|decline|declined|fail|failed|denied|mismatch|expired|unsupported|fraud|forg/i;
 
 export class KYCService {
   private api: AxiosInstance;
@@ -190,12 +191,13 @@ export class KYCService {
 
   constructor(db: Pool) {
     this.db = db;
-    this.baseURL = process.env.KYC_API_URL || 'https://api.eu.onfido.com/v3.6';
+    this.baseURL = process.env.KYC_API_URL || "https://api.eu.onfido.com/v3.6";
     this.apiKey =
-      process.env.KYC_API_KEY || (process.env.NODE_ENV === 'test' ? 'test_key' : '');
+      process.env.KYC_API_KEY ||
+      (process.env.NODE_ENV === "test" ? "test_key" : "");
 
     if (!this.apiKey) {
-      throw new Error('KYC_API_KEY environment variable is required');
+      throw new Error("KYC_API_KEY environment variable is required");
     }
 
     this.api = axios.create({
@@ -209,17 +211,24 @@ export class KYCService {
     });
 
     this.api.interceptors.request.use((config) => {
-      console.log(`KYC API Request: ${config.method?.toUpperCase()} ${config.url}`);
+      console.log(
+        `KYC API Request: ${config.method?.toUpperCase()} ${config.url}`,
+      );
       return config;
     });
 
     this.api.interceptors.response.use(
       (response) => {
-        console.log(`KYC API Response: ${response.status} ${response.config.url}`);
+        console.log(
+          `KYC API Response: ${response.status} ${response.config.url}`,
+        );
         return response;
       },
       (error) => {
-        logger.error(`KYC API Error: ${error.response?.status} ${error.config?.url}`, error.response?.data);
+        logger.error(
+          `KYC API Error: ${error.response?.status} ${error.config?.url}`,
+          error.response?.data,
+        );
         return Promise.reject(error);
       },
     );
@@ -231,14 +240,16 @@ export class KYCService {
     try {
       const validatedData = CreateApplicantSchema.parse(applicantData);
       return await this.requestWithRetry(() =>
-        this.api.post('/applicants', validatedData).then((response) => response.data as KYCApplicant),
+        this.api
+          .post("/applicants", validatedData)
+          .then((response) => response.data as KYCApplicant),
       );
     } catch (error) {
       if (error instanceof z.ZodError) {
         throw new Error(`Invalid applicant data: ${error.message}`);
       }
       throw new Error(
-        `Failed to create KYC applicant: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        `Failed to create KYC applicant: ${error instanceof Error ? error.message : "Unknown error"}`,
       );
     }
   }
@@ -246,20 +257,25 @@ export class KYCService {
   async getApplicant(applicantId: string): Promise<KYCApplicant> {
     try {
       return await this.requestWithRetry(() =>
-        this.api.get(`/applicants/${applicantId}`).then((response) => response.data as KYCApplicant),
+        this.api
+          .get(`/applicants/${applicantId}`)
+          .then((response) => response.data as KYCApplicant),
       );
     } catch (error) {
       throw new Error(
-        `Failed to retrieve applicant: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        `Failed to retrieve applicant: ${error instanceof Error ? error.message : "Unknown error"}`,
       );
     }
   }
 
-  async uploadDocument(documentData: z.infer<typeof UploadDocumentSchema>): Promise<any> {
+  async uploadDocument(
+    documentData: z.infer<typeof UploadDocumentSchema>,
+  ): Promise<any> {
     try {
       const validatedData = UploadDocumentSchema.parse(documentData);
       const mimeType =
-        validatedData.mime_type || this.inferMimeTypeFromFilename(validatedData.filename);
+        validatedData.mime_type ||
+        this.inferMimeTypeFromFilename(validatedData.filename);
       const fileBuffer = this.decodeBase64Document(validatedData.data);
 
       return await this.uploadDocumentBinary({
@@ -275,34 +291,41 @@ export class KYCService {
         throw new Error(`Invalid document data: ${error.message}`);
       }
       throw new Error(
-        `Failed to upload document: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        `Failed to upload document: ${error instanceof Error ? error.message : "Unknown error"}`,
       );
     }
   }
 
-  async uploadDocumentBinary(documentData: BinaryDocumentUploadInput): Promise<any> {
+  async uploadDocumentBinary(
+    documentData: BinaryDocumentUploadInput,
+  ): Promise<any> {
     const formData = new FormData();
-    formData.append('applicant_id', documentData.applicant_id);
-    formData.append('type', documentData.type);
+    formData.append("applicant_id", documentData.applicant_id);
+    formData.append("type", documentData.type);
     if (documentData.side) {
-      formData.append('side', documentData.side);
+      formData.append("side", documentData.side);
     }
     formData.append(
-      'file',
-      new Blob([documentData.fileBuffer], { type: documentData.mimeType }),
+      "file",
+      new Blob([documentData.fileBuffer as any], {
+        type: documentData.mimeType,
+      }),
       documentData.filename,
     );
 
     return this.requestWithRetry(() =>
       this.api
-        .post('/documents', formData, {
+        .post("/documents", formData, {
           timeout: 45000,
         })
         .then((response) => response.data),
     );
   }
 
-  async createWorkflowRun(applicantId: string, workflowId?: string): Promise<WorkflowRun> {
+  async createWorkflowRun(
+    applicantId: string,
+    workflowId?: string,
+  ): Promise<WorkflowRun> {
     try {
       const workflowData = {
         applicant_id: applicantId,
@@ -311,21 +334,24 @@ export class KYCService {
 
       return await this.requestWithRetry(() =>
         this.api
-          .post('/workflow_runs', workflowData)
+          .post("/workflow_runs", workflowData)
           .then((response) => response.data as WorkflowRun),
       );
     } catch (error) {
       throw new Error(
-        `Failed to create workflow run: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        `Failed to create workflow run: ${error instanceof Error ? error.message : "Unknown error"}`,
       );
     }
   }
 
-  async generateSDKToken(applicantId: string, applicationId: string): Promise<string> {
+  async generateSDKToken(
+    applicantId: string,
+    applicationId: string,
+  ): Promise<string> {
     try {
       const response = await this.requestWithRetry(() =>
         this.api
-          .post('/sdk_token', {
+          .post("/sdk_token", {
             applicant_id: applicantId,
             application_id: applicationId,
           })
@@ -335,12 +361,14 @@ export class KYCService {
       return response.token;
     } catch (error) {
       throw new Error(
-        `Failed to generate SDK token: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        `Failed to generate SDK token: ${error instanceof Error ? error.message : "Unknown error"}`,
       );
     }
   }
 
-  async getVerificationStatus(applicantId: string): Promise<VerificationStatusResponse> {
+  async getVerificationStatus(
+    applicantId: string,
+  ): Promise<VerificationStatusResponse> {
     try {
       const checks = await this.fetchChecks(applicantId);
       const reports = await this.fetchReports(applicantId);
@@ -353,7 +381,7 @@ export class KYCService {
       };
     } catch (error) {
       throw new Error(
-        `Failed to get verification status: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        `Failed to get verification status: ${error instanceof Error ? error.message : "Unknown error"}`,
       );
     }
   }
@@ -364,14 +392,22 @@ export class KYCService {
       const applicantId = await this.resolveApplicantId(payload.object);
 
       if (!applicantId) {
-        console.warn(`Unable to resolve applicant for webhook action ${payload.action}`);
+        console.warn(
+          `Unable to resolve applicant for webhook action ${payload.action}`,
+        );
         return;
       }
 
       const verificationStatus = await this.getVerificationStatus(applicantId);
-      await this.persistVerificationStatus(applicantId, verificationStatus, payload.action);
+      await this.persistVerificationStatus(
+        applicantId,
+        verificationStatus,
+        payload.action,
+      );
     } catch (error) {
-      logger.error(`Failed to handle webhook: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      logger.error(
+        `Failed to handle webhook: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
       throw error;
     }
   }
@@ -393,10 +429,14 @@ export class KYCService {
           await accountingSvc.syncContactForUser(userId);
         }
       } catch (err) {
-        logger.error(`Failed to sync accounting contact after KYC update for user ${userId}: ${err instanceof Error ? err.message : String(err)}`);
+        logger.error(
+          `Failed to sync accounting contact after KYC update for user ${userId}: ${err instanceof Error ? err.message : String(err)}`,
+        );
       }
     } catch (error) {
-      logger.error(`Failed to update user KYC level: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      logger.error(
+        `Failed to update user KYC level: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
       throw error;
     }
   }
@@ -436,7 +476,7 @@ export class KYCService {
   private normalizeVerification(
     checks: KYCCheck[],
     reports: KYCReport[],
-  ): Omit<VerificationStatusResponse, 'checks' | 'reports'> {
+  ): Omit<VerificationStatusResponse, "checks" | "reports"> {
     if (checks.length === 0 && reports.length === 0) {
       return {
         status: KYCStatus.PENDING,
@@ -449,9 +489,11 @@ export class KYCService {
     const hasExplicitRejection = reports.some((report) =>
       this.isRejectedLike(this.getReportEvidence(report)),
     );
-    const hasReview = reports.some((report) => this.isReviewLike(this.getReportEvidence(report)));
+    const hasReview = reports.some((report) =>
+      this.isReviewLike(this.getReportEvidence(report)),
+    );
 
-    if (rejectionReason === 'Fraudulent Document') {
+    if (rejectionReason === "Fraudulent Document") {
       return {
         status: KYCStatus.REVIEW,
         level: KYCLevel.UNVERIFIED,
@@ -476,7 +518,7 @@ export class KYCService {
     }
 
     const documentReports = reports.filter((report) =>
-      IDENTITY_REPORT_HINTS.test(report.name || ''),
+      IDENTITY_REPORT_HINTS.test(report.name || ""),
     );
     const hasApprovedIdentity = documentReports.some((report) =>
       this.isApprovedLike(this.getReportEvidence(report)),
@@ -492,7 +534,7 @@ export class KYCService {
 
     const hasAdvancedApproval = reports.some(
       (report) =>
-        ADVANCED_REPORT_HINTS.test(report.name || '') &&
+        ADVANCED_REPORT_HINTS.test(report.name || "") &&
         this.isApprovedLike(this.getReportEvidence(report)),
     );
 
@@ -503,50 +545,68 @@ export class KYCService {
     };
   }
 
-  private detectRejectionReason(reports: KYCReport[]): KYCRejectionReason | null {
+  private detectRejectionReason(
+    reports: KYCReport[],
+  ): KYCRejectionReason | null {
     const matches = (needle: RegExp) =>
       reports.some((report) => needle.test(this.getReportEvidence(report)));
 
     if (matches(/fraud|forg|tamper|counterfeit|fake|impersonat/i)) {
-      return 'Fraudulent Document';
+      return "Fraudulent Document";
     }
-    if (matches(/selfie mismatch|facial mismatch|face mismatch|photo mismatch|biometric mismatch/i)) {
-      return 'Selfie Mismatch';
+    if (
+      matches(
+        /selfie mismatch|facial mismatch|face mismatch|photo mismatch|biometric mismatch/i,
+      )
+    ) {
+      return "Selfie Mismatch";
     }
     if (matches(/name mismatch/i)) {
-      return 'Name Mismatch';
+      return "Name Mismatch";
     }
     if (matches(/address mismatch/i)) {
-      return 'Address Mismatch';
+      return "Address Mismatch";
     }
     if (matches(/blur|blurry|glare|quality|obscured|unreadable/i)) {
-      return 'Blurry ID';
+      return "Blurry ID";
     }
     if (matches(/expired|expiration|expiry/i)) {
-      return 'Expired ID';
+      return "Expired ID";
     }
     if (matches(/unsupported|unsupported document|document type/i)) {
-      return 'Unsupported Document Type';
+      return "Unsupported Document Type";
     }
     if (matches(/incomplete|missing/i)) {
-      return 'Incomplete Information';
+      return "Incomplete Information";
     }
 
     return null;
   }
 
   private getReportEvidence(report: KYCReport): string {
-    const parts: string[] = [report.name || '', report.status || '', report.result || ''];
+    const parts: string[] = [
+      report.name || "",
+      report.status || "",
+      report.result || "",
+    ];
 
     for (const item of report.breakdown || []) {
-      parts.push(item.name || '', item.result || '', JSON.stringify(item.properties || {}));
+      parts.push(
+        item.name || "",
+        item.result || "",
+        JSON.stringify(item.properties || {}),
+      );
     }
 
-    return parts.join(' ').toLowerCase();
+    return parts.join(" ").toLowerCase();
   }
 
   private isApprovedLike(text: string): boolean {
-    return APPROVED_HINTS.test(text) && !REJECTED_HINTS.test(text) && !REVIEW_HINTS.test(text);
+    return (
+      APPROVED_HINTS.test(text) &&
+      !REJECTED_HINTS.test(text) &&
+      !REVIEW_HINTS.test(text)
+    );
   }
 
   private isReviewLike(text: string): boolean {
@@ -557,12 +617,14 @@ export class KYCService {
     return REJECTED_HINTS.test(text);
   }
 
-  private async resolveApplicantId(object: WebhookEvent['payload']['object']): Promise<string | null> {
-    if (typeof object.applicant_id === 'string' && object.applicant_id) {
+  private async resolveApplicantId(
+    object: WebhookEvent["payload"]["object"],
+  ): Promise<string | null> {
+    if (typeof object.applicant_id === "string" && object.applicant_id) {
       return object.applicant_id;
     }
 
-    if (typeof object.applicant?.id === 'string' && object.applicant.id) {
+    if (typeof object.applicant?.id === "string" && object.applicant.id) {
       return object.applicant.id;
     }
 
@@ -570,16 +632,20 @@ export class KYCService {
       return null;
     }
 
-    if (object.type === 'workflow_run') {
+    if (object.type === "workflow_run") {
       const workflowRun = await this.requestWithRetry(() =>
-        this.api.get(`/workflow_runs/${object.id}`).then((response) => response.data as WorkflowRun),
+        this.api
+          .get(`/workflow_runs/${object.id}`)
+          .then((response) => response.data as WorkflowRun),
       );
       return workflowRun.applicant_id || workflowRun.applicant?.id || null;
     }
 
-    if (object.type === 'check') {
+    if (object.type === "check") {
       const check = await this.requestWithRetry(() =>
-        this.api.get(`/checks/${object.id}`).then((response) => response.data as KYCCheck),
+        this.api
+          .get(`/checks/${object.id}`)
+          .then((response) => response.data as KYCCheck),
       );
       return check.applicant_id || null;
     }
@@ -632,11 +698,11 @@ export class KYCService {
   }
 
   private decodeBase64Document(data: string): Buffer {
-    const normalized = data.includes(',') ? data.split(',').pop() || '' : data;
-    const buffer = Buffer.from(normalized, 'base64');
+    const normalized = data.includes(",") ? data.split(",").pop() || "" : data;
+    const buffer = Buffer.from(normalized, "base64");
 
     if (!buffer.length) {
-      throw new Error('Document payload is empty');
+      throw new Error("Document payload is empty");
     }
 
     return buffer;
@@ -644,9 +710,9 @@ export class KYCService {
 
   private inferMimeTypeFromFilename(filename: string): string {
     const lower = filename.toLowerCase();
-    if (lower.endsWith('.pdf')) return 'application/pdf';
-    if (lower.endsWith('.png')) return 'image/png';
-    return 'image/jpeg';
+    if (lower.endsWith(".pdf")) return "application/pdf";
+    if (lower.endsWith(".png")) return "image/png";
+    return "image/jpeg";
   }
 
   private toAppKYCLevel(kycLevel: KYCLevel): AppKYCLevel {
@@ -659,8 +725,10 @@ export class KYCService {
     try {
       return await withRetry(fn, TRANSIENT_RETRY_OPTIONS);
     } catch (error) {
-      logger.error(`KYC request failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      if (isTransientError(error, 'entrust')) {
+      logger.error(
+        `KYC request failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
+      if (isTransientError(error, "entrust")) {
         throw new Error(
           `Entrust request failed after a transient network error: ${
             error instanceof Error ? error.message : String(error)

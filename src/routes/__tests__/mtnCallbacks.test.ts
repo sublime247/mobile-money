@@ -3,7 +3,8 @@ import { jest } from "@jest/globals";
 jest.mock("../../config/appConfig", () => ({
   getConfigValue: jest.fn((key: string) => {
     if (key === "providers.mtn.callbackSecret") return "test-mtn-secret";
-    if (key === "providers.mtn.callbackSignatureHeader") return "x-callback-signature";
+    if (key === "providers.mtn.callbackSignatureHeader")
+      return "x-callback-signature";
     return undefined;
   }),
 }));

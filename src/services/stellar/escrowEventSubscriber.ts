@@ -14,10 +14,12 @@ type EscrowEventType = "lock" | "release";
 
 export function startEventSubscription() {
   const horizon = getStellarServer();
-  const horizonUrl = (horizon as any).serverURL || horizon.host; // fallback
+  const horizonUrl = (horizon as any).serverURL || (horizon as any).host; // fallback
   const escrowContractId = process.env.ESCROW_CONTRACT_ID;
   if (!escrowContractId) {
-    console.warn("ESCROW_CONTRACT_ID not set – Horizon event subscription disabled");
+    console.warn(
+      "ESCROW_CONTRACT_ID not set – Horizon event subscription disabled",
+    );
     return;
   }
 
@@ -29,13 +31,17 @@ export function startEventSubscription() {
       const data = JSON.parse(msg.data);
       if (!data || !data._embedded?.records) return;
       for (const tx of data._embedded.records) {
-        const opsResponse = await horizon.operations().forTransaction(tx.id).call();
+        const opsResponse = await horizon
+          .operations()
+          .forTransaction(tx.id)
+          .call();
         for (const op of opsResponse.records) {
-          if (op.type !== "contract_event") continue;
-          if (op.contract !== escrowContractId) continue;
-          const eventType: EscrowEventType = op.value?.type;
+          const operation = op as any;
+          if (operation.type !== "contract_event") continue;
+          if (operation.contract !== escrowContractId) continue;
+          const eventType: EscrowEventType = operation.value?.type;
           if (eventType !== "lock" && eventType !== "release") continue;
-          const payload: EscrowEventPayload = op.value?.payload || {};
+          const payload: EscrowEventPayload = operation.value?.payload || {};
           await insertEscrowEvent({
             tx_hash: tx.hash,
             ledger: tx.ledger_seq,

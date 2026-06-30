@@ -1,9 +1,9 @@
-import fs from 'fs';
-import path from 'path';
-import os from 'os';
-import pino, { DestinationStream, Level, Logger, StreamEntry } from 'pino';
-import { REDACT_KEYS } from './redact';
-import { AsyncLocalStorage } from 'async_hooks';
+import fs from "fs";
+import path from "path";
+import os from "os";
+import pino, { DestinationStream, Level, Logger, StreamEntry } from "pino";
+import { REDACT_KEYS } from "./redact";
+import { AsyncLocalStorage } from "async_hooks";
 
 export const requestContext = new AsyncLocalStorage<{ trace_id: string }>();
 
@@ -29,12 +29,12 @@ export const requestContext = new AsyncLocalStorage<{ trace_id: string }>();
  * transport sees them.
  */
 
-const SERVICE_NAME = process.env.SERVICE_NAME ?? 'mobile-money-api';
+const SERVICE_NAME = process.env.SERVICE_NAME ?? "mobile-money-api";
 const INSTANCE_ID = `${os.hostname()}:${process.pid}`;
 type RotatingStreamFactory = (
   filename: string | ((time: number | Date, index?: number) => string),
   options?: {
-    compress?: 'gzip';
+    compress?: "gzip";
     history?: string;
     maxFiles?: number;
     path?: string;
@@ -42,13 +42,14 @@ type RotatingStreamFactory = (
   },
 ) => DestinationStream;
 
-
-const LOG_LEVEL = (process.env.LOG_LEVEL ?? 'info') as Level;
-const LOG_DIR = process.env.LOG_DIR ?? path.join(process.cwd(), 'logs');
-const LOG_FILE_SIZE = process.env.LOG_FILE_SIZE ?? '10M';
+const LOG_LEVEL = (process.env.LOG_LEVEL ?? "info") as Level;
+const LOG_DIR = process.env.LOG_DIR ?? path.join(process.cwd(), "logs");
+const LOG_FILE_SIZE = process.env.LOG_FILE_SIZE ?? "10M";
 const configuredRetention = Number(process.env.LOG_FILE_RETENTION ?? 14);
-const LOG_FILE_RETENTION = Number.isFinite(configuredRetention) ? configuredRetention : 14;
-const SCRUB_CENSOR = '[REDACTED]';
+const LOG_FILE_RETENTION = Number.isFinite(configuredRetention)
+  ? configuredRetention
+  : 14;
+const SCRUB_CENSOR = "[REDACTED]";
 
 // ---------------------------------------------------------------------------
 // Global regex scrub filters — applied inside every transport so secrets
@@ -57,26 +58,29 @@ const SCRUB_CENSOR = '[REDACTED]';
 
 /** Extra PII master-key field names not covered by generic REDACT_KEYS. */
 const PII_MASTER_KEY_FIELDS = [
-  'pii_master_key',
-  'piiMasterKey',
-  'PII_MASTER_KEY',
-  'db_encryption_key',
-  'dbEncryptionKey',
-  'DB_ENCRYPTION_KEY',
+  "pii_master_key",
+  "piiMasterKey",
+  "PII_MASTER_KEY",
+  "db_encryption_key",
+  "dbEncryptionKey",
+  "DB_ENCRYPTION_KEY",
 ];
 
 type ScrubFilter = { pattern: RegExp; replacement: string };
 
 function buildJsonKeyValueScrubFilters(keys: string[]): ScrubFilter[] {
   return keys.flatMap((key) => {
-    const escaped = key.replace(/[_-]/g, '[_-]?');
+    const escaped = key.replace(/[_-]/g, "[_-]?");
     return [
       {
-        pattern: new RegExp(`("${escaped}"\\s*:\\s*")([^"\\\\]*(?:\\\\.[^"\\\\]*)*)(")`, 'gi'),
+        pattern: new RegExp(
+          `("${escaped}"\\s*:\\s*")([^"\\\\]*(?:\\\\.[^"\\\\]*)*)(")`,
+          "gi",
+        ),
         replacement: `$1${SCRUB_CENSOR}$3`,
       },
       {
-        pattern: new RegExp(`('${escaped}'\\s*:\\s*')([^']*)(')`, 'gi'),
+        pattern: new RegExp(`('${escaped}'\\s*:\\s*')([^']*)(')`, "gi"),
         replacement: `$1${SCRUB_CENSOR}$3`,
       },
     ];
@@ -127,16 +131,18 @@ function wrapStreamWithScrubbing(stream: DestinationStream): DestinationStream {
 // ---------------------------------------------------------------------------
 
 function formatShardDate(date: Date): string {
-  return date.toISOString().replace(/[:.]/g, '-');
+  return date.toISOString().replace(/[:.]/g, "-");
 }
 
 function logFileName(time: number | Date, index?: number): string {
   if (!time) {
-    return 'app.log';
+    return "app.log";
   }
 
-  const shardDate = formatShardDate(time instanceof Date ? time : new Date(time));
-  const shardIndex = index ? `.${index}` : '';
+  const shardDate = formatShardDate(
+    time instanceof Date ? time : new Date(time),
+  );
+  const shardIndex = index ? `.${index}` : "";
 
   return `app-${shardDate}${shardIndex}.log`;
 }
@@ -148,16 +154,16 @@ function ensureLogDirectory(): void {
 function buildFileStream(): DestinationStream {
   ensureLogDirectory();
 
-  const { createStream } = require('rotating-file-stream') as {
+  const { createStream } = require("rotating-file-stream") as {
     createStream: RotatingStreamFactory;
   };
 
   return createStream(logFileName, {
     path: LOG_DIR,
     size: LOG_FILE_SIZE,
-    compress: 'gzip',
+    compress: "gzip",
     maxFiles: LOG_FILE_RETENTION,
-    history: 'app.log.history',
+    history: "app.log.history",
   });
 }
 
@@ -174,7 +180,7 @@ function buildStreams(): StreamEntry[] | undefined {
 
   // In test environments skip all transports — tests use the raw pino
   // instance and should not attempt network connections.
-  if (process.env.NODE_ENV === 'test') {
+  if (process.env.NODE_ENV === "test") {
     return undefined;
   }
 
@@ -195,14 +201,14 @@ function buildStreams(): StreamEntry[] | undefined {
       level: LOG_LEVEL,
       stream: wrapStreamWithScrubbing(
         pino.transport({
-          target: 'pino-loki',
+          target: "pino-loki",
           options: {
             host: lokiHost,
             // Gracefully handle connection failures — never throw into the app
             silenceErrors: true,
             labels: {
               service: SERVICE_NAME,
-              env: process.env.NODE_ENV ?? 'development',
+              env: process.env.NODE_ENV ?? "development",
             },
             // Batch up to 10 log lines or flush every 5 s, whichever comes first
             batching: true,
@@ -270,7 +276,20 @@ const logger: Logger = pino(
   streams ? pino.multistream(streams, { dedupe: true }) : undefined,
 );
 
-export default logger;
+export type RelaxedLogger = Omit<
+  Logger,
+  "fatal" | "error" | "warn" | "info" | "debug" | "trace"
+> & {
+  fatal: (msg: string | object, ...args: any[]) => void;
+  error: (msg: string | object, ...args: any[]) => void;
+  warn: (msg: string | object, ...args: any[]) => void;
+  info: (msg: string | object, ...args: any[]) => void;
+  debug: (msg: string | object, ...args: any[]) => void;
+  trace: (msg: string | object, ...args: any[]) => void;
+};
+
+const relaxedLogger = logger as unknown as RelaxedLogger;
+export default relaxedLogger;
 
 /**
  * Create a child logger pre-bound with a trace_id.
@@ -279,6 +298,9 @@ export default logger;
  *   const reqLogger = childLogger(req.headers['x-trace-id'] as string);
  *   reqLogger.info({ path: req.path }, 'incoming request');
  */
-export function childLogger(traceId: string, extra?: Record<string, unknown>): Logger {
+export function childLogger(
+  traceId: string,
+  extra?: Record<string, unknown>,
+): any {
   return logger.child({ trace_id: traceId, ...extra });
 }

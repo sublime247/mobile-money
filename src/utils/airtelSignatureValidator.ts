@@ -16,12 +16,14 @@ export class AirtelSignatureValidator {
     this.cache = new NodeCache({ stdTTL: 3600 });
 
     // Load fallback keys from environment variables
-    const localFallback = process.env.AIRTEL_FALLBACK_PUBLIC_KEY || process.env.AIRTEL_FALLBACK_PUBLIC_KEYS;
+    const localFallback =
+      process.env.AIRTEL_FALLBACK_PUBLIC_KEY ||
+      process.env.AIRTEL_FALLBACK_PUBLIC_KEYS;
     if (localFallback) {
       // Split by delimiter (e.g. double newlines or custom delimiter) if multiple keys are provided
       this.fallbackKeys = localFallback
         .split("---SPLIT---")
-        .map(k => k.trim())
+        .map((k) => k.trim())
         .filter(Boolean);
     }
 
@@ -38,7 +40,10 @@ export class AirtelSignatureValidator {
       try {
         await this.fetchAndCacheKeys();
       } catch (err: any) {
-        logger.error({ error: err.message }, "Airtel Signature Validator: Background key refresh failed");
+        logger.error(
+          { error: err.message },
+          "Airtel Signature Validator: Background key refresh failed",
+        );
       }
     }, 3600 * 1000);
   }
@@ -53,12 +58,17 @@ export class AirtelSignatureValidator {
   // Fetch from endpoint and cache
   public async fetchAndCacheKeys(): Promise<string[]> {
     if (!this.keysUrl) {
-      logger.warn("Airtel Signature Validator: AIRTEL_PUBLIC_KEYS_URL is not configured. Using fallback keys.");
+      logger.warn(
+        "Airtel Signature Validator: AIRTEL_PUBLIC_KEYS_URL is not configured. Using fallback keys.",
+      );
       return this.fallbackKeys;
     }
 
     try {
-      logger.info({ url: this.keysUrl }, "Airtel Signature Validator: Fetching public keys...");
+      logger.info(
+        { url: this.keysUrl },
+        "Airtel Signature Validator: Fetching public keys...",
+      );
       const response = await axios.get(this.keysUrl, { timeout: 5000 });
       const data = response.data;
       const keys: string[] = [];
@@ -66,7 +76,7 @@ export class AirtelSignatureValidator {
       // Parse different potential formats from Airtel API
       if (Array.isArray(data)) {
         // Simple array of PEM keys
-        data.forEach(item => {
+        data.forEach((item) => {
           if (typeof item === "string") keys.push(item);
           else if (item.value) keys.push(item.value);
           else if (item.key) keys.push(item.key);
@@ -88,16 +98,24 @@ export class AirtelSignatureValidator {
         }
       }
 
-      const parsedKeys = keys.map(k => k.trim()).filter(Boolean);
+      const parsedKeys = keys.map((k) => k.trim()).filter(Boolean);
       if (parsedKeys.length > 0) {
         this.cache.set(this.cacheKey, parsedKeys);
-        logger.info({ count: parsedKeys.length }, "Airtel Signature Validator: Successfully fetched and cached public keys");
+        logger.info(
+          { count: parsedKeys.length },
+          "Airtel Signature Validator: Successfully fetched and cached public keys",
+        );
         return parsedKeys;
       }
 
-      throw new Error("Airtel Signature Validator: No valid keys could be extracted from response");
+      throw new Error(
+        "Airtel Signature Validator: No valid keys could be extracted from response",
+      );
     } catch (err: any) {
-      logger.error({ error: err.message }, "Airtel Signature Validator: Failed to fetch remote keys. Using cached or fallback keys.");
+      logger.error(
+        { error: err.message },
+        "Airtel Signature Validator: Failed to fetch remote keys. Using cached or fallback keys.",
+      );
       const cached = this.cache.get<string[]>(this.cacheKey);
       if (cached && cached.length > 0) {
         return cached;
@@ -122,11 +140,13 @@ export class AirtelSignatureValidator {
     }
 
     // Dynamically resolve local fallback keys from env
-    const localFallback = process.env.AIRTEL_FALLBACK_PUBLIC_KEY || process.env.AIRTEL_FALLBACK_PUBLIC_KEYS;
+    const localFallback =
+      process.env.AIRTEL_FALLBACK_PUBLIC_KEY ||
+      process.env.AIRTEL_FALLBACK_PUBLIC_KEYS;
     if (localFallback) {
       return localFallback
         .split("---SPLIT---")
-        .map(k => k.trim())
+        .map((k) => k.trim())
         .filter(Boolean);
     }
 
@@ -134,10 +154,15 @@ export class AirtelSignatureValidator {
   }
 
   // Verify signature
-  public async verifySignature(payload: string, signature: string): Promise<boolean> {
+  public async verifySignature(
+    payload: string,
+    signature: string,
+  ): Promise<boolean> {
     const keys = await this.getActiveKeys();
     if (keys.length === 0) {
-      logger.error("Airtel Signature Validator: No public keys available for signature verification");
+      logger.error(
+        "Airtel Signature Validator: No public keys available for signature verification",
+      );
       return false;
     }
 
@@ -146,7 +171,9 @@ export class AirtelSignatureValidator {
     try {
       sigBuffer = Buffer.from(signature, "base64");
     } catch {
-      logger.warn("Airtel Signature Validator: Signature is not a valid base64 string");
+      logger.warn(
+        "Airtel Signature Validator: Signature is not a valid base64 string",
+      );
       return false;
     }
 
@@ -166,7 +193,10 @@ export class AirtelSignatureValidator {
           return true;
         }
       } catch (err: any) {
-        logger.debug({ error: err.message }, "Airtel Signature Validator: Key verification failed with error");
+        logger.debug(
+          { error: err.message },
+          "Airtel Signature Validator: Key verification failed with error",
+        );
       }
     }
 

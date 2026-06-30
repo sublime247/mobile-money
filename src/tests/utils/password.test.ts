@@ -29,31 +29,46 @@ describe("registerSchema password complexity", () => {
   });
 
   it("rejects passwords shorter than 12 characters", () => {
-    const result = registerSchema.safeParse({ ...valid, password: makePass(["Short", "1", "!"]) });
+    const result = registerSchema.safeParse({
+      ...valid,
+      password: makePass(["Short", "1", "!"]),
+    });
     expect(result.success).toBe(false);
     expect(JSON.stringify(result)).toMatch(/12 characters/);
   });
 
   it("rejects passwords without an uppercase letter", () => {
-    const result = registerSchema.safeParse({ ...valid, password: makePass(["nouppercase", "1", "!"]) });
+    const result = registerSchema.safeParse({
+      ...valid,
+      password: makePass(["nouppercase", "1", "!"]),
+    });
     expect(result.success).toBe(false);
     expect(JSON.stringify(result)).toMatch(/uppercase/);
   });
 
   it("rejects passwords without a lowercase letter", () => {
-    const result = registerSchema.safeParse({ ...valid, password: makePass(["NOLOWERCASE", "1", "!"]) });
+    const result = registerSchema.safeParse({
+      ...valid,
+      password: makePass(["NOLOWERCASE", "1", "!"]),
+    });
     expect(result.success).toBe(false);
     expect(JSON.stringify(result)).toMatch(/lowercase/);
   });
 
   it("rejects passwords without a number", () => {
-    const result = registerSchema.safeParse({ ...valid, password: makePass(["NoNumber", "!", "@", "abc"]) });
+    const result = registerSchema.safeParse({
+      ...valid,
+      password: makePass(["NoNumber", "!", "@", "abc"]),
+    });
     expect(result.success).toBe(false);
     expect(JSON.stringify(result)).toMatch(/number/);
   });
 
   it("rejects passwords without a special character", () => {
-    const result = registerSchema.safeParse({ ...valid, password: makePass(["NoSpecialChar", "1"]) });
+    const result = registerSchema.safeParse({
+      ...valid,
+      password: makePass(["NoSpecialChar", "1"]),
+    });
     expect(result.success).toBe(false);
     expect(JSON.stringify(result)).toMatch(/special character/);
   });

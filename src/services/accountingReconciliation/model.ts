@@ -71,12 +71,15 @@ export class AccountingChartOfAccountsReconciliationModel {
         data.reportDate,
         data.status ?? AccountingReconciliationStatus.Pending,
         JSON.stringify(data.summary ?? {}),
-      ]
+      ],
     );
     return this.mapReportRow(res.rows[0]);
   }
 
-  async updateReport(id: string, data: Partial<AccountingChartOfAccountsReconciliationReport>): Promise<void> {
+  async updateReport(
+    id: string,
+    data: Partial<AccountingChartOfAccountsReconciliationReport>,
+  ): Promise<void> {
     const fields: string[] = [];
     const params: any[] = [id];
     let i = 2;
@@ -94,28 +97,40 @@ export class AccountingChartOfAccountsReconciliationModel {
 
     await queryWrite(
       `UPDATE accounting_chart_of_accounts_reconciliation_reports SET ${fields.join(", ")}, updated_at = NOW() WHERE id = $1`,
-      params
+      params,
     );
   }
 
-  async getReports(limit = 10, offset = 0): Promise<AccountingChartOfAccountsReconciliationReport[]> {
+  async getReports(
+    limit = 10,
+    offset = 0,
+  ): Promise<AccountingChartOfAccountsReconciliationReport[]> {
     const res = await queryRead(
       `SELECT * FROM accounting_chart_of_accounts_reconciliation_reports ORDER BY report_date DESC, created_at DESC LIMIT $1 OFFSET $2`,
-      [limit, offset]
+      [limit, offset],
     );
     return res.rows.map(this.mapReportRow);
   }
 
-  async getReportsByConnection(connectionId: string, limit = 10, offset = 0): Promise<AccountingChartOfAccountsReconciliationReport[]> {
+  async getReportsByConnection(
+    connectionId: string,
+    limit = 10,
+    offset = 0,
+  ): Promise<AccountingChartOfAccountsReconciliationReport[]> {
     const res = await queryRead(
       `SELECT * FROM accounting_chart_of_accounts_reconciliation_reports WHERE connection_id = $1 ORDER BY report_date DESC, created_at DESC LIMIT $2 OFFSET $3`,
-      [connectionId, limit, offset]
+      [connectionId, limit, offset],
     );
     return res.rows.map(this.mapReportRow);
   }
 
-  async getReportById(id: string): Promise<AccountingChartOfAccountsReconciliationReport | null> {
-    const res = await queryRead(`SELECT * FROM accounting_chart_of_accounts_reconciliation_reports WHERE id = $1`, [id]);
+  async getReportById(
+    id: string,
+  ): Promise<AccountingChartOfAccountsReconciliationReport | null> {
+    const res = await queryRead(
+      `SELECT * FROM accounting_chart_of_accounts_reconciliation_reports WHERE id = $1`,
+      [id],
+    );
     return res.rows[0] ? this.mapReportRow(res.rows[0]) : null;
   }
 
@@ -148,29 +163,37 @@ export class AccountingChartOfAccountsReconciliationModel {
         data.type,
         data.internalValue ?? null,
         data.externalValue ?? null,
-      ]
+      ],
     );
     return this.mapDiscrepancyRow(res.rows[0]);
   }
 
-  async getDiscrepanciesByReportId(reportId: string): Promise<AccountingChartOfAccountsReconciliationDiscrepancy[]> {
+  async getDiscrepanciesByReportId(
+    reportId: string,
+  ): Promise<AccountingChartOfAccountsReconciliationDiscrepancy[]> {
     const res = await queryRead(
       `SELECT * FROM accounting_chart_of_accounts_reconciliation_discrepancies WHERE report_id = $1 ORDER BY created_at ASC`,
-      [reportId]
+      [reportId],
     );
     return res.rows.map(this.mapDiscrepancyRow);
   }
 
-  async resolveDiscrepancy(id: string, notes: string, reviewedBy: string): Promise<void> {
+  async resolveDiscrepancy(
+    id: string,
+    notes: string,
+    reviewedBy: string,
+  ): Promise<void> {
     await queryWrite(
       `UPDATE accounting_chart_of_accounts_reconciliation_discrepancies 
        SET review_status = 'resolved', resolution_notes = $2, reviewed_by = $3, reviewed_at = NOW(), updated_at = NOW() 
        WHERE id = $1`,
-      [id, notes, reviewedBy]
+      [id, notes, reviewedBy],
     );
   }
 
-  private mapReportRow(row: any): AccountingChartOfAccountsReconciliationReport {
+  private mapReportRow(
+    row: any,
+  ): AccountingChartOfAccountsReconciliationReport {
     return {
       id: row.id,
       provider: row.provider,
@@ -183,7 +206,9 @@ export class AccountingChartOfAccountsReconciliationModel {
     };
   }
 
-  private mapDiscrepancyRow(row: any): AccountingChartOfAccountsReconciliationDiscrepancy {
+  private mapDiscrepancyRow(
+    row: any,
+  ): AccountingChartOfAccountsReconciliationDiscrepancy {
     return {
       id: row.id,
       reportId: row.report_id,

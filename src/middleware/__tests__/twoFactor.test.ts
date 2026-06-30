@@ -1,9 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import { jest } from "@jest/globals";
-import {
-  requireTwoFactor,
-  optionalTwoFactor,
-} from "../twoFactor";
+import { requireTwoFactor, optionalTwoFactor } from "../twoFactor";
 import { twoFactorRateLimiter } from "../../services/twoFactorRateLimiter";
 import {
   is2FAEnabled,

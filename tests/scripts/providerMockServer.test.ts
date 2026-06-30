@@ -91,7 +91,9 @@ describe("provider mock server", () => {
       expect(createResponse.status).toBe(202);
       expect(createResponse.body.status).toBe("PENDING");
 
-      const statusResponse = await request(app).get("/vodacom/c2b/v1/payment/voda-pay-1");
+      const statusResponse = await request(app).get(
+        "/vodacom/c2b/v1/payment/voda-pay-1",
+      );
       expect(statusResponse.status).toBe(200);
       expect(statusResponse.body.status).toBe("PENDING");
     });

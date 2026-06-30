@@ -65,8 +65,7 @@ afterEach(() => {
 // --- cleanupJob ---
 describe("runCleanupJob", () => {
   it("deletes old transactions and logs count", async () => {
-    mockQuery
-      .mockResolvedValueOnce({ rowCount: 3 });
+    mockQuery.mockResolvedValueOnce({ rowCount: 3 });
     mockQueryWrite.mockResolvedValueOnce({ rows: [{ released: 4 }] });
     await runCleanupJob();
     expect(mockQueryWrite).toHaveBeenCalledTimes(1);
@@ -78,8 +77,7 @@ describe("runCleanupJob", () => {
 
   it("uses LOG_RETENTION_DAYS env var", async () => {
     process.env.LOG_RETENTION_DAYS = "30";
-    mockQuery
-      .mockResolvedValueOnce({ rowCount: 0 });
+    mockQuery.mockResolvedValueOnce({ rowCount: 0 });
     mockQueryWrite.mockResolvedValueOnce({ rows: [{ released: 0 }] });
     await runCleanupJob();
     expect(mockQuery).toHaveBeenCalledWith(expect.stringContaining("30 days"));

@@ -3,8 +3,8 @@
  * Manages caching of formatter instances for optimal performance
  */
 
-import { CacheEntry, CacheStats, PerformanceMetrics } from './types';
-import { CurrencyConfig } from './CurrencyConfig';
+import { CacheEntry, CacheStats, PerformanceMetrics } from "./types";
+import { CurrencyConfig } from "./CurrencyConfig";
 
 /**
  * Cache manager for Intl.NumberFormat instances
@@ -17,7 +17,7 @@ export class FormatterCache {
   private static stats = {
     hits: 0,
     misses: 0,
-    evictions: 0
+    evictions: 0,
   };
   private static performanceStats = {
     totalCreationTime: 0,
@@ -25,7 +25,7 @@ export class FormatterCache {
     slowOperations: 0,
     totalFormatCalls: 0,
     totalFormatTime: 0,
-    errorCount: 0
+    errorCount: 0,
   };
 
   /**
@@ -37,7 +37,7 @@ export class FormatterCache {
   static getFormatter(currencyCode: string, locale: string): Intl.NumberFormat {
     const cacheKey = this.generateCacheKey(currencyCode, locale);
     const now = Date.now();
-    
+
     // Check if formatter exists in cache
     const cachedEntry = this.cache.get(cacheKey);
     if (cachedEntry) {
@@ -46,38 +46,38 @@ export class FormatterCache {
       cachedEntry.useCount++;
       this.stats.hits++;
       this.performanceStats.totalFormatCalls++;
-      
+
       // Move to end of map (most recently used)
       this.cache.delete(cacheKey);
       this.cache.set(cacheKey, cachedEntry);
-      
+
       return cachedEntry.formatter;
     }
 
     // Cache miss - create new formatter
     this.stats.misses++;
     this.performanceStats.totalFormatCalls++;
-    
+
     const creationStart = Date.now();
-    
+
     try {
       // Get currency configuration to determine formatting options
       const currencyRule = this.getCurrencyRuleForFormatter(currencyCode);
-      
+
       const formatter = new Intl.NumberFormat(locale, {
-        style: 'currency',
+        style: "currency",
         currency: currencyCode,
         useGrouping: currencyRule.formatting.useGrouping,
         minimumFractionDigits: currencyRule.minorUnits,
-        maximumFractionDigits: currencyRule.minorUnits
+        maximumFractionDigits: currencyRule.minorUnits,
       });
 
       const creationTime = Date.now() - creationStart;
-      
+
       // Track creation time
       this.performanceStats.totalCreationTime += creationTime;
       this.performanceStats.creationCount++;
-      
+
       // Track slow operations
       if (creationTime > this.slowOperationThresholdMs) {
         this.performanceStats.slowOperations++;
@@ -90,7 +90,7 @@ export class FormatterCache {
         locale,
         createdAt: now,
         lastUsed: now,
-        useCount: 1
+        useCount: 1,
       };
 
       // Add to cache
@@ -103,13 +103,13 @@ export class FormatterCache {
     } catch (error) {
       // Track errors
       this.performanceStats.errorCount++;
-      
+
       // If Intl.NumberFormat fails, create a basic fallback formatter
       // This ensures the cache always returns a working formatter
-      const fallbackFormatter = new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: 'USD',
-        useGrouping: true
+      const fallbackFormatter = new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: "USD",
+        useGrouping: true,
       });
 
       // Don't cache fallback formatters to avoid polluting cache
@@ -125,7 +125,7 @@ export class FormatterCache {
     this.stats = {
       hits: 0,
       misses: 0,
-      evictions: 0
+      evictions: 0,
     };
     this.performanceStats = {
       totalCreationTime: 0,
@@ -133,7 +133,7 @@ export class FormatterCache {
       slowOperations: 0,
       totalFormatCalls: 0,
       totalFormatTime: 0,
-      errorCount: 0
+      errorCount: 0,
     };
   }
 
@@ -144,7 +144,7 @@ export class FormatterCache {
     this.stats = {
       hits: 0,
       misses: 0,
-      evictions: 0
+      evictions: 0,
     };
     this.performanceStats = {
       totalCreationTime: 0,
@@ -152,7 +152,7 @@ export class FormatterCache {
       slowOperations: 0,
       totalFormatCalls: 0,
       totalFormatTime: 0,
-      errorCount: 0
+      errorCount: 0,
     };
   }
 
@@ -162,7 +162,8 @@ export class FormatterCache {
    */
   static getCacheStats(): CacheStats {
     const totalRequests = this.stats.hits + this.stats.misses;
-    const hitRate = totalRequests > 0 ? (this.stats.hits / totalRequests) * 100 : 0;
+    const hitRate =
+      totalRequests > 0 ? (this.stats.hits / totalRequests) * 100 : 0;
 
     return {
       size: this.cache.size,
@@ -170,7 +171,7 @@ export class FormatterCache {
       hits: this.stats.hits,
       misses: this.stats.misses,
       hitRate: Math.round(hitRate * 100) / 100, // Round to 2 decimal places
-      evictions: this.stats.evictions
+      evictions: this.stats.evictions,
     };
   }
 
@@ -180,14 +181,18 @@ export class FormatterCache {
    */
   static getPerformanceMetrics(): PerformanceMetrics {
     const totalRequests = this.stats.hits + this.stats.misses;
-    const cacheHitRate = totalRequests > 0 ? (this.stats.hits / totalRequests) * 100 : 0;
+    const cacheHitRate =
+      totalRequests > 0 ? (this.stats.hits / totalRequests) * 100 : 0;
     const averageFormatTime =
       this.performanceStats.creationCount > 0
-        ? this.performanceStats.totalCreationTime / this.performanceStats.creationCount
+        ? this.performanceStats.totalCreationTime /
+          this.performanceStats.creationCount
         : 0;
     const errorRate =
       this.performanceStats.totalFormatCalls > 0
-        ? (this.performanceStats.errorCount / this.performanceStats.totalFormatCalls) * 100
+        ? (this.performanceStats.errorCount /
+            this.performanceStats.totalFormatCalls) *
+          100
         : 0;
 
     return {
@@ -195,7 +200,7 @@ export class FormatterCache {
       averageFormatTime: Math.round(averageFormatTime * 1000) / 1000, // Round to 3 decimal places
       cacheHitRate: Math.round(cacheHitRate * 100) / 100,
       errorRate: Math.round(errorRate * 100) / 100,
-      slowOperations: this.performanceStats.slowOperations
+      slowOperations: this.performanceStats.slowOperations,
     };
   }
 
@@ -205,7 +210,7 @@ export class FormatterCache {
    */
   static setSlowOperationThreshold(thresholdMs: number): void {
     if (thresholdMs < 0) {
-      throw new Error('Slow operation threshold must be non-negative');
+      throw new Error("Slow operation threshold must be non-negative");
     }
     this.slowOperationThresholdMs = thresholdMs;
   }
@@ -216,7 +221,7 @@ export class FormatterCache {
    */
   static setMaxSize(size: number): void {
     if (size < 1) {
-      throw new Error('Cache size must be at least 1');
+      throw new Error("Cache size must be at least 1");
     }
     this.maxSize = size;
     this.evictOldEntries();
@@ -245,7 +250,10 @@ export class FormatterCache {
    * @param locale - Locale string
    * @returns Cache key string
    */
-  private static generateCacheKey(currencyCode: string, locale: string): string {
+  private static generateCacheKey(
+    currencyCode: string,
+    locale: string,
+  ): string {
     return `${currencyCode}:${locale}`;
   }
 
@@ -258,28 +266,28 @@ export class FormatterCache {
         throw error;
       }
 
-      new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: normalizedCode
+      new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: normalizedCode,
       });
 
       return {
         code: normalizedCode,
         numericCode: 999,
-        minorUnits: normalizedCode === 'JPY' ? 0 : 2,
+        minorUnits: normalizedCode === "JPY" ? 0 : 2,
         symbol: normalizedCode,
         name: normalizedCode,
         formatting: {
-          locale: 'en-US',
-          style: 'currency' as const,
+          locale: "en-US",
+          style: "currency" as const,
           useGrouping: true,
-          roundingMode: 'round' as const
+          roundingMode: "round" as const,
         },
         validation: {
           minValue: 0,
           maxValue: Number.MAX_SAFE_INTEGER,
-          precision: normalizedCode === 'JPY' ? 0 : 2
-        }
+          precision: normalizedCode === "JPY" ? 0 : 2,
+        },
       };
     }
   }
@@ -312,7 +320,7 @@ export class FormatterCache {
         locale: entry.locale,
         createdAt: new Date(entry.createdAt),
         lastUsed: new Date(entry.lastUsed),
-        useCount: entry.useCount
+        useCount: entry.useCount,
       });
     }
 

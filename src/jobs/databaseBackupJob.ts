@@ -12,7 +12,9 @@ export async function runDatabaseBackupJob(): Promise<void> {
     const result = await createBackup();
     const duration = ((Date.now() - startTime) / 1000).toFixed(2);
     if (result.success) {
-      console.log(`[backup-job] Database backup successful in ${duration}s. Backup ID: ${result.backupId}`);
+      console.log(
+        `[backup-job] Database backup successful in ${duration}s. Backup ID: ${result.backupId}`,
+      );
     } else {
       logger.error(`[backup-job] Database backup failed: ${result.error}`);
       throw new Error(result.error);

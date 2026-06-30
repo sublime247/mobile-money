@@ -66,7 +66,10 @@ function validateRow(row: CsvRow, index: number): ValidationError[] {
   }
 
   // Validate phone number (required)
-  if (!row.phone_number || !PHONE_REGEX.test(row.phone_number.replace(/[\s\-()]/g, ""))) {
+  if (
+    !row.phone_number ||
+    !PHONE_REGEX.test(row.phone_number.replace(/[\s\-()]/g, ""))
+  ) {
     errors.push({
       row: rowNum,
       field: "phone_number",
@@ -79,7 +82,8 @@ function validateRow(row: CsvRow, index: number): ValidationError[] {
     errors.push({
       row: rowNum,
       field: "country",
-      message: "Country must be a valid ISO 3166-1 alpha-2 code (e.g., US, CM, GB)",
+      message:
+        "Country must be a valid ISO 3166-1 alpha-2 code (e.g., US, CM, GB)",
     });
   }
 
@@ -112,7 +116,7 @@ function parseCsv(buffer: Buffer): Promise<CsvRow[]> {
         csvParser({
           mapHeaders: ({ header }) => header.trim(),
           mapValues: ({ value }) => value.trim(),
-        })
+        }),
       )
       .on("data", (row: CsvRow) => rows.push(row))
       .on("end", () => resolve(rows))
@@ -209,7 +213,7 @@ merchantRoutes.post(
         message: error instanceof Error ? error.message : "Unknown error",
       });
     }
-  }
+  },
 );
 
 // POST /api/merchants/bulk - Bulk import merchants via CSV
@@ -223,7 +227,8 @@ merchantRoutes.post(
       if (!req.file) {
         return res.status(400).json({
           error: "No file uploaded",
-          message: 'Send a CSV file using multipart/form-data with field name "file"',
+          message:
+            'Send a CSV file using multipart/form-data with field name "file"',
         });
       }
 
@@ -267,7 +272,10 @@ merchantRoutes.post(
       const createdBy = authReq.user?.id as string;
 
       // Submit for bulk processing
-      const result = await merchantService.bulkCreateMerchants(inputs, createdBy);
+      const result = await merchantService.bulkCreateMerchants(
+        inputs,
+        createdBy,
+      );
 
       res.status(202).json(result);
     } catch (error) {
@@ -277,7 +285,7 @@ merchantRoutes.post(
         message: error instanceof Error ? error.message : "Unknown error",
       });
     }
-  }
+  },
 );
 
 // GET /api/merchants/bulk/:jobId - Get bulk import job status
@@ -304,7 +312,7 @@ merchantRoutes.get(
         message: error instanceof Error ? error.message : "Unknown error",
       });
     }
-  }
+  },
 );
 
 // GET /api/merchants - List merchants
@@ -334,7 +342,7 @@ merchantRoutes.get(
         message: error instanceof Error ? error.message : "Unknown error",
       });
     }
-  }
+  },
 );
 
 // GET /api/merchants/:id - Get merchant by ID
@@ -361,7 +369,7 @@ merchantRoutes.get(
         message: error instanceof Error ? error.message : "Unknown error",
       });
     }
-  }
+  },
 );
 
 // POST /api/merchants/invite/:token/accept - Accept merchant invitation
@@ -394,7 +402,7 @@ merchantRoutes.post(
         message: error instanceof Error ? error.message : "Unknown error",
       });
     }
-  }
+  },
 );
 
 // Error handler for multer errors
@@ -415,5 +423,5 @@ merchantRoutes.use(
     }
 
     res.status(500).json({ error: "Internal server error" });
-  }
+  },
 );

@@ -1,4 +1,7 @@
-import { isReadOnlyQuery, getQueryCommand } from "../../src/utils/readOnlyDetector";
+import {
+  isReadOnlyQuery,
+  getQueryCommand,
+} from "../../src/utils/readOnlyDetector";
 
 describe("readOnlyDetector", () => {
   describe("isReadOnlyQuery", () => {
@@ -7,15 +10,21 @@ describe("readOnlyDetector", () => {
     });
 
     it("should return true for a WITH ... SELECT statement", () => {
-      expect(isReadOnlyQuery("WITH cte AS (SELECT * FROM users) SELECT * FROM cte;")).toBe(true);
+      expect(
+        isReadOnlyQuery("WITH cte AS (SELECT * FROM users) SELECT * FROM cte;"),
+      ).toBe(true);
     });
 
     it("should return false for an INSERT statement", () => {
-      expect(isReadOnlyQuery("INSERT INTO users (name) VALUES ('John');")).toBe(false);
+      expect(isReadOnlyQuery("INSERT INTO users (name) VALUES ('John');")).toBe(
+        false,
+      );
     });
 
     it("should return false for an UPDATE statement", () => {
-      expect(isReadOnlyQuery("UPDATE users SET name = 'John' WHERE id = 1;")).toBe(false);
+      expect(
+        isReadOnlyQuery("UPDATE users SET name = 'John' WHERE id = 1;"),
+      ).toBe(false);
     });
 
     it("should return false for a DELETE statement", () => {
@@ -46,7 +55,9 @@ describe("readOnlyDetector", () => {
     });
 
     it("should extract INSERT", () => {
-      expect(getQueryCommand("INSERT INTO users (name) VALUES ('x')")).toBe("INSERT");
+      expect(getQueryCommand("INSERT INTO users (name) VALUES ('x')")).toBe(
+        "INSERT",
+      );
     });
 
     it("should extract UPDATE", () => {

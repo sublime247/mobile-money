@@ -30,9 +30,11 @@ export async function startNotificationWorker(): Promise<void> {
 
   subscriber = new IORedis(REDIS_URL, redisOptions);
 
-  subscriber.on("connect", () => console.log("NotificationWorker: Redis connected"));
+  subscriber.on("connect", () =>
+    console.log("NotificationWorker: Redis connected"),
+  );
   subscriber.on("error", (err) =>
-    logger.error("NotificationWorker: Redis error:", err),
+    logger.error(err, "NotificationWorker: Redis error:"),
   );
 
   await subscriber.connect();
@@ -60,7 +62,11 @@ export async function startNotificationWorker(): Promise<void> {
       if (status === "completed") {
         await notificationRouter.routeTransactionNotification(tx, "completed");
       } else if (status === "failed") {
-        await notificationRouter.routeTransactionNotification(tx, "failed", payload.error);
+        await notificationRouter.routeTransactionNotification(
+          tx,
+          "failed",
+          payload.error,
+        );
       }
     } catch (err) {
       logger.error(err, "NotificationWorker: failed to handle message:");
@@ -87,9 +93,16 @@ export async function startNotificationWorker(): Promise<void> {
         if (!tx) return;
 
         if (status === "completed") {
-          await notificationRouter.routeTransactionNotification(tx, "completed");
+          await notificationRouter.routeTransactionNotification(
+            tx,
+            "completed",
+          );
         } else if (status === "failed") {
-          await notificationRouter.routeTransactionNotification(tx, "failed", payload.error);
+          await notificationRouter.routeTransactionNotification(
+            tx,
+            "failed",
+            payload.error,
+          );
         }
       } catch (err) {
         logger.error(err, "NotificationWorker: failed to handle pmessage:");

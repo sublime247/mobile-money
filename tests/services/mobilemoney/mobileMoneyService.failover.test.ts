@@ -41,8 +41,9 @@ class FakeProvider {
     if (next.success) {
       return {
         success: true,
-        data:
-          next.data ?? { reference: `${this.name}-${operation}-${Date.now()}` },
+        data: next.data ?? {
+          reference: `${this.name}-${operation}-${Date.now()}`,
+        },
       };
     }
 
@@ -81,7 +82,10 @@ describe("MobileMoneyService failover", () => {
         "mtn",
       ),
     );
-    providers.set("airtel", new FakeProvider([{ success: true }], [], "airtel"));
+    providers.set(
+      "airtel",
+      new FakeProvider([{ success: true }], [], "airtel"),
+    );
 
     const service = new MobileMoneyService(providers as any);
     const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
@@ -294,7 +298,11 @@ describe("MobileMoneyService failover", () => {
         ]) as any,
       );
 
-      const result = await service.initiatePayment("mtn", "+255700000000", "1000");
+      const result = await service.initiatePayment(
+        "mtn",
+        "+255700000000",
+        "1000",
+      );
 
       expect(result.success).toBe(true);
       expect(result.data).toEqual({ reference: "orange-final" });
@@ -331,7 +339,11 @@ describe("MobileMoneyService failover", () => {
         ]) as any,
       );
 
-      const result = await service.initiatePayment("mtn", "+255700000000", "1000");
+      const result = await service.initiatePayment(
+        "mtn",
+        "+255700000000",
+        "1000",
+      );
 
       expect(result.success).toBe(true);
       expect(result.data).toEqual({ reference: "airtel-success" });
@@ -428,9 +440,7 @@ describe("MobileMoneyService failover", () => {
         "mtn",
       );
 
-      const service = new MobileMoneyService(
-        new Map([["mtn", mtn]]) as any,
-      );
+      const service = new MobileMoneyService(new Map([["mtn", mtn]]) as any);
 
       await expect(
         service.initiatePayment("mtn", "+111111111", "100"),
@@ -461,13 +471,7 @@ describe("MobileMoneyService failover", () => {
         [],
         "airtel",
       );
-      const orange = new FakeProvider(
-        [
-          { success: true },
-        ],
-        [],
-        "orange",
-      );
+      const orange = new FakeProvider([{ success: true }], [], "orange");
 
       const service = new MobileMoneyService(
         new Map([

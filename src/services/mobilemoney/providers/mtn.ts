@@ -254,12 +254,11 @@ export class MTNProvider {
         return {
           referenceId: item.referenceId,
           success,
-          error:
-            !success
-              ? responseItem.errorReason ||
-                responseItem.message ||
-                `Status: ${status}`
-              : undefined,
+          error: !success
+            ? responseItem.errorReason ||
+              responseItem.message ||
+              `Status: ${status}`
+            : undefined,
           providerReference:
             responseItem.financialTransactionId || responseItem.transactionId,
         };

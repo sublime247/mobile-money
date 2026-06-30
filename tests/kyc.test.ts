@@ -1,5 +1,9 @@
 import { Pool } from "pg";
-import KYCService, { KYCStatus, KYCLevel, DocumentType } from "../src/services/kyc";
+import KYCService, {
+  KYCStatus,
+  KYCLevel,
+  DocumentType,
+} from "../src/services/kyc";
 
 jest.mock("../src/services/accounting", () => ({
   AccountingService: jest.fn().mockImplementation(() => ({
@@ -37,7 +41,9 @@ describe("KYCService", () => {
       })
       .mockResolvedValueOnce({
         data: {
-          checks: [{ id: "check-1", applicant_id: "applicant-1", status: "complete" }],
+          checks: [
+            { id: "check-1", applicant_id: "applicant-1", status: "complete" },
+          ],
         },
       } as any)
       .mockResolvedValueOnce({
@@ -64,7 +70,9 @@ describe("KYCService", () => {
   it("flags fraudulent documents for manual review", async () => {
     jest
       .spyOn((kycService as any).api, "get")
-      .mockResolvedValueOnce({ data: { checks: [{ id: "check-1", applicant_id: "applicant-1" }] } } as any)
+      .mockResolvedValueOnce({
+        data: { checks: [{ id: "check-1", applicant_id: "applicant-1" }] },
+      } as any)
       .mockResolvedValueOnce({
         data: {
           reports: [
@@ -87,9 +95,11 @@ describe("KYCService", () => {
   });
 
   it("uploads binary images to Entrust with multipart form data", async () => {
-    const postMock = jest.spyOn((kycService as any).api, "post").mockResolvedValueOnce({
-      data: { id: "provider-doc-1" },
-    } as any);
+    const postMock = jest
+      .spyOn((kycService as any).api, "post")
+      .mockResolvedValueOnce({
+        data: { id: "provider-doc-1" },
+      } as any);
 
     const response = await kycService.uploadDocumentBinary({
       applicant_id: "applicant-1",
@@ -120,7 +130,12 @@ describe("KYCService", () => {
       .mockResolvedValueOnce({
         data: {
           reports: [
-            { id: "report-1", name: "document", status: "approved", result: "clear" },
+            {
+              id: "report-1",
+              name: "document",
+              status: "approved",
+              result: "clear",
+            },
             {
               id: "report-2",
               name: "facial_similarity",
@@ -132,7 +147,9 @@ describe("KYCService", () => {
       } as any);
 
     mockPool.query
-      .mockResolvedValueOnce({ rows: [{ user_id: "user-1", kyc_level: "full" }] } as any)
+      .mockResolvedValueOnce({
+        rows: [{ user_id: "user-1", kyc_level: "full" }],
+      } as any)
       .mockResolvedValueOnce({ rows: [] } as any);
 
     await kycService.handleWebhook({
@@ -147,7 +164,12 @@ describe("KYCService", () => {
     expect(mockPool.query).toHaveBeenNthCalledWith(
       1,
       expect.stringContaining("UPDATE kyc_applicants"),
-      expect.arrayContaining([KYCStatus.APPROVED, KYCLevel.FULL, null, "applicant-1"]),
+      expect.arrayContaining([
+        KYCStatus.APPROVED,
+        KYCLevel.FULL,
+        null,
+        "applicant-1",
+      ]),
     );
     expect(mockPool.query).toHaveBeenNthCalledWith(
       2,
@@ -174,7 +196,11 @@ describe("Database Schema", () => {
     `;
 
     expect(createTableSQL).toContain("kyc_applicants");
-    expect(createTableSQL).toContain("verification_status VARCHAR(20) NOT NULL DEFAULT 'pending'");
-    expect(createTableSQL).toContain("kyc_level VARCHAR(20) NOT NULL DEFAULT 'none'");
+    expect(createTableSQL).toContain(
+      "verification_status VARCHAR(20) NOT NULL DEFAULT 'pending'",
+    );
+    expect(createTableSQL).toContain(
+      "kyc_level VARCHAR(20) NOT NULL DEFAULT 'none'",
+    );
   });
 });

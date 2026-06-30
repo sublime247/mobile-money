@@ -12,14 +12,14 @@ export const pubsub = getRedisPubSub();
 // ---------------------------------------------------------------------------
 
 export enum SubscriptionChannels {
-  TRANSACTION_CREATED    = "transaction.created",
-  TRANSACTION_UPDATED    = "transaction.updated",
-  TRANSACTION_COMPLETED  = "transaction.completed",
-  TRANSACTION_FAILED     = "transaction.failed",
+  TRANSACTION_CREATED = "transaction.created",
+  TRANSACTION_UPDATED = "transaction.updated",
+  TRANSACTION_COMPLETED = "transaction.completed",
+  TRANSACTION_FAILED = "transaction.failed",
 
-  DISPUTE_CREATED        = "dispute.created",
-  DISPUTE_UPDATED        = "dispute.updated",
-  DISPUTE_NOTE_ADDED     = "dispute.note_added",
+  DISPUTE_CREATED = "dispute.created",
+  DISPUTE_UPDATED = "dispute.updated",
+  DISPUTE_NOTE_ADDED = "dispute.note_added",
 
   BULK_IMPORT_JOB_UPDATED = "bulk_import_job.updated",
 }

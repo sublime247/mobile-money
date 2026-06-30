@@ -1,4 +1,11 @@
-import { describe, it, expect, beforeEach, afterEach, jest } from "@jest/globals";
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  jest,
+} from "@jest/globals";
 import { DeveloperDashboardService } from "../developerDashboardService";
 import { merchantWebhookModel } from "../../models/merchantWebhook";
 import { merchantWebhookService } from "../merchantWebhookService";
@@ -34,7 +41,9 @@ describe("Developer Dashboard Service - Webhook Delivery Timeline", () => {
         },
       ];
 
-      (merchantWebhookModel.findByUserId as jest.Mock).mockResolvedValue(mockWebhooks);
+      (merchantWebhookModel.findByUserId as jest.Mock).mockResolvedValue(
+        mockWebhooks,
+      );
 
       const result = await service.getWebhooks("user-123");
 
@@ -42,7 +51,9 @@ describe("Developer Dashboard Service - Webhook Delivery Timeline", () => {
       expect(result[0].id).toBe("webhook-1");
       expect(result[0].url).toBe("https://example.com/webhook");
       expect(result[0].createdAt).toBe("2024-01-01T00:00:00.000Z");
-      expect(merchantWebhookModel.findByUserId).toHaveBeenCalledWith("user-123");
+      expect(merchantWebhookModel.findByUserId).toHaveBeenCalledWith(
+        "user-123",
+      );
     });
 
     it("should return empty array when no webhooks exist", async () => {
@@ -94,13 +105,18 @@ describe("Developer Dashboard Service - Webhook Delivery Timeline", () => {
         },
       ];
 
-      (merchantWebhookModel.findById as jest.Mock).mockResolvedValue(mockWebhook);
+      (merchantWebhookModel.findById as jest.Mock).mockResolvedValue(
+        mockWebhook,
+      );
       (merchantWebhookModel.getDeliveryLogs as jest.Mock).mockResolvedValue({
         logs: mockLogs,
         total: 2,
       });
 
-      const result = await service.getWebhookDeliveryTimeline("user-123", "webhook-1");
+      const result = await service.getWebhookDeliveryTimeline(
+        "user-123",
+        "webhook-1",
+      );
 
       expect(result.webhookId).toBe("webhook-1");
       expect(result.webhookUrl).toBe("https://example.com/webhook");
@@ -159,13 +175,18 @@ describe("Developer Dashboard Service - Webhook Delivery Timeline", () => {
         },
       ];
 
-      (merchantWebhookModel.findById as jest.Mock).mockResolvedValue(mockWebhook);
+      (merchantWebhookModel.findById as jest.Mock).mockResolvedValue(
+        mockWebhook,
+      );
       (merchantWebhookModel.getDeliveryLogs as jest.Mock).mockResolvedValue({
         logs: mockLogs,
         total: 3,
       });
 
-      const result = await service.getWebhookDeliveryTimeline("user-123", "webhook-1");
+      const result = await service.getWebhookDeliveryTimeline(
+        "user-123",
+        "webhook-1",
+      );
 
       expect(result.summary.averageLatencyMs).toBe(200);
     });
@@ -174,7 +195,7 @@ describe("Developer Dashboard Service - Webhook Delivery Timeline", () => {
       (merchantWebhookModel.findById as jest.Mock).mockResolvedValue(null);
 
       await expect(
-        service.getWebhookDeliveryTimeline("user-123", "webhook-1")
+        service.getWebhookDeliveryTimeline("user-123", "webhook-1"),
       ).rejects.toThrow("Webhook not found or access denied");
     });
 
@@ -187,7 +208,9 @@ describe("Developer Dashboard Service - Webhook Delivery Timeline", () => {
         createdAt: new Date(),
       };
 
-      (merchantWebhookModel.findById as jest.Mock).mockResolvedValue(mockWebhook);
+      (merchantWebhookModel.findById as jest.Mock).mockResolvedValue(
+        mockWebhook,
+      );
       (merchantWebhookModel.getDeliveryLogs as jest.Mock).mockResolvedValue({
         logs: [],
         total: 0,
@@ -199,7 +222,7 @@ describe("Developer Dashboard Service - Webhook Delivery Timeline", () => {
         "webhook-1",
         "user-123",
         25,
-        10
+        10,
       );
     });
   });
@@ -238,8 +261,12 @@ describe("Developer Dashboard Service - Webhook Delivery Timeline", () => {
 
       const { queryRead } = require("../../config/database");
       (queryRead as jest.Mock).mockResolvedValue({ rows: [mockLogRow] });
-      (merchantWebhookModel.findById as jest.Mock).mockResolvedValue(mockWebhook);
-      (merchantWebhookService.testWebhook as jest.Mock).mockResolvedValue(mockRetryResult);
+      (merchantWebhookModel.findById as jest.Mock).mockResolvedValue(
+        mockWebhook,
+      );
+      (merchantWebhookService.testWebhook as jest.Mock).mockResolvedValue(
+        mockRetryResult,
+      );
 
       const result = await service.retryWebhookDelivery("user-123", "log-1");
 
@@ -247,7 +274,10 @@ describe("Developer Dashboard Service - Webhook Delivery Timeline", () => {
       expect(result.message).toBe("Webhook delivery retried successfully");
       expect(result.newLog).toBeDefined();
       expect(result.newLog?.id).toBe("new-log-1");
-      expect(merchantWebhookService.testWebhook).toHaveBeenCalledWith("webhook-1", "user-123");
+      expect(merchantWebhookService.testWebhook).toHaveBeenCalledWith(
+        "webhook-1",
+        "user-123",
+      );
     });
 
     it("should throw error when delivery log not found", async () => {
@@ -255,7 +285,7 @@ describe("Developer Dashboard Service - Webhook Delivery Timeline", () => {
       (queryRead as jest.Mock).mockResolvedValue({ rows: [] });
 
       await expect(
-        service.retryWebhookDelivery("user-123", "log-1")
+        service.retryWebhookDelivery("user-123", "log-1"),
       ).rejects.toThrow("Delivery log not found or access denied");
     });
 
@@ -272,7 +302,7 @@ describe("Developer Dashboard Service - Webhook Delivery Timeline", () => {
       (merchantWebhookModel.findById as jest.Mock).mockResolvedValue(null);
 
       await expect(
-        service.retryWebhookDelivery("user-123", "log-1")
+        service.retryWebhookDelivery("user-123", "log-1"),
       ).rejects.toThrow("Webhook not found");
     });
   });

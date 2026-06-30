@@ -20,10 +20,16 @@ yarn add @your-org/currency-formatter
 
 ```javascript
 // ES Modules
-import { CurrencyFormatter, CurrencyConfig } from '@your-org/currency-formatter';
+import {
+  CurrencyFormatter,
+  CurrencyConfig,
+} from "@your-org/currency-formatter";
 
 // CommonJS
-const { CurrencyFormatter, CurrencyConfig } = require('@your-org/currency-formatter');
+const {
+  CurrencyFormatter,
+  CurrencyConfig,
+} = require("@your-org/currency-formatter");
 ```
 
 ## Basic Usage
@@ -31,22 +37,22 @@ const { CurrencyFormatter, CurrencyConfig } = require('@your-org/currency-format
 ### Formatting Single Amounts
 
 ```typescript
-import { CurrencyFormatter } from '@your-org/currency-formatter';
+import { CurrencyFormatter } from "@your-org/currency-formatter";
 
 // Format USD amount
-const usdFormatted = CurrencyFormatter.format(1234.56, 'USD');
+const usdFormatted = CurrencyFormatter.format(1234.56, "USD");
 console.log(usdFormatted); // "$1,234.56"
 
 // Format XAF amount (0 decimal places)
-const xafFormatted = CurrencyFormatter.format(5000, 'XAF');
+const xafFormatted = CurrencyFormatter.format(5000, "XAF");
 console.log(xafFormatted); // "5 000 FCFA"
 
 // Format GHS amount
-const ghsFormatted = CurrencyFormatter.format(99.99, 'GHS');
+const ghsFormatted = CurrencyFormatter.format(99.99, "GHS");
 console.log(ghsFormatted); // "GH₵99.99"
 
 // Format NGN amount
-const ngnFormatted = CurrencyFormatter.format(1000.50, 'NGN');
+const ngnFormatted = CurrencyFormatter.format(1000.5, "NGN");
 console.log(ngnFormatted); // "₦1,000.50"
 ```
 
@@ -54,10 +60,10 @@ console.log(ngnFormatted); // "₦1,000.50"
 
 ```typescript
 const transactions = [
-  { amount: 100, currency: 'USD' },
-  { amount: 5000, currency: 'XAF' },
-  { amount: 50.75, currency: 'GHS' },
-  { amount: 2500.25, currency: 'NGN' }
+  { amount: 100, currency: "USD" },
+  { amount: 5000, currency: "XAF" },
+  { amount: 50.75, currency: "GHS" },
+  { amount: 2500.25, currency: "NGN" },
 ];
 
 const formatted = CurrencyFormatter.formatBatch(transactions);
@@ -69,8 +75,8 @@ const formatted = CurrencyFormatter.formatBatch(transactions);
 ### Basic Component
 
 ```tsx
-import React, { useState, useEffect } from 'react';
-import { CurrencyFormatter } from '@your-org/currency-formatter';
+import React, { useState, useEffect } from "react";
+import { CurrencyFormatter } from "@your-org/currency-formatter";
 
 interface CurrencyDisplayProps {
   amount: number;
@@ -78,17 +84,23 @@ interface CurrencyDisplayProps {
   locale?: string;
 }
 
-const CurrencyDisplay: React.FC<CurrencyDisplayProps> = ({ amount, currency, locale }) => {
-  const [formatted, setFormatted] = useState<string>('');
+const CurrencyDisplay: React.FC<CurrencyDisplayProps> = ({
+  amount,
+  currency,
+  locale,
+}) => {
+  const [formatted, setFormatted] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     try {
-      const formattedAmount = CurrencyFormatter.format(amount, currency, { locale });
+      const formattedAmount = CurrencyFormatter.format(amount, currency, {
+        locale,
+      });
       setFormatted(formattedAmount);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Formatting error');
+      setError(err instanceof Error ? err.message : "Formatting error");
     }
   }, [amount, currency, locale]);
 
@@ -100,17 +112,21 @@ const CurrencyDisplay: React.FC<CurrencyDisplayProps> = ({ amount, currency, loc
 };
 
 // Usage
-<CurrencyDisplay amount={1234.56} currency="USD" locale="en-US" />
+<CurrencyDisplay amount={1234.56} currency="USD" locale="en-US" />;
 ```
 
 ### Advanced React Hook
 
 ```tsx
-import { useState, useEffect } from 'react';
-import { CurrencyFormatter } from '@your-org/currency-formatter';
+import { useState, useEffect } from "react";
+import { CurrencyFormatter } from "@your-org/currency-formatter";
 
-export function useCurrencyFormat(amount: number, currency: string, options = {}) {
-  const [formatted, setFormatted] = useState<string>('');
+export function useCurrencyFormat(
+  amount: number,
+  currency: string,
+  options = {},
+) {
+  const [formatted, setFormatted] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -121,8 +137,8 @@ export function useCurrencyFormat(amount: number, currency: string, options = {}
       setFormatted(result);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Formatting error');
-      setFormatted('');
+      setError(err instanceof Error ? err.message : "Formatting error");
+      setFormatted("");
     } finally {
       setLoading(false);
     }
@@ -133,11 +149,11 @@ export function useCurrencyFormat(amount: number, currency: string, options = {}
 
 // Usage in component
 function MyComponent() {
-  const { formatted, loading, error } = useCurrencyFormat(1234.56, 'USD');
-  
+  const { formatted, loading, error } = useCurrencyFormat(1234.56, "USD");
+
   if (loading) return <div>Loading...</div>;
   if (error) return <div>Error: {error}</div>;
-  
+
   return <div>{formatted}</div>;
 }
 ```
@@ -155,29 +171,37 @@ function MyComponent() {
 </template>
 
 <script setup>
-import { ref, watch } from 'vue';
-import { CurrencyFormatter } from '@your-org/currency-formatter';
+import { ref, watch } from "vue";
+import { CurrencyFormatter } from "@your-org/currency-formatter";
 
 const props = defineProps({
   amount: { type: Number, required: true },
   currency: { type: String, required: true },
-  locale: { type: String, default: 'en-US' }
+  locale: { type: String, default: "en-US" },
 });
 
-const formattedAmount = ref('');
+const formattedAmount = ref("");
 const error = ref(null);
 
-watch(() => [props.amount, props.currency, props.locale], () => {
-  try {
-    formattedAmount.value = CurrencyFormatter.format(props.amount, props.currency, {
-      locale: props.locale
-    });
-    error.value = null;
-  } catch (err) {
-    error.value = err.message;
-    formattedAmount.value = '';
-  }
-}, { immediate: true });
+watch(
+  () => [props.amount, props.currency, props.locale],
+  () => {
+    try {
+      formattedAmount.value = CurrencyFormatter.format(
+        props.amount,
+        props.currency,
+        {
+          locale: props.locale,
+        },
+      );
+      error.value = null;
+    } catch (err) {
+      error.value = err.message;
+      formattedAmount.value = "";
+    }
+  },
+  { immediate: true },
+);
 </script>
 ```
 
@@ -186,23 +210,26 @@ watch(() => [props.amount, props.currency, props.locale], () => {
 ### Angular Service
 
 ```typescript
-import { Injectable } from '@angular/core';
-import { CurrencyFormatter } from '@your-org/currency-formatter';
+import { Injectable } from "@angular/core";
+import { CurrencyFormatter } from "@your-org/currency-formatter";
 
 @Injectable({
-  providedIn: 'root'
+  providedIn: "root",
 })
 export class CurrencyService {
   format(amount: number, currency: string, options?: any): string {
     try {
       return CurrencyFormatter.format(amount, currency, options);
     } catch (error) {
-      console.error('Currency formatting error:', error);
+      console.error("Currency formatting error:", error);
       return `${currency} ${amount}`;
     }
   }
 
-  formatBatch(amounts: Array<{ amount: number; currency: string }>, options?: any): string[] {
+  formatBatch(
+    amounts: Array<{ amount: number; currency: string }>,
+    options?: any,
+  ): string[] {
     return CurrencyFormatter.formatBatch(amounts, options);
   }
 }
@@ -211,22 +238,22 @@ export class CurrencyService {
 ### Angular Component
 
 ```typescript
-import { Component, Input, OnChanges, SimpleChanges } from '@angular/core';
-import { CurrencyService } from './currency.service';
+import { Component, Input, OnChanges, SimpleChanges } from "@angular/core";
+import { CurrencyService } from "./currency.service";
 
 @Component({
-  selector: 'app-currency-display',
+  selector: "app-currency-display",
   template: `
     <div *ngIf="error" class="error">{{ error }}</div>
     <div *ngIf="!error" class="currency">{{ formattedAmount }}</div>
-  `
+  `,
 })
 export class CurrencyDisplayComponent implements OnChanges {
   @Input() amount!: number;
   @Input() currency!: string;
-  @Input() locale: string = 'en-US';
+  @Input() locale: string = "en-US";
 
-  formattedAmount: string = '';
+  formattedAmount: string = "";
   error: string | null = null;
 
   constructor(private currencyService: CurrencyService) {}
@@ -236,12 +263,12 @@ export class CurrencyDisplayComponent implements OnChanges {
       this.formattedAmount = this.currencyService.format(
         this.amount,
         this.currency,
-        { locale: this.locale }
+        { locale: this.locale },
       );
       this.error = null;
     } catch (error: any) {
       this.error = error.message;
-      this.formattedAmount = '';
+      this.formattedAmount = "";
     }
   }
 }
@@ -253,11 +280,11 @@ export class CurrencyDisplayComponent implements OnChanges {
 
 ```typescript
 // German locale (uses comma as decimal separator)
-CurrencyFormatter.format(1234.56, 'USD', { locale: 'de-DE' });
+CurrencyFormatter.format(1234.56, "USD", { locale: "de-DE" });
 // Returns: "1.234,56 $"
 
 // French locale
-CurrencyFormatter.format(1234.56, 'USD', { locale: 'fr-FR' });
+CurrencyFormatter.format(1234.56, "USD", { locale: "fr-FR" });
 // Returns: "1 234,56 $"
 ```
 
@@ -265,11 +292,11 @@ CurrencyFormatter.format(1234.56, 'USD', { locale: 'fr-FR' });
 
 ```typescript
 // Disable thousands grouping
-CurrencyFormatter.format(1000000, 'USD', { useGrouping: false });
+CurrencyFormatter.format(1000000, "USD", { useGrouping: false });
 // Returns: "$1000000.00"
 
 // Enable thousands grouping (default)
-CurrencyFormatter.format(1000000, 'USD', { useGrouping: true });
+CurrencyFormatter.format(1000000, "USD", { useGrouping: true });
 // Returns: "$1,000,000.00"
 ```
 
@@ -277,10 +304,10 @@ CurrencyFormatter.format(1000000, 'USD', { useGrouping: true });
 
 ```typescript
 // Custom decimal places
-CurrencyFormatter.format(100, 'USD', { minimumFractionDigits: 4 });
+CurrencyFormatter.format(100, "USD", { minimumFractionDigits: 4 });
 // Returns: "$100.0000"
 
-CurrencyFormatter.format(100.123456, 'USD', { maximumFractionDigits: 3 });
+CurrencyFormatter.format(100.123456, "USD", { maximumFractionDigits: 3 });
 // Returns: "$100.123"
 ```
 
@@ -288,15 +315,15 @@ CurrencyFormatter.format(100.123456, 'USD', { maximumFractionDigits: 3 });
 
 ```typescript
 // Floor rounding (round down)
-CurrencyFormatter.format(1.999, 'USD', { roundingMode: 'floor' });
+CurrencyFormatter.format(1.999, "USD", { roundingMode: "floor" });
 // Returns: "$1.99"
 
 // Ceil rounding (round up)
-CurrencyFormatter.format(1.001, 'USD', { roundingMode: 'ceil' });
+CurrencyFormatter.format(1.001, "USD", { roundingMode: "ceil" });
 // Returns: "$1.01"
 
 // Standard rounding (default)
-CurrencyFormatter.format(1.555, 'USD', { roundingMode: 'round' });
+CurrencyFormatter.format(1.555, "USD", { roundingMode: "round" });
 // Returns: "$1.56"
 ```
 
@@ -309,7 +336,7 @@ try {
   const formatted = CurrencyFormatter.format(amount, currency, options);
   // Use formatted value
 } catch (error) {
-  console.error('Formatting failed:', error.message);
+  console.error("Formatting failed:", error.message);
   // Fallback formatting
   const fallback = `${currency} ${amount}`;
 }
@@ -321,9 +348,9 @@ try {
 const result = CurrencyFormatter.formatWithResult(amount, currency, options);
 
 if (result.success) {
-  console.log('Formatted:', result.formatted);
+  console.log("Formatted:", result.formatted);
 } else {
-  console.error('Error:', result.error);
+  console.error("Error:", result.error);
   // Use fallback value if provided
   const fallback = result.fallbackValue || `${currency} ${amount}`;
 }
@@ -334,28 +361,28 @@ if (result.success) {
 ### Runtime Configuration
 
 ```typescript
-import { CurrencyConfig } from '@your-org/currency-formatter';
+import { CurrencyConfig } from "@your-org/currency-formatter";
 
 // Get supported currencies
 const supported = CurrencyConfig.getSupportedCurrencies();
 // Returns: ['XAF', 'GHS', 'NGN', 'USD']
 
 // Get currency information
-const symbol = CurrencyConfig.getCurrencySymbol('USD'); // "$"
-const name = CurrencyConfig.getCurrencyName('USD'); // "US Dollar"
-const locale = CurrencyConfig.getDefaultLocale('USD'); // "en-US"
+const symbol = CurrencyConfig.getCurrencySymbol("USD"); // "$"
+const name = CurrencyConfig.getCurrencyName("USD"); // "US Dollar"
+const locale = CurrencyConfig.getDefaultLocale("USD"); // "en-US"
 
 // Update configuration at runtime
 CurrencyConfig.updateConfiguration([
   {
-    code: 'USD',
+    code: "USD",
     formatting: {
-      roundingMode: 'floor',
+      roundingMode: "floor",
       useGrouping: false,
-      locale: 'en-US',
-      style: 'currency'
-    }
-  }
+      locale: "en-US",
+      style: "currency",
+    },
+  },
 ]);
 ```
 
@@ -372,14 +399,14 @@ CurrencyConfig.updateConfiguration([
 // Single formatting (1000 operations)
 const startSingle = performance.now();
 for (let i = 0; i < 1000; i++) {
-  CurrencyFormatter.format(100 + i, 'USD');
+  CurrencyFormatter.format(100 + i, "USD");
 }
 const endSingle = performance.now();
 
 // Batch formatting (1000 operations)
 const batchData = Array.from({ length: 1000 }, (_, i) => ({
   amount: 100 + i,
-  currency: 'USD'
+  currency: "USD",
 }));
 
 const startBatch = performance.now();
@@ -388,12 +415,15 @@ const endBatch = performance.now();
 
 console.log(`Single: ${(endSingle - startSingle).toFixed(2)}ms`);
 console.log(`Batch: ${(endBatch - startBatch).toFixed(2)}ms`);
-console.log(`Batch is ${((endSingle - startSingle) / (endBatch - startBatch)).toFixed(1)}x faster`);
+console.log(
+  `Batch is ${((endSingle - startSingle) / (endBatch - startBatch)).toFixed(1)}x faster`,
+);
 ```
 
 ## Browser Compatibility
 
 The CurrencyFormatter utility:
+
 - Works in all modern browsers (Chrome, Firefox, Safari, Edge)
 - Uses native `Intl.NumberFormat` API with fallbacks
 - No polyfills required for modern browsers
@@ -402,6 +432,7 @@ The CurrencyFormatter utility:
 ## Examples
 
 Check out the example files:
+
 - `examples/react-usage.tsx` - React component examples
 - `examples/vanilla-usage.ts` - Vanilla JavaScript examples
 - `examples/browser-demo.html` - Browser demo with HTML/CSS/JS
@@ -409,6 +440,7 @@ Check out the example files:
 ## TypeScript Support
 
 Full TypeScript support included with:
+
 - Complete type definitions
 - Interface documentation
 - Type-safe configuration
@@ -421,6 +453,7 @@ MIT License - See LICENSE file for details.
 ## Support
 
 For issues, questions, or contributions:
+
 1. Check the documentation
 2. Look at example files
 3. Open an issue on GitHub

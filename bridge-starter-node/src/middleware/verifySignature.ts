@@ -24,13 +24,16 @@ export const verifyWebhookSignature = (
       { path: req.path, method: req.method },
       "Webhook rejected: missing x-bridge-signature header",
     );
-    res.status(401).json(formatErrorResponse(401, "UNAUTHORIZED", "Missing signature"));
+    res
+      .status(401)
+      .json(formatErrorResponse(401, "UNAUTHORIZED", "Missing signature"));
     return;
   }
 
-  const rawBody = (req as any).rawBody && Buffer.isBuffer((req as any).rawBody)
-    ? (req as any).rawBody
-    : Buffer.from(JSON.stringify(req.body));
+  const rawBody =
+    (req as any).rawBody && Buffer.isBuffer((req as any).rawBody)
+      ? (req as any).rawBody
+      : Buffer.from(JSON.stringify(req.body));
 
   const expected = crypto
     .createHmac("sha256", config.webhookSecret)
@@ -54,7 +57,9 @@ export const verifyWebhookSignature = (
       { path: req.path, method: req.method },
       "Webhook rejected: invalid signature",
     );
-    res.status(401).json(formatErrorResponse(401, "UNAUTHORIZED", "Invalid signature"));
+    res
+      .status(401)
+      .json(formatErrorResponse(401, "UNAUTHORIZED", "Invalid signature"));
     return;
   }
 

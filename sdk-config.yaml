@@ -21,4 +21,3 @@ additionalProperties:
   dynamicTokenMapping:
     script: generate_token.sh
     args: []
-

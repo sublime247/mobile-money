@@ -112,7 +112,8 @@ function buildReceiptViewModel(
   const totalValue = parseAmount(transaction.total) ?? amountValue + feeValue;
 
   const senderRaw = transaction.sender ?? transaction.phoneNumber ?? "N/A";
-  const receiverRaw = transaction.receiver ?? transaction.stellarAddress ?? "N/A";
+  const receiverRaw =
+    transaction.receiver ?? transaction.stellarAddress ?? "N/A";
 
   const maskValue = (val: string) => {
     if (!val || val === "N/A") return val;

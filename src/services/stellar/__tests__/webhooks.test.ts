@@ -20,7 +20,11 @@ jest.mock("bullmq", () => {
   };
 });
 
-import { enqueueSepWebhook, sepWebhookQueue, sepWebhookWorker } from "../webhooks";
+import {
+  enqueueSepWebhook,
+  sepWebhookQueue,
+  sepWebhookWorker,
+} from "../webhooks";
 
 const getMockQueueAdd = () => (global as any).mockQueueAdd;
 const getRegisteredProcessor = () => (global as any).registeredProcessor;
@@ -63,7 +67,7 @@ describe("SEP Webhooks Service and Worker", () => {
             type: "exponential",
             delay: 1000,
           },
-        })
+        }),
       );
     });
 
@@ -104,7 +108,9 @@ describe("SEP Webhooks Service and Worker", () => {
       await processor(mockJob);
 
       const expectedBody = JSON.stringify(jobData.payload);
-      const expectedSignature = "sha256=" + createHmac("sha256", "test-secret").update(expectedBody).digest("hex");
+      const expectedSignature =
+        "sha256=" +
+        createHmac("sha256", "test-secret").update(expectedBody).digest("hex");
 
       expect(mockFetch).toHaveBeenCalledWith("https://example.com/callback", {
         method: "POST",
@@ -137,8 +143,10 @@ describe("SEP Webhooks Service and Worker", () => {
 
       const processor = getRegisteredProcessor();
       expect(processor).toBeDefined();
-      
-      await expect(processor(mockJob)).rejects.toThrow("HTTP error 500: Internal Server Error");
+
+      await expect(processor(mockJob)).rejects.toThrow(
+        "HTTP error 500: Internal Server Error",
+      );
     });
   });
 });

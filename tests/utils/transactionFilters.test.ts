@@ -26,7 +26,9 @@ describe("transactionFilters", () => {
     });
 
     it("should throw an error for invalid statuses", () => {
-      expect(() => parseStatusFilter("pending,unknown")).toThrow(/Invalid status values: unknown/);
+      expect(() => parseStatusFilter("pending,unknown")).toThrow(
+        /Invalid status values: unknown/,
+      );
     });
   });
 
@@ -36,15 +38,22 @@ describe("transactionFilters", () => {
     });
 
     it("should return empty string if all statuses are selected", () => {
-      const allStatuses = Object.values(TransactionStatus) as TransactionStatus[];
+      const allStatuses = Object.values(
+        TransactionStatus,
+      ) as TransactionStatus[];
       expect(buildStatusWhereClause(allStatuses)).toBe("");
     });
 
     it("should build IN clause for specific statuses", () => {
-      expect(buildStatusWhereClause([TransactionStatus.Pending])).toBe("status IN ('pending')");
-      expect(buildStatusWhereClause([TransactionStatus.Pending, TransactionStatus.Completed])).toBe(
-        "status IN ('pending', 'completed')"
+      expect(buildStatusWhereClause([TransactionStatus.Pending])).toBe(
+        "status IN ('pending')",
       );
+      expect(
+        buildStatusWhereClause([
+          TransactionStatus.Pending,
+          TransactionStatus.Completed,
+        ]),
+      ).toBe("status IN ('pending', 'completed')");
     });
   });
 
@@ -63,7 +72,11 @@ describe("transactionFilters", () => {
     });
 
     it("should apply default values", () => {
-      validateTransactionFilters(mockReq as Request, mockRes as Response, mockNext);
+      validateTransactionFilters(
+        mockReq as Request,
+        mockRes as Response,
+        mockNext,
+      );
 
       expect(mockNext).toHaveBeenCalled();
       expect((mockReq as any).transactionFilters).toEqual({
@@ -75,8 +88,17 @@ describe("transactionFilters", () => {
     });
 
     it("should parse provided valid values", () => {
-      mockReq.query = { status: "pending,failed", limit: "20", offset: "10", reference: "ref123" };
-      validateTransactionFilters(mockReq as Request, mockRes as Response, mockNext);
+      mockReq.query = {
+        status: "pending,failed",
+        limit: "20",
+        offset: "10",
+        reference: "ref123",
+      };
+      validateTransactionFilters(
+        mockReq as Request,
+        mockRes as Response,
+        mockNext,
+      );
 
       expect(mockNext).toHaveBeenCalled();
       expect((mockReq as any).transactionFilters).toEqual({
@@ -89,83 +111,151 @@ describe("transactionFilters", () => {
 
     it("should cap limit at 1000", () => {
       mockReq.query = { limit: "2000" };
-      validateTransactionFilters(mockReq as Request, mockRes as Response, mockNext);
+      validateTransactionFilters(
+        mockReq as Request,
+        mockRes as Response,
+        mockNext,
+      );
 
       expect((mockReq as any).transactionFilters.limit).toBe(1000);
     });
 
     it("should return 400 for invalid limit", () => {
       mockReq.query = { limit: "-5" };
-      validateTransactionFilters(mockReq as Request, mockRes as Response, mockNext);
+      validateTransactionFilters(
+        mockReq as Request,
+        mockRes as Response,
+        mockNext,
+      );
 
       expect(mockRes.status).toHaveBeenCalledWith(400);
-      expect(mockRes.json).toHaveBeenCalledWith(expect.objectContaining({ error: "Invalid limit parameter" }));
+      expect(mockRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: "Invalid limit parameter" }),
+      );
     });
 
     it("should return 400 for invalid offset", () => {
       mockReq.query = { offset: "-5" };
-      validateTransactionFilters(mockReq as Request, mockRes as Response, mockNext);
+      validateTransactionFilters(
+        mockReq as Request,
+        mockRes as Response,
+        mockNext,
+      );
 
       expect(mockRes.status).toHaveBeenCalledWith(400);
-      expect(mockRes.json).toHaveBeenCalledWith(expect.objectContaining({ error: "Invalid offset parameter" }));
+      expect(mockRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: "Invalid offset parameter" }),
+      );
     });
 
     it("should return 400 for invalid status", () => {
       mockReq.query = { status: "invalid" };
-      validateTransactionFilters(mockReq as Request, mockRes as Response, mockNext);
+      validateTransactionFilters(
+        mockReq as Request,
+        mockRes as Response,
+        mockNext,
+      );
 
       expect(mockRes.status).toHaveBeenCalledWith(400);
-      expect(mockRes.json).toHaveBeenCalledWith(expect.objectContaining({ error: "Invalid status parameter" }));
+      expect(mockRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: "Invalid status parameter" }),
+      );
     });
 
     it("should accept valid startDate and endDate with UTC/timezone offset", () => {
-      mockReq.query = { startDate: "2026-06-28T14:33:52Z", endDate: "2026-06-28T15:32:52+01:00" };
-      validateTransactionFilters(mockReq as Request, mockRes as Response, mockNext);
+      mockReq.query = {
+        startDate: "2026-06-28T14:33:52Z",
+        endDate: "2026-06-28T15:32:52+01:00",
+      };
+      validateTransactionFilters(
+        mockReq as Request,
+        mockRes as Response,
+        mockNext,
+      );
 
       expect(mockNext).toHaveBeenCalled();
-      expect((mockReq as any).transactionFilters.startDate).toBe("2026-06-28T14:33:52Z");
-      expect((mockReq as any).transactionFilters.endDate).toBe("2026-06-28T15:32:52+01:00");
+      expect((mockReq as any).transactionFilters.startDate).toBe(
+        "2026-06-28T14:33:52Z",
+      );
+      expect((mockReq as any).transactionFilters.endDate).toBe(
+        "2026-06-28T15:32:52+01:00",
+      );
     });
 
     it("should accept valid dates with fractional seconds", () => {
-      mockReq.query = { startDate: "2026-06-28T14:33:52.123Z", endDate: "2026-06-28T15:32:52.456-05:00" };
-      validateTransactionFilters(mockReq as Request, mockRes as Response, mockNext);
+      mockReq.query = {
+        startDate: "2026-06-28T14:33:52.123Z",
+        endDate: "2026-06-28T15:32:52.456-05:00",
+      };
+      validateTransactionFilters(
+        mockReq as Request,
+        mockRes as Response,
+        mockNext,
+      );
 
       expect(mockNext).toHaveBeenCalled();
-      expect((mockReq as any).transactionFilters.startDate).toBe("2026-06-28T14:33:52.123Z");
-      expect((mockReq as any).transactionFilters.endDate).toBe("2026-06-28T15:32:52.456-05:00");
+      expect((mockReq as any).transactionFilters.startDate).toBe(
+        "2026-06-28T14:33:52.123Z",
+      );
+      expect((mockReq as any).transactionFilters.endDate).toBe(
+        "2026-06-28T15:32:52.456-05:00",
+      );
     });
 
     it("should reject startDate without UTC timezone offset", () => {
       mockReq.query = { startDate: "2026-06-28T14:33:52" };
-      validateTransactionFilters(mockReq as Request, mockRes as Response, mockNext);
+      validateTransactionFilters(
+        mockReq as Request,
+        mockRes as Response,
+        mockNext,
+      );
 
       expect(mockRes.status).toHaveBeenCalledWith(400);
-      expect(mockRes.json).toHaveBeenCalledWith(expect.objectContaining({ error: "Invalid startDate parameter" }));
+      expect(mockRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: "Invalid startDate parameter" }),
+      );
     });
 
     it("should reject endDate without UTC timezone offset", () => {
       mockReq.query = { endDate: "2026-06-28T15:32:52" };
-      validateTransactionFilters(mockReq as Request, mockRes as Response, mockNext);
+      validateTransactionFilters(
+        mockReq as Request,
+        mockRes as Response,
+        mockNext,
+      );
 
       expect(mockRes.status).toHaveBeenCalledWith(400);
-      expect(mockRes.json).toHaveBeenCalledWith(expect.objectContaining({ error: "Invalid endDate parameter" }));
+      expect(mockRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: "Invalid endDate parameter" }),
+      );
     });
 
     it("should reject simple YYYY-MM-DD date formats", () => {
       mockReq.query = { startDate: "2026-06-28" };
-      validateTransactionFilters(mockReq as Request, mockRes as Response, mockNext);
+      validateTransactionFilters(
+        mockReq as Request,
+        mockRes as Response,
+        mockNext,
+      );
 
       expect(mockRes.status).toHaveBeenCalledWith(400);
-      expect(mockRes.json).toHaveBeenCalledWith(expect.objectContaining({ error: "Invalid startDate parameter" }));
+      expect(mockRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: "Invalid startDate parameter" }),
+      );
     });
 
     it("should reject invalid date strings", () => {
       mockReq.query = { startDate: "not-a-date" };
-      validateTransactionFilters(mockReq as Request, mockRes as Response, mockNext);
+      validateTransactionFilters(
+        mockReq as Request,
+        mockRes as Response,
+        mockNext,
+      );
 
       expect(mockRes.status).toHaveBeenCalledWith(400);
-      expect(mockRes.json).toHaveBeenCalledWith(expect.objectContaining({ error: "Invalid startDate parameter" }));
+      expect(mockRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: "Invalid startDate parameter" }),
+      );
     });
   });
 

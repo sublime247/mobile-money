@@ -168,7 +168,14 @@ describe("sensitive field redaction", () => {
       {
         level: "info",
         redact: {
-          paths: ["password", "*.password", "token", "*.token", "secret", "*.secret"],
+          paths: [
+            "password",
+            "*.password",
+            "token",
+            "*.token",
+            "secret",
+            "*.secret",
+          ],
           placeholder: "[REDACTED]",
           censor: "[REDACTED]",
         },
@@ -176,7 +183,10 @@ describe("sensitive field redaction", () => {
       { write: (msg: string) => void lines.push(msg) },
     );
 
-    testLogger.info({ password: "super-secret", user: "alice" }, "login attempt");
+    testLogger.info(
+      { password: "super-secret", user: "alice" },
+      "login attempt",
+    );
     const entry = JSON.parse(lines[0]) as Record<string, unknown>;
     expect(entry.password).toBe("[REDACTED]");
     expect(entry.user).toBe("alice");
@@ -196,7 +206,10 @@ describe("sensitive field redaction", () => {
       { write: (msg: string) => void lines.push(msg) },
     );
 
-    testLogger.info({ token: "bearer-xyz", action: "refresh" }, "token refresh");
+    testLogger.info(
+      { token: "bearer-xyz", action: "refresh" },
+      "token refresh",
+    );
     const entry = JSON.parse(lines[0]) as Record<string, unknown>;
     expect(entry.token).toBe("[REDACTED]");
     expect(entry.action).toBe("refresh");
@@ -216,7 +229,10 @@ describe("sensitive field redaction", () => {
       { write: (msg: string) => void lines.push(msg) },
     );
 
-    testLogger.info({ config: { secret: "s3cr3t", name: "app" } }, "config loaded");
+    testLogger.info(
+      { config: { secret: "s3cr3t", name: "app" } },
+      "config loaded",
+    );
     const entry = JSON.parse(lines[0]) as Record<string, unknown>;
     const config = entry.config as Record<string, unknown>;
     expect(config.secret).toBe("[REDACTED]");
@@ -249,7 +265,10 @@ describe("childLogger", () => {
 
   it("binds extra fields alongside trace_id", async () => {
     const { childLogger } = await import("../logger");
-    const child = childLogger("trace-extra", { user_id: "u-99", tenant: "acme" });
+    const child = childLogger("trace-extra", {
+      user_id: "u-99",
+      tenant: "acme",
+    });
     const bindings = (
       child as unknown as { bindings: () => Record<string, unknown> }
     ).bindings?.();

@@ -3,7 +3,10 @@ import { Router, Request, Response } from "express";
 import * as StellarSdk from "stellar-sdk";
 import { Pool } from "pg";
 import { Sep12Service, Sep12CustomerStatus } from "./sep12";
-import { sanctionService, SanctionScreeningError } from "../services/sanctionService";
+import {
+  sanctionService,
+  SanctionScreeningError,
+} from "../services/sanctionService";
 import { getNetworkPassphrase } from "../config/stellar";
 
 /**
@@ -22,7 +25,12 @@ import { getNetworkPassphrase } from "../config/stellar";
 // Types
 // ============================================================================
 
-export type Sep8Status = "success" | "revised" | "pending" | "action_required" | "rejected";
+export type Sep8Status =
+  | "success"
+  | "revised"
+  | "pending"
+  | "action_required"
+  | "rejected";
 
 export interface Sep8SuccessResponse {
   status: "success" | "revised";
@@ -66,9 +74,12 @@ export interface Sep8Config {
 }
 
 export function getSep8Config(): Sep8Config {
-  const signingKey = process.env.STELLAR_SIGNING_KEY || process.env.STELLAR_ISSUER_SECRET;
+  const signingKey =
+    process.env.STELLAR_SIGNING_KEY || process.env.STELLAR_ISSUER_SECRET;
   if (!signingKey) {
-    throw new Error("STELLAR_SIGNING_KEY or STELLAR_ISSUER_SECRET must be defined for SEP-08");
+    throw new Error(
+      "STELLAR_SIGNING_KEY or STELLAR_ISSUER_SECRET must be defined for SEP-08",
+    );
   }
 
   return {
@@ -98,16 +109,21 @@ function extractPaymentPairs(
     const opSource = (op as any).source ?? sourceAccount;
 
     if (op.type === "payment") {
-      pairs.push({ sender: opSource, receiver: (op as StellarSdk.Operation.Payment).destination });
+      pairs.push({
+        sender: opSource,
+        receiver: (op as StellarSdk.Operation.Payment).destination,
+      });
     } else if (op.type === "pathPaymentStrictSend") {
       pairs.push({
         sender: opSource,
-        receiver: (op as StellarSdk.Operation.PathPaymentStrictSend).destination,
+        receiver: (op as StellarSdk.Operation.PathPaymentStrictSend)
+          .destination,
       });
     } else if (op.type === "pathPaymentStrictReceive") {
       pairs.push({
         sender: opSource,
-        receiver: (op as StellarSdk.Operation.PathPaymentStrictReceive).destination,
+        receiver: (op as StellarSdk.Operation.PathPaymentStrictReceive)
+          .destination,
       });
     }
   }
@@ -157,7 +173,7 @@ export const createSep8Router = (db: Pool): Router => {
       try {
         config = getSep8Config();
       } catch (err: any) {
-        logger.error("[SEP-8] Server configuration error:", err);
+        logger.error(err, "[SEP-8] Server configuration error:");
         return res.status(500).json({
           status: "rejected",
           error: "Internal server configuration error",
@@ -187,9 +203,13 @@ export const createSep8Router = (db: Pool): Router => {
       // KYC check: the source account must be a verified customer.
       let customer: Awaited<ReturnType<typeof sep12Service.getCustomer>>;
       try {
-        customer = await sep12Service.getCustomer(sourceAccount, undefined, undefined);
+        customer = await sep12Service.getCustomer(
+          sourceAccount,
+          undefined,
+          undefined,
+        );
       } catch (err: any) {
-        logger.error("[SEP-8] KYC lookup failed:", err);
+        logger.error(err, "[SEP-8] KYC lookup failed:");
         return res.status(500).json({
           status: "rejected",
           error: "Internal server error during KYC check",
@@ -238,7 +258,7 @@ export const createSep8Router = (db: Pool): Router => {
             error: "Transaction rejected: account is on a sanctions list",
           } satisfies Sep8RejectedResponse);
         }
-        logger.error("[SEP-8] Sanctions check error:", err);
+        logger.error(err, "[SEP-8] Sanctions check error:");
         return res.status(500).json({
           status: "rejected",
           error: "Internal server error during sanctions check",
@@ -255,7 +275,7 @@ export const createSep8Router = (db: Pool): Router => {
         message: "Transaction approved.",
       } satisfies Sep8SuccessResponse);
     } catch (err: any) {
-      logger.error("[SEP-8 /tx_approve]:", err);
+      logger.error(err, "[SEP-8 /tx_approve]:");
       return res.status(500).json({
         status: "rejected",
         error: "Internal Server Error",

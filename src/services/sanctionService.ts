@@ -1,5 +1,6 @@
 import logger from "../utils/logger";
 import { pool } from "../config/database";
+import { createGunzip } from "zlib";
 import { invalidatePattern } from "./cache";
 import axios from "axios";
 import { resolveToBaseAddress, isMuxedAddress } from "../stellar/muxed";
@@ -167,7 +168,10 @@ export class SanctionService {
    * Calculate composite match score using multiple strategies.
    * Combines exact-token matching, Levenshtein distance, and token-based matching.
    */
-  private calculateMatchScore(targetName: string, cached: CachedSanctionEntry): number {
+  private calculateMatchScore(
+    targetName: string,
+    cached: CachedSanctionEntry,
+  ): number {
     const targetNormalized = this.normalizeName(targetName);
     const targetTokens = this.tokenize(targetName);
 
@@ -178,7 +182,9 @@ export class SanctionService {
     );
 
     // Strategy 2: Token-based matching (Jaccard index)
-    const intersection = new Set([...targetTokens].filter((t) => cached.tokens.has(t)));
+    const intersection = new Set(
+      [...targetTokens].filter((t) => cached.tokens.has(t)),
+    );
     const union = new Set([...targetTokens, ...cached.tokens]);
     const jaccardScore = union.size > 0 ? intersection.size / union.size : 0;
 
@@ -186,7 +192,10 @@ export class SanctionService {
     let bestTokenScore = 0;
     for (const targetToken of targetTokens) {
       for (const cachedToken of cached.tokens) {
-        const tokenSimilarity = this.levenshteinSimilarity(targetToken, cachedToken);
+        const tokenSimilarity = this.levenshteinSimilarity(
+          targetToken,
+          cachedToken,
+        );
         if (tokenSimilarity > bestTokenScore) {
           bestTokenScore = tokenSimilarity;
         }
@@ -509,7 +518,7 @@ export class SanctionService {
 
       await client.query("COMMIT");
       console.log(`Successfully synced ${entities.length} sanction entities.`);
-      
+
       // Invalidate the cache to force reload on next search
       this.cacheInitialized = false;
       this.sanctionCache = [];
@@ -572,9 +581,12 @@ export class SanctionService {
       decompress: false, // we handle decompression ourselves
     });
 
-    const contentEncoding = (response.headers["content-encoding"] ?? "").toLowerCase();
+    const contentEncoding = String(
+      response.headers["content-encoding"] ?? "",
+    ).toLowerCase();
     const rawStream: NodeJS.ReadableStream = response.data;
-    const dataStream = contentEncoding === "gzip" ? rawStream.pipe(createGunzip()) : rawStream;
+    const dataStream =
+      contentEncoding === "gzip" ? rawStream.pipe(createGunzip()) : rawStream;
 
     let batch: SanctionEntity[] = [];
     let lineBuffer = "";
@@ -631,7 +643,13 @@ export class SanctionService {
              country = EXCLUDED.country,
              category = EXCLUDED.category,
              updated_at = CURRENT_TIMESTAMP`,
-          [entity.name, entity.country ?? null, entity.source, entity.category ?? null, entity.external_id ?? null],
+          [
+            entity.name,
+            entity.country ?? null,
+            entity.source,
+            entity.category ?? null,
+            entity.external_id ?? null,
+          ],
         );
       }
       await client.query("COMMIT");

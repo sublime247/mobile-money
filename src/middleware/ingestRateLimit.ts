@@ -159,7 +159,10 @@ export function deriveIngestKey(req: Request): string {
 
   const forwarded = req.headers["x-forwarded-for"];
   const ip =
-    (typeof forwarded === "string" ? forwarded.split(",")[0] : undefined)?.trim() ??
+    (typeof forwarded === "string"
+      ? forwarded.split(",")[0]
+      : undefined
+    )?.trim() ??
     req.ip ??
     "unknown";
 
@@ -212,7 +215,9 @@ async function consumeToken(
  * // Apply with explicit config
  * router.use(createIngestRateLimiter({ capacity: 200, refillRate: 100, keyTtlSeconds: 60 }));
  */
-export function createIngestRateLimiter(overrides: Partial<TokenBucketConfig> = {}) {
+export function createIngestRateLimiter(
+  overrides: Partial<TokenBucketConfig> = {},
+) {
   const cfg: TokenBucketConfig = { ...loadConfig(), ...overrides };
 
   return async function ingestRateLimiter(

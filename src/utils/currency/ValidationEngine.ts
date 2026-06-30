@@ -3,8 +3,8 @@
  * Handles validation of amounts, currency codes, locales, and options
  */
 
-import { ValidationResult, FormatOptions, RoundingMode } from './types';
-import { CurrencyConfig } from './CurrencyConfig';
+import { ValidationResult, FormatOptions, RoundingMode } from "./types";
+import { CurrencyConfig } from "./CurrencyConfig";
 
 /**
  * Input validation engine for currency formatter
@@ -20,29 +20,29 @@ export class ValidationEngine {
     if (amount === null || amount === undefined) {
       return {
         isValid: false,
-        error: 'Amount cannot be null or undefined'
+        error: "Amount cannot be null or undefined",
       };
     }
 
     // Convert to number if it's a string
     let numericAmount: number;
-    if (typeof amount === 'string') {
+    if (typeof amount === "string") {
       // Remove whitespace and check for empty string
       const trimmed = amount.trim();
-      if (trimmed === '') {
+      if (trimmed === "") {
         return {
           isValid: false,
-          error: 'Amount cannot be an empty string'
+          error: "Amount cannot be an empty string",
         };
       }
-      
+
       numericAmount = parseFloat(trimmed);
-    } else if (typeof amount === 'number') {
+    } else if (typeof amount === "number") {
       numericAmount = amount;
     } else {
       return {
         isValid: false,
-        error: `Invalid amount type: expected number or string, got ${typeof amount}`
+        error: `Invalid amount type: expected number or string, got ${typeof amount}`,
       };
     }
 
@@ -50,7 +50,7 @@ export class ValidationEngine {
     if (isNaN(numericAmount)) {
       return {
         isValid: false,
-        error: 'Amount must be a valid number'
+        error: "Amount must be a valid number",
       };
     }
 
@@ -58,7 +58,7 @@ export class ValidationEngine {
     if (!isFinite(numericAmount)) {
       return {
         isValid: false,
-        error: 'Amount cannot be infinite'
+        error: "Amount cannot be infinite",
       };
     }
 
@@ -66,7 +66,7 @@ export class ValidationEngine {
     if (numericAmount < 0) {
       return {
         isValid: false,
-        error: 'Amount cannot be negative'
+        error: "Amount cannot be negative",
       };
     }
 
@@ -75,13 +75,13 @@ export class ValidationEngine {
     if (numericAmount > MAX_SAFE_AMOUNT) {
       return {
         isValid: false,
-        error: `Amount exceeds maximum allowed value of ${MAX_SAFE_AMOUNT}`
+        error: `Amount exceeds maximum allowed value of ${MAX_SAFE_AMOUNT}`,
       };
     }
 
     return {
       isValid: true,
-      sanitizedValue: numericAmount
+      sanitizedValue: numericAmount,
     };
   }
 
@@ -95,15 +95,15 @@ export class ValidationEngine {
     if (code === null || code === undefined) {
       return {
         isValid: false,
-        error: 'Currency code cannot be null or undefined'
+        error: "Currency code cannot be null or undefined",
       };
     }
 
     // Check if it's a string
-    if (typeof code !== 'string') {
+    if (typeof code !== "string") {
       return {
         isValid: false,
-        error: `Invalid currency code type: expected string, got ${typeof code}`
+        error: `Invalid currency code type: expected string, got ${typeof code}`,
       };
     }
 
@@ -111,10 +111,10 @@ export class ValidationEngine {
     const sanitizedCode = code.trim().toUpperCase();
 
     // Check for empty string
-    if (sanitizedCode === '') {
+    if (sanitizedCode === "") {
       return {
         isValid: false,
-        error: 'Currency code cannot be empty'
+        error: "Currency code cannot be empty",
       };
     }
 
@@ -122,7 +122,8 @@ export class ValidationEngine {
     if (!/^[A-Z]{3}$/.test(sanitizedCode)) {
       return {
         isValid: false,
-        error: 'Currency code must be exactly 3 uppercase letters (ISO 4217 format)'
+        error:
+          "Currency code must be exactly 3 uppercase letters (ISO 4217 format)",
       };
     }
 
@@ -131,13 +132,13 @@ export class ValidationEngine {
       const supportedCurrencies = CurrencyConfig.getSupportedCurrencies();
       return {
         isValid: false,
-        error: `Unsupported currency code '${sanitizedCode}'. Supported currencies: ${supportedCurrencies.join(', ')}`
+        error: `Unsupported currency code '${sanitizedCode}'. Supported currencies: ${supportedCurrencies.join(", ")}`,
       };
     }
 
     return {
       isValid: true,
-      sanitizedValue: sanitizedCode
+      sanitizedValue: sanitizedCode,
     };
   }
 
@@ -151,15 +152,15 @@ export class ValidationEngine {
     if (locale === null || locale === undefined) {
       return {
         isValid: false,
-        error: 'Locale cannot be null or undefined'
+        error: "Locale cannot be null or undefined",
       };
     }
 
     // Check if it's a string
-    if (typeof locale !== 'string') {
+    if (typeof locale !== "string") {
       return {
         isValid: false,
-        error: `Invalid locale type: expected string, got ${typeof locale}`
+        error: `Invalid locale type: expected string, got ${typeof locale}`,
       };
     }
 
@@ -167,10 +168,10 @@ export class ValidationEngine {
     const sanitizedLocale = locale.trim();
 
     // Check for empty string
-    if (sanitizedLocale === '') {
+    if (sanitizedLocale === "") {
       return {
         isValid: false,
-        error: 'Locale cannot be empty'
+        error: "Locale cannot be empty",
       };
     }
 
@@ -179,7 +180,8 @@ export class ValidationEngine {
     if (!localePattern.test(sanitizedLocale)) {
       return {
         isValid: false,
-        error: 'Locale must be in format "xx" or "xx-XX" (e.g., "en", "en-US", "fr-CM")'
+        error:
+          'Locale must be in format "xx" or "xx-XX" (e.g., "en", "en-US", "fr-CM")',
       };
     }
 
@@ -187,30 +189,30 @@ export class ValidationEngine {
     try {
       // This will throw if the locale is not supported
       new Intl.NumberFormat(sanitizedLocale);
-      
+
       return {
         isValid: true,
-        sanitizedValue: sanitizedLocale
+        sanitizedValue: sanitizedLocale,
       };
     } catch (error) {
       // If the specific locale is not supported, try to find a fallback
-      const languageCode = sanitizedLocale.split('-')[0];
-      
+      const languageCode = sanitizedLocale.split("-")[0];
+
       // Try just the language code
       try {
         new Intl.NumberFormat(languageCode);
         return {
           isValid: true,
           sanitizedValue: languageCode,
-          error: `Locale '${sanitizedLocale}' not supported, using fallback '${languageCode}'`
+          error: `Locale '${sanitizedLocale}' not supported, using fallback '${languageCode}'`,
         };
       } catch (fallbackError) {
         // Use system default as last resort
-        const defaultLocale = 'en-US';
+        const defaultLocale = "en-US";
         return {
           isValid: true,
           sanitizedValue: defaultLocale,
-          error: `Locale '${sanitizedLocale}' not supported, using default '${defaultLocale}'`
+          error: `Locale '${sanitizedLocale}' not supported, using default '${defaultLocale}'`,
         };
       }
     }
@@ -226,15 +228,15 @@ export class ValidationEngine {
     if (options === null || options === undefined) {
       return {
         isValid: true,
-        sanitizedValue: {}
+        sanitizedValue: {},
       };
     }
 
     // Check if it's an object
-    if (typeof options !== 'object' || Array.isArray(options)) {
+    if (typeof options !== "object" || Array.isArray(options)) {
       return {
         isValid: false,
-        error: 'Options must be an object'
+        error: "Options must be an object",
       };
     }
 
@@ -253,8 +255,8 @@ export class ValidationEngine {
 
     // Validate useGrouping if provided
     if (options.useGrouping !== undefined) {
-      if (typeof options.useGrouping !== 'boolean') {
-        errors.push('useGrouping must be a boolean');
+      if (typeof options.useGrouping !== "boolean") {
+        errors.push("useGrouping must be a boolean");
       } else {
         sanitizedOptions.useGrouping = options.useGrouping;
       }
@@ -262,11 +264,15 @@ export class ValidationEngine {
 
     // Validate minimumFractionDigits if provided
     if (options.minimumFractionDigits !== undefined) {
-      if (typeof options.minimumFractionDigits !== 'number' || 
-          !Number.isInteger(options.minimumFractionDigits) ||
-          options.minimumFractionDigits < 0 ||
-          options.minimumFractionDigits > 20) {
-        errors.push('minimumFractionDigits must be an integer between 0 and 20');
+      if (
+        typeof options.minimumFractionDigits !== "number" ||
+        !Number.isInteger(options.minimumFractionDigits) ||
+        options.minimumFractionDigits < 0 ||
+        options.minimumFractionDigits > 20
+      ) {
+        errors.push(
+          "minimumFractionDigits must be an integer between 0 and 20",
+        );
       } else {
         sanitizedOptions.minimumFractionDigits = options.minimumFractionDigits;
       }
@@ -274,28 +280,39 @@ export class ValidationEngine {
 
     // Validate maximumFractionDigits if provided
     if (options.maximumFractionDigits !== undefined) {
-      if (typeof options.maximumFractionDigits !== 'number' || 
-          !Number.isInteger(options.maximumFractionDigits) ||
-          options.maximumFractionDigits < 0 ||
-          options.maximumFractionDigits > 20) {
-        errors.push('maximumFractionDigits must be an integer between 0 and 20');
+      if (
+        typeof options.maximumFractionDigits !== "number" ||
+        !Number.isInteger(options.maximumFractionDigits) ||
+        options.maximumFractionDigits < 0 ||
+        options.maximumFractionDigits > 20
+      ) {
+        errors.push(
+          "maximumFractionDigits must be an integer between 0 and 20",
+        );
       } else {
         sanitizedOptions.maximumFractionDigits = options.maximumFractionDigits;
       }
     }
 
     // Validate that minimumFractionDigits <= maximumFractionDigits
-    if (sanitizedOptions.minimumFractionDigits !== undefined && 
-        sanitizedOptions.maximumFractionDigits !== undefined &&
-        sanitizedOptions.minimumFractionDigits > sanitizedOptions.maximumFractionDigits) {
-      errors.push('minimumFractionDigits cannot be greater than maximumFractionDigits');
+    if (
+      sanitizedOptions.minimumFractionDigits !== undefined &&
+      sanitizedOptions.maximumFractionDigits !== undefined &&
+      sanitizedOptions.minimumFractionDigits >
+        sanitizedOptions.maximumFractionDigits
+    ) {
+      errors.push(
+        "minimumFractionDigits cannot be greater than maximumFractionDigits",
+      );
     }
 
     // Validate roundingMode if provided
     if (options.roundingMode !== undefined) {
-      const validRoundingModes: RoundingMode[] = ['round', 'floor', 'ceil'];
+      const validRoundingModes: RoundingMode[] = ["round", "floor", "ceil"];
       if (!validRoundingModes.includes(options.roundingMode)) {
-        errors.push(`roundingMode must be one of: ${validRoundingModes.join(', ')}`);
+        errors.push(
+          `roundingMode must be one of: ${validRoundingModes.join(", ")}`,
+        );
       } else {
         sanitizedOptions.roundingMode = options.roundingMode;
       }
@@ -303,31 +320,39 @@ export class ValidationEngine {
 
     // Validate fallbackValue if provided
     if (options.fallbackValue !== undefined) {
-      if (typeof options.fallbackValue !== 'string') {
-        errors.push('fallbackValue must be a string');
+      if (typeof options.fallbackValue !== "string") {
+        errors.push("fallbackValue must be a string");
       } else {
         sanitizedOptions.fallbackValue = options.fallbackValue;
       }
     }
 
     // Check for unknown properties
-    const knownProperties = ['locale', 'useGrouping', 'minimumFractionDigits', 
-                           'maximumFractionDigits', 'roundingMode', 'fallbackValue'];
-    const unknownProperties = Object.keys(options).filter(key => !knownProperties.includes(key));
+    const knownProperties = [
+      "locale",
+      "useGrouping",
+      "minimumFractionDigits",
+      "maximumFractionDigits",
+      "roundingMode",
+      "fallbackValue",
+    ];
+    const unknownProperties = Object.keys(options).filter(
+      (key) => !knownProperties.includes(key),
+    );
     if (unknownProperties.length > 0) {
-      errors.push(`Unknown properties: ${unknownProperties.join(', ')}`);
+      errors.push(`Unknown properties: ${unknownProperties.join(", ")}`);
     }
 
     if (errors.length > 0) {
       return {
         isValid: false,
-        error: errors.join('; ')
+        error: errors.join("; "),
       };
     }
 
     return {
       isValid: true,
-      sanitizedValue: sanitizedOptions
+      sanitizedValue: sanitizedOptions,
     };
   }
 
@@ -337,15 +362,18 @@ export class ValidationEngine {
    * @param currencyCode - Currency code for validation rules
    * @returns Validation result
    */
-  static validateAmountForCurrency(amount: number, currencyCode: string): ValidationResult {
+  static validateAmountForCurrency(
+    amount: number,
+    currencyCode: string,
+  ): ValidationResult {
     try {
       const currencyRule = CurrencyConfig.getCurrencyRule(currencyCode);
-      
+
       // Check minimum value
       if (amount < currencyRule.validation.minValue) {
         return {
           isValid: false,
-          error: `Amount ${amount} is below minimum allowed value ${currencyRule.validation.minValue} for ${currencyCode}`
+          error: `Amount ${amount} is below minimum allowed value ${currencyRule.validation.minValue} for ${currencyCode}`,
         };
       }
 
@@ -353,27 +381,27 @@ export class ValidationEngine {
       if (amount > currencyRule.validation.maxValue) {
         return {
           isValid: false,
-          error: `Amount ${amount} exceeds maximum allowed value ${currencyRule.validation.maxValue} for ${currencyCode}`
+          error: `Amount ${amount} exceeds maximum allowed value ${currencyRule.validation.maxValue} for ${currencyCode}`,
         };
       }
 
       // Check precision (number of decimal places)
-      const decimalPlaces = (amount.toString().split('.')[1] || '').length;
+      const decimalPlaces = (amount.toString().split(".")[1] || "").length;
       if (decimalPlaces > currencyRule.validation.precision) {
         return {
           isValid: false,
-          error: `Amount ${amount} has too many decimal places. ${currencyCode} allows maximum ${currencyRule.validation.precision} decimal places`
+          error: `Amount ${amount} has too many decimal places. ${currencyCode} allows maximum ${currencyRule.validation.precision} decimal places`,
         };
       }
 
       return {
         isValid: true,
-        sanitizedValue: amount
+        sanitizedValue: amount,
       };
     } catch (error) {
       return {
         isValid: false,
-        error: `Failed to validate amount for currency ${currencyCode}: ${error instanceof Error ? error.message : 'Unknown error'}`
+        error: `Failed to validate amount for currency ${currencyCode}: ${error instanceof Error ? error.message : "Unknown error"}`,
       };
     }
   }

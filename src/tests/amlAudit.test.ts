@@ -27,7 +27,7 @@ describe("AML Audit Dashboard", () => {
       `INSERT INTO users (phone_number, kyc_level) 
        VALUES ($1, $2) 
        RETURNING id`,
-      ["+237600000001", "basic"]
+      ["+237600000001", "basic"],
     );
     testUserId = user.rows[0].id;
 
@@ -36,7 +36,16 @@ describe("AML Audit Dashboard", () => {
       `INSERT INTO transactions (type, amount, phone_number, provider, stellar_address, user_id, status, reference_number)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING id`,
-      ["deposit", "2000000", "+237600000001", "orange", "GTEST123", testUserId, "completed", "REF" + Date.now()]
+      [
+        "deposit",
+        "2000000",
+        "+237600000001",
+        "orange",
+        "GTEST123",
+        testUserId,
+        "completed",
+        "REF" + Date.now(),
+      ],
     );
     testTransactionId = transaction.rows[0].id;
 
@@ -63,9 +72,10 @@ describe("AML Audit Dashboard", () => {
 
   afterAll(async () => {
     // Cleanup
-    await pool.query("DELETE FROM aml_alert_review_history WHERE alert_id = $1", [
-      testAlertId,
-    ]);
+    await pool.query(
+      "DELETE FROM aml_alert_review_history WHERE alert_id = $1",
+      [testAlertId],
+    );
     await pool.query("DELETE FROM aml_alerts WHERE id = $1", [testAlertId]);
     await pool.query("DELETE FROM transactions WHERE id = $1", [
       testTransactionId,
@@ -79,7 +89,7 @@ describe("AML Audit Dashboard", () => {
     query: any = {},
     params: any = {},
     body: any = {},
-    userId?: string
+    userId?: string,
   ) => {
     const req = {
       query,
@@ -118,7 +128,7 @@ describe("AML Audit Dashboard", () => {
       expect(res.json).toHaveBeenCalled();
       const response = (res.json as jest.Mock).mock.calls[0][0];
       expect(
-        response.data.every((a: any) => a.status === "pending_review")
+        response.data.every((a: any) => a.status === "pending_review"),
       ).toBe(true);
     });
 
@@ -130,7 +140,7 @@ describe("AML Audit Dashboard", () => {
       expect(res.json).toHaveBeenCalled();
       const response = (res.json as jest.Mock).mock.calls[0][0];
       expect(response.data.every((a: any) => a.userId === testUserId)).toBe(
-        true
+        true,
       );
     });
 
@@ -233,7 +243,7 @@ describe("AML Audit Dashboard", () => {
           status: "reviewed",
           reviewNotes: "Verified transaction is legitimate",
         },
-        testUserId
+        testUserId,
       );
 
       await reviewAmlAlert(req, res);
@@ -242,7 +252,7 @@ describe("AML Audit Dashboard", () => {
       const response = (res.json as jest.Mock).mock.calls[0][0];
       expect(response.alert.status).toBe("reviewed");
       expect(response.alert.reviewNotes).toBe(
-        "Verified transaction is legitimate"
+        "Verified transaction is legitimate",
       );
       expect(response.alert.reviewedBy).toBe(testUserId);
       expect(response.alert.reviewedAt).toBeDefined();
@@ -252,7 +262,7 @@ describe("AML Audit Dashboard", () => {
       // First reset to pending
       await pool.query(
         "UPDATE aml_alerts SET status = $1, reviewed_at = NULL, reviewed_by = NULL WHERE id = $2",
-        ["pending_review", testAlertId]
+        ["pending_review", testAlertId],
       );
 
       const { req, res } = createMockReqRes(
@@ -262,7 +272,7 @@ describe("AML Audit Dashboard", () => {
           status: "dismissed",
           reviewNotes: "False positive",
         },
-        testUserId
+        testUserId,
       );
 
       await reviewAmlAlert(req, res);
@@ -279,7 +289,7 @@ describe("AML Audit Dashboard", () => {
         {
           status: "invalid",
         },
-        testUserId
+        testUserId,
       );
 
       await reviewAmlAlert(req, res);
@@ -295,7 +305,7 @@ describe("AML Audit Dashboard", () => {
         {
           status: "reviewed",
         },
-        testUserId
+        testUserId,
       );
 
       await reviewAmlAlert(req, res);
@@ -309,7 +319,7 @@ describe("AML Audit Dashboard", () => {
         { alertId: testAlertId },
         {
           status: "reviewed",
-        }
+        },
       );
 
       await reviewAmlAlert(req, res);
@@ -337,7 +347,9 @@ describe("AML Audit Dashboard", () => {
     });
 
     it("should filter stats by date range", async () => {
-      const startDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const startDate = new Date(
+        Date.now() - 7 * 24 * 60 * 60 * 1000,
+      ).toISOString();
       const endDate = new Date().toISOString();
 
       const { req, res } = createMockReqRes({ startDate, endDate });
@@ -400,7 +412,10 @@ describe("AML Audit Dashboard", () => {
       const afterCursor = page1.pagination.after;
 
       // 2. Fetch second page with after cursor
-      const { req: req2, res: res2 } = createMockReqRes({ limit: "1", after: afterCursor });
+      const { req: req2, res: res2 } = createMockReqRes({
+        limit: "1",
+        after: afterCursor,
+      });
       await listAmlAlertsForAudit(req2, res2);
 
       expect(res2.json).toHaveBeenCalled();
@@ -411,7 +426,10 @@ describe("AML Audit Dashboard", () => {
       const beforeCursor = page2.pagination.before;
 
       // 3. Fetch first page again using before cursor
-      const { req: req3, res: res3 } = createMockReqRes({ limit: "1", before: beforeCursor });
+      const { req: req3, res: res3 } = createMockReqRes({
+        limit: "1",
+        before: beforeCursor,
+      });
       await listAmlAlertsForAudit(req3, res3);
 
       expect(res3.json).toHaveBeenCalled();
@@ -430,9 +448,8 @@ describe("AML Audit Dashboard", () => {
     });
 
     it("should get alerts by transaction", async () => {
-      const alerts = await amlAlertModel.getAlertsByTransaction(
-        testTransactionId
-      );
+      const alerts =
+        await amlAlertModel.getAlertsByTransaction(testTransactionId);
       expect(alerts.length).toBeGreaterThan(0);
       expect(alerts[0].transactionId).toBe(testTransactionId);
     });

@@ -1,5 +1,8 @@
 import { DisputeService } from "../../src/services/dispute";
-import { TransactionModel, TransactionStatus } from "../../src/models/transaction";
+import {
+  TransactionModel,
+  TransactionStatus,
+} from "../../src/models/transaction";
 import { Dispute, DisputeModel } from "../../src/models/dispute";
 
 describe("DisputeService", () => {
@@ -46,7 +49,9 @@ describe("DisputeService", () => {
       status: TransactionStatus.Pending,
     });
 
-    jest.spyOn(DisputeModel.prototype, "findActiveByTransactionId").mockResolvedValue(null);
+    jest
+      .spyOn(DisputeModel.prototype, "findActiveByTransactionId")
+      .mockResolvedValue(null);
 
     const svc = new DisputeService();
     await expect(svc.openDispute(txId, "wrong amount")).rejects.toThrow(
@@ -60,8 +65,12 @@ describe("DisputeService", () => {
       status: TransactionStatus.Completed,
     });
 
-    jest.spyOn(DisputeModel.prototype, "findActiveByTransactionId").mockResolvedValue(null);
-    jest.spyOn(DisputeModel.prototype, "create").mockResolvedValue(baseDispute());
+    jest
+      .spyOn(DisputeModel.prototype, "findActiveByTransactionId")
+      .mockResolvedValue(null);
+    jest
+      .spyOn(DisputeModel.prototype, "create")
+      .mockResolvedValue(baseDispute());
     const updateStatus = jest
       .spyOn(TransactionModel.prototype, "updateStatus")
       .mockResolvedValue(undefined);
@@ -86,13 +95,15 @@ describe("DisputeService", () => {
     const updateStatus = jest
       .spyOn(TransactionModel.prototype, "updateStatus")
       .mockResolvedValue(undefined);
-    const addNote = jest.spyOn(DisputeModel.prototype, "addNote").mockResolvedValue({
-      id: "note-1",
-      disputeId: "d1",
-      author: "admin-1",
-      note: "Admin reversed payment: Merchant evidence did not validate payment",
-      createdAt: new Date(),
-    });
+    const addNote = jest
+      .spyOn(DisputeModel.prototype, "addNote")
+      .mockResolvedValue({
+        id: "note-1",
+        disputeId: "d1",
+        author: "admin-1",
+        note: "Admin reversed payment: Merchant evidence did not validate payment",
+        createdAt: new Date(),
+      });
 
     const svc = new DisputeService();
     const result = await svc.resolvePayment(
@@ -124,13 +135,15 @@ describe("DisputeService", () => {
     const updateStatus = jest
       .spyOn(TransactionModel.prototype, "updateStatus")
       .mockResolvedValue(undefined);
-    const addNote = jest.spyOn(DisputeModel.prototype, "addNote").mockResolvedValue({
-      id: "note-1",
-      disputeId: "d1",
-      author: "admin-1",
-      note: "Admin upheld payment: Merchant evidence confirms delivery",
-      createdAt: new Date(),
-    });
+    const addNote = jest
+      .spyOn(DisputeModel.prototype, "addNote")
+      .mockResolvedValue({
+        id: "note-1",
+        disputeId: "d1",
+        author: "admin-1",
+        note: "Admin upheld payment: Merchant evidence confirms delivery",
+        createdAt: new Date(),
+      });
 
     const svc = new DisputeService();
     const result = await svc.resolvePayment(
@@ -141,7 +154,10 @@ describe("DisputeService", () => {
     );
 
     expect(result.status).toBe("upheld");
-    expect(updateStatus).toHaveBeenCalledWith(txId, TransactionStatus.Completed);
+    expect(updateStatus).toHaveBeenCalledWith(
+      txId,
+      TransactionStatus.Completed,
+    );
     expect(addNote).toHaveBeenCalledWith(
       "d1",
       "admin-1",

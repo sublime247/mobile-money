@@ -22,9 +22,8 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 
   res.on("finish", () => {
     const durationMs = Date.now() - startMs;
-    const level = res.statusCode >= 500 ? "error"
-                : res.statusCode >= 400 ? "warn"
-                : "info";
+    const level =
+      res.statusCode >= 500 ? "error" : res.statusCode >= 400 ? "warn" : "info";
 
     logger[level](
       {

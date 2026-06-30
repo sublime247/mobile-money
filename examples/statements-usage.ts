@@ -1,6 +1,6 @@
 /**
  * Monthly Account Statements PDF Generator - Usage Examples
- * 
+ *
  * This example demonstrates how to use the statements API to generate
  * professional PDF statements for users.
  */
@@ -15,7 +15,7 @@ async function downloadMonthlyStatement(
   authToken: string,
   year: number,
   month: number,
-  outputPath: string
+  outputPath: string,
 ) {
   try {
     const response = await axios.get(
@@ -25,13 +25,13 @@ async function downloadMonthlyStatement(
           Authorization: `Bearer ${authToken}`,
         },
         responseType: "arraybuffer", // Important for binary PDF data
-      }
+      },
     );
 
     // Save PDF to file
     fs.writeFileSync(outputPath, response.data);
     console.log(`Statement saved to: ${outputPath}`);
-    
+
     return {
       success: true,
       filename: outputPath,
@@ -64,9 +64,9 @@ function streamStatementToClient(req: any, res: any) {
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader(
         "Content-Disposition",
-        response.headers["content-disposition"]
+        response.headers["content-disposition"],
       );
-      
+
       // Pipe the PDF stream to client
       response.data.pipe(res);
     })
@@ -84,8 +84,13 @@ async function main() {
   const month = 1; // January
   const outputPath = `./statement-${year}-${month.toString().padStart(2, "0")}.pdf`;
 
-  const result = await downloadMonthlyStatement(authToken, year, month, outputPath);
-  
+  const result = await downloadMonthlyStatement(
+    authToken,
+    year,
+    month,
+    outputPath,
+  );
+
   if (result.success) {
     console.log("✅ Statement generated successfully!");
     console.log(`📄 File: ${result.filename}`);
@@ -98,7 +103,4 @@ async function main() {
 // Uncomment to run the example
 // main().catch(console.error);
 
-export {
-  downloadMonthlyStatement,
-  streamStatementToClient,
-};
+export { downloadMonthlyStatement, streamStatementToClient };

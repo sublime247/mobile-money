@@ -46,7 +46,10 @@ jest.mock("../../src/websocket", () => ({
 
 import { queryWrite } from "../../src/config/database";
 import { CachedTransactionInvalidation } from "../../src/services/cachedTransactionService";
-import { TransactionModel, TransactionStatus } from "../../src/models/transaction";
+import {
+  TransactionModel,
+  TransactionStatus,
+} from "../../src/models/transaction";
 
 const row = (id: string, createdAt: string) => ({
   id,
@@ -77,8 +80,12 @@ describe("TransactionModel keyset pagination", () => {
     mockPoolQuery.mockResolvedValue({ rows: [] });
     mockQueryWrite.mockReset();
     jest.mocked(CachedTransactionInvalidation.invalidateUserCaches).mockReset();
-    jest.mocked(CachedTransactionInvalidation.invalidateProviderStats).mockReset();
-    jest.mocked(CachedTransactionInvalidation.invalidateGeneralStats).mockReset();
+    jest
+      .mocked(CachedTransactionInvalidation.invalidateProviderStats)
+      .mockReset();
+    jest
+      .mocked(CachedTransactionInvalidation.invalidateGeneralStats)
+      .mockReset();
   });
 
   it("uses created_at and id ordering for the first history page", async () => {
@@ -113,7 +120,9 @@ describe("TransactionModel keyset pagination", () => {
     const [sql, params] = mockQueryRead.mock.calls[0];
     expect(sql).toContain("WITH anchor AS");
     expect(sql).toContain("ORDER BY created_at DESC, id DESC");
-    expect(sql).toContain("AND (created_at, id) < (SELECT created_at, id FROM anchor)");
+    expect(sql).toContain(
+      "AND (created_at, id) < (SELECT created_at, id FROM anchor)",
+    );
     expect(params).toEqual([199, 2]);
   });
 
@@ -145,7 +154,9 @@ describe("TransactionModel keyset pagination", () => {
 
     const [sql, params] = mockQueryRead.mock.calls[0];
     expect(sql).toContain("status = ANY($1)");
-    expect(sql).toContain("AND (created_at, id) < (SELECT created_at, id FROM anchor)");
+    expect(sql).toContain(
+      "AND (created_at, id) < (SELECT created_at, id FROM anchor)",
+    );
     expect(params).toEqual([[TransactionStatus.Completed], 4999, 50]);
   });
 
@@ -167,18 +178,20 @@ describe("TransactionModel keyset pagination", () => {
     });
 
     expect(
-      (CachedTransactionInvalidation.invalidateUserCaches as jest.Mock)
-        .mock.calls[0][0],
+      (CachedTransactionInvalidation.invalidateUserCaches as jest.Mock).mock
+        .calls[0][0],
     ).toBe(transaction.userId);
     expect(
-      (CachedTransactionInvalidation.invalidateProviderStats as jest.Mock)
-        .mock.calls[0][0],
+      (CachedTransactionInvalidation.invalidateProviderStats as jest.Mock).mock
+        .calls[0][0],
     ).toBe(transaction.provider);
   });
 
   it("falls back to general stats invalidation when provider is missing", async () => {
     const transaction = row("create-2", "2026-05-02T00:00:00.000Z");
-    jest.mocked(queryWrite).mockResolvedValueOnce({ rows: [{ ...transaction, provider: null }] });
+    jest
+      .mocked(queryWrite)
+      .mockResolvedValueOnce({ rows: [{ ...transaction, provider: null }] });
 
     const model = new TransactionModel();
     await model.create({
@@ -194,8 +207,8 @@ describe("TransactionModel keyset pagination", () => {
     });
 
     expect(
-      (CachedTransactionInvalidation.invalidateGeneralStats as jest.Mock)
-        .mock.calls.length,
+      (CachedTransactionInvalidation.invalidateGeneralStats as jest.Mock).mock
+        .calls.length,
     ).toBeGreaterThanOrEqual(1);
   });
 
@@ -216,12 +229,12 @@ describe("TransactionModel keyset pagination", () => {
     await model.updateStatus("create-1", TransactionStatus.Completed);
 
     expect(
-      (CachedTransactionInvalidation.invalidateUserCaches as jest.Mock)
-        .mock.calls[0][0],
+      (CachedTransactionInvalidation.invalidateUserCaches as jest.Mock).mock
+        .calls[0][0],
     ).toBe("user-1");
     expect(
-      (CachedTransactionInvalidation.invalidateProviderStats as jest.Mock)
-        .mock.calls[0][0],
+      (CachedTransactionInvalidation.invalidateProviderStats as jest.Mock).mock
+        .calls[0][0],
     ).toBe("mtn");
   });
 });

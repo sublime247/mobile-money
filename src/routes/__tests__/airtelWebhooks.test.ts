@@ -105,10 +105,8 @@ describe("Airtel Webhook Routes", () => {
     // Mock successful key fetching
     axiosMock.get.mockResolvedValue({
       data: {
-        keys: [
-          { kid: "key-1", value: publicKey }
-        ]
-      }
+        keys: [{ kid: "key-1", value: publicKey }],
+      },
     });
 
     mockFindById.mockResolvedValue({
@@ -128,7 +126,10 @@ describe("Airtel Webhook Routes", () => {
     expect(response.body.success).toBe(true);
     expect(response.body.transaction_id).toBe("txn_airtel_999");
     expect(mockFindById).toHaveBeenCalledWith("txn_airtel_999");
-    expect(mockUpdateStatus).toHaveBeenCalledWith("txn_airtel_999", "completed");
+    expect(mockUpdateStatus).toHaveBeenCalledWith(
+      "txn_airtel_999",
+      "completed",
+    );
   });
 
   it("should fall back to local public keys and verify successfully when remote fetch fails", async () => {
@@ -151,7 +152,10 @@ describe("Airtel Webhook Routes", () => {
 
     expect(response.body.success).toBe(true);
     expect(mockFindById).toHaveBeenCalledWith("txn_airtel_999");
-    expect(mockUpdateStatus).toHaveBeenCalledWith("txn_airtel_999", "completed");
+    expect(mockUpdateStatus).toHaveBeenCalledWith(
+      "txn_airtel_999",
+      "completed",
+    );
   });
 
   it("should return 404 when transaction is not found", async () => {

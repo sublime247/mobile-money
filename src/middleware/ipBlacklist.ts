@@ -26,7 +26,9 @@ const STATIC_BLACKLIST_CIDRS: Array<[ipaddr.IPv4 | ipaddr.IPv6, number]> = (
     try {
       acc.push(ipaddr.parseCIDR(cidr));
     } catch {
-      console.warn(`[ipBlacklist] Invalid CIDR in IP_BLACKLIST_CIDRS: "${cidr}" — skipped`);
+      console.warn(
+        `[ipBlacklist] Invalid CIDR in IP_BLACKLIST_CIDRS: "${cidr}" — skipped`,
+      );
     }
     return acc;
   }, []);
@@ -53,7 +55,7 @@ function isStaticallyBlacklisted(rawIp: string): boolean {
   try {
     const parsed = ipaddr.process(rawIp);
     return STATIC_BLACKLIST_CIDRS.some(([network, prefix]) =>
-      parsed.match(network, prefix),
+      (parsed as any).match(network as any, prefix),
     );
   } catch {
     return false;
@@ -73,7 +75,8 @@ async function isDynamicallyBlacklisted(rawIp: string): Promise<boolean> {
     if (exactHit !== null) return true;
 
     // 2. CIDR set lookup — iterate stored CIDRs and match
-    const cidrs = await redisClient.sMembers(BLACKLIST_CIDR_SET);
+    const cidrsRaw = await redisClient.sMembers(BLACKLIST_CIDR_SET);
+    const cidrs = Array.isArray(cidrsRaw) ? cidrsRaw : Array.from(cidrsRaw);
     if (cidrs.length === 0) return false;
 
     let parsed: ipaddr.IPv4 | ipaddr.IPv6;
@@ -85,8 +88,8 @@ async function isDynamicallyBlacklisted(rawIp: string): Promise<boolean> {
 
     for (const cidr of cidrs) {
       try {
-        const [network, prefix] = ipaddr.parseCIDR(cidr);
-        if (parsed.match(network, prefix)) return true;
+        const [network, prefix] = ipaddr.parseCIDR(cidr.toString());
+        if ((parsed as any).match(network as any, prefix)) return true;
       } catch {
         // ignore malformed CIDR entries stored in Redis
       }
@@ -128,7 +131,9 @@ export async function ipBlacklistMiddleware(
 
   // Fast path: static list (no I/O)
   if (isStaticallyBlacklisted(clientIp)) {
-    console.warn(`[ipBlacklist] Blocked blacklisted IP (static): ${clientIp} — ${req.method} ${req.originalUrl}`);
+    console.warn(
+      `[ipBlacklist] Blocked blacklisted IP (static): ${clientIp} — ${req.method} ${req.originalUrl}`,
+    );
     res.status(403).json({ error: "Forbidden" });
     return;
   }
@@ -136,7 +141,9 @@ export async function ipBlacklistMiddleware(
   // Dynamic path: Redis lookup
   const dynamicHit = await isDynamicallyBlacklisted(clientIp);
   if (dynamicHit) {
-    console.warn(`[ipBlacklist] Blocked blacklisted IP (dynamic): ${clientIp} — ${req.method} ${req.originalUrl}`);
+    console.warn(
+      `[ipBlacklist] Blocked blacklisted IP (dynamic): ${clientIp} — ${req.method} ${req.originalUrl}`,
+    );
     res.status(403).json({ error: "Forbidden" });
     return;
   }
@@ -159,7 +166,9 @@ export async function blacklistIp(ip: string, ttlSec?: number): Promise<void> {
   } else {
     await redisClient.set(key, "1");
   }
-  console.log(`[ipBlacklist] Added IP to blacklist: ${ip}${ttlSec ? ` (TTL ${ttlSec}s)` : ""}`);
+  console.log(
+    `[ipBlacklist] Added IP to blacklist: ${ip}${ttlSec ? ` (TTL ${ttlSec}s)` : ""}`,
+  );
 }
 
 /**

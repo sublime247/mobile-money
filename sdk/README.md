@@ -24,6 +24,7 @@ val status = sdk.getStatus(response.transactionId)
 ```
 
 ## Features
+
 - Automatic Auth Injection (JWT Bearer)
 - Retrofit2 + Coroutines support
 - Native Android compatibility

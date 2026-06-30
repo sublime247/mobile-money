@@ -1,7 +1,11 @@
 import logger from "../utils/logger";
 import axios from "axios";
 import passport from "passport";
-import { Strategy as GoogleStrategy, Profile as GoogleProfile, VerifyCallback as GoogleVerifyCallback } from "passport-google-oauth20";
+import {
+  Strategy as GoogleStrategy,
+  Profile as GoogleProfile,
+  VerifyCallback as GoogleVerifyCallback,
+} from "passport-google-oauth20";
 import { Strategy as OpenIDConnectStrategy } from "passport-openidconnect";
 import { Router, Request, Response } from "express";
 import { pool } from "../config/database";
@@ -41,10 +45,18 @@ function oidcConfigurationUrl(issuer: string): string {
 
 function formatCertificate(x5c: string): string {
   const chunks = x5c.match(/.{1,64}/g) || [];
-  return [`-----BEGIN CERTIFICATE-----`, ...chunks, `-----END CERTIFICATE-----`].join("\n") + "\n";
+  return (
+    [
+      `-----BEGIN CERTIFICATE-----`,
+      ...chunks,
+      `-----END CERTIFICATE-----`,
+    ].join("\n") + "\n"
+  );
 }
 
-async function fetchOIDCMetadata(issuer: string): Promise<OIDCProviderMetadata> {
+async function fetchOIDCMetadata(
+  issuer: string,
+): Promise<OIDCProviderMetadata> {
   const normalizedIssuer = normalizeIssuerUrl(issuer);
   if (!metadataCache.has(normalizedIssuer)) {
     const metadataPromise = axios
@@ -99,7 +111,11 @@ function findSigningKey(keys: any[], kid?: string): string {
   throw new Error("OIDC signing key does not include an x5c certificate");
 }
 
-async function verifyIdToken(idToken: string, issuer: string, audience: string): Promise<JwtPayload> {
+async function verifyIdToken(
+  idToken: string,
+  issuer: string,
+  audience: string,
+): Promise<JwtPayload> {
   const header = getJwtHeader(idToken);
   const metadata = await fetchOIDCMetadata(issuer);
   const keys = await fetchJwks(metadata.jwks_uri);
@@ -126,7 +142,10 @@ function extractRawClaims(profile: any): any {
   return profile?._json ?? profile ?? {};
 }
 
-export async function validateGoogleOIDCProfile(profile: any, params?: any): Promise<OIDCValidatedClaims> {
+export async function validateGoogleOIDCProfile(
+  profile: any,
+  params?: any,
+): Promise<OIDCValidatedClaims> {
   if (!profile || typeof profile !== "object") {
     throw new Error("Invalid Google profile payload");
   }
@@ -142,7 +161,11 @@ export async function validateGoogleOIDCProfile(profile: any, params?: any): Pro
     throw new Error("Google account email must be verified");
   }
 
-  if (raw.iss && raw.iss !== "https://accounts.google.com" && raw.iss !== "accounts.google.com") {
+  if (
+    raw.iss &&
+    raw.iss !== "https://accounts.google.com" &&
+    raw.iss !== "accounts.google.com"
+  ) {
     throw new Error("Google token issuer mismatch");
   }
 
@@ -152,14 +175,21 @@ export async function validateGoogleOIDCProfile(profile: any, params?: any): Pro
   }
 
   if (params?.id_token && typeof params.id_token === "string") {
-    const claims = await verifyIdToken(params.id_token, "https://accounts.google.com", audience);
+    const claims = await verifyIdToken(
+      params.id_token,
+      "https://accounts.google.com",
+      audience,
+    );
     if (claims.email_verified !== true) {
       throw new Error("Google ID token email_verified claim is not true");
     }
     if (!claims.sub) {
       throw new Error("Google ID token missing subject claim");
     }
-    if (claims.aud !== audience && !(Array.isArray(claims.aud) && claims.aud.includes(audience))) {
+    if (
+      claims.aud !== audience &&
+      !(Array.isArray(claims.aud) && claims.aud.includes(audience))
+    ) {
       throw new Error("Google ID token audience does not match client ID");
     }
   }
@@ -173,13 +203,17 @@ export async function validateGoogleOIDCProfile(profile: any, params?: any): Pro
   };
 }
 
-export async function validateAzureOIDCProfile(profile: any, params?: any): Promise<OIDCValidatedClaims> {
+export async function validateAzureOIDCProfile(
+  profile: any,
+  params?: any,
+): Promise<OIDCValidatedClaims> {
   if (!profile || typeof profile !== "object") {
     throw new Error("Invalid Azure profile payload");
   }
 
   const raw = extractRawClaims(profile);
-  const email = profile.emails?.[0]?.value || raw.email || raw.preferred_username;
+  const email =
+    profile.emails?.[0]?.value || raw.email || raw.preferred_username;
   const subject = profile.id || raw.sub;
 
   requiredString(subject, "Azure subject");
@@ -194,7 +228,10 @@ export async function validateAzureOIDCProfile(profile: any, params?: any): Prom
   const normalizedIssuer = normalizeIssuerUrl(issuer);
   if (raw.iss) {
     const actualIssuer = normalizeIssuerUrl(raw.iss);
-    if (actualIssuer !== normalizedIssuer && actualIssuer !== `${normalizedIssuer}/v2.0`) {
+    if (
+      actualIssuer !== normalizedIssuer &&
+      actualIssuer !== `${normalizedIssuer}/v2.0`
+    ) {
       throw new Error("Azure token issuer mismatch");
     }
   }
@@ -204,7 +241,10 @@ export async function validateAzureOIDCProfile(profile: any, params?: any): Prom
     if (!claims.sub) {
       throw new Error("Azure ID token missing subject claim");
     }
-    if (claims.aud !== audience && !(Array.isArray(claims.aud) && claims.aud.includes(audience))) {
+    if (
+      claims.aud !== audience &&
+      !(Array.isArray(claims.aud) && claims.aud.includes(audience))
+    ) {
       throw new Error("Azure ID token audience does not match client ID");
     }
   }
@@ -315,22 +355,35 @@ async function processOIDCProfile(
 function normalizeGoogleVerifyCallbackArgs(args: IArguments) {
   const list = Array.from(args) as any[];
   const done = list[list.length - 1];
-  const profile = list.find((item) => item && typeof item === "object" && item.provider === "google");
-  const params = list.find((item) => item && typeof item === "object" && item.id_token);
+  const profile = list.find(
+    (item) => item && typeof item === "object" && item.provider === "google",
+  );
+  const params = list.find(
+    (item) => item && typeof item === "object" && item.id_token,
+  );
   return { profile, params, done };
 }
 
 function normalizeAzureVerifyCallbackArgs(args: IArguments) {
   const list = Array.from(args) as any[];
   const done = list[list.length - 1];
-  const profile = list.find((item) => item && typeof item === "object" && item.id);
-  const params = list.find((item) => item && typeof item === "object" && item.id_token);
+  const profile = list.find(
+    (item) => item && typeof item === "object" && item.id,
+  );
+  const params = list.find(
+    (item) => item && typeof item === "object" && item.id_token,
+  );
   return { profile, params, done };
 }
 
 export function initializeOIDCProviders() {
   const googleConfig = ssoConfig.oidc.google;
-  if (googleConfig && googleConfig.clientID && googleConfig.clientSecret && googleConfig.callbackURL) {
+  if (
+    googleConfig &&
+    googleConfig.clientID &&
+    googleConfig.clientSecret &&
+    googleConfig.callbackURL
+  ) {
     passport.use(
       new GoogleStrategy(
         {
@@ -339,8 +392,16 @@ export function initializeOIDCProviders() {
           callbackURL: googleConfig.callbackURL,
           scope: ["profile", "email"],
         },
-        async function (this: any, accessToken: string, refreshToken: string, paramsOrProfile: any, profileOrDone: any, maybeDone?: any) {
-          const { profile, params, done } = normalizeGoogleVerifyCallbackArgs(arguments);
+        async function (
+          this: any,
+          accessToken: string,
+          refreshToken: string,
+          paramsOrProfile: any,
+          profileOrDone: any,
+          maybeDone?: any,
+        ) {
+          const { profile, params, done } =
+            normalizeGoogleVerifyCallbackArgs(arguments);
           try {
             const user = await processOIDCProfile("google", profile, params);
             return done(null, user);
@@ -354,7 +415,13 @@ export function initializeOIDCProviders() {
   }
 
   const azureConfig = ssoConfig.oidc.azure;
-  if (azureConfig && azureConfig.clientID && azureConfig.clientSecret && azureConfig.issuer && azureConfig.callbackURL) {
+  if (
+    azureConfig &&
+    azureConfig.clientID &&
+    azureConfig.clientSecret &&
+    azureConfig.issuer &&
+    azureConfig.callbackURL
+  ) {
     passport.use(
       "azure-oidc",
       new OpenIDConnectStrategy(
@@ -369,7 +436,8 @@ export function initializeOIDCProviders() {
           scope: ["openid", "profile", "email"],
         },
         async function (this: any, ...args: any[]) {
-          const { profile, params, done } = normalizeAzureVerifyCallbackArgs(arguments);
+          const { profile, params, done } =
+            normalizeAzureVerifyCallbackArgs(arguments);
           try {
             const user = await processOIDCProfile("azure", profile, params);
             return done(null, user);
@@ -401,13 +469,30 @@ export function createOIDCRouter() {
   };
 
   if (ssoConfig.oidc.google?.clientID) {
-    router.get("/google", passport.authenticate("google", { scope: ["profile", "email"], session: false }));
-    router.get("/google/callback", passport.authenticate("google", { session: false }), handleSuccess);
+    router.get(
+      "/google",
+      passport.authenticate("google", {
+        scope: ["profile", "email"],
+        session: false,
+      }),
+    );
+    router.get(
+      "/google/callback",
+      passport.authenticate("google", { session: false }),
+      handleSuccess,
+    );
   }
 
   if (ssoConfig.oidc.azure?.clientID) {
-    router.get("/azure", passport.authenticate("azure-oidc", { session: false }));
-    router.get("/azure/callback", passport.authenticate("azure-oidc", { session: false }), handleSuccess);
+    router.get(
+      "/azure",
+      passport.authenticate("azure-oidc", { session: false }),
+    );
+    router.get(
+      "/azure/callback",
+      passport.authenticate("azure-oidc", { session: false }),
+      handleSuccess,
+    );
   }
 
   return router;

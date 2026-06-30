@@ -1,4 +1,4 @@
-import { getConfigValue } from './appConfig';
+import { getConfigValue } from "./appConfig";
 
 export enum MobileMoneyProvider {
   MTN = "mtn",
@@ -26,7 +26,7 @@ export interface ProviderLimitsConfig {
  * This replaces hardcoded defaults with values from appConfig.
  */
 export function getProviderLimitsConfig(): ProviderLimitsConfig {
-  const providers = getConfigValue('providers');
+  const providers = getConfigValue("providers");
   return {
     [MobileMoneyProvider.MTN]: {
       minAmount: providers.mtn.minAmount,
@@ -55,7 +55,10 @@ export const DEFAULT_PROVIDER_LIMITS: ProviderLimitsConfig = {
   [MobileMoneyProvider.MTN]: { minAmount: 100, maxAmount: 500000 },
   [MobileMoneyProvider.AIRTEL]: { minAmount: 100, maxAmount: 1000000 },
   [MobileMoneyProvider.ORANGE]: { minAmount: 500, maxAmount: 750000 },
-  [MobileMoneyProvider.ORANGE_MADAGASCAR]: { minAmount: 100, maxAmount: 5000000 },
+  [MobileMoneyProvider.ORANGE_MADAGASCAR]: {
+    minAmount: 100,
+    maxAmount: 5000000,
+  },
   [MobileMoneyProvider.SMS_PORTAL]: { minAmount: 100, maxAmount: 5000000 },
 };
 

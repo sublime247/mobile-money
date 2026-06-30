@@ -62,17 +62,17 @@ CREATE TABLE merchant_batch_jobs (
 
 The CSV file must contain the following headers:
 
-| Column | Required | Description | Validation |
-|--------|----------|-------------|------------|
-| name | Yes | Contact person's full name | Max 255 characters |
-| email | Yes | Merchant's email address | Valid email format |
-| phone_number | Yes | Contact phone number | 7-15 digits |
-| business_name | No | Business/Company name | Max 255 characters |
-| business_type | No | Type of business | Max 100 characters |
-| tax_id | No | Tax identification number | Max 50 characters |
-| address | No | Business address | - |
-| city | No | City | Max 100 characters |
-| country | No | ISO 3166-1 alpha-2 code | 2 uppercase letters (default: CM) |
+| Column        | Required | Description                | Validation                        |
+| ------------- | -------- | -------------------------- | --------------------------------- |
+| name          | Yes      | Contact person's full name | Max 255 characters                |
+| email         | Yes      | Merchant's email address   | Valid email format                |
+| phone_number  | Yes      | Contact phone number       | 7-15 digits                       |
+| business_name | No       | Business/Company name      | Max 255 characters                |
+| business_type | No       | Type of business           | Max 100 characters                |
+| tax_id        | No       | Tax identification number  | Max 50 characters                 |
+| address       | No       | Business address           | -                                 |
+| city          | No       | City                       | Max 100 characters                |
+| country       | No       | ISO 3166-1 alpha-2 code    | 2 uppercase letters (default: CM) |
 
 ### Example CSV
 
@@ -91,6 +91,7 @@ POST /api/merchants
 ```
 
 **Request Body:**
+
 ```json
 {
   "name": "John Doe",
@@ -103,6 +104,7 @@ POST /api/merchants
 ```
 
 **Response (201 Created):**
+
 ```json
 {
   "message": "Merchant invitation sent successfully",
@@ -124,9 +126,11 @@ Content-Type: multipart/form-data
 ```
 
 **Form Data:**
+
 - `file`: CSV file (max 10MB)
 
 **Response (202 Accepted):**
+
 ```json
 {
   "jobId": "uuid",
@@ -143,6 +147,7 @@ GET /api/merchants/bulk/:jobId
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "jobId": "uuid",
@@ -172,6 +177,7 @@ GET /api/merchants?page=1&limit=50&status=pending&kycStatus=not_started
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "merchants": [...],
@@ -197,6 +203,7 @@ POST /api/merchants/invite/:token/accept
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "message": "Invitation accepted successfully",
@@ -243,6 +250,7 @@ When CSV validation fails, the API returns detailed validation errors:
 ### Processing Errors
 
 During bulk processing, some rows may fail due to:
+
 - Duplicate email addresses
 - Database constraint violations
 - System errors
@@ -261,6 +269,7 @@ These errors are captured and returned in the job status response, allowing succ
 ### Invitation Email Template
 
 The invitation email includes:
+
 - Personalized greeting
 - Business name (if provided)
 - Accept invitation button/link
@@ -271,11 +280,11 @@ The invitation email includes:
 
 ### Environment Variables
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `FRONTEND_URL` | URL for invitation links | `https://app.mobilemoney.com` |
-| `SENDGRID_MERCHANT_INVITATION_TEMPLATE_ID` | SendGrid template ID | - |
-| `EMAIL_FROM` | Sender email address | `"Mobile Money" <no-reply@mobilemoney.com>` |
+| Variable                                   | Description              | Default                                     |
+| ------------------------------------------ | ------------------------ | ------------------------------------------- |
+| `FRONTEND_URL`                             | URL for invitation links | `https://app.mobilemoney.com`               |
+| `SENDGRID_MERCHANT_INVITATION_TEMPLATE_ID` | SendGrid template ID     | -                                           |
+| `EMAIL_FROM`                               | Sender email address     | `"Mobile Money" <no-reply@mobilemoney.com>` |
 
 ## Running Migrations
 

@@ -34,7 +34,11 @@ const normalizeBulkIds = (value: unknown): string[] => {
 // In-memory store (replace with real DB pool in production)
 interface PendingAction {
   id: string;
-  action_type: "freeze_account" | "manual_credit" | "manual_debit" | "unlock_user";
+  action_type:
+    | "freeze_account"
+    | "manual_credit"
+    | "manual_debit"
+    | "unlock_user";
   status: "pending" | "approved" | "rejected";
   payload: Record<string, unknown>;
   maker_id: string;
@@ -85,49 +89,45 @@ const generateId = () =>
  * POST /api/admin/actions
  * Maker submits a high-risk action for approval
  */
-router.post(
-  "/actions",
-  requireAdmin,
-  (req: Request, res: Response) => {
-    const maker = (req as AuthRequest).user!;
-    const { action_type, payload, maker_note } = req.body;
+router.post("/actions", requireAdmin, (req: Request, res: Response) => {
+  const maker = (req as AuthRequest).user!;
+  const { action_type, payload, maker_note } = req.body;
 
-    if (!action_type || !payload) {
-      return res.status(400).json({
-        message: "action_type and payload are required",
-      });
-    }
-
-    if (!HIGH_RISK_ACTIONS.includes(action_type)) {
-      return res.status(400).json({
-        message: `action_type must be one of: ${HIGH_RISK_ACTIONS.join(", ")}`,
-      });
-    }
-
-    const action: PendingAction = {
-      id: generateId(),
-      action_type,
-      status: "pending",
-      payload,
-      maker_id: maker.id,
-      maker_note: maker_note || undefined,
-      created_at: new Date().toISOString(),
-    };
-
-    pendingActions.push(action);
-
-    logAudit("ACTION_SUBMITTED", maker.id, {
-      actionId: action.id,
-      action_type,
-      payload,
+  if (!action_type || !payload) {
+    return res.status(400).json({
+      message: "action_type and payload are required",
     });
+  }
 
-    return res.status(201).json({
-      message: "Action submitted and awaiting checker approval",
-      action,
+  if (!HIGH_RISK_ACTIONS.includes(action_type)) {
+    return res.status(400).json({
+      message: `action_type must be one of: ${HIGH_RISK_ACTIONS.join(", ")}`,
     });
-  },
-);
+  }
+
+  const action: PendingAction = {
+    id: generateId(),
+    action_type,
+    status: "pending",
+    payload,
+    maker_id: maker.id,
+    maker_note: maker_note || undefined,
+    created_at: new Date().toISOString(),
+  };
+
+  pendingActions.push(action);
+
+  logAudit("ACTION_SUBMITTED", maker.id, {
+    actionId: action.id,
+    action_type,
+    payload,
+  });
+
+  return res.status(201).json({
+    message: "Action submitted and awaiting checker approval",
+    action,
+  });
+});
 
 /**
  * POST /api/admin/actions/bulk/approve
@@ -159,7 +159,11 @@ router.post(
         const action = pendingActions.find((a) => a.id === actionId);
 
         if (!action) {
-          results.push({ actionId, status: "failed", message: "Action not found" });
+          results.push({
+            actionId,
+            status: "failed",
+            message: "Action not found",
+          });
           continue;
         }
 
@@ -245,7 +249,11 @@ router.post(
         const action = pendingActions.find((a) => a.id === actionId);
 
         if (!action) {
-          results.push({ actionId, status: "failed", message: "Action not found" });
+          results.push({
+            actionId,
+            status: "failed",
+            message: "Action not found",
+          });
           continue;
         }
 
@@ -303,34 +311,26 @@ router.post(
  * GET /api/admin/actions
  * List all pending actions
  */
-router.get(
-  "/actions",
-  requireAdmin,
-  (req: Request, res: Response) => {
-    const { status } = req.query;
-    const filtered = status
-      ? pendingActions.filter((a) => a.status === status)
-      : pendingActions;
+router.get("/actions", requireAdmin, (req: Request, res: Response) => {
+  const { status } = req.query;
+  const filtered = status
+    ? pendingActions.filter((a) => a.status === status)
+    : pendingActions;
 
-    return res.json({ actions: filtered, total: filtered.length });
-  },
-);
+  return res.json({ actions: filtered, total: filtered.length });
+});
 
 /**
  * GET /api/admin/actions/:id
  * Get a single pending action
  */
-router.get(
-  "/actions/:id",
-  requireAdmin,
-  (req: Request, res: Response) => {
-    const action = pendingActions.find((a) => a.id === req.params.id);
-    if (!action) {
-      return res.status(404).json({ message: "Action not found" });
-    }
-    return res.json({ action });
-  },
-);
+router.get("/actions/:id", requireAdmin, (req: Request, res: Response) => {
+  const action = pendingActions.find((a) => a.id === req.params.id);
+  if (!action) {
+    return res.status(404).json({ message: "Action not found" });
+  }
+  return res.json({ action });
+});
 
 /**
  * POST /api/admin/actions/:id/approve
@@ -440,11 +440,19 @@ function executeAction(action: PendingAction): Record<string, unknown> {
   switch (action.action_type) {
     case "freeze_account":
       console.log(`[EXEC] Freezing account`, action.payload);
-      return { executed: true, action_type: "freeze_account", ...action.payload };
+      return {
+        executed: true,
+        action_type: "freeze_account",
+        ...action.payload,
+      };
 
     case "manual_credit":
       console.log(`[EXEC] Manual credit`, action.payload);
-      return { executed: true, action_type: "manual_credit", ...action.payload };
+      return {
+        executed: true,
+        action_type: "manual_credit",
+        ...action.payload,
+      };
 
     case "manual_debit":
       console.log(`[EXEC] Manual debit`, action.payload);

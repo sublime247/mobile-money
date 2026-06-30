@@ -54,8 +54,7 @@ describe("MTN MoMo API Contract", () => {
             undefined,
             {
               headers: {
-                Authorization:
-                  "Basic dGVzdC1hcGkta2V5OnRlc3QtYXBpLXNlY3JldA==",
+                Authorization: "Basic dGVzdC1hcGkta2V5OnRlc3QtYXBpLXNlY3JldA==",
                 "Ocp-Apim-Subscription-Key": MTN_SUBSCRIPTION_KEY,
               },
             },
@@ -76,10 +75,7 @@ describe("MTN MoMo API Contract", () => {
           method: "POST",
           path: "/collection/v1_0/requesttopay",
           headers: {
-            Authorization: regex(
-              "^Bearer .+$",
-              `Bearer ${BEARER_TOKEN}`,
-            ),
+            Authorization: regex("^Bearer .+$", `Bearer ${BEARER_TOKEN}`),
             "Ocp-Apim-Subscription-Key": string(MTN_SUBSCRIPTION_KEY),
             "X-Target-Environment": like("sandbox"),
             "X-Reference-Id": regex(

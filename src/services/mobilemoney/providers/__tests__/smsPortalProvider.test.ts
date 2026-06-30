@@ -31,17 +31,30 @@ describe("SmsPortalProvider", () => {
 
   describe("requestPayment", () => {
     it("returns success when simulator succeeds", async () => {
-      mockSubmitFormAndExtract.mockResolvedValue({ success: true, data: { message: "Payment sent", reference: "ref-1" } });
+      mockSubmitFormAndExtract.mockResolvedValue({
+        success: true,
+        data: { message: "Payment sent", reference: "ref-1" },
+      });
 
-      const result = await provider.requestPayment("+261700000000", "5000", "ref-1");
+      const result = await provider.requestPayment(
+        "+261700000000",
+        "5000",
+        "ref-1",
+      );
 
       expect(result.success).toBe(true);
-      expect(result.data).toMatchObject({ message: "Payment sent", reference: "ref-1" });
+      expect(result.data).toMatchObject({
+        message: "Payment sent",
+        reference: "ref-1",
+      });
       expect(mockSubmitFormAndExtract).toHaveBeenCalledTimes(1);
     });
 
     it("returns failure when simulator returns error", async () => {
-      mockSubmitFormAndExtract.mockResolvedValue({ success: false, error: "Insufficient balance" });
+      mockSubmitFormAndExtract.mockResolvedValue({
+        success: false,
+        error: "Insufficient balance",
+      });
 
       const result = await provider.requestPayment("+261700000000", "5000");
 
@@ -59,7 +72,10 @@ describe("SmsPortalProvider", () => {
     });
 
     it("generates a reference when none provided", async () => {
-      mockSubmitFormAndExtract.mockResolvedValue({ success: true, data: { reference: expect.stringContaining("SMS-PAYMENT-") } });
+      mockSubmitFormAndExtract.mockResolvedValue({
+        success: true,
+        data: { reference: expect.stringContaining("SMS-PAYMENT-") },
+      });
 
       const result = await provider.requestPayment("+261700000000", "5000");
 
@@ -69,16 +85,26 @@ describe("SmsPortalProvider", () => {
 
   describe("sendPayout", () => {
     it("returns success when simulator succeeds", async () => {
-      mockSubmitFormAndExtract.mockResolvedValue({ success: true, data: { message: "Payout sent", reference: "payout-1" } });
+      mockSubmitFormAndExtract.mockResolvedValue({
+        success: true,
+        data: { message: "Payout sent", reference: "payout-1" },
+      });
 
-      const result = await provider.sendPayout("+261700000000", "10000", "payout-1");
+      const result = await provider.sendPayout(
+        "+261700000000",
+        "10000",
+        "payout-1",
+      );
 
       expect(result.success).toBe(true);
       expect(mockSubmitFormAndExtract).toHaveBeenCalledTimes(1);
     });
 
     it("returns failure when simulator returns error", async () => {
-      mockSubmitFormAndExtract.mockResolvedValue({ success: false, error: "Daily limit exceeded" });
+      mockSubmitFormAndExtract.mockResolvedValue({
+        success: false,
+        error: "Daily limit exceeded",
+      });
 
       const result = await provider.sendPayout("+261700000000", "10000");
 

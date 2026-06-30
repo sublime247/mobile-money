@@ -114,6 +114,7 @@ Pact tests are **separate** from unit tests:
 - **Pact tests** (`npm run test:pact`) use `jest.pact.config.js` and Pact mock servers
 
 This separation ensures:
+
 - Fast unit test execution (no Pact overhead)
 - Isolated contract verification
 - No port conflicts
@@ -139,12 +140,14 @@ Add to your CI pipeline:
 ### Port Already in Use
 
 Pact mock servers bind to random ports. If you see port conflicts, ensure:
+
 - Tests run serially (`maxWorkers: 1` in `jest.pact.config.js`)
 - No other services are using the port range
 
 ### Pact Files Not Generated
 
 Check that:
+
 - The `pacts/` directory exists (created automatically)
 - Tests are passing (pact files only generate on success)
 - You have write permissions in the project directory

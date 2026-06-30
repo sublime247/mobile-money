@@ -8,6 +8,8 @@ describe("formatPhoneForProvider", () => {
   });
 
   it("keeps E.164 format for other providers", () => {
-    expect(formatPhoneForProvider("+237670000000", "mtn")).toBe("+237670000000");
+    expect(formatPhoneForProvider("+237670000000", "mtn")).toBe(
+      "+237670000000",
+    );
   });
 });

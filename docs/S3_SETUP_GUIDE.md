@@ -171,19 +171,22 @@ Replace the values with your actual credentials from Step 2.
 Create a test script `test-s3.ts`:
 
 ```typescript
-import { getS3Client } from './src/config/s3';
-import { ListBucketsCommand } from '@aws-sdk/client-s3';
+import { getS3Client } from "./src/config/s3";
+import { ListBucketsCommand } from "@aws-sdk/client-s3";
 
 async function testS3Connection() {
   try {
     const client = getS3Client();
     const command = new ListBucketsCommand({});
     const response = await client.send(command);
-    
-    console.log('✓ S3 connection successful!');
-    console.log('Buckets:', response.Buckets?.map(b => b.Name));
+
+    console.log("✓ S3 connection successful!");
+    console.log(
+      "Buckets:",
+      response.Buckets?.map((b) => b.Name),
+    );
   } catch (error) {
-    console.error('✗ S3 connection failed:', error);
+    console.error("✗ S3 connection failed:", error);
   }
 }
 
@@ -317,6 +320,7 @@ aws cloudwatch put-metric-alarm \
 **Cause**: IAM user doesn't have required permissions
 
 **Solution**:
+
 1. Verify IAM policy is attached to user
 2. Check bucket policy doesn't block access
 3. Ensure credentials in `.env` are correct
@@ -326,6 +330,7 @@ aws cloudwatch put-metric-alarm \
 **Cause**: Bucket name is incorrect or in different region
 
 **Solution**:
+
 1. Verify bucket name in `.env` matches actual bucket
 2. Check `AWS_REGION` matches bucket region
 
@@ -334,6 +339,7 @@ aws cloudwatch put-metric-alarm \
 **Cause**: Environment variables not loaded
 
 **Solution**:
+
 1. Ensure `.env` file exists
 2. Restart application after updating `.env`
 3. Check `dotenv.config()` is called before S3 client creation
@@ -343,6 +349,7 @@ aws cloudwatch put-metric-alarm \
 **Cause**: Incorrect secret access key or clock skew
 
 **Solution**:
+
 1. Verify `AWS_SECRET_ACCESS_KEY` is correct
 2. Check system clock is synchronized
 3. Regenerate access keys if needed
@@ -393,13 +400,13 @@ export const createS3Client = (): S3Client => {
       secretAccessKey: s3Config.secretAccessKey,
     },
   };
-  
+
   // Use LocalStack for development
   if (process.env.AWS_ENDPOINT_URL) {
     config.endpoint = process.env.AWS_ENDPOINT_URL;
     config.forcePathStyle = true;
   }
-  
+
   return new S3Client(config);
 };
 ```

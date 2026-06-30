@@ -12,7 +12,10 @@ if (fs.existsSync(path.join(__dirname, "../.env"))) {
 
 const runCommand = (cmd: string, env: Record<string, string>): string => {
   try {
-    return execSync(cmd, { env: { ...process.env, ...env }, encoding: "utf8" }).trim();
+    return execSync(cmd, {
+      env: { ...process.env, ...env },
+      encoding: "utf8",
+    }).trim();
   } catch (error: any) {
     throw new Error(`Command failed: ${cmd}\nError: ${error.message}`);
   }
@@ -25,18 +28,22 @@ const main = () => {
 
   const SENTRY_AUTH_TOKEN = process.env.SENTRY_AUTH_TOKEN;
   const SENTRY_ORG = process.env.SENTRY_ORG || process.env.SENTRY_ORGANIZATION;
-  const SENTRY_PROJECT = process.env.SENTRY_PROJECT || process.env.SENTRY_PROJECT_NAME;
-  
+  const SENTRY_PROJECT =
+    process.env.SENTRY_PROJECT || process.env.SENTRY_PROJECT_NAME;
+
   let SENTRY_RELEASE = process.env.SENTRY_RELEASE;
   if (!SENTRY_RELEASE) {
     try {
-      SENTRY_RELEASE = execSync("git rev-parse HEAD", { encoding: "utf8" }).trim();
+      SENTRY_RELEASE = execSync("git rev-parse HEAD", {
+        encoding: "utf8",
+      }).trim();
     } catch {
       // Ignored
     }
   }
 
-  const ENVIRONMENT = process.env.ENVIRONMENT || process.env.NODE_ENV || "production";
+  const ENVIRONMENT =
+    process.env.ENVIRONMENT || process.env.NODE_ENV || "production";
 
   if (!SENTRY_AUTH_TOKEN) {
     console.error("❌ Error: SENTRY_AUTH_TOKEN is not set.");
@@ -47,7 +54,9 @@ const main = () => {
     process.exit(1);
   }
   if (!SENTRY_PROJECT) {
-    console.error("❌ Error: SENTRY_PROJECT (or SENTRY_PROJECT_NAME) is not set.");
+    console.error(
+      "❌ Error: SENTRY_PROJECT (or SENTRY_PROJECT_NAME) is not set.",
+    );
     process.exit(1);
   }
   if (!SENTRY_RELEASE) {
@@ -74,7 +83,9 @@ const main = () => {
     execSync("sentry-cli --version", { stdio: "ignore" });
     hasCli = true;
   } catch {
-    console.log("⚠️  sentry-cli not found in PATH. Checking node_modules / npx...");
+    console.log(
+      "⚠️  sentry-cli not found in PATH. Checking node_modules / npx...",
+    );
     try {
       execSync("npx sentry-cli --version", { stdio: "ignore" });
       hasCli = true;
@@ -86,7 +97,9 @@ const main = () => {
   const cliPath = hasCli ? "sentry-cli" : "npx sentry-cli";
 
   if (!hasCli) {
-    console.log("⚠️  sentry-cli not found. Installing @sentry/cli locally as dev dependency...");
+    console.log(
+      "⚠️  sentry-cli not found. Installing @sentry/cli locally as dev dependency...",
+    );
     try {
       execSync("npm install --no-save @sentry/cli", { stdio: "inherit" });
     } catch (e: any) {
@@ -101,16 +114,24 @@ const main = () => {
 
     console.log("📝 Associating commits...");
     try {
-      runCommand(`${cliPath} releases set-commits --auto "${SENTRY_RELEASE}"`, sentryEnv);
+      runCommand(
+        `${cliPath} releases set-commits --auto "${SENTRY_RELEASE}"`,
+        sentryEnv,
+      );
     } catch (err: any) {
-      console.log(`⚠️  Could not associate commits automatically: ${err.message}. Continuing...`);
+      console.log(
+        `⚠️  Could not associate commits automatically: ${err.message}. Continuing...`,
+      );
     }
 
     console.log("🏁 Finalizing release...");
     runCommand(`${cliPath} releases finalize "${SENTRY_RELEASE}"`, sentryEnv);
 
     console.log(`📦 Recording deployment for environment '${ENVIRONMENT}'...`);
-    runCommand(`${cliPath} releases deploys "${SENTRY_RELEASE}" new -e "${ENVIRONMENT}"`, sentryEnv);
+    runCommand(
+      `${cliPath} releases deploys "${SENTRY_RELEASE}" new -e "${ENVIRONMENT}"`,
+      sentryEnv,
+    );
 
     console.log("✅ Sentry release and deployment successfully recorded!");
   } catch (error: any) {

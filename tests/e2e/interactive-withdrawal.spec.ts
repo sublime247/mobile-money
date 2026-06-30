@@ -26,7 +26,11 @@ test.describe("Interactive Withdrawal – SEP-24 Hosted Flow", () => {
 
   test("GET /sep24/fee returns fee for withdrawal operation", async () => {
     const res = await api.get("/sep24/fee", {
-      params: { asset_code: ASSET_CODE, amount: WITHDRAW_AMOUNT, operation: "withdrawal" },
+      params: {
+        asset_code: ASSET_CODE,
+        amount: WITHDRAW_AMOUNT,
+        operation: "withdrawal",
+      },
     });
     expect(res.ok()).toBeTruthy();
     const body = await res.json();
@@ -94,7 +98,11 @@ test.describe("Interactive Withdrawal – SEP-24 Hosted Flow", () => {
 
   test("Expired callback redirects to failure", async () => {
     const initRes = await api.post("/sep24/withdraw", {
-      data: { asset_code: ASSET_CODE, amount: "100", account: VALID_STELLAR_ACCOUNT },
+      data: {
+        asset_code: ASSET_CODE,
+        amount: "100",
+        account: VALID_STELLAR_ACCOUNT,
+      },
     });
     const { id } = await initRes.json();
     const cbRes = await api.post(`/sep24/callback/${id}`, {
@@ -110,7 +118,11 @@ test.describe("Interactive Withdrawal – SEP-24 Hosted Flow", () => {
     const results = await Promise.all(
       [1, 2, 3].map(() =>
         api.post("/sep24/withdraw", {
-          data: { asset_code: ASSET_CODE, amount: "50", account: VALID_STELLAR_ACCOUNT },
+          data: {
+            asset_code: ASSET_CODE,
+            amount: "50",
+            account: VALID_STELLAR_ACCOUNT,
+          },
         }),
       ),
     );
@@ -124,14 +136,22 @@ test.describe("Interactive Withdrawal – SEP-24 Hosted Flow", () => {
 
   test("POST /sep24/withdraw rejects unsupported asset", async () => {
     const res = await api.post("/sep24/withdraw", {
-      data: { asset_code: "FAKECOIN", amount: "100", account: VALID_STELLAR_ACCOUNT },
+      data: {
+        asset_code: "FAKECOIN",
+        amount: "100",
+        account: VALID_STELLAR_ACCOUNT,
+      },
     });
     expect(res.status()).toBe(400);
   });
 
   test("POST /sep24/withdraw rejects invalid Stellar account", async () => {
     const res = await api.post("/sep24/withdraw", {
-      data: { asset_code: ASSET_CODE, amount: WITHDRAW_AMOUNT, account: "BAD_KEY" },
+      data: {
+        asset_code: ASSET_CODE,
+        amount: WITHDRAW_AMOUNT,
+        account: "BAD_KEY",
+      },
     });
     expect(res.status()).toBe(400);
   });

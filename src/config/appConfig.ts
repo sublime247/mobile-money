@@ -334,10 +334,10 @@ export const configSchema = convict({
       default: 60000, // 1 minute
     },
     requestTimeoutMs: {
-      doc: 'Orange API request timeout in milliseconds',
-      format: 'nat',
+      doc: "Orange API request timeout in milliseconds",
+      format: "nat",
       default: 30000,
-      env: 'ORANGE_REQUEST_TIMEOUT_MS',
+      env: "ORANGE_REQUEST_TIMEOUT_MS",
     },
   },
 
@@ -423,22 +423,22 @@ export const configSchema = convict({
   // Response compression
   compression: {
     enabled: {
-      doc: 'Enable HTTP response compression',
+      doc: "Enable HTTP response compression",
       format: Boolean,
       default: true,
-      env: 'COMPRESSION_ENABLED',
+      env: "COMPRESSION_ENABLED",
     },
     threshold: {
-      doc: 'Minimum response size in bytes to trigger compression',
-      format: 'nat',
+      doc: "Minimum response size in bytes to trigger compression",
+      format: "nat",
       default: 1024,
-      env: 'COMPRESSION_THRESHOLD',
+      env: "COMPRESSION_THRESHOLD",
     },
     level: {
-      doc: 'Gzip compression level (0-9) used by zlib',
-      format: 'nat',
+      doc: "Gzip compression level (0-9) used by zlib",
+      format: "nat",
       default: 6,
-      env: 'COMPRESSION_LEVEL',
+      env: "COMPRESSION_LEVEL",
     },
   },
 });

@@ -59,9 +59,11 @@ WebP output quality, you can update your Markdown references to point to the
 
 ```md
 <!-- Before -->
+
 ![Architecture diagram](./img/architecture-diagram.png)
 
 <!-- After (smaller, faster) -->
+
 ![Architecture diagram](./img/architecture-diagram.webp)
 ```
 
@@ -69,8 +71,8 @@ WebP output quality, you can update your Markdown references to point to the
 
 Edit the constants at the top of `optimize-images.mjs`:
 
-| Constant | Default | Description |
-|---|---|---|
-| `WEBP_QUALITY` | `80` | WebP quality (0–100) |
-| `IMG_DIR` | `static/img` | Directory to scan |
+| Constant               | Default                | Description            |
+| ---------------------- | ---------------------- | ---------------------- |
+| `WEBP_QUALITY`         | `80`                   | WebP quality (0–100)   |
+| `IMG_DIR`              | `static/img`           | Directory to scan      |
 | `SUPPORTED_EXTENSIONS` | `.png .jpg .jpeg .gif` | File types to compress |

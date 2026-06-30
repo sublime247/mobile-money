@@ -21,28 +21,98 @@ export interface Env {
 // to continent-level mapping.
 const COUNTRY_TO_REGION: Record<string, string> = {
   // North America (NA)
-  US: "NA", CA: "NA", MX: "NA",
+  US: "NA",
+  CA: "NA",
+  MX: "NA",
   // Europe (EU)
-  GB: "EU", DE: "EU", FR: "EU", IT: "EU", ES: "EU", NL: "EU",
-  BE: "EU", CH: "EU", SE: "EU", NO: "EU", DK: "EU", FI: "EU",
-  AT: "EU", IE: "EU", PL: "EU", CZ: "EU", PT: "EU", GR: "EU",
-  HU: "EU", RO: "EU", BG: "EU", SK: "EU", HR: "EU", SI: "EU",
-  LT: "EU", LV: "EU", EE: "EU", IS: "EU", LU: "EU", MT: "EU",
-  UA: "EU", RU: "EU", TR: "EU",
+  GB: "EU",
+  DE: "EU",
+  FR: "EU",
+  IT: "EU",
+  ES: "EU",
+  NL: "EU",
+  BE: "EU",
+  CH: "EU",
+  SE: "EU",
+  NO: "EU",
+  DK: "EU",
+  FI: "EU",
+  AT: "EU",
+  IE: "EU",
+  PL: "EU",
+  CZ: "EU",
+  PT: "EU",
+  GR: "EU",
+  HU: "EU",
+  RO: "EU",
+  BG: "EU",
+  SK: "EU",
+  HR: "EU",
+  SI: "EU",
+  LT: "EU",
+  LV: "EU",
+  EE: "EU",
+  IS: "EU",
+  LU: "EU",
+  MT: "EU",
+  UA: "EU",
+  RU: "EU",
+  TR: "EU",
   // Asia-Pacific (APAC)
-  IN: "APAC", JP: "APAC", AU: "APAC", SG: "APAC", KR: "APAC",
-  CN: "APAC", HK: "APAC", TW: "APAC", NZ: "APAC", MY: "APAC",
-  TH: "APAC", VN: "APAC", PH: "APAC", ID: "APAC", PK: "APAC",
-  BD: "APAC", LK: "APAC", MM: "APAC", KH: "APAC", LA: "APAC",
+  IN: "APAC",
+  JP: "APAC",
+  AU: "APAC",
+  SG: "APAC",
+  KR: "APAC",
+  CN: "APAC",
+  HK: "APAC",
+  TW: "APAC",
+  NZ: "APAC",
+  MY: "APAC",
+  TH: "APAC",
+  VN: "APAC",
+  PH: "APAC",
+  ID: "APAC",
+  PK: "APAC",
+  BD: "APAC",
+  LK: "APAC",
+  MM: "APAC",
+  KH: "APAC",
+  LA: "APAC",
   // Africa (AF)
-  NG: "AF", ZA: "AF", KE: "AF", GH: "AF", EG: "AF",
-  MA: "AF", TN: "AF", DZ: "AF", SN: "AF", CI: "AF",
-  CM: "AF", UG: "AF", ET: "AF", TZ: "AF", ZM: "AF",
-  ZW: "AF", MZ: "AF", AO: "AF", SD: "AF", LY: "AF",
+  NG: "AF",
+  ZA: "AF",
+  KE: "AF",
+  GH: "AF",
+  EG: "AF",
+  MA: "AF",
+  TN: "AF",
+  DZ: "AF",
+  SN: "AF",
+  CI: "AF",
+  CM: "AF",
+  UG: "AF",
+  ET: "AF",
+  TZ: "AF",
+  ZM: "AF",
+  ZW: "AF",
+  MZ: "AF",
+  AO: "AF",
+  SD: "AF",
+  LY: "AF",
   // South America (SA)
-  BR: "SA", AR: "SA", CL: "SA", CO: "SA", PE: "SA",
-  VE: "SA", EC: "SA", BO: "SA", UY: "SA", PY: "SA",
-  GY: "SA", SR: "SA",
+  BR: "SA",
+  AR: "SA",
+  CL: "SA",
+  CO: "SA",
+  PE: "SA",
+  VE: "SA",
+  EC: "SA",
+  BO: "SA",
+  UY: "SA",
+  PY: "SA",
+  GY: "SA",
+  SR: "SA",
 };
 
 // Continent code → region code fallback.
@@ -59,7 +129,8 @@ const CONTINENT_TO_REGION: Record<string, string> = {
 function parseAllowedOrigins(raw: string | undefined): ReadonlySet<string> {
   if (!raw) return new Set();
   return new Set(
-    raw.split(",")
+    raw
+      .split(",")
       .map((o) => o.trim())
       .filter((o) => o.length > 0 && !o.includes("*")),
   );
@@ -74,13 +145,17 @@ function buildCorsHeaders(
     "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Credentials": "true",
     "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With, X-Request-ID",
+    "Access-Control-Allow-Headers":
+      "Content-Type, Authorization, X-Requested-With, X-Request-ID",
     "Access-Control-Expose-Headers": "X-Request-ID",
     "Access-Control-Max-Age": "600",
   };
 }
 
-function addCorsHeaders(response: Response, corsHeaders: Record<string, string>): Response {
+function addCorsHeaders(
+  response: Response,
+  corsHeaders: Record<string, string>,
+): Response {
   const headers = new Headers(response.headers);
   for (const [key, value] of Object.entries(corsHeaders)) {
     headers.set(key, value);
@@ -92,7 +167,10 @@ function addCorsHeaders(response: Response, corsHeaders: Record<string, string>)
   });
 }
 
-export function resolveOrigin(cf: IncomingRequestCfProperties | undefined, env: Env): string | null {
+export function resolveOrigin(
+  cf: IncomingRequestCfProperties | undefined,
+  env: Env,
+): string | null {
   if (!cf) {
     return null;
   }
@@ -115,18 +193,23 @@ export function resolveOrigin(cf: IncomingRequestCfProperties | undefined, env: 
   }
 
   // Resolve region code to an env var name: REGION_{code}_ORIGIN
-  const regionOrigin = env[`REGION_${regionCode}_ORIGIN` as keyof Env] as string | undefined;
+  const regionOrigin = env[`REGION_${regionCode}_ORIGIN` as keyof Env] as
+    | string
+    | undefined;
   return regionOrigin || null;
 }
 
-async function pingCheck(origin: string, path: string = '/health'): Promise<boolean> {
+async function pingCheck(
+  origin: string,
+  path: string = "/health",
+): Promise<boolean> {
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 2000);
 
     const response = await fetch(`${origin}${path}`, {
-      method: 'GET',
-      signal: controller.signal
+      method: "GET",
+      signal: controller.signal,
     });
 
     clearTimeout(timeout);
@@ -137,7 +220,11 @@ async function pingCheck(origin: string, path: string = '/health'): Promise<bool
 }
 
 export default {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  async fetch(
+    request: Request,
+    env: Env,
+    ctx: ExecutionContext,
+  ): Promise<Response> {
     const allowedOrigins = parseAllowedOrigins(env.ALLOWED_ORIGINS);
     const requestOrigin = request.headers.get("Origin") ?? "";
     const corsHeaders = buildCorsHeaders(requestOrigin, allowedOrigins);
@@ -163,7 +250,10 @@ export default {
     let usingGeoOrigin = false;
 
     if (geoRoutingEnabled) {
-      const geoOrigin = resolveOrigin(request.cf as IncomingRequestCfProperties | undefined, env);
+      const geoOrigin = resolveOrigin(
+        request.cf as IncomingRequestCfProperties | undefined,
+        env,
+      );
       if (geoOrigin && geoOrigin !== primary) {
         // Proactive health check on the geo-proximal origin.
         const isGeoHealthy = await pingCheck(geoOrigin, healthPath);
@@ -171,7 +261,9 @@ export default {
           targetOrigin = geoOrigin;
           usingGeoOrigin = true;
         } else {
-          console.warn(`[edge-router] Geo origin ${geoOrigin} is down. Falling back to primary.`);
+          console.warn(
+            `[edge-router] Geo origin ${geoOrigin} is down. Falling back to primary.`,
+          );
           const isPrimaryHealthy = await pingCheck(primary, healthPath);
           targetOrigin = isPrimaryHealthy ? primary : backup;
         }
@@ -187,13 +279,16 @@ export default {
     }
 
     // Step 2: Forward request to the selected origin.
-    const targetUrl = new URL(requestUrl.pathname + requestUrl.search, targetOrigin);
+    const targetUrl = new URL(
+      requestUrl.pathname + requestUrl.search,
+      targetOrigin,
+    );
 
     const newRequest = new Request(targetUrl.toString(), {
       method: request.method,
       headers: request.headers,
       body: request.clone().body,
-      redirect: 'manual'
+      redirect: "manual",
     });
 
     try {
@@ -201,26 +296,40 @@ export default {
 
       // Step 3a: Geo origin returned 5xx — fallback to primary.
       if (response.status >= 500 && usingGeoOrigin) {
-        console.warn(`[edge-router] Geo origin ${targetOrigin} returned ${response.status}. Falling back to primary.`);
-        const primaryUrl = new URL(requestUrl.pathname + requestUrl.search, primary);
+        console.warn(
+          `[edge-router] Geo origin ${targetOrigin} returned ${response.status}. Falling back to primary.`,
+        );
+        const primaryUrl = new URL(
+          requestUrl.pathname + requestUrl.search,
+          primary,
+        );
         const fallbackRequest = new Request(primaryUrl.toString(), {
           method: request.method,
           headers: request.headers,
           body: request.body,
-          redirect: 'manual'
+          redirect: "manual",
         });
         return withCors(await fetch(fallbackRequest));
       }
 
       // Step 3b: Primary returned 5xx — fallback to backup (original behaviour).
-      if (response.status >= 500 && targetOrigin === primary && primary !== backup) {
-        console.warn(`[edge-router] Primary origin ${primary} returned ${response.status}. Rerouting to backup.`);
-        const backupUrl = new URL(requestUrl.pathname + requestUrl.search, backup);
+      if (
+        response.status >= 500 &&
+        targetOrigin === primary &&
+        primary !== backup
+      ) {
+        console.warn(
+          `[edge-router] Primary origin ${primary} returned ${response.status}. Rerouting to backup.`,
+        );
+        const backupUrl = new URL(
+          requestUrl.pathname + requestUrl.search,
+          backup,
+        );
         const backupRequest = new Request(backupUrl.toString(), {
           method: request.method,
           headers: request.headers,
           body: request.body,
-          redirect: 'manual'
+          redirect: "manual",
         });
         return withCors(await fetch(backupRequest));
       }
@@ -229,31 +338,41 @@ export default {
     } catch (err) {
       // Step 4a: Fetch to geo origin threw — fallback to primary.
       if (usingGeoOrigin) {
-        console.error(`[edge-router] Fetch to geo origin failed. Falling back to primary.`);
-        const primaryUrl = new URL(requestUrl.pathname + requestUrl.search, primary);
+        console.error(
+          `[edge-router] Fetch to geo origin failed. Falling back to primary.`,
+        );
+        const primaryUrl = new URL(
+          requestUrl.pathname + requestUrl.search,
+          primary,
+        );
         const fallbackRequest = new Request(primaryUrl.toString(), {
           method: request.method,
           headers: request.headers,
           body: request.body,
-          redirect: 'manual'
+          redirect: "manual",
         });
         return withCors(await fetch(fallbackRequest));
       }
 
       // Step 4b: Fetch to primary threw — fallback to backup (original behaviour).
       if (targetOrigin === primary && primary !== backup) {
-        console.error(`[edge-router] Fetch to primary origin failed. Rerouting to backup.`);
-        const backupUrl = new URL(requestUrl.pathname + requestUrl.search, backup);
+        console.error(
+          `[edge-router] Fetch to primary origin failed. Rerouting to backup.`,
+        );
+        const backupUrl = new URL(
+          requestUrl.pathname + requestUrl.search,
+          backup,
+        );
         const backupRequest = new Request(backupUrl.toString(), {
           method: request.method,
           headers: request.headers,
           body: request.body,
-          redirect: 'manual'
+          redirect: "manual",
         });
         return withCors(await fetch(backupRequest));
       }
 
       return withCors(new Response("Service Unavailable", { status: 503 }));
     }
-  }
+  },
 } satisfies ExportedHandler<Env>;

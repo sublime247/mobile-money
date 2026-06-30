@@ -28,6 +28,8 @@ describe("runCleanupJob", () => {
 
     expect(mockReleaseAllExpiredIdempotencyKeys).toHaveBeenCalledTimes(1);
     expect(mockPoolQuery).toHaveBeenCalledTimes(1);
-    expect(mockPoolQuery.mock.calls[0][0]).toContain("DELETE FROM transactions");
+    expect(mockPoolQuery.mock.calls[0][0]).toContain(
+      "DELETE FROM transactions",
+    );
   });
 });

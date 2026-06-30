@@ -53,7 +53,7 @@ function buildTransport(): TransportSingleOptions | undefined {
     options: {
       colorize: true,
       translateTime: "SYS:standard", // human-readable local time in dev
-      ignore: "pid,hostname",        // reduce noise in terminal output
+      ignore: "pid,hostname", // reduce noise in terminal output
     },
   };
 }

@@ -24,9 +24,9 @@ import { printError } from "./momo-cli";
  * ✅ Faster writes (fewer indexes = less maintenance overhead)
  */
 
-import { Pool } from 'pg';
-import dotenv from 'dotenv';
-import fs from 'fs';
+import { Pool } from "pg";
+import dotenv from "dotenv";
+import fs from "fs";
 
 dotenv.config();
 
@@ -85,7 +85,7 @@ const pool = new Pool({
  * Find indexes with zero scans in the specified number of days
  */
 async function findUnusedIndexes(
-  daysSince: number = 30
+  daysSince: number = 30,
 ): Promise<UnusedIndex[]> {
   const query = `
     WITH index_stats AS (
@@ -203,7 +203,8 @@ async function findDuplicateIndexes(): Promise<DuplicateIndex[]> {
   return result.rows.map((row) => ({
     table_name: row.table_name,
     column_list: row.column_list,
-    indexes: typeof row.indexes === 'string' ? JSON.parse(row.indexes) : row.indexes,
+    indexes:
+      typeof row.indexes === "string" ? JSON.parse(row.indexes) : row.indexes,
     total_size_mb: parseFloat(row.total_size_mb),
   }));
 }
@@ -264,10 +265,14 @@ async function getIndexStatistics() {
  * Generate SQL for dropping indexes
  */
 function generateDropSQL(indexes: UnusedIndex[]): string[] {
-  const safeIndexes = indexes.filter((idx) => !idx.is_primary && !idx.is_unique);
+  const safeIndexes = indexes.filter(
+    (idx) => !idx.is_primary && !idx.is_unique,
+  );
   return safeIndexes.map(
-    (idx) => `-- Safe to drop: ${idx.indexname} (${idx.size_mb}MB, unused for ${idx.days_since_activity} days)
-DROP INDEX IF EXISTS ${idx.schemaname}.${idx.indexname};`
+    (
+      idx,
+    ) => `-- Safe to drop: ${idx.indexname} (${idx.size_mb}MB, unused for ${idx.days_since_activity} days)
+DROP INDEX IF EXISTS ${idx.schemaname}.${idx.indexname};`,
   );
 }
 
@@ -275,25 +280,25 @@ DROP INDEX IF EXISTS ${idx.schemaname}.${idx.indexname};`
  * Generate human-readable report
  */
 function formatReport(report: AuditReport): string {
-  let output = '';
+  let output = "";
 
-  output += '\n' + '═'.repeat(80) + '\n';
-  output += '📊 DATABASE INDEX AUDIT REPORT\n';
-  output += '═'.repeat(80) + '\n\n';
+  output += "\n" + "═".repeat(80) + "\n";
+  output += "📊 DATABASE INDEX AUDIT REPORT\n";
+  output += "═".repeat(80) + "\n\n";
 
   output += `🕐 Timestamp: ${report.timestamp.toISOString()}\n`;
   output += `🗄️  Database: ${report.database}\n`;
   output += `📅 Analysis Period: Last ${report.analysis_days} days\n\n`;
 
-  output += '📈 INDEX STATISTICS\n';
-  output += '─'.repeat(80) + '\n';
+  output += "📈 INDEX STATISTICS\n";
+  output += "─".repeat(80) + "\n";
   output += `Total Indexes:              ${report.stats.total_indexes}\n`;
   output += `Unused Indexes:             ${report.stats.unused_count}\n`;
   output += `Potential Storage Saving:   ${report.stats.potential_space_savings_mb} MB\n\n`;
 
   if (report.unused_indexes.length > 0) {
-    output += '🔴 UNUSED INDEXES (0 scans)\n';
-    output += '─'.repeat(80) + '\n';
+    output += "🔴 UNUSED INDEXES (0 scans)\n";
+    output += "─".repeat(80) + "\n";
     report.unused_indexes.forEach((idx) => {
       output += `\nTable: ${idx.tablename}\n`;
       output += `  Index: ${idx.indexname}\n`;
@@ -301,12 +306,12 @@ function formatReport(report: AuditReport): string {
       output += `  Last Activity: ${idx.last_activity}\n`;
       output += `  Days Since Activity: ${idx.days_since_activity}\n`;
     });
-    output += '\n';
+    output += "\n";
   }
 
   if (report.bloated_indexes.length > 0) {
-    output += '⚠️  BLOATED INDEXES (>10MB, low usage)\n';
-    output += '─'.repeat(80) + '\n';
+    output += "⚠️  BLOATED INDEXES (>10MB, low usage)\n";
+    output += "─".repeat(80) + "\n";
     report.bloated_indexes.forEach((idx) => {
       output += `\nTable: ${idx.tablename}\n`;
       output += `  Index: ${idx.indexname}\n`;
@@ -314,12 +319,12 @@ function formatReport(report: AuditReport): string {
       output += `  Scans: ${idx.idx_scan}\n`;
       output += `  Last Activity: ${idx.last_activity}\n`;
     });
-    output += '\n';
+    output += "\n";
   }
 
   if (report.duplicate_indexes.length > 0) {
-    output += '🔀 DUPLICATE INDEXES\n';
-    output += '─'.repeat(80) + '\n';
+    output += "🔀 DUPLICATE INDEXES\n";
+    output += "─".repeat(80) + "\n";
     report.duplicate_indexes.forEach((dup) => {
       output += `\nTable: ${dup.table_name}\n`;
       output += `  Columns: ${dup.column_list}\n`;
@@ -329,35 +334,35 @@ function formatReport(report: AuditReport): string {
         output += `    - ${idx.indexname}: ${idx.size_mb}MB (${idx.idx_scan} scans)\n`;
       });
     });
-    output += '\n';
+    output += "\n";
   }
 
   if (report.safe_to_drop.length > 0) {
-    output += '✅ SAFE TO DROP\n';
-    output += '─'.repeat(80) + '\n';
+    output += "✅ SAFE TO DROP\n";
+    output += "─".repeat(80) + "\n";
     output += `Found ${report.safe_to_drop.length} indexes safe to drop.\n`;
     output += `Potential space savings: ${report.stats.potential_space_savings_mb} MB\n\n`;
   }
 
   if (report.recommendations.length > 0) {
-    output += '💡 RECOMMENDATIONS\n';
-    output += '─'.repeat(80) + '\n';
+    output += "💡 RECOMMENDATIONS\n";
+    output += "─".repeat(80) + "\n";
     report.recommendations.forEach((rec) => {
       output += `• ${rec}\n`;
     });
-    output += '\n';
+    output += "\n";
   }
 
   if (report.warnings.length > 0) {
-    output += '⚠️  WARNINGS\n';
-    output += '─'.repeat(80) + '\n';
+    output += "⚠️  WARNINGS\n";
+    output += "─".repeat(80) + "\n";
     report.warnings.forEach((warn) => {
       output += `• ${warn}\n`;
     });
-    output += '\n';
+    output += "\n";
   }
 
-  output += '═'.repeat(80) + '\n';
+  output += "═".repeat(80) + "\n";
   return output;
 }
 
@@ -368,23 +373,23 @@ async function runAudit() {
   const args = process.argv.slice(2);
   let daysSince = 30;
   let verbose = false;
-  let output_format: 'text' | 'json' | 'sql' = 'text';
+  let output_format: "text" | "json" | "sql" = "text";
 
   // Parse CLI arguments
   args.forEach((arg) => {
-    if (arg.startsWith('--days=')) {
-      daysSince = parseInt(arg.split('=')[1], 10);
+    if (arg.startsWith("--days=")) {
+      daysSince = parseInt(arg.split("=")[1], 10);
     }
-    if (arg === '--verbose') {
+    if (arg === "--verbose") {
       verbose = true;
     }
-    if (arg.startsWith('--format=')) {
-      output_format = arg.split('=')[1] as any;
+    if (arg.startsWith("--format=")) {
+      output_format = arg.split("=")[1] as any;
     }
   });
 
   try {
-    console.log('🔍 Starting Database Index Audit...\n');
+    console.log("🔍 Starting Database Index Audit...\n");
 
     const unused = await findUnusedIndexes(daysSince);
     const duplicates = await findDuplicateIndexes();
@@ -397,7 +402,7 @@ async function runAudit() {
 
     const report: AuditReport = {
       timestamp: new Date(),
-      database: process.env.DATABASE_URL?.split('/').pop() || 'unknown',
+      database: process.env.DATABASE_URL?.split("/").pop() || "unknown",
       analysis_days: daysSince,
       unused_indexes: unused,
       duplicate_indexes: duplicates,
@@ -416,44 +421,46 @@ async function runAudit() {
     // Generate recommendations
     if (unused.length > 0) {
       report.recommendations.push(
-        `Review and drop ${unused.length} unused indexes to save ${potentialSavings}MB`
+        `Review and drop ${unused.length} unused indexes to save ${potentialSavings}MB`,
       );
     }
     if (duplicates.length > 0) {
       report.recommendations.push(
-        `Consolidate ${duplicates.length} sets of duplicate indexes`
+        `Consolidate ${duplicates.length} sets of duplicate indexes`,
       );
     }
     if (bloated.length > 0) {
       report.recommendations.push(
-        `Monitor ${bloated.length} bloated indexes for potential removal`
+        `Monitor ${bloated.length} bloated indexes for potential removal`,
       );
     }
 
     // Add warnings
     if (potentialSavings > 1000) {
       report.warnings.push(
-        `High potential storage savings (${potentialSavings}MB). Careful review recommended before deletion.`
+        `High potential storage savings (${potentialSavings}MB). Careful review recommended before deletion.`,
       );
     }
 
     // Output results
-    if ((output_format as string) === 'json') {
+    if ((output_format as string) === "json") {
       console.log(JSON.stringify(report, null, 2));
-    } else if ((output_format as string) === 'sql') {
+    } else if ((output_format as string) === "sql") {
       if (dropSql.length > 0) {
-        console.log('-- Generated DROP statements (review carefully before executing)\n');
-        dropSql.forEach((sql) => console.log(sql + '\n'));
+        console.log(
+          "-- Generated DROP statements (review carefully before executing)\n",
+        );
+        dropSql.forEach((sql) => console.log(sql + "\n"));
       } else {
-        console.log('-- No safe indexes to drop');
+        console.log("-- No safe indexes to drop");
       }
     } else {
       // Text format
       console.log(formatReport(report));
 
       if (verbose && dropSql.length > 0) {
-        console.log('\n📝 SQL STATEMENTS\n');
-        console.log('─'.repeat(80) + '\n');
+        console.log("\n📝 SQL STATEMENTS\n");
+        console.log("─".repeat(80) + "\n");
         dropSql.forEach((sql, idx) => {
           console.log(`${idx + 1}. ${sql}\n`);
         });
@@ -461,10 +468,11 @@ async function runAudit() {
     }
 
     // Return exit code based on findings
-    const hasIssues = unused.length > 0 || duplicates.length > 0 || bloated.length > 0;
+    const hasIssues =
+      unused.length > 0 || duplicates.length > 0 || bloated.length > 0;
     process.exit(hasIssues ? 1 : 0);
   } catch (error) {
-    printError('❌ Audit failed:', error);
+    printError("❌ Audit failed:", error);
     process.exit(1);
   } finally {
     await pool.end();

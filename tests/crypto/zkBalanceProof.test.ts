@@ -78,9 +78,16 @@ describe("ZK proof of opening (Schnorr / Sigma)", () => {
 
   it("verifies for zero and for large values near the group order", () => {
     const zero = commit(0n);
-    expect(verifyOpening(zero.commitment, proveOpening(zero.commitment, zero.opening))).toBe(true);
+    expect(
+      verifyOpening(
+        zero.commitment,
+        proveOpening(zero.commitment, zero.opening),
+      ),
+    ).toBe(true);
     const big = commit(10n ** 12n); // 1 trillion minor units
-    expect(verifyOpening(big.commitment, proveOpening(big.commitment, big.opening))).toBe(true);
+    expect(
+      verifyOpening(big.commitment, proveOpening(big.commitment, big.opening)),
+    ).toBe(true);
   });
 });
 
@@ -110,7 +117,9 @@ describe("ZK proof of equality of committed values", () => {
       c1.opening.blinding,
       c2.opening.blinding,
     );
-    expect(verifyEqualOpenings(c1.commitment, c2.commitment, proof)).toBe(false);
+    expect(verifyEqualOpenings(c1.commitment, c2.commitment, proof)).toBe(
+      false,
+    );
   });
 
   it("rejects against swapped commitments", () => {

@@ -1,4 +1,7 @@
-import { MobileMoneyProvider, ProviderTransactionStatus } from "../mobileMoneyService";
+import {
+  MobileMoneyProvider,
+  ProviderTransactionStatus,
+} from "../mobileMoneyService";
 import logger from "../../../utils/logger";
 
 export interface ChaosConfig {
@@ -40,7 +43,10 @@ function clampRatio(value: number): number {
   return Math.max(0, Math.min(1, value));
 }
 
-function normalizeLatencyBounds(minMs: number, maxMs: number): Pick<NormalizedChaosConfig, "latencyMinMs" | "latencyMaxMs"> {
+function normalizeLatencyBounds(
+  minMs: number,
+  maxMs: number,
+): Pick<NormalizedChaosConfig, "latencyMinMs" | "latencyMaxMs"> {
   const lower = Math.max(0, Math.floor(minMs));
   const upper = Math.max(0, Math.floor(maxMs));
 
@@ -49,22 +55,42 @@ function normalizeLatencyBounds(minMs: number, maxMs: number): Pick<NormalizedCh
     : { latencyMinMs: upper, latencyMaxMs: lower };
 }
 
-export function getChaosConfigFromEnv(env: NodeJS.ProcessEnv = process.env): NormalizedChaosConfig {
-  const latencyMaxFallback = parseNumber(env.CHAOS_LATENCY_MS, DEFAULT_CHAOS_CONFIG.latencyMaxMs);
-  const latencyMinMs = parseNumber(env.CHAOS_LATENCY_MIN_MS, DEFAULT_CHAOS_CONFIG.latencyMinMs);
-  const latencyMaxMs = parseNumber(env.CHAOS_LATENCY_MAX_MS, latencyMaxFallback);
+export function getChaosConfigFromEnv(
+  env: NodeJS.ProcessEnv = process.env,
+): NormalizedChaosConfig {
+  const latencyMaxFallback = parseNumber(
+    env.CHAOS_LATENCY_MS,
+    DEFAULT_CHAOS_CONFIG.latencyMaxMs,
+  );
+  const latencyMinMs = parseNumber(
+    env.CHAOS_LATENCY_MIN_MS,
+    DEFAULT_CHAOS_CONFIG.latencyMinMs,
+  );
+  const latencyMaxMs = parseNumber(
+    env.CHAOS_LATENCY_MAX_MS,
+    latencyMaxFallback,
+  );
 
   return {
     enabled: parseBoolean(env.CHAOS_ENABLED, DEFAULT_CHAOS_CONFIG.enabled),
-    latencyChance: clampRatio(parseNumber(env.CHAOS_LATENCY_CHANCE, DEFAULT_CHAOS_CONFIG.latencyChance)),
+    latencyChance: clampRatio(
+      parseNumber(env.CHAOS_LATENCY_CHANCE, DEFAULT_CHAOS_CONFIG.latencyChance),
+    ),
     ...normalizeLatencyBounds(latencyMinMs, latencyMaxMs),
-    errorChance: clampRatio(parseNumber(env.CHAOS_ERROR_CHANCE, DEFAULT_CHAOS_CONFIG.errorChance)),
-    dropChance: clampRatio(parseNumber(env.CHAOS_DROP_CHANCE, DEFAULT_CHAOS_CONFIG.dropChance)),
+    errorChance: clampRatio(
+      parseNumber(env.CHAOS_ERROR_CHANCE, DEFAULT_CHAOS_CONFIG.errorChance),
+    ),
+    dropChance: clampRatio(
+      parseNumber(env.CHAOS_DROP_CHANCE, DEFAULT_CHAOS_CONFIG.dropChance),
+    ),
   };
 }
 
 function normalizeConfig(config: ChaosConfig): NormalizedChaosConfig {
-  const latencyMaxMs = config.latencyMaxMs ?? config.latencyMs ?? DEFAULT_CHAOS_CONFIG.latencyMaxMs;
+  const latencyMaxMs =
+    config.latencyMaxMs ??
+    config.latencyMs ??
+    DEFAULT_CHAOS_CONFIG.latencyMaxMs;
 
   return {
     enabled: config.enabled,
@@ -94,9 +120,12 @@ export class ChaosMiddleware implements MobileMoneyProvider {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  private async applyChaos<T>(operation: () => Promise<T>, requestId?: string): Promise<T> {
+  private async applyChaos<T>(
+    operation: () => Promise<T>,
+    requestId?: string,
+  ): Promise<T> {
     const log = requestId ? logger.child({ requestId }) : logger;
-    
+
     if (!this.config.enabled) {
       return operation();
     }
@@ -104,7 +133,9 @@ export class ChaosMiddleware implements MobileMoneyProvider {
     // 1. Latency injection
     if (this.shouldInject(this.config.latencyChance)) {
       const { latencyMinMs, latencyMaxMs } = this.config;
-      const delay = latencyMinMs + Math.floor(Math.random() * (latencyMaxMs - latencyMinMs + 1));
+      const delay =
+        latencyMinMs +
+        Math.floor(Math.random() * (latencyMaxMs - latencyMinMs + 1));
       log.info({ delay }, "Chaos: Injecting latency");
       await this.sleep(delay);
     }
@@ -132,17 +163,31 @@ export class ChaosMiddleware implements MobileMoneyProvider {
     return operation();
   }
 
-  async requestPayment(phoneNumber: string, amount: string, requestId?: string) {
-    return this.applyChaos(() => this.inner.requestPayment(phoneNumber, amount, requestId), requestId);
+  async requestPayment(
+    phoneNumber: string,
+    amount: string,
+    requestId?: string,
+  ) {
+    return this.applyChaos(
+      () => this.inner.requestPayment(phoneNumber, amount, requestId),
+      requestId,
+    );
   }
 
   async sendPayout(phoneNumber: string, amount: string, requestId?: string) {
-    return this.applyChaos(() => this.inner.sendPayout(phoneNumber, amount, requestId), requestId);
+    return this.applyChaos(
+      () => this.inner.sendPayout(phoneNumber, amount, requestId),
+      requestId,
+    );
   }
 
-  async getTransactionStatus(referenceId: string): Promise<{ status: ProviderTransactionStatus }> {
+  async getTransactionStatus(
+    referenceId: string,
+  ): Promise<{ status: ProviderTransactionStatus }> {
     if (this.inner.getTransactionStatus) {
-      return this.applyChaos(() => this.inner.getTransactionStatus!(referenceId));
+      return this.applyChaos(() =>
+        this.inner.getTransactionStatus!(referenceId),
+      );
     }
     return { status: "unknown" };
   }

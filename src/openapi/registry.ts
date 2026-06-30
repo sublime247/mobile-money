@@ -10,8 +10,11 @@
  *   import { z } from 'zod';       ← after
  */
 
-import { extendZodWithOpenApi, OpenAPIRegistry } from '@asteasolutions/zod-to-openapi';
-import { z } from 'zod';
+import {
+  extendZodWithOpenApi,
+  OpenAPIRegistry,
+} from "@asteasolutions/zod-to-openapi";
+import { z } from "zod";
 
 // Extend Zod once, globally.
 extendZodWithOpenApi(z);

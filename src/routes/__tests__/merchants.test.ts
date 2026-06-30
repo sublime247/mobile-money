@@ -33,7 +33,7 @@ describe("Merchant Routes", () => {
   beforeEach(() => {
     app = express();
     app.use(express.json());
-    
+
     // Reset mock implementations and calls
     mockMerchantService.createMerchant.mockReset();
     mockMerchantService.bulkCreateMerchants.mockReset();
@@ -41,7 +41,7 @@ describe("Merchant Routes", () => {
     mockMerchantService.listMerchants.mockReset();
     mockMerchantService.getMerchant.mockReset();
     mockMerchantService.acceptInvitation.mockReset();
-    
+
     app.use("/api/merchants", merchantRoutes);
   });
 
@@ -71,25 +71,25 @@ describe("Merchant Routes", () => {
 
       mockMerchantService.createMerchant.mockResolvedValue(mockMerchant as any);
 
-      const response = await request(app)
-        .post("/api/merchants")
-        .send(input);
+      const response = await request(app).post("/api/merchants").send(input);
 
       expect(response.status).toBe(201);
-      expect(response.body.message).toBe("Merchant invitation sent successfully");
+      expect(response.body.message).toBe(
+        "Merchant invitation sent successfully",
+      );
       expect(response.body.merchant.id).toBe(mockMerchant.id);
     });
 
     it("should return 400 if merchant creation fails", async () => {
-      mockMerchantService.createMerchant.mockRejectedValue(new Error("Email already exists"));
+      mockMerchantService.createMerchant.mockRejectedValue(
+        new Error("Email already exists"),
+      );
 
-      const response = await request(app)
-        .post("/api/merchants")
-        .send({
-          name: "Test Merchant",
-          email: "existing@example.com",
-          phoneNumber: "+237670000000",
-        });
+      const response = await request(app).post("/api/merchants").send({
+        name: "Test Merchant",
+        email: "existing@example.com",
+        phoneNumber: "+237670000000",
+      });
 
       expect(response.status).toBe(400);
       expect(response.body.error).toBe("Failed to create merchant");
@@ -111,18 +111,26 @@ describe("Merchant Routes", () => {
 
       const response = await request(app)
         .post("/api/merchants/bulk")
-        .attach("file", emptyCsv, { filename: "merchants.csv", contentType: "text/csv" });
+        .attach("file", emptyCsv, {
+          filename: "merchants.csv",
+          contentType: "text/csv",
+        });
 
       expect(response.status).toBe(400);
       expect(response.body.error).toBe("CSV file contains no data rows");
     });
 
     it("should return 422 if CSV validation fails", async () => {
-      const invalidCsv = Buffer.from("name,email,phone_number\n,invalid-email,123");
+      const invalidCsv = Buffer.from(
+        "name,email,phone_number\n,invalid-email,123",
+      );
 
       const response = await request(app)
         .post("/api/merchants/bulk")
-        .attach("file", invalidCsv, { filename: "merchants.csv", contentType: "text/csv" });
+        .attach("file", invalidCsv, {
+          filename: "merchants.csv",
+          contentType: "text/csv",
+        });
 
       expect(response.status).toBe(422);
       expect(response.body.error).toBe("CSV validation failed");
@@ -131,19 +139,23 @@ describe("Merchant Routes", () => {
 
     it("should accept valid CSV and return 202", async () => {
       const validCsv = Buffer.from(
-        "name,email,phone_number,business_name\nJohn Doe,john@example.com,+237670000000,John's Store"
+        "name,email,phone_number,business_name\nJohn Doe,john@example.com,+237670000000,John's Store",
       );
 
       mockMerchantService.bulkCreateMerchants.mockResolvedValue({
         jobId: "job-123",
         total: 1,
-        message: "Bulk merchant import queued - 1 merchant(s) will be processed",
+        message:
+          "Bulk merchant import queued - 1 merchant(s) will be processed",
         statusUrl: "/api/merchants/bulk/job-123",
       });
 
       const response = await request(app)
         .post("/api/merchants/bulk")
-        .attach("file", validCsv, { filename: "merchants.csv", contentType: "text/csv" });
+        .attach("file", validCsv, {
+          filename: "merchants.csv",
+          contentType: "text/csv",
+        });
 
       expect(response.status).toBe(202);
       expect(response.body.jobId).toBe("job-123");
@@ -155,8 +167,9 @@ describe("Merchant Routes", () => {
     it("should return 404 if job not found", async () => {
       mockMerchantService.getBatchJobStatus.mockResolvedValue(null);
 
-      const response = await request(app)
-        .get("/api/merchants/bulk/non-existent-job");
+      const response = await request(app).get(
+        "/api/merchants/bulk/non-existent-job",
+      );
 
       expect(response.status).toBe(404);
       expect(response.body.error).toBe("Job not found");
@@ -182,8 +195,7 @@ describe("Merchant Routes", () => {
 
       mockMerchantService.getBatchJobStatus.mockResolvedValue(jobStatus as any);
 
-      const response = await request(app)
-        .get("/api/merchants/bulk/job-123");
+      const response = await request(app).get("/api/merchants/bulk/job-123");
 
       expect(response.status).toBe(200);
       expect(response.body.jobId).toBe("job-123");
@@ -207,8 +219,7 @@ describe("Merchant Routes", () => {
         },
       });
 
-      const response = await request(app)
-        .get("/api/merchants");
+      const response = await request(app).get("/api/merchants");
 
       expect(response.status).toBe(200);
       expect(response.body.merchants).toHaveLength(2);
@@ -220,8 +231,7 @@ describe("Merchant Routes", () => {
     it("should return 404 if merchant not found", async () => {
       mockMerchantService.getMerchant.mockResolvedValue(null);
 
-      const response = await request(app)
-        .get("/api/merchants/non-existent-id");
+      const response = await request(app).get("/api/merchants/non-existent-id");
 
       expect(response.status).toBe(404);
       expect(response.body.error).toBe("Merchant not found");
@@ -238,8 +248,7 @@ describe("Merchant Routes", () => {
 
       mockMerchantService.getMerchant.mockResolvedValue(merchant as any);
 
-      const response = await request(app)
-        .get("/api/merchants/merchant-123");
+      const response = await request(app).get("/api/merchants/merchant-123");
 
       expect(response.status).toBe(200);
       expect(response.body.id).toBe("merchant-123");
@@ -251,8 +260,9 @@ describe("Merchant Routes", () => {
     it("should return 404 if invitation token is invalid", async () => {
       mockMerchantService.acceptInvitation.mockResolvedValue(null);
 
-      const response = await request(app)
-        .post("/api/merchants/invite/invalid-token/accept");
+      const response = await request(app).post(
+        "/api/merchants/invite/invalid-token/accept",
+      );
 
       expect(response.status).toBe(404);
       expect(response.body.error).toBe("Invalid or expired invitation token");
@@ -268,8 +278,9 @@ describe("Merchant Routes", () => {
 
       mockMerchantService.acceptInvitation.mockResolvedValue(merchant as any);
 
-      const response = await request(app)
-        .post("/api/merchants/invite/valid-token/accept");
+      const response = await request(app).post(
+        "/api/merchants/invite/valid-token/accept",
+      );
 
       expect(response.status).toBe(200);
       expect(response.body.message).toBe("Invitation accepted successfully");

@@ -32,7 +32,7 @@ repos:
       - id: end-of-file-fixer
       - id: check-yaml
       - id: check-added-large-files
-        args: ['--maxkb=1000']
+        args: ["--maxkb=1000"]
       - id: check-json
       - id: check-case-conflict
       - id: check-merge-conflict
@@ -43,7 +43,8 @@ repos:
     hooks:
       - id: eslint
         types: [javascript, typescript]
-        additional_dependencies: ['eslint', 'eslint-config-prettier', 'eslint-plugin-prettier']
+        additional_dependencies:
+          ["eslint", "eslint-config-prettier", "eslint-plugin-prettier"]
 
 # Configuration for all hooks
 default_language_version:

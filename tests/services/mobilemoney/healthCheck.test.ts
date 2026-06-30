@@ -316,15 +316,15 @@ describe("checkMobileMoneyHealth()", () => {
       return fakeFetch(200)(url, init);
     };
 
-      const result = await checkMobileMoneyHealth(ALL, mixedFetch);
+    const result = await checkMobileMoneyHealth(ALL, mixedFetch);
 
-      expect(result).toMatchObject<MobileMoneyHealthResult>({
-        providers: {
-          mtn: { status: "up", responseTime: expect.any(Number) },
-          airtel: { status: "up", responseTime: expect.any(Number) },
-          orange: { status: "down", responseTime: null },
-        },
-      });
+    expect(result).toMatchObject<MobileMoneyHealthResult>({
+      providers: {
+        mtn: { status: "up", responseTime: expect.any(Number) },
+        airtel: { status: "up", responseTime: expect.any(Number) },
+        orange: { status: "down", responseTime: null },
+      },
+    });
   });
 
   it("never rejects when all providers fail", async () => {

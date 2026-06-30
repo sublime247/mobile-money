@@ -5,7 +5,7 @@ import * as crypto from "crypto";
 
 export interface MultisigConfig {
   id?: string;
-  account_type: 'escrow' | 'issuance' | 'vault';
+  account_type: "escrow" | "issuance" | "vault";
   account_id: string;
   required_signatures: number;
   total_signers: number;
@@ -33,12 +33,12 @@ export interface MultisigSigner {
 export interface MultisigRequest {
   id?: string;
   config_id: string;
-  request_type: 'transfer' | 'issuance' | 'vault_operation';
+  request_type: "transfer" | "issuance" | "vault_operation";
   account_id: string;
   amount_xaf: number;
   destination: string;
   metadata?: Record<string, unknown>;
-  status: 'pending' | 'approved' | 'rejected' | 'cancelled' | 'expired';
+  status: "pending" | "approved" | "rejected" | "cancelled" | "expired";
   required_signatures: number;
   collected_signatures: number;
   expires_at: Date;
@@ -54,7 +54,7 @@ export interface MultisigSignature {
   request_id: string;
   signer_id: string;
   signature_data: string;
-  signature_type: 'webhook' | 'manual' | 'api';
+  signature_type: "webhook" | "manual" | "api";
   ip_address?: string;
   user_agent?: string;
   created_at?: Date;
@@ -88,9 +88,9 @@ export class MultisigCustodyLedgerService {
    * Check if a transaction requires multi-sig approval
    */
   async checkMultisigRequirement(
-    accountType: 'escrow' | 'issuance' | 'vault',
+    accountType: "escrow" | "issuance" | "vault",
     accountId: string,
-    amountXaf: number
+    amountXaf: number,
   ): Promise<MultisigCheckResult> {
     const config = await this.getMultisigConfig(accountType, accountId);
 
@@ -129,8 +129,8 @@ export class MultisigCustodyLedgerService {
    * Get multi-sig configuration for an account
    */
   async getMultisigConfig(
-    accountType: 'escrow' | 'issuance' | 'vault',
-    accountId: string
+    accountType: "escrow" | "issuance" | "vault",
+    accountId: string,
   ): Promise<MultisigConfig | null> {
     const cacheKey = `multisig_config_${accountType}_${accountId}`;
     const cached = this.cache.get<MultisigConfig>(cacheKey);
@@ -181,12 +181,12 @@ export class MultisigCustodyLedgerService {
    */
   async createApprovalRequest(
     configId: string,
-    requestType: 'transfer' | 'issuance' | 'vault_operation',
+    requestType: "transfer" | "issuance" | "vault_operation",
     accountId: string,
     amountXaf: number,
     destination: string,
     createdBy: string,
-    metadata?: Record<string, unknown>
+    metadata?: Record<string, unknown>,
   ): Promise<MultisigRequest> {
     const config = await this.getConfigById(configId);
     if (!config) {
@@ -218,7 +218,7 @@ export class MultisigCustodyLedgerService {
     const request = result.rows[0];
 
     // Log audit event
-    await this.logAuditEvent(request.id, 'created', createdBy, {
+    await this.logAuditEvent(request.id, "created", createdBy, {
       requestType,
       amountXaf,
       destination,
@@ -235,23 +235,35 @@ export class MultisigCustodyLedgerService {
     requestId: string,
     signerId: string,
     signatureData: string,
-    signatureType: 'webhook' | 'manual' | 'api',
+    signatureType: "webhook" | "manual" | "api",
     ipAddress?: string,
-    userAgent?: string
+    userAgent?: string,
   ): Promise<{ success: boolean; message: string; fullyApproved: boolean }> {
     // Get the request
     const request = await this.getRequestById(requestId);
     if (!request) {
-      return { success: false, message: "Request not found", fullyApproved: false };
+      return {
+        success: false,
+        message: "Request not found",
+        fullyApproved: false,
+      };
     }
 
-    if (request.status !== 'pending') {
-      return { success: false, message: `Request is already ${request.status}`, fullyApproved: false };
+    if (request.status !== "pending") {
+      return {
+        success: false,
+        message: `Request is already ${request.status}`,
+        fullyApproved: false,
+      };
     }
 
     if (new Date() > request.expires_at) {
-      await this.updateRequestStatus(requestId, 'expired');
-      return { success: false, message: "Request has expired", fullyApproved: false };
+      await this.updateRequestStatus(requestId, "expired");
+      return {
+        success: false,
+        message: "Request has expired",
+        fullyApproved: false,
+      };
     }
 
     // Get config and signers
@@ -259,15 +271,23 @@ export class MultisigCustodyLedgerService {
     const signers = await this.getSigners(request.config_id);
 
     // Verify signer is authorized
-    const signer = signers.find(s => s.signer_id === signerId && s.is_active);
+    const signer = signers.find((s) => s.signer_id === signerId && s.is_active);
     if (!signer) {
-      return { success: false, message: "Signer not authorized", fullyApproved: false };
+      return {
+        success: false,
+        message: "Signer not authorized",
+        fullyApproved: false,
+      };
     }
 
     // Check if signature already exists
     const existingSignature = await this.getSignature(requestId, signerId);
     if (existingSignature) {
-      return { success: false, message: "Signature already collected from this signer", fullyApproved: false };
+      return {
+        success: false,
+        message: "Signature already collected from this signer",
+        fullyApproved: false,
+      };
     }
 
     // Add signature
@@ -291,20 +311,21 @@ export class MultisigCustodyLedgerService {
     const updatedRequest = await this.incrementSignatureCount(requestId);
 
     // Log audit event
-    await this.logAuditEvent(requestId, 'signature_added', signerId, {
+    await this.logAuditEvent(requestId, "signature_added", signerId, {
       signerName: signer.signer_name,
       signatureType,
       collectedSignatures: updatedRequest.collected_signatures,
       requiredSignatures: updatedRequest.required_signatures,
     });
 
-    const fullyApproved = updatedRequest.collected_signatures >= updatedRequest.required_signatures;
+    const fullyApproved =
+      updatedRequest.collected_signatures >= updatedRequest.required_signatures;
 
     if (fullyApproved) {
       // Auto-approve when threshold is met
-      await this.updateRequestStatus(requestId, 'approved');
-      await this.logAuditEvent(requestId, 'auto_approved', 'system', {
-        reason: 'Signature threshold met',
+      await this.updateRequestStatus(requestId, "approved");
+      await this.logAuditEvent(requestId, "auto_approved", "system", {
+        reason: "Signature threshold met",
       });
     }
 
@@ -320,15 +341,18 @@ export class MultisigCustodyLedgerService {
    */
   async executeApprovedRequest(
     requestId: string,
-    executedBy: string
+    executedBy: string,
   ): Promise<{ success: boolean; message: string }> {
     const request = await this.getRequestById(requestId);
     if (!request) {
       return { success: false, message: "Request not found" };
     }
 
-    if (request.status !== 'approved') {
-      return { success: false, message: `Request must be approved (current: ${request.status})` };
+    if (request.status !== "approved") {
+      return {
+        success: false,
+        message: `Request must be approved (current: ${request.status})`,
+      };
     }
 
     // Update request as executed
@@ -345,7 +369,7 @@ export class MultisigCustodyLedgerService {
     await pool.query(updateQuery, [executedBy, requestId]);
 
     // Log audit event
-    await this.logAuditEvent(requestId, 'executed', executedBy, {
+    await this.logAuditEvent(requestId, "executed", executedBy, {
       amountXaf: request.amount_xaf,
       destination: request.destination,
     });
@@ -362,15 +386,18 @@ export class MultisigCustodyLedgerService {
   async cancelRequest(
     requestId: string,
     cancelledBy: string,
-    reason: string
+    reason: string,
   ): Promise<{ success: boolean; message: string }> {
     const request = await this.getRequestById(requestId);
     if (!request) {
       return { success: false, message: "Request not found" };
     }
 
-    if (request.status !== 'pending') {
-      return { success: false, message: `Cannot cancel request in ${request.status} status` };
+    if (request.status !== "pending") {
+      return {
+        success: false,
+        message: `Cannot cancel request in ${request.status} status`,
+      };
     }
 
     // Check if time-lock has passed
@@ -401,7 +428,7 @@ export class MultisigCustodyLedgerService {
     await pool.query(updateQuery, [requestId]);
 
     // Log audit event
-    await this.logAuditEvent(requestId, 'cancelled', cancelledBy, {
+    await this.logAuditEvent(requestId, "cancelled", cancelledBy, {
       reason,
       timeLockMinutes: config.time_lock_minutes,
     });
@@ -415,7 +442,9 @@ export class MultisigCustodyLedgerService {
   /**
    * Get pending requests for a signer
    */
-  async getPendingRequestsForSigner(signerId: string): Promise<MultisigRequest[]> {
+  async getPendingRequestsForSigner(
+    signerId: string,
+  ): Promise<MultisigRequest[]> {
     const query = `
       SELECT r.*
       FROM multisig_requests r
@@ -436,7 +465,7 @@ export class MultisigCustodyLedgerService {
    */
   private async getDailyTotal(
     accountType: string,
-    accountId: string
+    accountId: string,
   ): Promise<number> {
     const query = `
       SELECT COALESCE(SUM(amount_xaf), 0) as total
@@ -459,7 +488,7 @@ export class MultisigCustodyLedgerService {
         AND r.status IN ('approved', 'executed')
         AND r.created_at >= CURRENT_DATE
     `,
-      [accountType, accountId]
+      [accountType, accountId],
     );
 
     return parseFloat(result.rows[0]?.total || 0);
@@ -468,7 +497,9 @@ export class MultisigCustodyLedgerService {
   /**
    * Get configuration by ID
    */
-  private async getConfigById(configId: string): Promise<MultisigConfig | null> {
+  private async getConfigById(
+    configId: string,
+  ): Promise<MultisigConfig | null> {
     const query = `SELECT * FROM multisig_configs WHERE id = $1`;
     const result = await pool.query(query, [configId]);
     return result.rows[0] || null;
@@ -477,7 +508,9 @@ export class MultisigCustodyLedgerService {
   /**
    * Get request by ID
    */
-  private async getRequestById(requestId: string): Promise<MultisigRequest | null> {
+  private async getRequestById(
+    requestId: string,
+  ): Promise<MultisigRequest | null> {
     const query = `SELECT * FROM multisig_requests WHERE id = $1`;
     const result = await pool.query(query, [requestId]);
     return result.rows[0] || null;
@@ -486,7 +519,10 @@ export class MultisigCustodyLedgerService {
   /**
    * Get signature for a request and signer
    */
-  private async getSignature(requestId: string, signerId: string): Promise<MultisigSignature | null> {
+  private async getSignature(
+    requestId: string,
+    signerId: string,
+  ): Promise<MultisigSignature | null> {
     const query = `
       SELECT * FROM multisig_signatures
       WHERE request_id = $1 AND signer_id = $2
@@ -498,7 +534,9 @@ export class MultisigCustodyLedgerService {
   /**
    * Increment signature count
    */
-  private async incrementSignatureCount(requestId: string): Promise<MultisigRequest> {
+  private async incrementSignatureCount(
+    requestId: string,
+  ): Promise<MultisigRequest> {
     const query = `
       UPDATE multisig_requests
       SET collected_signatures = collected_signatures + 1,
@@ -513,7 +551,10 @@ export class MultisigCustodyLedgerService {
   /**
    * Update request status
    */
-  private async updateRequestStatus(requestId: string, status: string): Promise<void> {
+  private async updateRequestStatus(
+    requestId: string,
+    status: string,
+  ): Promise<void> {
     const query = `
       UPDATE multisig_requests
       SET status = $1, updated_at = NOW()
@@ -529,7 +570,7 @@ export class MultisigCustodyLedgerService {
     requestId: string | null,
     action: string,
     actor: string,
-    details?: Record<string, unknown>
+    details?: Record<string, unknown>,
   ): Promise<void> {
     const query = `
       INSERT INTO multisig_audit_log
@@ -552,17 +593,17 @@ export class MultisigCustodyLedgerService {
   verifyWebhookSignature(
     payload: string,
     signature: string,
-    publicKey: string
+    publicKey: string,
   ): boolean {
     try {
       const verified = crypto.verify(
-        'sha256',
+        "sha256",
         Buffer.from(payload),
         {
           key: publicKey,
-          format: 'pem',
+          format: "pem",
         },
-        Buffer.from(signature, 'hex')
+        Buffer.from(signature, "hex"),
       );
       return verified;
     } catch (error) {
@@ -574,15 +615,18 @@ export class MultisigCustodyLedgerService {
   /**
    * Generate a signature envelope for a request
    */
-  generateSignatureEnvelope(requestId: string, signerId: string): {
+  generateSignatureEnvelope(
+    requestId: string,
+    signerId: string,
+  ): {
     envelope: string;
     timestamp: number;
   } {
     const timestamp = Date.now();
     const envelope = crypto
-      .createHmac('sha256', `${requestId}:${signerId}:${timestamp}`)
+      .createHmac("sha256", `${requestId}:${signerId}:${timestamp}`)
       .update(JSON.stringify({ requestId, signerId, timestamp }))
-      .digest('hex');
+      .digest("hex");
 
     return { envelope, timestamp };
   }

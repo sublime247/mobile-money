@@ -6,7 +6,9 @@ import { WebSocketManager } from "../src/websocket";
 const TEST_SECRET = "test-jwt-secret";
 const TEST_PORT = 9877;
 
-function makeToken(payload: object = { userId: "user-1", email: "u@test.com" }) {
+function makeToken(
+  payload: object = { userId: "user-1", email: "u@test.com" },
+) {
   return jwt.sign(payload, TEST_SECRET, { expiresIn: "1h" });
 }
 
@@ -23,7 +25,9 @@ function waitForMessage(ws: WebSocket): Promise<object> {
   });
 }
 
-function waitForClose(ws: WebSocket): Promise<{ code: number; reason: string }> {
+function waitForClose(
+  ws: WebSocket,
+): Promise<{ code: number; reason: string }> {
   return new Promise((resolve) => {
     ws.once("close", (code, reasonBuf) =>
       resolve({ code, reason: reasonBuf.toString() }),
@@ -69,7 +73,10 @@ describe("WebSocketManager", () => {
       const ws = new WebSocket(baseUrl, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const msg = (await waitForMessage(ws)) as { type: string; data: { userId: string } };
+      const msg = (await waitForMessage(ws)) as {
+        type: string;
+        data: { userId: string };
+      };
       expect(msg.type).toBe("connection.ack");
       expect(msg.data.userId).toBe("user-1");
       ws.close();
@@ -86,7 +93,10 @@ describe("WebSocketManager", () => {
     it("falls back to sub claim when userId is absent", async () => {
       const token = makeToken({ sub: "sub-user-99", email: "s@test.com" });
       const ws = new WebSocket(`${baseUrl}?token=${token}`);
-      const msg = (await waitForMessage(ws)) as { type: string; data: { userId: string } };
+      const msg = (await waitForMessage(ws)) as {
+        type: string;
+        data: { userId: string };
+      };
       expect(msg.type).toBe("connection.ack");
       expect(msg.data.userId).toBe("sub-user-99");
       ws.close();
@@ -103,9 +113,15 @@ describe("WebSocketManager", () => {
       await waitForMessage(ws); // connection.ack
 
       ws.send(
-        JSON.stringify({ type: "subscribe", data: { transactionId: "tx-abc" } }),
+        JSON.stringify({
+          type: "subscribe",
+          data: { transactionId: "tx-abc" },
+        }),
       );
-      const ack = (await waitForMessage(ws)) as { type: string; data: { transactionId: string } };
+      const ack = (await waitForMessage(ws)) as {
+        type: string;
+        data: { transactionId: string };
+      };
       expect(ack.type).toBe("subscribe.ack");
       expect(ack.data.transactionId).toBe("tx-abc");
       ws.close();
@@ -116,7 +132,10 @@ describe("WebSocketManager", () => {
       await waitForMessage(ws); // connection.ack
 
       ws.send(JSON.stringify({ type: "unknown.type", data: {} }));
-      const err = (await waitForMessage(ws)) as { type: string; data: { message: string } };
+      const err = (await waitForMessage(ws)) as {
+        type: string;
+        data: { message: string };
+      };
       expect(err.type).toBe("error");
       expect(err.data.message).toMatch(/unknown message type/i);
       ws.close();
@@ -127,7 +146,10 @@ describe("WebSocketManager", () => {
       await waitForMessage(ws); // connection.ack
 
       ws.send("this is not json");
-      const err = (await waitForMessage(ws)) as { type: string; data: { message: string } };
+      const err = (await waitForMessage(ws)) as {
+        type: string;
+        data: { message: string };
+      };
       expect(err.type).toBe("error");
       expect(err.data.message).toMatch(/invalid json/i);
       ws.close();
@@ -144,7 +166,10 @@ describe("WebSocketManager", () => {
       await waitForMessage(ws); // connection.ack
 
       ws.send(
-        JSON.stringify({ type: "subscribe", data: { transactionId: "tx-broadcast-1" } }),
+        JSON.stringify({
+          type: "subscribe",
+          data: { transactionId: "tx-broadcast-1" },
+        }),
       );
       await waitForMessage(ws); // subscribe.ack
 
@@ -153,7 +178,10 @@ describe("WebSocketManager", () => {
         id: "tx-broadcast-1",
         status: "completed",
       });
-      const update = (await broadcastPromise) as { type: string; data: { id: string; status: string } };
+      const update = (await broadcastPromise) as {
+        type: string;
+        data: { id: string; status: string };
+      };
       expect(update.type).toBe("transaction.updated");
       expect(update.data.id).toBe("tx-broadcast-1");
       expect(update.data.status).toBe("completed");
@@ -166,7 +194,10 @@ describe("WebSocketManager", () => {
 
       // Subscribe to a different transaction
       ws.send(
-        JSON.stringify({ type: "subscribe", data: { transactionId: "tx-other" } }),
+        JSON.stringify({
+          type: "subscribe",
+          data: { transactionId: "tx-other" },
+        }),
       );
       await waitForMessage(ws); // subscribe.ack
 
@@ -190,13 +221,19 @@ describe("WebSocketManager", () => {
       await waitForMessage(ws); // connection.ack
 
       ws.send(
-        JSON.stringify({ type: "subscribe", data: { transactionId: "tx-unsub" } }),
+        JSON.stringify({
+          type: "subscribe",
+          data: { transactionId: "tx-unsub" },
+        }),
       );
       await waitForMessage(ws); // subscribe.ack
 
       // Unsubscribe
       ws.send(
-        JSON.stringify({ type: "unsubscribe", data: { transactionId: "tx-unsub" } }),
+        JSON.stringify({
+          type: "unsubscribe",
+          data: { transactionId: "tx-unsub" },
+        }),
       );
 
       // Small delay to let the unsubscribe message reach the server
@@ -207,7 +244,10 @@ describe("WebSocketManager", () => {
         received.push(JSON.parse(data.toString()));
       });
 
-      await manager.broadcastTransactionUpdate({ id: "tx-unsub", status: "pending" });
+      await manager.broadcastTransactionUpdate({
+        id: "tx-unsub",
+        status: "pending",
+      });
       await new Promise<void>((resolve) => setTimeout(resolve, 200));
       expect(received).toHaveLength(0);
       ws.close();
@@ -222,8 +262,12 @@ describe("WebSocketManager", () => {
     it("tracks the number of connected clients", async () => {
       const before = manager.connectionCount;
 
-      const ws1 = new WebSocket(`${baseUrl}?token=${makeToken({ userId: "c1", email: "c1@t.com" })}`);
-      const ws2 = new WebSocket(`${baseUrl}?token=${makeToken({ userId: "c2", email: "c2@t.com" })}`);
+      const ws1 = new WebSocket(
+        `${baseUrl}?token=${makeToken({ userId: "c1", email: "c1@t.com" })}`,
+      );
+      const ws2 = new WebSocket(
+        `${baseUrl}?token=${makeToken({ userId: "c2", email: "c2@t.com" })}`,
+      );
 
       await waitForMessage(ws1);
       await waitForMessage(ws2);

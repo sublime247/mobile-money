@@ -21,23 +21,23 @@
  * performance benefit, or update references after verifying output quality.
  */
 
-import { readdir, stat } from 'node:fs/promises';
-import { join, extname, basename, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import sharp from 'sharp';
+import { readdir, stat } from "node:fs/promises";
+import { join, extname, basename, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import sharp from "sharp";
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /** Root of the docs-portal package */
-const PORTAL_ROOT = join(__dirname, '..');
+const PORTAL_ROOT = join(__dirname, "..");
 
 /** Directory that holds all static assets */
-const IMG_DIR = join(PORTAL_ROOT, 'static', 'img');
+const IMG_DIR = join(PORTAL_ROOT, "static", "img");
 
 /** Raster extensions we want to compress */
-const SUPPORTED_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif']);
+const SUPPORTED_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".gif"]);
 
 /** WebP quality (0–100). 80 is a good balance of size vs. visual quality. */
 const WEBP_QUALITY = 80;
@@ -94,15 +94,15 @@ function pad(str, width) {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
-  console.log('\n🖼️  Docs-portal image optimizer (sharp)\n');
+  console.log("\n🖼️  Docs-portal image optimizer (sharp)\n");
   console.log(`   Scanning: ${IMG_DIR}\n`);
 
   const images = await collectImages(IMG_DIR);
 
   if (images.length === 0) {
-    console.log('   ✅  No raster images found — nothing to compress.\n');
+    console.log("   ✅  No raster images found — nothing to compress.\n");
     console.log(
-      '   Add .png / .jpg / .jpeg / .gif files to docs-portal/static/img/ and re-run.\n'
+      "   Add .png / .jpg / .jpeg / .gif files to docs-portal/static/img/ and re-run.\n",
     );
     process.exit(0);
   }
@@ -110,11 +110,11 @@ async function main() {
   // Table header
   const COL = { file: 40, orig: 12, compressed: 14, saved: 8 };
   const HEADER =
-    pad('File', COL.file) +
-    pad('Original', COL.orig) +
-    pad('Compressed', COL.compressed) +
-    pad('Saved', COL.saved);
-  const DIVIDER = '─'.repeat(COL.file + COL.orig + COL.compressed + COL.saved);
+    pad("File", COL.file) +
+    pad("Original", COL.orig) +
+    pad("Compressed", COL.compressed) +
+    pad("Saved", COL.saved);
+  const DIVIDER = "─".repeat(COL.file + COL.orig + COL.compressed + COL.saved);
 
   console.log(`   ${HEADER}`);
   console.log(`   ${DIVIDER}`);
@@ -125,7 +125,7 @@ async function main() {
 
   for (const imgPath of images) {
     const ext = extname(imgPath).toLowerCase();
-    const webpPath = imgPath.replace(new RegExp(`\\${ext}$`, 'i'), '.webp');
+    const webpPath = imgPath.replace(new RegExp(`\\${ext}$`, "i"), ".webp");
     const label = basename(imgPath);
 
     try {
@@ -136,7 +136,7 @@ async function main() {
       const pipeline = sharp(imgPath);
 
       // For PNG, preserve alpha channel (transparency) using lossless-alpha WebP
-      if (ext === '.png') {
+      if (ext === ".png") {
         pipeline.webp({ quality: WEBP_QUALITY, alphaQuality: 90 });
       } else {
         pipeline.webp({ quality: WEBP_QUALITY });
@@ -152,10 +152,11 @@ async function main() {
       totalOriginalBytes += origSize;
       totalCompressedBytes += compressedSize;
 
-      const savedStr = savedBytes >= 0 ? `${savedPct}%` : `+${Math.abs(savedPct)}%`;
+      const savedStr =
+        savedBytes >= 0 ? `${savedPct}%` : `+${Math.abs(savedPct)}%`;
 
       console.log(
-        `   ${pad(label, COL.file)}${pad(formatBytes(origSize), COL.orig)}${pad(formatBytes(compressedSize), COL.compressed)}${savedStr}`
+        `   ${pad(label, COL.file)}${pad(formatBytes(origSize), COL.orig)}${pad(formatBytes(compressedSize), COL.compressed)}${savedStr}`,
       );
     } catch (err) {
       failures++;
@@ -168,30 +169,32 @@ async function main() {
   const totalPct =
     totalOriginalBytes > 0
       ? ((totalSaved / totalOriginalBytes) * 100).toFixed(1)
-      : '0.0';
+      : "0.0";
 
   console.log(`   ${DIVIDER}`);
   console.log(
-    `   ${pad('TOTAL', COL.file)}${pad(formatBytes(totalOriginalBytes), COL.orig)}${pad(formatBytes(totalCompressedBytes), COL.compressed)}${totalPct}%`
+    `   ${pad("TOTAL", COL.file)}${pad(formatBytes(totalOriginalBytes), COL.orig)}${pad(formatBytes(totalCompressedBytes), COL.compressed)}${totalPct}%`,
   );
   console.log();
 
   if (failures > 0) {
-    console.error(`   ⚠️  ${failures} image(s) failed to compress. See errors above.\n`);
+    console.error(
+      `   ⚠️  ${failures} image(s) failed to compress. See errors above.\n`,
+    );
     process.exit(1);
   }
 
   console.log(
-    `   ✅  Done! ${images.length} image(s) compressed. WebP files saved alongside originals.\n`
+    `   ✅  Done! ${images.length} image(s) compressed. WebP files saved alongside originals.\n`,
   );
   console.log(
-    '   💡  Tip: Update your Markdown image references from .png/.jpg to .webp\n' +
-      '       to serve the smaller files, e.g.:\n' +
-      '       ![screenshot](./screenshot.webp)\n'
+    "   💡  Tip: Update your Markdown image references from .png/.jpg to .webp\n" +
+      "       to serve the smaller files, e.g.:\n" +
+      "       ![screenshot](./screenshot.webp)\n",
   );
 }
 
 main().catch((err) => {
-  console.error('Unexpected error:', err);
+  console.error("Unexpected error:", err);
   process.exit(1);
 });

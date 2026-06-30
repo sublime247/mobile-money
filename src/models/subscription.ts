@@ -65,7 +65,10 @@ export class SubscriptionModel {
   }
 
   async listByMerchant(merchantId: string) {
-    const res = await queryRead(`SELECT * FROM subscriptions WHERE merchant_id = $1 ORDER BY created_at DESC`, [merchantId]);
+    const res = await queryRead(
+      `SELECT * FROM subscriptions WHERE merchant_id = $1 ORDER BY created_at DESC`,
+      [merchantId],
+    );
     return res.rows;
   }
 
@@ -88,14 +91,24 @@ export class SubscriptionModel {
     await queryWrite(`DELETE FROM subscriptions WHERE id = $1`, [id]);
   }
 
-  async markRun(subscriptionId: string, nextRunAt: string | null, lastRunAt = new Date().toISOString()) {
+  async markRun(
+    subscriptionId: string,
+    nextRunAt: string | null,
+    lastRunAt = new Date().toISOString(),
+  ) {
     await queryWrite(
       `UPDATE subscriptions SET last_run_at = $1, next_run_at = $2, retry_count = 0, updated_at = NOW() WHERE id = $3`,
       [lastRunAt, nextRunAt, subscriptionId],
     );
   }
 
-  async recordAttempt(subscriptionId: string, transactionId: string | null, attemptNumber: number, status: string, error?: string) {
+  async recordAttempt(
+    subscriptionId: string,
+    transactionId: string | null,
+    attemptNumber: number,
+    status: string,
+    error?: string,
+  ) {
     await queryWrite(
       `INSERT INTO subscription_attempts (subscription_id, transaction_id, attempt_number, status, error) VALUES ($1,$2,$3,$4,$5)`,
       [subscriptionId, transactionId, attemptNumber, status, error ?? null],
@@ -111,15 +124,23 @@ export class SubscriptionModel {
   }
 
   async pause(subscriptionId: string) {
-    await queryWrite(`UPDATE subscriptions SET status = 'paused', updated_at = NOW() WHERE id = $1`, [subscriptionId]);
+    await queryWrite(
+      `UPDATE subscriptions SET status = 'paused', updated_at = NOW() WHERE id = $1`,
+      [subscriptionId],
+    );
   }
 
   async resume(subscriptionId: string) {
-    await queryWrite(`UPDATE subscriptions SET status = 'active', updated_at = NOW() WHERE id = $1`, [subscriptionId]);
+    await queryWrite(
+      `UPDATE subscriptions SET status = 'active', updated_at = NOW() WHERE id = $1`,
+      [subscriptionId],
+    );
   }
 
   async getById(id: string) {
-    const res = await queryRead(`SELECT * FROM subscriptions WHERE id = $1`, [id]);
+    const res = await queryRead(`SELECT * FROM subscriptions WHERE id = $1`, [
+      id,
+    ]);
     return res.rows[0] ?? null;
   }
 }

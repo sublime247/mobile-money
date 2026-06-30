@@ -9,14 +9,15 @@ import {
   ValidationError,
 } from "../services/accounting/accountingService";
 import { pool } from "../config/database";
-import logger from "../utils/logger";
 import { addAccountingRetryJob } from "./accountingRetryQueue";
 import { natsManager, NATS_QUEUE_ENABLED, type JsMsg } from "./nats";
 
 const SYNC_CONCURRENCY = 5;
 const NATS_SYNC_SUBJECT = process.env.NATS_SYNC_SUBJECT || "accounting.sync";
-const NATS_SYNC_DURABLE_CONSUMER = process.env.NATS_SYNC_DURABLE_CONSUMER || "accounting-sync-consumer";
-const NATS_SYNC_CONSUMER_GROUP = process.env.NATS_SYNC_CONSUMER_GROUP || "accounting-sync-group";
+const NATS_SYNC_DURABLE_CONSUMER =
+  process.env.NATS_SYNC_DURABLE_CONSUMER || "accounting-sync-consumer";
+const NATS_SYNC_CONSUMER_GROUP =
+  process.env.NATS_SYNC_CONSUMER_GROUP || "accounting-sync-group";
 
 // Create instance of our Accounting Service
 export const accountingService = new AccountingService();
@@ -30,7 +31,7 @@ export const accountingService = new AccountingService();
  */
 async function logAccountingSyncError(
   transactionId: string,
-  providerType: 'quickbooks' | 'xero',
+  providerType: "quickbooks" | "xero",
   errorMessage: string,
 ): Promise<void> {
   await pool.query(
@@ -156,7 +157,8 @@ export async function processSyncJob(
             {
               jobId: job.id,
               syncId,
-              queueError: queueErr instanceof Error ? queueErr.message : String(queueErr),
+              queueError:
+                queueErr instanceof Error ? queueErr.message : String(queueErr),
             },
             "Failed to add accounting sync to retry queue",
           );
@@ -169,7 +171,10 @@ export async function processSyncJob(
         logger.error(
           {
             jobId: job.id,
-            discardError: discardErr instanceof Error ? discardErr.message : String(discardErr),
+            discardError:
+              discardErr instanceof Error
+                ? discardErr.message
+                : String(discardErr),
           },
           "Failed to discard sync job",
         );
@@ -268,10 +273,7 @@ if (NATS_QUEUE_ENABLED) {
       SYNC_CONCURRENCY,
     )
     .catch((err) =>
-      console.error(
-        "[SyncWorker] [NATS] JetStream consumer error:",
-        err,
-      ),
+      console.error("[SyncWorker] [NATS] JetStream consumer error:", err),
     );
 }
 

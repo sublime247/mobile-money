@@ -1,7 +1,10 @@
 import * as StellarSdk from "stellar-sdk";
 import { StellarService } from "../../src/services/stellar/stellarService";
 import { pool } from "../../src/config/database";
-import { getStellarServer, getNetworkPassphrase } from "../../src/config/stellar";
+import {
+  getStellarServer,
+  getNetworkPassphrase,
+} from "../../src/config/stellar";
 
 // ── mock asset service to return a non-native asset ──────────────────────────
 jest.mock("../../src/services/stellar/assetService", () => {
@@ -9,9 +12,9 @@ jest.mock("../../src/services/stellar/assetService", () => {
   const issuer = StellarSdkMock.Keypair.random().publicKey();
   return {
     AssetService: jest.fn().mockImplementation(() => ({})),
-    getConfiguredPaymentAsset: jest.fn().mockReturnValue(
-      new StellarSdkMock.Asset("USDC", issuer)
-    ),
+    getConfiguredPaymentAsset: jest
+      .fn()
+      .mockReturnValue(new StellarSdkMock.Asset("USDC", issuer)),
   };
 });
 
@@ -25,18 +28,23 @@ describe("Clawback Integration Tests", () => {
   beforeAll(async () => {
     stellarService = new StellarService();
     server = getStellarServer();
-    
+
     // Generate test keypairs - use random if env secret is invalid
     try {
-      if (process.env.STELLAR_ISSUER_SECRET && process.env.STELLAR_ISSUER_SECRET.startsWith('S')) {
-        issuerKeypair = StellarSdk.Keypair.fromSecret(process.env.STELLAR_ISSUER_SECRET);
+      if (
+        process.env.STELLAR_ISSUER_SECRET &&
+        process.env.STELLAR_ISSUER_SECRET.startsWith("S")
+      ) {
+        issuerKeypair = StellarSdk.Keypair.fromSecret(
+          process.env.STELLAR_ISSUER_SECRET,
+        );
       } else {
         issuerKeypair = StellarSdk.Keypair.random();
       }
     } catch {
       issuerKeypair = StellarSdk.Keypair.random();
     }
-    
+
     userKeypair = StellarSdk.Keypair.random();
     testAsset = new StellarSdk.Asset("TEST", issuerKeypair.publicKey());
   });
@@ -48,8 +56,13 @@ describe("Clawback Integration Tests", () => {
   describe("Asset Issuance and Clawback", () => {
     it("should successfully issue asset, enable clawback, and claw back from user", async () => {
       // Skip if in mock mode
-      if (!process.env.STELLAR_ISSUER_SECRET || !process.env.STELLAR_ISSUER_SECRET.startsWith('S')) {
-        console.log("Skipping testnet integration test - no valid STELLAR_ISSUER_SECRET");
+      if (
+        !process.env.STELLAR_ISSUER_SECRET ||
+        !process.env.STELLAR_ISSUER_SECRET.startsWith("S")
+      ) {
+        console.log(
+          "Skipping testnet integration test - no valid STELLAR_ISSUER_SECRET",
+        );
         return;
       }
 
@@ -72,7 +85,7 @@ describe("Clawback Integration Tests", () => {
             StellarSdk.Operation.changeTrust({
               asset: testAsset,
               limit: "1000",
-            })
+            }),
           )
           .setTimeout(30)
           .build();
@@ -81,7 +94,9 @@ describe("Clawback Integration Tests", () => {
         await server.submitTransaction(trustTx);
 
         // Step 4: Issue tokens to user
-        const issuerAccount = await server.loadAccount(issuerKeypair.publicKey());
+        const issuerAccount = await server.loadAccount(
+          issuerKeypair.publicKey(),
+        );
         const paymentTx = new StellarSdk.TransactionBuilder(issuerAccount, {
           fee: StellarSdk.BASE_FEE,
           networkPassphrase: getNetworkPassphrase(),
@@ -91,7 +106,7 @@ describe("Clawback Integration Tests", () => {
               destination: userKeypair.publicKey(),
               asset: testAsset,
               amount: "100",
-            })
+            }),
           )
           .setTimeout(30)
           .build();
@@ -102,7 +117,7 @@ describe("Clawback Integration Tests", () => {
         // Verify user balance before clawback
         const accountBefore = await server.loadAccount(userKeypair.publicKey());
         const balanceBefore = accountBefore.balances.find(
-          (b: any) => b.asset_code === "TEST"
+          (b: any) => b.asset_code === "TEST",
         );
         expect(balanceBefore).toBeDefined();
         expect(parseFloat(balanceBefore!.balance)).toBe(100);
@@ -110,7 +125,7 @@ describe("Clawback Integration Tests", () => {
         // Step 5: Execute clawback
         const clawbackResult = await stellarService.executeClawback(
           userKeypair.publicKey(),
-          "50"
+          "50",
         );
 
         expect(clawbackResult.hash).toBeDefined();
@@ -118,12 +133,12 @@ describe("Clawback Integration Tests", () => {
         // Verify user balance after clawback
         const accountAfter = await server.loadAccount(userKeypair.publicKey());
         const balanceAfter = accountAfter.balances.find(
-          (b: any) => b.asset_code === "TEST"
+          (b: any) => b.asset_code === "TEST",
         );
         expect(parseFloat(balanceAfter!.balance)).toBe(50);
       } catch (error: any) {
         // Network errors are acceptable when testnet is unavailable
-        if (error?.response?.status === 400 || error?.code === 'ECONNREFUSED') {
+        if (error?.response?.status === 400 || error?.code === "ECONNREFUSED") {
           console.log("Skipping - testnet unavailable or account not funded");
           return;
         }
@@ -138,11 +153,16 @@ describe("Clawback Integration Tests", () => {
       }
 
       const unauthorizedKeypair = StellarSdk.Keypair.random();
-      const unauthorizedAsset = new StellarSdk.Asset("UNAUTH", unauthorizedKeypair.publicKey());
+      const unauthorizedAsset = new StellarSdk.Asset(
+        "UNAUTH",
+        unauthorizedKeypair.publicKey(),
+      );
 
       try {
-        const account = await server.loadAccount(unauthorizedKeypair.publicKey());
-        
+        const account = await server.loadAccount(
+          unauthorizedKeypair.publicKey(),
+        );
+
         const clawbackTx = new StellarSdk.TransactionBuilder(account, {
           fee: StellarSdk.BASE_FEE,
           networkPassphrase: getNetworkPassphrase(),
@@ -152,7 +172,7 @@ describe("Clawback Integration Tests", () => {
               from: userKeypair.publicKey(),
               asset: unauthorizedAsset,
               amount: "10",
-            })
+            }),
           )
           .setTimeout(30)
           .build();
@@ -164,22 +184,26 @@ describe("Clawback Integration Tests", () => {
       } catch (error: any) {
         expect(error).toBeDefined();
         // Accept various error types that indicate unauthorized/not found
-        const isExpectedError = 
+        const isExpectedError =
           error.message?.includes("op_not_authorized") ||
           error.message?.includes("account not found") ||
           error.message?.includes("404") ||
           error.response?.status === 404 ||
-          error.response?.data?.extras?.result_codes?.operations?.includes("op_not_authorized");
+          error.response?.data?.extras?.result_codes?.operations?.includes(
+            "op_not_authorized",
+          );
         expect(isExpectedError).toBeTruthy();
       }
     });
 
     it("should fail clawback on native XLM", async () => {
-      const { getConfiguredPaymentAsset } = require("../../src/services/stellar/assetService");
+      const {
+        getConfiguredPaymentAsset,
+      } = require("../../src/services/stellar/assetService");
       getConfiguredPaymentAsset.mockReturnValueOnce(StellarSdk.Asset.native());
 
       await expect(
-        stellarService.executeClawback(userKeypair.publicKey(), "10")
+        stellarService.executeClawback(userKeypair.publicKey(), "10"),
       ).rejects.toThrow("Cannot claw back native XLM");
     });
   });
@@ -205,7 +229,7 @@ describe("Clawback Integration Tests", () => {
            AND resource_id = $1 
            ORDER BY created_at DESC 
            LIMIT 1`,
-          [result.hash || "mock_clawback_hash"]
+          [result.hash || "mock_clawback_hash"],
         );
 
         // In mock mode, we won't have audit logs, so just verify the operation completed
@@ -225,7 +249,10 @@ describe("Clawback Integration Tests", () => {
       const testAddress = StellarSdk.Keypair.random().publicKey();
       const clawbackAmount = "75";
 
-      const result = await stellarService.executeClawback(testAddress, clawbackAmount);
+      const result = await stellarService.executeClawback(
+        testAddress,
+        clawbackAmount,
+      );
 
       expect(result).toBeDefined();
       expect(result.hash).toBeDefined();
@@ -236,7 +263,7 @@ describe("Clawback Integration Tests", () => {
         const auditCheck = await pool.query(
           `SELECT COUNT(*) as count FROM audit_logs 
            WHERE action LIKE '%clawback%' 
-           AND created_at > NOW() - INTERVAL '1 minute'`
+           AND created_at > NOW() - INTERVAL '1 minute'`,
         );
 
         // Just verify query executes without error
@@ -252,11 +279,11 @@ describe("Clawback Integration Tests", () => {
     it("should only allow admin accounts to initiate clawback", async () => {
       // This test verifies that the StellarService requires proper issuer keypair
       const serviceWithoutKey = new StellarService();
-      
+
       // Should work in mock mode
       const result = await serviceWithoutKey.executeClawback(
         StellarSdk.Keypair.random().publicKey(),
-        "10"
+        "10",
       );
 
       expect(result.hash).toBeDefined();
@@ -266,13 +293,13 @@ describe("Clawback Integration Tests", () => {
       const testAddress = StellarSdk.Keypair.random().publicKey();
 
       await expect(
-        stellarService.executeClawback(testAddress, "-10")
+        stellarService.executeClawback(testAddress, "-10"),
       ).rejects.toThrow();
     });
 
     it("should validate destination address format", async () => {
       await expect(
-        stellarService.executeClawback("invalid-address", "10")
+        stellarService.executeClawback("invalid-address", "10"),
       ).rejects.toThrow();
     });
   });

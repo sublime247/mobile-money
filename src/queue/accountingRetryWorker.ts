@@ -30,7 +30,14 @@ const accountingService = new AccountingService();
 export async function processAccountingRetryJob(
   job: Job<AccountingRetryJobData, AccountingRetryJobResult>,
 ): Promise<AccountingRetryJobResult> {
-  const { syncId, transactionId, platform, payload, failureReason, previousAttempts } = job.data;
+  const {
+    syncId,
+    transactionId,
+    platform,
+    payload,
+    failureReason,
+    previousAttempts,
+  } = job.data;
   const retryAttempt = previousAttempts + job.attemptsMade + 1;
 
   logger.info(
@@ -119,7 +126,10 @@ export async function processAccountingRetryJob(
         logger.error(
           {
             jobId: job.id,
-            discardError: discardErr instanceof Error ? discardErr.message : String(discardErr),
+            discardError:
+              discardErr instanceof Error
+                ? discardErr.message
+                : String(discardErr),
           },
           "Failed to discard accounting retry job",
         );
@@ -137,14 +147,10 @@ export async function processAccountingRetryJob(
 export const accountingRetryWorker = new Worker<
   AccountingRetryJobData,
   AccountingRetryJobResult
->(
-  ACCOUNTING_RETRY_QUEUE_NAME,
-  processAccountingRetryJob,
-  {
-    ...queueOptions,
-    concurrency: 2, // Conservative concurrency for retry queue
-  },
-);
+>(ACCOUNTING_RETRY_QUEUE_NAME, processAccountingRetryJob, {
+  ...queueOptions,
+  concurrency: 2, // Conservative concurrency for retry queue
+});
 
 // Event listeners for monitoring
 accountingRetryWorker.on("completed", (job) => {

@@ -124,7 +124,9 @@ export async function runCli(args: string[]): Promise<void> {
 
         process.stdout.write("\x1b[2J\x1b[0f");
 
-        console.log(`${formatCliHeading("Mobile Money System Status Dashboard")}\n`);
+        console.log(
+          `${formatCliHeading("Mobile Money System Status Dashboard")}\n`,
+        );
 
         console.log("System Stats:");
         console.log(
@@ -133,10 +135,14 @@ export async function runCli(args: string[]): Promise<void> {
         console.log(
           `  Memory Usage: ${(usedMem / 1024 / 1024).toFixed(2)} MB / ${(totalMem / 1024 / 1024).toFixed(2)} MB (${memUsagePercent}%)`,
         );
-        console.log(`  Redis Memory: ${(stats.redis_memory_bytes / 1024 / 1024).toFixed(2)} MB\n`);
+        console.log(
+          `  Redis Memory: ${(stats.redis_memory_bytes / 1024 / 1024).toFixed(2)} MB\n`,
+        );
 
         console.log(`Queue Lengths (Total Depth: ${stats.total_depth}):`);
-        console.log(`  ${"Queue Name".padEnd(30)} | Waiting | Active | Total | Latency (ms)`);
+        console.log(
+          `  ${"Queue Name".padEnd(30)} | Waiting | Active | Total | Latency (ms)`,
+        );
         console.log(
           `  ${"-".repeat(30)}-+-${"-".repeat(7)}-+-${"-".repeat(6)}-+-${"-".repeat(5)}-+-${"-".repeat(12)}`,
         );
@@ -189,7 +195,7 @@ export async function runCli(args: string[]): Promise<void> {
     }
 
     const [{ pool }, queueModule, transactionQueueModule] = await Promise.all([
-      import("../config/database"),
+      import("../config/database.js"),
       import("../queue/index.js"),
       import("../queue/transactionQueue.js"),
     ]);
@@ -197,9 +203,7 @@ export async function runCli(args: string[]): Promise<void> {
     activePool = pool;
     activeTransactionQueue = transactionQueueModule.transactionQueue;
 
-    console.log(
-      `Searching for transactions in batch ${batchId}...`,
-    );
+    console.log(`Searching for transactions in batch ${batchId}...`);
 
     try {
       const query = `

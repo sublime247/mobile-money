@@ -1,4 +1,8 @@
-import { WebhookService, FlatWebhookPayload, notifyFlatTransactionWebhook } from "../webhook";
+import {
+  WebhookService,
+  FlatWebhookPayload,
+  notifyFlatTransactionWebhook,
+} from "../webhook";
 import { Transaction, TransactionStatus } from "../../models/transaction";
 
 describe("WebhookService - Flat Payloads", () => {
@@ -31,22 +35,26 @@ describe("WebhookService - Flat Payloads", () => {
         amount: "100.00",
         phoneNumber: "+1234567890",
         provider: "mpesa",
-        stellarAddress: "GD5DJQDQKEZBDQZBH4ENLN5JTQAVLHKUL2QHYK3LTJY2J5N2Z5Q5K7",
+        stellarAddress:
+          "GD5DJQDQKEZBDQZBH4ENLN5JTQAVLHKUL2QHYK3LTJY2J5N2Z5Q5K7",
         status: TransactionStatus.Completed,
         tags: ["test", "deposit"],
         notes: "Test transaction",
         userId: "user_123",
         metadata: {
           stellar_hash: "abc123",
-          ledger: "12345"
+          ledger: "12345",
         },
         createdAt: new Date("2026-03-27T11:45:00.000Z"),
         updatedAt: new Date("2026-03-27T11:46:00.000Z"),
         webhook_delivery_status: "delivered",
-        webhook_delivered_at: new Date("2026-03-27T11:46:05.000Z")
+        webhook_delivered_at: new Date("2026-03-27T11:46:05.000Z"),
       } as Transaction;
 
-      const payload = webhookService.buildFlatPayload("transaction.completed", transaction);
+      const payload = webhookService.buildFlatPayload(
+        "transaction.completed",
+        transaction,
+      );
 
       expect(payload.event_type).toBe("transaction.completed");
       expect(payload.transaction_id).toBe("txn_123");
@@ -56,7 +64,9 @@ describe("WebhookService - Flat Payloads", () => {
       expect(payload.currency).toBe("USD");
       expect(payload.phone_number).toBe("+1234567890");
       expect(payload.provider).toBe("mpesa");
-      expect(payload.stellar_address).toBe("GD5DJQDQKEZBDQZBH4ENLN5JTQAVLHKUL2QHYK3LTJY2J5N2Z5Q5K7");
+      expect(payload.stellar_address).toBe(
+        "GD5DJQDQKEZBDQZBH4ENLN5JTQAVLHKUL2QHYK3LTJY2J5N2Z5Q5K7",
+      );
       expect(payload.status).toBe("completed");
       expect(payload.user_id).toBe("user_123");
       expect(payload.notes).toBe("Test transaction");
@@ -66,7 +76,9 @@ describe("WebhookService - Flat Payloads", () => {
       expect(payload.webhook_delivery_status).toBe("delivered");
       expect(payload.webhook_delivered_at).toBe("2026-03-27T11:46:05.000Z");
       expect(payload.event_id).toMatch(/^evt_\d+_[a-z0-9]+$/);
-      expect(payload.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+      expect(payload.timestamp).toMatch(
+        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
+      );
     });
 
     it("should handle transaction with minimal fields", () => {
@@ -77,12 +89,16 @@ describe("WebhookService - Flat Payloads", () => {
         amount: "50.00",
         phoneNumber: "+0987654321",
         provider: "airtel",
-        stellarAddress: "GD5DJQDQKEZBDQZBH4ENLN5JTQAVLHKUL2QHYK3LTJY2J5N2Z5Q5K7",
+        stellarAddress:
+          "GD5DJQDQKEZBDQZBH4ENLN5JTQAVLHKUL2QHYK3LTJY2J5N2Z5Q5K7",
         status: TransactionStatus.Pending,
-        createdAt: new Date("2026-03-27T11:45:00.000Z")
+        createdAt: new Date("2026-03-27T11:45:00.000Z"),
       } as Transaction;
 
-      const payload = webhookService.buildFlatPayload("transaction.pending", transaction);
+      const payload = webhookService.buildFlatPayload(
+        "transaction.pending",
+        transaction,
+      );
 
       expect(payload.event_type).toBe("transaction.pending");
       expect(payload.transaction_id).toBe("txn_minimal");
@@ -91,7 +107,9 @@ describe("WebhookService - Flat Payloads", () => {
       expect(payload.amount).toBe("50.00");
       expect(payload.phone_number).toBe("+0987654321");
       expect(payload.provider).toBe("airtel");
-      expect(payload.stellar_address).toBe("GD5DJQDQKEZBDQZBH4ENLN5JTQAVLHKUL2QHYK3LTJY2J5N2Z5Q5K7");
+      expect(payload.stellar_address).toBe(
+        "GD5DJQDQKEZBDQZBH4ENLN5JTQAVLHKUL2QHYK3LTJY2J5N2Z5Q5K7",
+      );
       expect(payload.status).toBe("pending");
       expect(payload.user_id).toBeUndefined();
       expect(payload.notes).toBeUndefined();
@@ -108,13 +126,17 @@ describe("WebhookService - Flat Payloads", () => {
         amount: "75.00",
         phoneNumber: "+1111111111",
         provider: "mpesa",
-        stellarAddress: "GD5DJQDQKEZBDQZBH4ENLN5JTQAVLHKUL2QHYK3LTJY2J5N2Z5Q5K7",
+        stellarAddress:
+          "GD5DJQDQKEZBDQZBH4ENLN5JTQAVLHKUL2QHYK3LTJY2J5N2Z5Q5K7",
         status: TransactionStatus.Completed,
         metadata: {},
-        createdAt: new Date("2026-03-27T11:45:00.000Z")
+        createdAt: new Date("2026-03-27T11:45:00.000Z"),
       } as Transaction;
 
-      const payload = webhookService.buildFlatPayload("transaction.completed", transaction);
+      const payload = webhookService.buildFlatPayload(
+        "transaction.completed",
+        transaction,
+      );
 
       expect(payload.metadata_key).toBeUndefined();
       expect(payload.metadata_value).toBeUndefined();
@@ -130,9 +152,10 @@ describe("WebhookService - Flat Payloads", () => {
         amount: "100.00",
         phoneNumber: "+1234567890",
         provider: "mpesa",
-        stellarAddress: "GD5DJQDQKEZBDQZBH4ENLN5JTQAVLHKUL2QHYK3LTJY2J5N2Z5Q5K7",
+        stellarAddress:
+          "GD5DJQDQKEZBDQZBH4ENLN5JTQAVLHKUL2QHYK3LTJY2J5N2Z5Q5K7",
         status: TransactionStatus.Completed,
-        createdAt: new Date("2026-03-27T11:45:00.000Z")
+        createdAt: new Date("2026-03-27T11:45:00.000Z"),
       } as Transaction;
 
       mockFetch.mockResolvedValueOnce({
@@ -140,7 +163,10 @@ describe("WebhookService - Flat Payloads", () => {
         status: 200,
       });
 
-      const result = await webhookService.sendFlatTransactionEvent("transaction.completed", transaction);
+      const result = await webhookService.sendFlatTransactionEvent(
+        "transaction.completed",
+        transaction,
+      );
 
       expect(result.status).toBe("delivered");
       expect(result.attempts).toBe(1);
@@ -158,7 +184,7 @@ describe("WebhookService - Flat Payloads", () => {
             "X-Webhook-Signature": expect.stringMatching(/^sha256=[a-f0-9]+$/),
           },
           body: expect.stringContaining('"transaction_id":"txn_success"'),
-        })
+        }),
       );
     });
 
@@ -170,14 +196,18 @@ describe("WebhookService - Flat Payloads", () => {
         amount: "100.00",
         phoneNumber: "+1234567890",
         provider: "mpesa",
-        stellarAddress: "GD5DJQDQKEZBDQZBH4ENLN5JTQAVLHKUL2QHYK3LTJY2J5N2Z5Q5K7",
+        stellarAddress:
+          "GD5DJQDQKEZBDQZBH4ENLN5JTQAVLHKUL2QHYK3LTJY2J5N2Z5Q5K7",
         status: TransactionStatus.Completed,
-        createdAt: new Date("2026-03-27T11:45:00.000Z")
+        createdAt: new Date("2026-03-27T11:45:00.000Z"),
       } as Transaction;
 
       mockFetch.mockRejectedValue(new Error("Network error"));
 
-      const result = await webhookService.sendFlatTransactionEvent("transaction.completed", transaction);
+      const result = await webhookService.sendFlatTransactionEvent(
+        "transaction.completed",
+        transaction,
+      );
 
       expect(result.status).toBe("failed");
       expect(result.attempts).toBe(2); // maxAttempts
@@ -200,12 +230,16 @@ describe("WebhookService - Flat Payloads", () => {
         amount: "100.00",
         phoneNumber: "+1234567890",
         provider: "mpesa",
-        stellarAddress: "GD5DJQDQKEZBDQZBH4ENLN5JTQAVLHKUL2QHYK3LTJY2J5N2Z5Q5K7",
+        stellarAddress:
+          "GD5DJQDQKEZBDQZBH4ENLN5JTQAVLHKUL2QHYK3LTJY2J5N2Z5Q5K7",
         status: TransactionStatus.Completed,
-        createdAt: new Date("2026-03-27T11:45:00.000Z")
+        createdAt: new Date("2026-03-27T11:45:00.000Z"),
       } as Transaction;
 
-      const result = await noUrlService.sendFlatTransactionEvent("transaction.completed", transaction);
+      const result = await noUrlService.sendFlatTransactionEvent(
+        "transaction.completed",
+        transaction,
+      );
 
       expect(result.status).toBe("skipped");
       expect(result.attempts).toBe(0);
@@ -225,12 +259,16 @@ describe("WebhookService - Flat Payloads", () => {
         amount: "100.00",
         phoneNumber: "+1234567890",
         provider: "mpesa",
-        stellarAddress: "GD5DJQDQKEZBDQZBH4ENLN5JTQAVLHKUL2QHYK3LTJY2J5N2Z5Q5K7",
+        stellarAddress:
+          "GD5DJQDQKEZBDQZBH4ENLN5JTQAVLHKUL2QHYK3LTJY2J5N2Z5Q5K7",
         status: TransactionStatus.Completed,
-        createdAt: new Date("2026-03-27T11:45:00.000Z")
+        createdAt: new Date("2026-03-27T11:45:00.000Z"),
       } as Transaction;
 
-      const result = await noSecretService.sendFlatTransactionEvent("transaction.completed", transaction);
+      const result = await noSecretService.sendFlatTransactionEvent(
+        "transaction.completed",
+        transaction,
+      );
 
       expect(result.status).toBe("skipped");
       expect(result.attempts).toBe(0);
@@ -247,9 +285,10 @@ describe("WebhookService - Flat Payloads", () => {
         amount: "100.00",
         phoneNumber: "+1234567890",
         provider: "mpesa",
-        stellarAddress: "GD5DJQDQKEZBDQZBH4ENLN5JTQAVLHKUL2QHYK3LTJY2J5N2Z5Q5K7",
+        stellarAddress:
+          "GD5DJQDQKEZBDQZBH4ENLN5JTQAVLHKUL2QHYK3LTJY2J5N2Z5Q5K7",
         status: TransactionStatus.Completed,
-        createdAt: new Date("2026-03-27T11:45:00.000Z")
+        createdAt: new Date("2026-03-27T11:45:00.000Z"),
       } as Transaction;
 
       mockTransactionModel.findById.mockResolvedValue(transaction);
@@ -258,29 +297,40 @@ describe("WebhookService - Flat Payloads", () => {
         status: 200,
       });
 
-      const result = await notifyFlatTransactionWebhook("txn_notify", "transaction.completed", {
-        transactionModel: mockTransactionModel,
-        webhookService,
-      });
+      const result = await notifyFlatTransactionWebhook(
+        "txn_notify",
+        "transaction.completed",
+        {
+          transactionModel: mockTransactionModel,
+          webhookService,
+        },
+      );
 
       expect(result).not.toBeNull();
       expect(result!.status).toBe("delivered");
       expect(mockTransactionModel.findById).toHaveBeenCalledWith("txn_notify");
-      expect(mockTransactionModel.updateWebhookDelivery).toHaveBeenCalledWith("txn_notify", {
-        status: "delivered",
-        lastAttemptAt: expect.any(Date),
-        deliveredAt: expect.any(Date),
-        lastError: null,
-      });
+      expect(mockTransactionModel.updateWebhookDelivery).toHaveBeenCalledWith(
+        "txn_notify",
+        {
+          status: "delivered",
+          lastAttemptAt: expect.any(Date),
+          deliveredAt: expect.any(Date),
+          lastError: null,
+        },
+      );
     });
 
     it("should return null when transaction is not found", async () => {
       mockTransactionModel.findById.mockResolvedValue(null);
 
-      const result = await notifyFlatTransactionWebhook("txn_missing", "transaction.completed", {
-        transactionModel: mockTransactionModel,
-        webhookService,
-      });
+      const result = await notifyFlatTransactionWebhook(
+        "txn_missing",
+        "transaction.completed",
+        {
+          transactionModel: mockTransactionModel,
+          webhookService,
+        },
+      );
 
       expect(result).toBeNull();
       expect(mockTransactionModel.findById).toHaveBeenCalledWith("txn_missing");

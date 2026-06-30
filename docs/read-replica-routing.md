@@ -1,29 +1,35 @@
 # Read Replica Routing Implementation
 
 ## Overview
+
 This document describes the read replica routing system implemented to handle heavy GraphQL queries and admin reports efficiently by automatically routing read-only (SELECT) queries to Postgres read replicas while keeping write operations (INSERT/UPDATE/DELETE) on the primary database.
 
 The system uses two complementary routing strategies:
+
 1. **SQL Query Type Detection** - Analyzes SQL to determine if it's read-only
 2. **HTTP Method-Based Routing** - Routes based on REST API HTTP methods (GET to replicas, POST/PUT/PATCH/DELETE to primary)
 
 ## Architecture
 
 ### HTTP Method-Based Routing Middleware
+
 A new middleware `src/middleware/readReplicaRouting.ts` provides automatic database pool selection based on HTTP method:
+
 - **GET/HEAD/OPTIONS requests** → Replica pool (read-only)
 - **POST/PUT/PATCH/DELETE requests** → Primary pool (critical writes)
 
 The middleware attaches routing context to Express Request objects:
+
 ```typescript
 interface DatabaseRoutingContext {
-  useReplicaPool: boolean;  // true for GET, false for write operations
-  method: string;           // HTTP method
-  path: string;             // Request path
+  useReplicaPool: boolean; // true for GET, false for write operations
+  method: string; // HTTP method
+  path: string; // Request path
 }
 ```
 
 Usage in services:
+
 ```typescript
 // Route handlers receive request with routing context
 const result = await queryWithContext(req, "SELECT * FROM users", []);
@@ -31,26 +37,38 @@ const result = await queryWithContext(req, "SELECT * FROM users", []);
 ```
 
 ### Smart Query Detection
+
 A new utility `src/utils/readOnlyDetector.ts` provides:
+
 - `isReadOnlyQuery(query)` - Detects if a SQL query is read-only (SELECT)
 - `getQueryCommand(query)` - Extracts the main SQL command for logging
 
 ### Smart Router Function
+
 New `querySmart()` function in `src/config/database.ts`:
+
 ```typescript
-export async function querySmart<T>(text: string, params?: unknown[]): Promise<QueryResult<T>>
+export async function querySmart<T>(
+  text: string,
+  params?: unknown[],
+): Promise<QueryResult<T>>;
 ```
+
 - Auto-detects read-only queries
 - Routes SELECT queries to `queryRead()` (replica pool)
 - Routes write operations to `queryWrite()` (primary pool)
 
 ### Context-Aware Query Functions
+
 New functions for HTTP request-aware routing:
+
 - `queryWithContext(req, text, params)` - Routes based on HTTP method + SQL query type
 - `queryBatchWithContext(req, queries)` - Executes multiple queries with proper routing
 
 ### Explicit Routing
+
 Existing functions in `src/config/database.ts`:
+
 - `queryRead()` - Routes to replica pool with fallback to primary
 - `queryWrite()` - Routes to primary pool only
 - `checkReplicaHealth()` - Health check endpoint for monitoring replicas
@@ -59,10 +77,12 @@ Existing functions in `src/config/database.ts`:
 ## Database Configuration
 
 Replicas are configured via environment variables:
+
 - `DATABASE_URL` - Primary read/write connection
 - `READ_REPLICA_URL` - Comma-separated list of replica connection strings
 
 Example:
+
 ```
 DATABASE_URL=postgresql://user:pass@primary:5432/mobile_money
 READ_REPLICA_URL=postgresql://user:pass@replica1:5432/mobile_money,postgresql://user:pass@replica2:5432/mobile_money
@@ -73,15 +93,18 @@ READ_REPLICA_URL=postgresql://user:pass@replica1:5432/mobile_money,postgresql://
 The `readReplicaRoutingMiddleware` is automatically applied in `src/index.ts` after the request ID middleware.
 
 Enable debug logging for routing decisions:
+
 ```
 DEBUG_DB_ROUTING=true  # Logs "GET /api/users → REPLICA" style messages
 ```
 
 Route behavior:
+
 - **GET/HEAD/OPTIONS** → `useReplicaPool = true` (replica preferred)
 - **POST/PUT/PATCH/DELETE** → `useReplicaPool = false` (primary only)
 
 Services can check the routing context:
+
 ```typescript
 // In route handler or service
 if (req.dbRouting?.useReplicaPool) {
@@ -94,11 +117,13 @@ if (req.dbRouting?.useReplicaPool) {
 ## Implementation Details
 
 ### Load Balancing
+
 - Round-robin load balancing across multiple replicas
 - Automatic failover to primary if replica is unreachable
 - No breaking changes to existing code
 
 ### Dual Routing Strategy
+
 The system uses complementary routing approaches:
 
 1. **HTTP Method-Based** (middleware level)
@@ -112,6 +137,7 @@ The system uses complementary routing approaches:
    - Works with services calling queryRead/queryWrite/querySmart directly
 
 Example routing flow:
+
 ```
 REST API GET request
   ↓
@@ -125,11 +151,14 @@ Routes to replica pool with fallback to primary
 ```
 
 ### Models Updated
+
 All model classes now use explicit routing:
+
 - **SELECT queries** → `queryRead()` for optimal performance on replicas
 - **INSERT/UPDATE/DELETE** → `queryWrite()` for consistency guarantees
 
 Updated models:
+
 - `src/models/transaction.ts` - 40+ query methods
 - `src/models/dispute.ts` - 25+ query methods
 - `src/models/users.ts` - 4 query methods
@@ -139,6 +168,7 @@ Updated models:
 - `src/models/refreshTokenFamily.ts` - 4 query methods
 
 ### Routes Updated
+
 - `src/routes/reports.ts` - Reconciliation reports now use `queryRead()` for heavy aggregations
 
 ## Performance Benefits
@@ -152,10 +182,13 @@ Updated models:
 ## Monitoring
 
 ### Health Check Endpoint
+
 ```
 GET /admin/health/replicas (requires admin auth)
 ```
+
 Returns status of all configured replica pools:
+
 ```json
 [
   { "url": "postgresql://replica1:5432/...", "healthy": true },
@@ -164,47 +197,57 @@ Returns status of all configured replica pools:
 ```
 
 ### Logging
+
 - Failed replica queries log warnings and fall back to primary
 - Slow query logging continues to work for all queries
 
 ## Migration Path
 
 ### For REST API Routes
+
 When implementing route handlers that need database queries:
 
 ```typescript
 // Use queryWithContext for automatic HTTP method-based routing
-import { queryWithContext } from '../config/database';
+import { queryWithContext } from "../config/database";
 
-router.get('/users/:id', async (req: Request, res: Response) => {
+router.get("/users/:id", async (req: Request, res: Response) => {
   // Automatically routes to replica because HTTP method is GET
-  const result = await queryWithContext(req, 'SELECT * FROM users WHERE id = $1', [req.params.id]);
+  const result = await queryWithContext(
+    req,
+    "SELECT * FROM users WHERE id = $1",
+    [req.params.id],
+  );
   res.json(result.rows);
 });
 
-router.post('/users', async (req: Request, res: Response) => {
+router.post("/users", async (req: Request, res: Response) => {
   // Automatically routes to primary because HTTP method is POST
-  const result = await queryWithContext(req, 'INSERT INTO users ...');
+  const result = await queryWithContext(req, "INSERT INTO users ...");
   res.json(result.rows);
 });
 ```
 
 ### For Services Using Direct Calls
+
 For services calling query functions without HTTP context:
+
 1. **Option A**: Replace with `querySmart()` for automatic SQL-based routing
 2. **Option B**: Replace with `queryRead()` for SELECT or `queryWrite()` for write operations
 3. **Option C**: Keep using `pool.query()` (works but doesn't utilize replicas)
 
 ### For Backend Workers/Jobs
+
 Background jobs and workers should use explicit routing:
+
 ```typescript
-import { queryRead, queryWrite } from '../config/database';
+import { queryRead, queryWrite } from "../config/database";
 
 // Read-heavy job
-await queryRead('SELECT * FROM large_table');
+await queryRead("SELECT * FROM large_table");
 
 // Write job
-await queryWrite('UPDATE jobs SET status = $1 WHERE id = $2', ['done', jobId]);
+await queryWrite("UPDATE jobs SET status = $1 WHERE id = $2", ["done", jobId]);
 ```
 
 ## Future Enhancements
@@ -219,6 +262,7 @@ await queryWrite('UPDATE jobs SET status = $1 WHERE id = $2', ['done', jobId]);
 ## Testing
 
 ### Manual Testing
+
 ```bash
 # Verify replica is being used
 SELECT * FROM transactions LIMIT 1;  # Should use replica
@@ -231,7 +275,9 @@ curl http://localhost:3000/admin/health/replicas
 ```
 
 ### Load Testing
+
 Use tools like pgbench to verify:
+
 - Read queries distribute across replicas
 - Write queries all go to primary
 - Failover works when replicas are down
@@ -240,16 +286,19 @@ Use tools like pgbench to verify:
 ## Troubleshooting
 
 ### Replicas Not Being Used
+
 1. Verify `READ_REPLICA_URL` environment variable is set
 2. Check replica connectivity: `psql postgresql://replica:5432/db -c "SELECT 1"`
 3. Review logs for replica connection errors
 
 ### Stale Data on Replicas
+
 1. Check replica lag: `SELECT EXTRACT(EPOCH FROM (NOW() - pg_last_xact_replay_timestamp()))`
 2. Replicas should be streaming replication (WAL shipping)
 3. Consider using read consistency settings if lag is critical
 
 ### Performance Issues
+
 1. Compare replica query times vs primary
 2. Check replica resources (CPU, disk, network)
 3. Consider adding more replicas if load is high

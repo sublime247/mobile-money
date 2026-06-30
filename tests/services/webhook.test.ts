@@ -67,7 +67,9 @@ describe("WebhookService", () => {
     });
 
     expect(init.body).toBe(expectedBody);
-    expect((init.headers as Record<string, string>)["X-Webhook-Signature"]).toBe(
+    expect(
+      (init.headers as Record<string, string>)["X-Webhook-Signature"],
+    ).toBe(
       `sha256=${createHmac("sha256", "top-secret").update(expectedBody).digest("hex")}`,
     );
   });

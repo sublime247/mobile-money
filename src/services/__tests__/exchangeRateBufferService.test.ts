@@ -43,7 +43,13 @@ describe("ExchangeRateBufferService", () => {
     it("should return raw rate when no buffer config exists", async () => {
       (pool.query as jest.Mock).mockResolvedValue({ rows: [] });
 
-      const result = await service.applyBuffer(600, "mtn", "USD", "XAF", "sell");
+      const result = await service.applyBuffer(
+        600,
+        "mtn",
+        "USD",
+        "XAF",
+        "sell",
+      );
 
       expect(result.rawRate).toBe(600);
       expect(result.bufferedRate).toBe(600);
@@ -72,7 +78,13 @@ describe("ExchangeRateBufferService", () => {
         ],
       });
 
-      const result = await service.applyBuffer(600, "mtn", "USD", "XAF", "sell");
+      const result = await service.applyBuffer(
+        600,
+        "mtn",
+        "USD",
+        "XAF",
+        "sell",
+      );
 
       expect(result.rawRate).toBe(600);
       // sell: rate / (1 + 0.02) = 600 / 1.02 ≈ 588.2352941
@@ -131,7 +143,13 @@ describe("ExchangeRateBufferService", () => {
         ],
       });
 
-      const result = await service.applyBuffer(600, "airtel", "USD", "XAF", "sell");
+      const result = await service.applyBuffer(
+        600,
+        "airtel",
+        "USD",
+        "XAF",
+        "sell",
+      );
 
       expect(result.providerUsed).toBe("*");
       expect(result.bufferApplied).toBe(1.5);
@@ -159,13 +177,19 @@ describe("ExchangeRateBufferService", () => {
 
       // Return high-volatility price data → dynamic buffer would be very high
       (findRange as jest.Mock).mockResolvedValueOnce([
-        { price: 0.10, recordedAt: new Date(), source: "test" },
+        { price: 0.1, recordedAt: new Date(), source: "test" },
         { price: 0.15, recordedAt: new Date(), source: "test" },
         { price: 0.08, recordedAt: new Date(), source: "test" },
-        { price: 0.20, recordedAt: new Date(), source: "test" },
+        { price: 0.2, recordedAt: new Date(), source: "test" },
       ]);
 
-      const result = await service.applyBuffer(0.12, "mtn", "XLM", "USD", "sell");
+      const result = await service.applyBuffer(
+        0.12,
+        "mtn",
+        "XLM",
+        "USD",
+        "sell",
+      );
 
       // Dynamic buffer would be large, but should be clamped to max 3%
       expect(result.bufferApplied).toBeLessThanOrEqual(3);
@@ -198,7 +222,13 @@ describe("ExchangeRateBufferService", () => {
         { price: 0.12, recordedAt: new Date(), source: "test" },
       ]);
 
-      const result = await service.applyBuffer(0.12, "mtn", "XLM", "USD", "sell");
+      const result = await service.applyBuffer(
+        0.12,
+        "mtn",
+        "XLM",
+        "USD",
+        "sell",
+      );
 
       // Falls back to static buffer_percent of 1.5
       expect(result.bufferApplied).toBe(1.5);

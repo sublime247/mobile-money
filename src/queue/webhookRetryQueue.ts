@@ -22,7 +22,9 @@ const MAX_ATTEMPTS = Number(process.env.WEBHOOK_RETRY_MAX_ATTEMPTS ?? 5);
 // Base delay for exponential backoff in ms (default 30s → 30s, 60s, 120s, 240s, 480s)
 const BASE_DELAY_MS = Number(process.env.WEBHOOK_RETRY_BASE_DELAY_MS ?? 30_000);
 
-export async function enqueueWebhookRetry(data: WebhookRetryJobData): Promise<void> {
+export async function enqueueWebhookRetry(
+  data: WebhookRetryJobData,
+): Promise<void> {
   await webhookRetryQueue.add("deliver", data, {
     attempts: MAX_ATTEMPTS,
     backoff: { type: "exponential", delay: BASE_DELAY_MS },

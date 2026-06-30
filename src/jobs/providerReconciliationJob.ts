@@ -8,7 +8,9 @@ const providerReconciliationService = new ProviderReconciliationService();
  * This job should run once per day, typically early morning after provider reports are available
  */
 export async function runDailyProviderReconciliation(): Promise<void> {
-  logger.info("[Daily Provider Reconciliation] Starting daily reconciliation job");
+  logger.info(
+    "[Daily Provider Reconciliation] Starting daily reconciliation job",
+  );
 
   try {
     // Get yesterday's date (reconcile previous day's transactions)
@@ -16,26 +18,34 @@ export async function runDailyProviderReconciliation(): Promise<void> {
     yesterday.setDate(yesterday.getDate() - 1);
 
     // Get enabled provider configurations
-    const providerConfigs = await providerReconciliationService.getProviderConfigs();
+    const providerConfigs =
+      await providerReconciliationService.getProviderConfigs();
 
     if (providerConfigs.length === 0) {
-      logger.info("[Daily Provider Reconciliation] No enabled provider configurations found");
+      logger.info(
+        "[Daily Provider Reconciliation] No enabled provider configurations found",
+      );
       return;
     }
 
-    logger.info(`[Daily Provider Reconciliation] Processing ${providerConfigs.length} providers for ${yesterday.toISOString().split('T')[0]}`);
+    logger.info(
+      `[Daily Provider Reconciliation] Processing ${providerConfigs.length} providers for ${yesterday.toISOString().split("T")[0]}`,
+    );
 
     const results = [];
 
     // Run reconciliation for each provider
     for (const config of providerConfigs) {
       try {
-        logger.info(`[Daily Provider Reconciliation] Processing ${config.provider}`);
-
-        const result = await providerReconciliationService.runProviderReconciliation(
-          config.provider,
-          yesterday
+        logger.info(
+          `[Daily Provider Reconciliation] Processing ${config.provider}`,
         );
+
+        const result =
+          await providerReconciliationService.runProviderReconciliation(
+            config.provider,
+            yesterday,
+          );
 
         results.push({
           provider: config.provider,
@@ -43,41 +53,58 @@ export async function runDailyProviderReconciliation(): Promise<void> {
           result,
         });
 
-        logger.info(`[Daily Provider Reconciliation] Completed ${config.provider}: ${result.match_rate}% match rate`);
-
+        logger.info(
+          `[Daily Provider Reconciliation] Completed ${config.provider}: ${result.match_rate}% match rate`,
+        );
       } catch (error) {
-        logger.error(error, `[Daily Provider Reconciliation] Failed for ${config.provider}`);
+        logger.error(
+          error,
+          `[Daily Provider Reconciliation] Failed for ${config.provider}`,
+        );
 
         results.push({
           provider: config.provider,
           success: false,
-          error: error instanceof Error ? error.message : 'Unknown error',
+          error: error instanceof Error ? error.message : "Unknown error",
         });
       }
     }
 
     // Log summary
-    const successful = results.filter(r => r.success).length;
+    const successful = results.filter((r) => r.success).length;
     const failed = results.length - successful;
 
-    logger.info(`[Daily Provider Reconciliation] Job completed: ${successful} successful, ${failed} failed`);
+    logger.info(
+      `[Daily Provider Reconciliation] Job completed: ${successful} successful, ${failed} failed`,
+    );
 
     if (failed > 0) {
-      logger.warn(`[Daily Provider Reconciliation] Failed providers: ${results.filter(r => !r.success).map(r => r.provider).join(', ')}`);
+      logger.warn(
+        `[Daily Provider Reconciliation] Failed providers: ${results
+          .filter((r) => !r.success)
+          .map((r) => r.provider)
+          .join(", ")}`,
+      );
     }
 
     // Check for critical alerts that need immediate attention
-    const pendingAlerts = await providerReconciliationService.getPendingAlerts(100);
-    const criticalAlerts = pendingAlerts.filter(alert => alert.severity === 'critical');
-    const highAlerts = pendingAlerts.filter(alert => alert.severity === 'high');
+    const pendingAlerts =
+      await providerReconciliationService.getPendingAlerts(100);
+    const criticalAlerts = pendingAlerts.filter(
+      (alert) => alert.severity === "critical",
+    );
+    const highAlerts = pendingAlerts.filter(
+      (alert) => alert.severity === "high",
+    );
 
     if (criticalAlerts.length > 0 || highAlerts.length > 0) {
-      logger.warn(`[Daily Provider Reconciliation] Found ${criticalAlerts.length} critical and ${highAlerts.length} high priority alerts requiring review`);
+      logger.warn(
+        `[Daily Provider Reconciliation] Found ${criticalAlerts.length} critical and ${highAlerts.length} high priority alerts requiring review`,
+      );
 
       // Here you could add notification logic (email, Slack, PagerDuty, etc.)
       // For now, just log the alert counts
     }
-
   } catch (error) {
     logger.error(error, "[Daily Provider Reconciliation] Job failed");
     throw error;
@@ -90,13 +117,21 @@ export async function runDailyProviderReconciliation(): Promise<void> {
  */
 export async function runManualProviderReconciliation(
   provider: string,
-  reportDate: Date
+  reportDate: Date,
 ): Promise<any> {
-  logger.info(`[Manual Provider Reconciliation] Starting for ${provider} on ${reportDate.toISOString().split('T')[0]}`);
+  logger.info(
+    `[Manual Provider Reconciliation] Starting for ${provider} on ${reportDate.toISOString().split("T")[0]}`,
+  );
 
   try {
-    const result = await providerReconciliationService.runProviderReconciliation(provider, reportDate);
-    logger.info(`[Manual Provider Reconciliation] Completed: ${result.match_rate}% match rate`);
+    const result =
+      await providerReconciliationService.runProviderReconciliation(
+        provider,
+        reportDate,
+      );
+    logger.info(
+      `[Manual Provider Reconciliation] Completed: ${result.match_rate}% match rate`,
+    );
     return result;
   } catch (error) {
     logger.error(error, `[Manual Provider Reconciliation] Failed`);

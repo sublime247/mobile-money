@@ -1,5 +1,11 @@
 import { Request, Response, NextFunction } from "express";
-import { resolveLocale, resolveLocaleFromRequest, i18nMiddleware, SUPPORTED_LOCALES, translate } from "../../src/utils/i18n";
+import {
+  resolveLocale,
+  resolveLocaleFromRequest,
+  i18nMiddleware,
+  SUPPORTED_LOCALES,
+  translate,
+} from "../../src/utils/i18n";
 import i18next from "i18next";
 
 describe("i18n utils", () => {
@@ -30,12 +36,18 @@ describe("i18n utils", () => {
     });
 
     it("should parse accept-language header", () => {
-      const req = { headers: { "accept-language": "fr-CH, fr;q=0.9, en;q=0.8, de;q=0.7, *;q=0.5" } } as Request;
+      const req = {
+        headers: {
+          "accept-language": "fr-CH, fr;q=0.9, en;q=0.8, de;q=0.7, *;q=0.5",
+        },
+      } as Request;
       expect(resolveLocaleFromRequest(req)).toBe("fr");
     });
 
     it("should prioritize correctly from accept-language header", () => {
-      const req = { headers: { "accept-language": "de;q=0.9, es;q=0.8" } } as Request;
+      const req = {
+        headers: { "accept-language": "de;q=0.9, es;q=0.8" },
+      } as Request;
       expect(resolveLocaleFromRequest(req)).toBe("es");
     });
 
@@ -48,9 +60,11 @@ describe("i18n utils", () => {
       const req = { headers: { "accept-language": "zh, de" } } as Request;
       expect(resolveLocaleFromRequest(req)).toBe("en");
     });
-    
+
     it("should handle accept-language header as array", () => {
-      const req = { headers: { "accept-language": ["fr", "en;q=0.8"] } } as unknown as Request;
+      const req = {
+        headers: { "accept-language": ["fr", "en;q=0.8"] },
+      } as unknown as Request;
       expect(resolveLocaleFromRequest(req)).toBe("fr");
     });
   });
@@ -72,7 +86,9 @@ describe("i18n utils", () => {
   describe("translate", () => {
     beforeAll(() => {
       // Just ensure i18next is mockable or returns keys
-      jest.spyOn(i18next, "t").mockImplementation((key: string | string[]) => String(key));
+      jest
+        .spyOn(i18next, "t")
+        .mockImplementation((key: string | string[]) => String(key));
     });
 
     afterAll(() => {
@@ -81,12 +97,18 @@ describe("i18n utils", () => {
 
     it("should call i18next.t with resolved locale", () => {
       translate("some.key", "fr-FR", { count: 1 });
-      expect(i18next.t).toHaveBeenCalledWith("some.key", expect.objectContaining({ lng: "fr", count: 1 }));
+      expect(i18next.t).toHaveBeenCalledWith(
+        "some.key",
+        expect.objectContaining({ lng: "fr", count: 1 }),
+      );
     });
-    
+
     it("should use fallback locale when none provided", () => {
       translate("some.key");
-      expect(i18next.t).toHaveBeenCalledWith("some.key", expect.objectContaining({ lng: "en" }));
+      expect(i18next.t).toHaveBeenCalledWith(
+        "some.key",
+        expect.objectContaining({ lng: "en" }),
+      );
     });
   });
 });

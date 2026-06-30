@@ -1,5 +1,8 @@
 import logger from "../utils/logger";
-import amqp, { AmqpConnectionManager, ChannelWrapper } from "amqp-connection-manager";
+import amqp, {
+  AmqpConnectionManager,
+  ChannelWrapper,
+} from "amqp-connection-manager";
 import { ConfirmChannel, Message } from "amqplib";
 
 const RABBITMQ_URL = process.env.RABBITMQ_URL || "amqp://localhost:5672";
@@ -25,18 +28,22 @@ class RabbitMQManager {
   constructor() {
     this.connection = amqp.connect([RABBITMQ_URL]);
     this.connection.on("connect", () => console.log("Connected to RabbitMQ"));
-    this.connection.on("disconnect", (err) => logger.error("Disconnected from RabbitMQ", err.err));
+    this.connection.on("disconnect", (err) =>
+      logger.error("Disconnected from RabbitMQ", err.err),
+    );
 
     this.channelWrapper = this.connection.createChannel({
       json: true,
       setup: async (channel: ConfirmChannel) => {
         await Promise.all([
-          channel.assertExchange(EXCHANGES.TRANSACTIONS, "topic", { durable: true }),
+          channel.assertExchange(EXCHANGES.TRANSACTIONS, "topic", {
+            durable: true,
+          }),
           channel.assertQueue(QUEUES.TRANSACTION_PROCESSING, { durable: true }),
           channel.bindQueue(
             QUEUES.TRANSACTION_PROCESSING,
             EXCHANGES.TRANSACTIONS,
-            ROUTING_KEYS.TRANSACTION_PROCESS
+            ROUTING_KEYS.TRANSACTION_PROCESS,
           ),
         ]);
       },
@@ -48,7 +55,9 @@ class RabbitMQManager {
       await this.channelWrapper.publish(exchange, routingKey, data, {
         persistent: true,
       });
-      console.log(`[RabbitMQ] Published message to ${exchange} with key ${routingKey}`);
+      console.log(
+        `[RabbitMQ] Published message to ${exchange} with key ${routingKey}`,
+      );
     } catch (error) {
       logger.error(`[RabbitMQ] Failed to publish message:`, error);
       throw error;
@@ -58,7 +67,7 @@ class RabbitMQManager {
   async consume<T>(
     queue: string,
     onMessage: (data: T, msg: Message) => Promise<void>,
-    concurrency: number = 5
+    concurrency: number = 5,
   ) {
     await this.channelWrapper.addSetup(async (channel: ConfirmChannel) => {
       await channel.prefetch(concurrency);
@@ -70,7 +79,10 @@ class RabbitMQManager {
             await onMessage(data, msg);
             channel.ack(msg);
           } catch (error) {
-            logger.error(`[RabbitMQ] Error processing message from ${queue}:`, error);
+            logger.error(
+              `[RabbitMQ] Error processing message from ${queue}:`,
+              error,
+            );
             // Default behavior: nack without requeue to avoid infinite loops unless specified
             channel.nack(msg, false, false);
           }

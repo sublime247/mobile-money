@@ -65,7 +65,10 @@ describe("Transaction Status Filtering - Utility Functions", () => {
     });
 
     it("should filter out empty values", () => {
-      expect(parseStatusFilter("pending,,completed")).toEqual(["pending", "completed"]);
+      expect(parseStatusFilter("pending,,completed")).toEqual([
+        "pending",
+        "completed",
+      ]);
     });
 
     it("should handle only hyphens", () => {
@@ -246,7 +249,9 @@ describe("Transaction Status Filtering - Middleware", () => {
       app.use(router);
 
       request(app)
-        .get("/?startDate=2026-06-28T14:33:52Z&endDate=2026-06-28T15:32:52%2B01:00")
+        .get(
+          "/?startDate=2026-06-28T14:33:52Z&endDate=2026-06-28T15:32:52%2B01:00",
+        )
         .expect(200)
         .expect({ success: true }, done);
     });

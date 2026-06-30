@@ -1,5 +1,9 @@
 import { pool } from "../config/database";
-import { cachedQueryManager, CacheTags, QUERY_TTL_POLICIES } from "./cachedQueryManager";
+import {
+  cachedQueryManager,
+  CacheTags,
+  QUERY_TTL_POLICIES,
+} from "./cachedQueryManager";
 import { TransactionCacheInvalidation, CacheKeyGenerators } from "./cacheAside";
 
 /**
@@ -49,8 +53,11 @@ export async function getCachedUserTransactionHistory(
     CacheKeyGenerators.userTransactionHistory(userId),
     params,
   );
-  const tags = [CacheTags.userHistory(userId), CacheTags.userTransaction(userId)];
-  
+  const tags = [
+    CacheTags.userHistory(userId),
+    CacheTags.userTransaction(userId),
+  ];
+
   return cachedQueryManager.getOrFetch(
     cacheKey,
     async () => {
@@ -86,7 +93,7 @@ export async function getCachedTransactionCount(
     params,
   )}:count`;
   const tags = [CacheTags.userHistory(userId)];
-  
+
   return cachedQueryManager.getOrFetch(
     cacheKey,
     async () => {
@@ -169,7 +176,10 @@ export async function getCachedAmlProfileSnapshot(
   const hourStart = new Date(asOf.getTime() - 60 * 60 * 1000);
   const dayStart = new Date(asOf.getTime() - 24 * 60 * 60 * 1000);
   const weekStart = new Date(asOf.getTime() - 7 * 24 * 60 * 60 * 1000);
-  const movingAverageWindowDays = Math.max(1, options.movingAverageWindowDays ?? 30);
+  const movingAverageWindowDays = Math.max(
+    1,
+    options.movingAverageWindowDays ?? 30,
+  );
   const movingAverageStart = new Date(
     asOf.getTime() - movingAverageWindowDays * 24 * 60 * 60 * 1000,
   );
@@ -177,8 +187,11 @@ export async function getCachedAmlProfileSnapshot(
     asOf: asOf.toISOString(),
     excludeTransactionId: options.excludeTransactionId ?? null,
     movingAverageWindowDays,
-  });
-  const tags = [CacheTags.userHistory(userId), CacheTags.userTransaction(userId)];
+  } as any);
+  const tags = [
+    CacheTags.userHistory(userId),
+    CacheTags.userTransaction(userId),
+  ];
 
   const result = await cachedQueryManager.getOrFetch(
     cacheKey,
@@ -237,7 +250,9 @@ export async function getCachedAmlProfileSnapshot(
           countLast24Hours: Number(row?.countLast24Hours ?? 0),
           countLast7Days: Number(row?.countLast7Days ?? 0),
           movingAverageAmount: Number(row?.movingAverageAmount ?? 0),
-          lastLocationAt: row?.lastLocationAt ? new Date(row.lastLocationAt) : null,
+          lastLocationAt: row?.lastLocationAt
+            ? new Date(row.lastLocationAt)
+            : null,
           lastLocationMetadata: row?.lastLocationMetadata ?? null,
         };
       } finally {
@@ -260,47 +275,48 @@ function buildTransactionQuery(params: TransactionQueryParams) {
   const values: any[] = [];
   const whereClauses: string[] = [];
   let paramIndex = 1;
-  
+
   if (params.userId) {
     whereClauses.push(`user_id = $${paramIndex++}`);
     values.push(params.userId);
   }
-  
+
   if (params.status) {
     whereClauses.push(`status = $${paramIndex++}`);
     values.push(params.status);
   }
-  
+
   if (params.provider) {
     whereClauses.push(`provider = $${paramIndex++}`);
     values.push(params.provider);
   }
-  
+
   if (params.startDate) {
     whereClauses.push(`created_at >= $${paramIndex++}`);
     values.push(params.startDate);
   }
-  
+
   if (params.endDate) {
     whereClauses.push(`created_at <= $${paramIndex++}`);
     values.push(params.endDate);
   }
-  
+
   if (params.minAmount !== undefined) {
     whereClauses.push(`amount >= $${paramIndex++}`);
     values.push(params.minAmount);
   }
-  
+
   if (params.maxAmount !== undefined) {
     whereClauses.push(`amount <= $${paramIndex++}`);
     values.push(params.maxAmount);
   }
-  
-  const whereClause = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
-  
+
+  const whereClause =
+    whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
+
   const offset = params.offset || 0;
   const limit = params.limit || 50;
-  
+
   const text = `
     SELECT id, reference_number, type, amount, phone_number, provider, status,
            stellar_address, tags, notes, admin_notes, user_id, created_at, updated_at
@@ -309,9 +325,9 @@ function buildTransactionQuery(params: TransactionQueryParams) {
     ORDER BY created_at DESC
     LIMIT $${paramIndex + 1} OFFSET $${paramIndex + 2}
   `;
-  
+
   values.push(limit, offset);
-  
+
   return { text, values };
 }
 
@@ -321,36 +337,37 @@ function buildTransactionQuery(params: TransactionQueryParams) {
 function buildCountQuery(params: TransactionQueryParams) {
   const values: any[] = [];
   const whereClauses: string[] = [];
-  
+
   if (params.userId) {
     values.push(params.userId);
     whereClauses.push(`user_id = $${values.length}`);
   }
-  
+
   if (params.status) {
     values.push(params.status);
     whereClauses.push(`status = $${values.length}`);
   }
-  
+
   if (params.provider) {
     values.push(params.provider);
     whereClauses.push(`provider = $${values.length}`);
   }
-  
+
   if (params.startDate) {
     values.push(params.startDate);
     whereClauses.push(`created_at >= $${values.length}`);
   }
-  
+
   if (params.endDate) {
     values.push(params.endDate);
     whereClauses.push(`created_at <= $${values.length}`);
   }
-  
-  const whereClause = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
-  
+
+  const whereClause =
+    whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
+
   const text = `SELECT COUNT(*) as count FROM transactions ${whereClause}`;
-  
+
   return { text, values };
 }
 

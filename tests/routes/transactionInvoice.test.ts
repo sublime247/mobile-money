@@ -1,6 +1,9 @@
 import express from "express";
 import request from "supertest";
-import { TransactionModel, TransactionStatus } from "../../src/models/transaction";
+import {
+  TransactionModel,
+  TransactionStatus,
+} from "../../src/models/transaction";
 import { transactionRoutes } from "../../src/routes/transactions";
 import { generateToken } from "../../src/auth/jwt";
 
@@ -28,7 +31,11 @@ describe("GET /api/transactions/:id/invoice", () => {
     process.env.ORG_URL = "https://merchant.example";
     process.env.ORG_ADDRESS = "1 Merchant Way";
     process.env.ORG_DESCRIPTION = "Branded merchant invoice";
-    token = generateToken({ userId: "user-123", email: "user@example.com", role: "merchant" });
+    token = generateToken({
+      userId: "user-123",
+      email: "user@example.com",
+      role: "merchant",
+    });
 
     app = express();
     app.use("/api/transactions", transactionRoutes);
@@ -52,14 +59,18 @@ describe("GET /api/transactions/:id/invoice", () => {
       .parse((res, callback) => {
         res.setEncoding("binary");
         let data = "";
-        res.on("data", (chunk) => { data += chunk; });
+        res.on("data", (chunk) => {
+          data += chunk;
+        });
         res.on("end", () => callback(null, Buffer.from(data, "binary")));
       });
 
     expect(response.status).toBe(200);
     expect(response.headers["content-type"]).toMatch(/application\/pdf/);
     expect(response.headers["content-disposition"]).toContain("attachment;");
-    expect(response.headers["content-disposition"]).toContain("invoice-REF-123.pdf");
+    expect(response.headers["content-disposition"]).toContain(
+      "invoice-REF-123.pdf",
+    );
     expect(response.body).toBeInstanceOf(Buffer);
     expect(response.body.slice(0, 4).toString()).toBe("%PDF");
   });
@@ -75,7 +86,9 @@ describe("GET /api/transactions/:id/invoice", () => {
       .parse((res, callback) => {
         res.setEncoding("binary");
         let data = "";
-        res.on("data", (chunk) => { data += chunk; });
+        res.on("data", (chunk) => {
+          data += chunk;
+        });
         res.on("end", () => callback(null, Buffer.from(data, "binary")));
       });
 
@@ -84,7 +97,10 @@ describe("GET /api/transactions/:id/invoice", () => {
   });
 
   it("returns 400 for non-completed transactions", async () => {
-    findByIdSpy.mockResolvedValue({ ...fakeTransaction, status: TransactionStatus.Pending });
+    findByIdSpy.mockResolvedValue({
+      ...fakeTransaction,
+      status: TransactionStatus.Pending,
+    });
 
     const response = await request(app)
       .get(`/api/transactions/${fakeTransaction.id}/invoice`)

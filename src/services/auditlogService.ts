@@ -16,7 +16,11 @@ export const auditService = {
    * @param limit - Maximum number of logs to return (default: 100)
    * @param offset - Number of logs to skip (default: 0)
    */
-  fetchAuditLogs: async (userId: string, limit: number = 100, offset: number = 0): Promise<AuditLog[]> => {
+  fetchAuditLogs: async (
+    userId: string,
+    limit: number = 100,
+    offset: number = 0,
+  ): Promise<AuditLog[]> => {
     try {
       const query = `
         SELECT id, user_id as "userId", action, created_at as timestamp, metadata
@@ -28,7 +32,7 @@ export const auditService = {
       const result = await pool.query(query, [userId, limit, offset]);
       return result.rows;
     } catch (error) {
-      logger.error({ error, userId }, 'Failed to fetch audit logs');
+      logger.error({ error, userId }, "Failed to fetch audit logs");
       return [];
     }
   },
@@ -50,9 +54,9 @@ export const auditService = {
         log.id,
         log.userId,
       ]);
-      logger.info({ logId: log.id, userId: log.userId }, 'Audit log updated');
+      logger.info({ logId: log.id, userId: log.userId }, "Audit log updated");
     } catch (error) {
-      logger.error({ error, logId: log.id }, 'Failed to update audit log');
+      logger.error({ error, logId: log.id }, "Failed to update audit log");
       throw new Error("Failed to update audit log");
     }
   },
@@ -83,15 +87,18 @@ export const auditService = {
         JSON.stringify(data.metadata || {}),
       ]);
       logger.info(
-        { 
-          adminId: data.adminId, 
-          resource: data.resource, 
-          targetId: data.targetId 
-        }, 
-        'PII access logged'
+        {
+          adminId: data.adminId,
+          resource: data.resource,
+          targetId: data.targetId,
+        },
+        "PII access logged",
       );
     } catch (error) {
-      logger.error({ error, adminId: data.adminId, resource: data.resource }, 'Failed to log PII access');
+      logger.error(
+        { error, adminId: data.adminId, resource: data.resource },
+        "Failed to log PII access",
+      );
     }
   },
 };

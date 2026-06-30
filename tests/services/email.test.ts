@@ -53,7 +53,7 @@ describe("EmailService", () => {
       "user@example.com",
       mockTransaction,
       "fr",
-      "Coffee Shop"
+      "Coffee Shop",
     );
 
     expect(mockSendMail).toHaveBeenCalledWith(
@@ -66,7 +66,7 @@ describe("EmailService", () => {
           locale: "fr",
           merchantDisplayName: "Coffee Shop",
         }),
-      })
+      }),
     );
   });
 
@@ -89,7 +89,7 @@ describe("EmailService", () => {
       mockTransaction,
       "Insufficient funds",
       "sw",
-      "Coffee Shop"
+      "Coffee Shop",
     );
 
     expect(mockSendMail).toHaveBeenCalledWith(
@@ -102,7 +102,7 @@ describe("EmailService", () => {
           locale: "sw",
           merchantDisplayName: "Coffee Shop",
         }),
-      })
+      }),
     );
   });
 

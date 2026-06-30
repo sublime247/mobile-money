@@ -85,16 +85,24 @@ describe("AccountingChartOfAccountsReconciliationService", () => {
       await service.runDailyReconciliation(provider, connectionId, reportDate);
 
       expect(mockReconModel.createDiscrepancy).toHaveBeenCalled();
-      
+
       // Should have:
       // 1. Name mismatch for 1000
       // 2. Missing in external for 2000
       // 3. Missing in internal for 3000
-      
-      const discrepancyTypes = mockReconModel.createDiscrepancy.mock.calls.map(call => call[0].type);
-      expect(discrepancyTypes).toContain(AccountingDiscrepancyType.AccountNameMismatch);
-      expect(discrepancyTypes).toContain(AccountingDiscrepancyType.AccountMissingInQBO);
-      expect(discrepancyTypes).toContain(AccountingDiscrepancyType.AccountMissingInInternal);
+
+      const discrepancyTypes = mockReconModel.createDiscrepancy.mock.calls.map(
+        (call) => call[0].type,
+      );
+      expect(discrepancyTypes).toContain(
+        AccountingDiscrepancyType.AccountNameMismatch,
+      );
+      expect(discrepancyTypes).toContain(
+        AccountingDiscrepancyType.AccountMissingInQBO,
+      );
+      expect(discrepancyTypes).toContain(
+        AccountingDiscrepancyType.AccountMissingInInternal,
+      );
     });
   });
 
@@ -118,7 +126,7 @@ describe("AccountingChartOfAccountsReconciliationService", () => {
       ]);
 
       const csv = await service.exportReportToCSV(reportId);
-      
+
       expect(csv).toContain("Type,Internal Code,Internal Name");
       expect(csv).toContain("account_name_mismatch");
       expect(csv).toContain("1000");

@@ -68,10 +68,14 @@ const DEFAULT_SHORTFALL_THRESHOLDS: BalanceShortfallThresholds = {
  * surfaced in incident payloads and log lines so on-call engineers can verify
  * routing without inspecting PagerDuty UI.
  */
-const ESCALATION_PATHS: Record<ShortfallSeverity, { label: string; description: string }> = {
+const ESCALATION_PATHS: Record<
+  ShortfallSeverity,
+  { label: string; description: string }
+> = {
   critical: {
     label: "immediate-escalation",
-    description: "Immediate on-call (Critical → PagerDuty critical routing key)",
+    description:
+      "Immediate on-call (Critical → PagerDuty critical routing key)",
   },
   error: {
     label: "operational-escalation",
@@ -131,9 +135,18 @@ export class PagerDutyService {
    * runtime; that accessor triggers the one-shot validation/repair automatically.
    */
   static BALANCE_SHORTFALL_THRESHOLDS: BalanceShortfallThresholds = {
-    criticalPct: PagerDutyService.parseShortfallEnv("BALANCE_SHORTFALL_CRITICAL_PCT", DEFAULT_SHORTFALL_THRESHOLDS.criticalPct),
-    moderatePct: PagerDutyService.parseShortfallEnv("BALANCE_SHORTFALL_MODERATE_PCT", DEFAULT_SHORTFALL_THRESHOLDS.moderatePct),
-    minorPct: PagerDutyService.parseShortfallEnv("BALANCE_SHORTFALL_MINOR_PCT", DEFAULT_SHORTFALL_THRESHOLDS.minorPct),
+    criticalPct: PagerDutyService.parseShortfallEnv(
+      "BALANCE_SHORTFALL_CRITICAL_PCT",
+      DEFAULT_SHORTFALL_THRESHOLDS.criticalPct,
+    ),
+    moderatePct: PagerDutyService.parseShortfallEnv(
+      "BALANCE_SHORTFALL_MODERATE_PCT",
+      DEFAULT_SHORTFALL_THRESHOLDS.moderatePct,
+    ),
+    minorPct: PagerDutyService.parseShortfallEnv(
+      "BALANCE_SHORTFALL_MINOR_PCT",
+      DEFAULT_SHORTFALL_THRESHOLDS.minorPct,
+    ),
   };
 
   /**
@@ -157,7 +170,9 @@ export class PagerDutyService {
     delete process.env.BALANCE_SHORTFALL_MINOR_PCT;
     delete process.env.BALANCE_SHORTFALL_MODERATE_PCT;
     delete process.env.BALANCE_SHORTFALL_CRITICAL_PCT;
-    PagerDutyService.BALANCE_SHORTFALL_THRESHOLDS = { ...DEFAULT_SHORTFALL_THRESHOLDS };
+    PagerDutyService.BALANCE_SHORTFALL_THRESHOLDS = {
+      ...DEFAULT_SHORTFALL_THRESHOLDS,
+    };
     PagerDutyService.thresholdsValidated = false;
   }
 
@@ -165,7 +180,8 @@ export class PagerDutyService {
   private config: PagerDutyConfig;
   private activeIncidents: Map<string, IncidentData> = new Map();
   /** Tracks active balance-shortfall incidents so they can be auto-resolved when balance recovers. */
-  private activeShortfallIncidents: Map<string, BalanceShortfallContext> = new Map();
+  private activeShortfallIncidents: Map<string, BalanceShortfallContext> =
+    new Map();
   private checkInterval: NodeJS.Timeout | null = null;
 
   constructor(config: PagerDutyConfig) {
@@ -269,7 +285,10 @@ export class PagerDutyService {
       const errorRate = this.calculateErrorRate(provider);
       const isIncidentActive = this.activeIncidents.has(`incident_${provider}`);
 
-      if (errorRate > PagerDutyService.ERROR_RATE_THRESHOLD && !isIncidentActive) {
+      if (
+        errorRate > PagerDutyService.ERROR_RATE_THRESHOLD &&
+        !isIncidentActive
+      ) {
         // Trigger new incident
         await this.triggerIncident(provider, errorRate);
       } else if (
@@ -331,7 +350,10 @@ export class PagerDutyService {
   /**
    * Trigger a CRITICAL incident in PagerDuty
    */
-  private async triggerIncident(provider: string, errorRate: number): Promise<void> {
+  private async triggerIncident(
+    provider: string,
+    errorRate: number,
+  ): Promise<void> {
     try {
       const event = this.buildIncidentEvent(provider, errorRate, "trigger");
 
@@ -370,7 +392,10 @@ export class PagerDutyService {
   /**
    * Resolve an active incident in PagerDuty
    */
-  private async resolveIncident(provider: string, errorRate: number): Promise<void> {
+  private async resolveIncident(
+    provider: string,
+    errorRate: number,
+  ): Promise<void> {
     try {
       const event = this.buildIncidentEvent(provider, errorRate, "resolve");
 
@@ -472,7 +497,10 @@ export class PagerDutyService {
    * defaults rather than rejected — surfacing the value in logs lets on-call
    * engineers spot misconfiguration without taking the service offline.
    */
-  private static parseShortfallEnv(envName: string, defaultPct: number): number {
+  private static parseShortfallEnv(
+    envName: string,
+    defaultPct: number,
+  ): number {
     const raw = process.env[envName];
     if (raw === undefined || raw === "") return defaultPct;
     const parsed = Number.parseFloat(raw);
@@ -509,13 +537,15 @@ export class PagerDutyService {
     if (!isOrdered) {
       console.warn(
         `[pagerduty] Balance shortfall thresholds are misconfigured ` +
-        `(minor=${t.minorPct}, moderate=${t.moderatePct}, critical=${t.criticalPct}); ` +
-        `thresholds must satisfy 0 < minor < moderate < critical. ` +
-        `Falling back to defaults: minor=${DEFAULT_SHORTFALL_THRESHOLDS.minorPct}, ` +
-        `moderate=${DEFAULT_SHORTFALL_THRESHOLDS.moderatePct}, ` +
-        `critical=${DEFAULT_SHORTFALL_THRESHOLDS.criticalPct}`,
+          `(minor=${t.minorPct}, moderate=${t.moderatePct}, critical=${t.criticalPct}); ` +
+          `thresholds must satisfy 0 < minor < moderate < critical. ` +
+          `Falling back to defaults: minor=${DEFAULT_SHORTFALL_THRESHOLDS.minorPct}, ` +
+          `moderate=${DEFAULT_SHORTFALL_THRESHOLDS.moderatePct}, ` +
+          `critical=${DEFAULT_SHORTFALL_THRESHOLDS.criticalPct}`,
       );
-      PagerDutyService.BALANCE_SHORTFALL_THRESHOLDS = { ...DEFAULT_SHORTFALL_THRESHOLDS };
+      PagerDutyService.BALANCE_SHORTFALL_THRESHOLDS = {
+        ...DEFAULT_SHORTFALL_THRESHOLDS,
+      };
     }
 
     if (!PagerDutyService.thresholdsValidated) {
@@ -531,9 +561,9 @@ export class PagerDutyService {
       const pad = (s: string) => s.padEnd(22, " ");
       console.log(
         `[pagerduty] Balance shortfall escalation matrix active ${dto}\n` +
-        `  - ${pad(ESCALATION_PATHS.warning.label)}: shortfallPct >= ${a.minorPct}%   (warning → team notification)\n` +
-        `  - ${pad(ESCALATION_PATHS.error.label)}: shortfallPct >= ${a.moderatePct}%   (error → operational escalation)\n` +
-        `  - ${pad(ESCALATION_PATHS.critical.label)}: shortfallPct >= ${a.criticalPct}%   (critical → immediate escalation)`,
+          `  - ${pad(ESCALATION_PATHS.warning.label)}: shortfallPct >= ${a.minorPct}%   (warning → team notification)\n` +
+          `  - ${pad(ESCALATION_PATHS.error.label)}: shortfallPct >= ${a.moderatePct}%   (error → operational escalation)\n` +
+          `  - ${pad(ESCALATION_PATHS.critical.label)}: shortfallPct >= ${a.criticalPct}%   (critical → immediate escalation)`,
       );
     }
 
@@ -619,7 +649,9 @@ export class PagerDutyService {
    * If a shortfall incident for the same provider+asset is already active, no
    * duplicate is created (dedup_key ensures idempotency).
    */
-  async triggerBalanceShortfallIncident(context: BalanceShortfallContext): Promise<void> {
+  async triggerBalanceShortfallIncident(
+    context: BalanceShortfallContext,
+  ): Promise<void> {
     if (!this.config.enabled) return;
 
     const dedupeKey = this.getBalanceDedupeKey(context.provider, context.asset);
@@ -684,7 +716,10 @@ export class PagerDutyService {
   /**
    * Resolve a previously-triggered balance-shortfall incident (balance recovered).
    */
-  async resolveBalanceShortfallIncident(provider: string, asset: string): Promise<void> {
+  async resolveBalanceShortfallIncident(
+    provider: string,
+    asset: string,
+  ): Promise<void> {
     const dedupeKey = this.getBalanceDedupeKey(provider, asset);
 
     if (!this.activeShortfallIncidents.has(dedupeKey)) {
@@ -749,7 +784,12 @@ export class PagerDutyService {
     // Validate & repair tier thresholds on first call (one-shot, idempotent).
     PagerDutyService.validateAndRepairThresholds();
 
-    const context = this.evaluateBalanceShortfall(provider, asset, threshold, currentBalance);
+    const context = this.evaluateBalanceShortfall(
+      provider,
+      asset,
+      threshold,
+      currentBalance,
+    );
 
     if (context) {
       await this.triggerBalanceShortfallIncident(context);

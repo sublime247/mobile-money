@@ -11,7 +11,7 @@
  * @returns true if the query is a read-only SELECT, false otherwise
  */
 export function isReadOnlyQuery(query: string): boolean {
-  if (!query || typeof query !== 'string') {
+  if (!query || typeof query !== "string") {
     return false;
   }
 
@@ -19,7 +19,7 @@ export function isReadOnlyQuery(query: string): boolean {
   const normalized = query.trim().toUpperCase();
 
   // If it doesn't start with SELECT or WITH, it's not read-only
-  if (!normalized.startsWith('SELECT') && !normalized.startsWith('WITH')) {
+  if (!normalized.startsWith("SELECT") && !normalized.startsWith("WITH")) {
     return false;
   }
 
@@ -48,10 +48,10 @@ export function isReadOnlyQuery(query: string): boolean {
  * @returns The main command (SELECT, INSERT, UPDATE, etc.)
  */
 export function getQueryCommand(query: string): string {
-  if (!query || typeof query !== 'string') {
-    return 'UNKNOWN';
+  if (!query || typeof query !== "string") {
+    return "UNKNOWN";
   }
 
   const match = query.trim().match(/^(\w+)/i);
-  return match ? match[1].toUpperCase() : 'UNKNOWN';
+  return match ? match[1].toUpperCase() : "UNKNOWN";
 }

@@ -85,7 +85,10 @@ export class WhatsappService {
         };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        console.warn("[whatsapp] failed, falling back to SMS", { to, error: msg })
+        console.warn("[whatsapp] failed, falling back to SMS", {
+          to,
+          error: msg,
+        });
 
         // Fallback to SMS
         const smsResult = await this.smsService.sendToPhone(to, body);
@@ -131,7 +134,12 @@ export class WhatsappService {
       "4": ctx.referenceNumber,
     };
 
-    return this.sendWithFallback(phoneNumber, body, templateSid, templateVariables);
+    return this.sendWithFallback(
+      phoneNumber,
+      body,
+      templateSid,
+      templateVariables,
+    );
   }
 
   /**
@@ -147,7 +155,12 @@ export class WhatsappService {
     const templateSid = process.env.TWILIO_WHATSAPP_OTP_TEMPLATE_SID;
     const templateVariables = { "1": otp };
 
-    return this.sendWithFallback(phoneNumber, body, templateSid, templateVariables);
+    return this.sendWithFallback(
+      phoneNumber,
+      body,
+      templateSid,
+      templateVariables,
+    );
   }
 
   private buildTransactionMessage(ctx: TransactionSmsContext): string {

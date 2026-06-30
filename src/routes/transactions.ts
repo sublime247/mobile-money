@@ -97,7 +97,8 @@ transactionRoutes.get(
 
       if (transaction.status !== TransactionStatus.Completed)
         return res.status(400).json({
-          error: "Invoice download is available only for completed transactions",
+          error:
+            "Invoice download is available only for completed transactions",
         });
 
       const pdf = await generateTransactionPdfBuffer(transaction, {

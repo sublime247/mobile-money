@@ -30,24 +30,24 @@ open ──→ investigating ──→ resolved
 
 ### Valid Transitions
 
-| From | To | Requirements |
-|------|----|----|
-| open | investigating | Must be assigned to agent |
-| open | resolved | Resolution text required |
-| open | rejected | Resolution text required |
-| investigating | resolved | Resolution text required |
-| investigating | rejected | Resolution text required |
+| From          | To            | Requirements              |
+| ------------- | ------------- | ------------------------- |
+| open          | investigating | Must be assigned to agent |
+| open          | resolved      | Resolution text required  |
+| open          | rejected      | Resolution text required  |
+| investigating | resolved      | Resolution text required  |
+| investigating | rejected      | Resolution text required  |
 
 ## Priority System & SLA
 
 ### Priority Levels
 
-| Priority | SLA Hours | Use Case |
-|----------|-----------|----------|
-| critical | 4 hours | System outages, security issues |
-| high | 24 hours | Payment failures, account lockouts |
-| medium | 72 hours | General transaction disputes |
-| low | 168 hours (7 days) | Minor issues, feature requests |
+| Priority | SLA Hours          | Use Case                           |
+| -------- | ------------------ | ---------------------------------- |
+| critical | 4 hours            | System outages, security issues    |
+| high     | 24 hours           | Payment failures, account lockouts |
+| medium   | 72 hours           | General transaction disputes       |
+| low      | 168 hours (7 days) | Minor issues, feature requests     |
 
 ### SLA Monitoring
 
@@ -60,6 +60,7 @@ open ──→ investigating ──→ resolved
 ### Core Dispute Management
 
 #### Create Dispute
+
 ```http
 POST /api/transactions/:id/dispute
 Content-Type: application/json
@@ -74,6 +75,7 @@ Authorization: Bearer <token>
 ```
 
 #### Get Dispute Details
+
 ```http
 GET /api/disputes/:disputeId/details
 Authorization: Bearer <token>
@@ -82,6 +84,7 @@ Authorization: Bearer <token>
 Returns dispute with notes, evidence, and timeline.
 
 #### Update Dispute Status
+
 ```http
 PATCH /api/disputes/:disputeId/status
 Content-Type: application/json
@@ -95,6 +98,7 @@ Authorization: Bearer <token>
 ```
 
 #### Update Dispute Fields
+
 ```http
 PATCH /api/disputes/:disputeId
 Content-Type: application/json
@@ -110,6 +114,7 @@ Authorization: Bearer <token>
 ### Evidence Management
 
 #### Upload Single Evidence
+
 ```http
 POST /api/disputes/:disputeId/evidence
 Content-Type: multipart/form-data
@@ -120,6 +125,7 @@ description: "Bank statement showing duplicate charge"
 ```
 
 #### Upload Multiple Evidence Files
+
 ```http
 POST /api/disputes/:disputeId/evidence/multiple
 Content-Type: multipart/form-data
@@ -132,6 +138,7 @@ descriptions[]: "Email confirmation"
 ```
 
 #### Get Evidence List
+
 ```http
 GET /api/disputes/:disputeId/evidence
 Authorization: Bearer <token>
@@ -140,6 +147,7 @@ Authorization: Bearer <token>
 ### Notes Management
 
 #### Add Note
+
 ```http
 POST /api/disputes/:disputeId/notes
 Content-Type: application/json
@@ -154,6 +162,7 @@ Authorization: Bearer <token>
 ### Assignment
 
 #### Assign to Agent
+
 ```http
 POST /api/disputes/:disputeId/assign
 Content-Type: application/json
@@ -167,24 +176,28 @@ Authorization: Bearer <token>
 ### Reporting & Monitoring
 
 #### Generate Report
+
 ```http
 GET /api/disputes/report?from=2024-01-01&to=2024-01-31&assignedTo=agent@company.com
 Authorization: Bearer <token>
 ```
 
 #### SLA Compliance Report
+
 ```http
 GET /api/disputes/sla/report?days=30
 Authorization: Bearer <token>
 ```
 
 #### Get Overdue Disputes
+
 ```http
 GET /api/disputes/overdue
 Authorization: Bearer <token>
 ```
 
 #### Trigger SLA Processing
+
 ```http
 POST /api/disputes/sla/process
 Authorization: Bearer <token>
@@ -218,6 +231,7 @@ dispute-evidence/
 ### New Tables
 
 #### dispute_evidence
+
 ```sql
 CREATE TABLE dispute_evidence (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -234,6 +248,7 @@ CREATE TABLE dispute_evidence (
 ```
 
 #### dispute_timeline
+
 ```sql
 CREATE TABLE dispute_timeline (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -251,6 +266,7 @@ CREATE TABLE dispute_timeline (
 ### Enhanced disputes Table
 
 New columns added:
+
 - `sla_due_date`: Calculated SLA deadline
 - `sla_warning_sent`: Flag for warning notification
 - `priority`: Priority level (low/medium/high/critical)
@@ -281,12 +297,14 @@ New columns added:
 **Schedule**: Every hour (`0 * * * *`)
 
 **Functions**:
+
 - Send SLA warning notifications
 - Escalate overdue disputes
 - Update priority levels
 - Generate compliance metrics
 
 **Configuration**:
+
 ```env
 DISPUTE_SLA_CRON=0 * * * *  # Every hour
 ```
@@ -308,7 +326,7 @@ DISPUTE_SLA_CRON=0 * * * *  # Every hour
 {
   "event": "dispute.sla_warning",
   "disputeId": "uuid",
-  "transactionId": "uuid", 
+  "transactionId": "uuid",
   "status": "investigating",
   "message": "Dispute approaching SLA deadline",
   "metadata": {
@@ -367,6 +385,7 @@ MAX_EVIDENCE_FILES=5
 ### Dashboards
 
 Recommended Grafana dashboard panels:
+
 - Dispute volume by priority
 - SLA compliance trends
 - Agent workload distribution
@@ -377,16 +396,19 @@ Recommended Grafana dashboard panels:
 ### Common Issues
 
 #### File Upload Failures
+
 - Check S3 credentials and bucket permissions
 - Verify file size and type restrictions
 - Monitor S3 service availability
 
 #### SLA Job Not Running
+
 - Verify cron schedule configuration
 - Check job scheduler logs
 - Ensure database connectivity
 
 #### State Transition Errors
+
 - Review state machine validation rules
 - Check required fields for transitions
 - Verify user permissions
@@ -394,6 +416,7 @@ Recommended Grafana dashboard panels:
 ### Logs
 
 Key log patterns to monitor:
+
 ```
 [DisputeSlaJob] Starting SLA monitoring job...
 [DisputeNotification] dispute.sla_warning sent for dispute-uuid
@@ -405,6 +428,7 @@ S3 dispute evidence upload error: <error-details>
 ### Database Migration
 
 Run the migration script:
+
 ```bash
 psql -d mobile_money -f database/migrations/add_dispute_evidence_and_sla.sql
 ```

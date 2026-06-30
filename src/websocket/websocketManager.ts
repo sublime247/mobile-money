@@ -87,7 +87,10 @@ export class WebSocketManager {
       }
 
       try {
-        const decoded = verifyToken(token) as unknown as Record<string, unknown>;
+        const decoded = verifyToken(token) as unknown as Record<
+          string,
+          unknown
+        >;
         const candidateUserId =
           typeof decoded.userId === "string"
             ? decoded.userId
@@ -128,7 +131,7 @@ export class WebSocketManager {
       });
 
       client.on("error", (err) => {
-        logger.error(`WebSocket client error (${clientId}):`, err);
+        logger.error(err, `WebSocket client error (${clientId}):`);
       });
 
       // Acknowledge connection
@@ -347,7 +350,9 @@ export class WebSocketManager {
         if (!client.isAlive) {
           client.missedPings += 1;
           if (client.missedPings >= this.MAX_MISSED_PINGS) {
-            console.log(`Terminating stale WebSocket client after ${client.missedPings} missed pings: ${clientId}`);
+            console.log(
+              `Terminating stale WebSocket client after ${client.missedPings} missed pings: ${clientId}`,
+            );
             client.terminate();
             this.handleDisconnect(clientId, client);
             continue;
@@ -395,7 +400,7 @@ export class WebSocketManager {
         // Only broadcast locally – the publishing instance already did so
         this.broadcastLocally(transactionId, message);
       } catch (err) {
-        logger.error("Failed to handle Redis message:", err);
+        logger.error(err, "Failed to handle Redis message:");
       }
     });
 

@@ -22,11 +22,11 @@ export interface CurrencyRule {
     /** Default locale for this currency */
     locale: string;
     /** Always 'currency' for this utility */
-    style: 'currency';
+    style: "currency";
     /** Whether to use thousands separators */
     useGrouping: boolean;
     /** Rounding mode for decimal precision */
-    roundingMode: 'round' | 'floor' | 'ceil';
+    roundingMode: "round" | "floor" | "ceil";
   };
   /** Validation rules */
   validation: {
@@ -73,7 +73,7 @@ export interface FormatOptions {
   /** Override maximum fraction digits */
   maximumFractionDigits?: number;
   /** Override rounding mode */
-  roundingMode?: 'round' | 'floor' | 'ceil';
+  roundingMode?: "round" | "floor" | "ceil";
   /** Fallback value if formatting fails */
   fallbackValue?: string;
 }
@@ -188,22 +188,22 @@ export interface CacheStats {
 /**
  * Supported currency codes
  */
-export type SupportedCurrency = 'XAF' | 'GHS' | 'NGN' | 'USD';
+export type SupportedCurrency = "XAF" | "GHS" | "NGN" | "USD";
 
 /**
  * Rounding modes
  */
-export type RoundingMode = 'round' | 'floor' | 'ceil';
+export type RoundingMode = "round" | "floor" | "ceil";
 
 /**
  * Error categories
  */
-export type ErrorCategory = 
-  | 'INVALID_AMOUNT'
-  | 'INVALID_CURRENCY'
-  | 'INVALID_LOCALE'
-  | 'INVALID_OPTIONS'
-  | 'CONFIGURATION_ERROR'
-  | 'FORMATTING_ERROR'
-  | 'PERFORMANCE_ERROR'
-  | 'UNKNOWN_ERROR';
+export type ErrorCategory =
+  | "INVALID_AMOUNT"
+  | "INVALID_CURRENCY"
+  | "INVALID_LOCALE"
+  | "INVALID_OPTIONS"
+  | "CONFIGURATION_ERROR"
+  | "FORMATTING_ERROR"
+  | "PERFORMANCE_ERROR"
+  | "UNKNOWN_ERROR";

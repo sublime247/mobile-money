@@ -10,7 +10,14 @@
  * - Queue management
  */
 
-import { describe, it, expect, beforeEach, afterEach, jest } from "@jest/globals";
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  jest,
+} from "@jest/globals";
 
 // Test-only pool implementation that doesn't require real Stellar network
 class MockChannelAccount {
@@ -22,7 +29,11 @@ class MockChannelAccount {
   errorCount: number = 0;
   isDisabled: boolean = false;
 
-  constructor(publicKey: string, secretKey: string, sequence: bigint = BigInt(12345)) {
+  constructor(
+    publicKey: string,
+    secretKey: string,
+    sequence: bigint = BigInt(12345),
+  ) {
     this.publicKey = publicKey;
     this.secretKey = secretKey;
     this.sequence = sequence;
@@ -75,7 +86,7 @@ class MockChannelAccountsPool {
   }
 
   async initialize(
-    accountConfigs: Array<{ publicKey: string; secretKey: string }>
+    accountConfigs: Array<{ publicKey: string; secretKey: string }>,
   ): Promise<void> {
     if (this.isInitialized) {
       throw new Error("Pool is already initialized");
@@ -89,7 +100,7 @@ class MockChannelAccountsPool {
       const account = new MockChannelAccount(
         config.publicKey,
         config.secretKey,
-        BigInt(12345)
+        BigInt(12345),
       );
       this.accounts.set(config.publicKey, account);
     }
@@ -126,18 +137,19 @@ class MockChannelAccountsPool {
         const index = this.acquireQueue.indexOf(deferred);
         if (index !== -1) {
           this.acquireQueue.splice(index, 1);
-          reject(new Error(`Pool exhausted: queue timeout after ${this.config.queueTimeoutMs}ms`));
+          reject(
+            new Error(
+              `Pool exhausted: queue timeout after ${this.config.queueTimeoutMs}ms`,
+            ),
+          );
         }
       }, this.config.queueTimeoutMs);
     });
   }
 
   async submitTransaction<T>(
-    buildAndSubmit: (
-      sourcePublicKey: string,
-      sequence: bigint
-    ) => Promise<T>,
-    options: { maxRetries?: number } = {}
+    buildAndSubmit: (sourcePublicKey: string, sequence: bigint) => Promise<T>,
+    options: { maxRetries?: number } = {},
   ): Promise<T> {
     const maxRetries = options.maxRetries ?? 3;
     let lastError: Error | undefined;
@@ -148,10 +160,7 @@ class MockChannelAccountsPool {
       try {
         const txSequence = account.sequence + BigInt(1);
 
-        const result = await buildAndSubmit(
-          account.publicKey,
-          txSequence
-        );
+        const result = await buildAndSubmit(account.publicKey, txSequence);
 
         release(true, txSequence);
         this.stats.totalTransactionsSubmitted++;
@@ -184,12 +193,9 @@ class MockChannelAccountsPool {
 
   async submitBatch<T>(
     transactions: Array<{
-      build: (
-        sourcePublicKey: string,
-        sequence: bigint
-      ) => Promise<T>;
+      build: (sourcePublicKey: string, sequence: bigint) => Promise<T>;
     }>,
-    options: { concurrency?: number } = {}
+    options: { concurrency?: number } = {},
   ): Promise<Array<{ success: boolean; result?: T; error?: Error }>> {
     const concurrency = options.concurrency ?? this.accounts.size;
     const results: Array<{ success: boolean; result?: T; error?: Error }> = [];
@@ -205,7 +211,7 @@ class MockChannelAccountsPool {
           } catch (error) {
             return { success: false, error: error as Error };
           }
-        })
+        }),
       );
 
       results.push(...batchResults);
@@ -361,7 +367,7 @@ class MockChannelAccountsPool {
     while (
       this.acquireQueue.length > 0 &&
       now - this.acquireQueue[0].timestamp > this.config.queueTimeoutMs
-      ) {
+    ) {
       const deferred = this.acquireQueue.shift();
       if (deferred) {
         deferred.reject(new Error("Queue timeout"));
@@ -424,7 +430,7 @@ describe("ChannelAccountsPool", () => {
 
     it("should throw error when initialized with no accounts", async () => {
       await expect(pool.initialize([])).rejects.toThrow(
-        "At least one channel account is required"
+        "At least one channel account is required",
       );
     });
 
@@ -432,14 +438,12 @@ describe("ChannelAccountsPool", () => {
       await pool.initialize(testAccounts);
 
       await expect(pool.initialize(testAccounts)).rejects.toThrow(
-        "Pool is already initialized"
+        "Pool is already initialized",
       );
     });
 
     it("should throw error when acquiring before initialization", async () => {
-      await expect(pool.acquire()).rejects.toThrow(
-        "Pool is not initialized"
-      );
+      await expect(pool.acquire()).rejects.toThrow("Pool is not initialized");
     });
   });
 
@@ -514,7 +518,7 @@ describe("ChannelAccountsPool", () => {
 
     it("should queue requests when all accounts are locked", async () => {
       const acquisitions = await Promise.all(
-        Array.from({ length: 5 }, () => pool.acquire())
+        Array.from({ length: 5 }, () => pool.acquire()),
       );
 
       const stats = pool.getStats();
@@ -526,7 +530,10 @@ describe("ChannelAccountsPool", () => {
       const queuedStats = pool.getStats();
       expect(queuedStats.queueLength).toBe(1);
 
-      acquisitions[0].release(true, acquisitions[0].account.sequence + BigInt(1));
+      acquisitions[0].release(
+        true,
+        acquisitions[0].account.sequence + BigInt(1),
+      );
 
       const queuedResult = await queuedPromise;
       expect(queuedResult.account).toBeDefined();
@@ -551,7 +558,7 @@ describe("ChannelAccountsPool", () => {
           })
           .catch(() => {
             results.push({ success: false, id: i });
-          })
+          }),
       );
 
       await Promise.all(promises);
@@ -622,9 +629,12 @@ describe("ChannelAccountsPool", () => {
 
     it("should handle transaction errors gracefully", async () => {
       await expect(
-        pool.submitTransaction(async () => {
-          throw new Error("Network error");
-        }, { maxRetries: 1 })
+        pool.submitTransaction(
+          async () => {
+            throw new Error("Network error");
+          },
+          { maxRetries: 1 },
+        ),
       ).rejects.toThrow("Network error");
 
       const stats = pool.getStats();
@@ -703,9 +713,12 @@ describe("ChannelAccountsPool", () => {
 
     it("should track error statistics", async () => {
       try {
-        await pool.submitTransaction(async () => {
-          throw new Error("Test error");
-        }, { maxRetries: 1 });
+        await pool.submitTransaction(
+          async () => {
+            throw new Error("Test error");
+          },
+          { maxRetries: 1 },
+        );
       } catch {
         // Expected
       }
@@ -727,7 +740,7 @@ describe("ChannelAccountsPool", () => {
 
     it("should reject queued requests on shutdown", async () => {
       const acquisitions = await Promise.all(
-        Array.from({ length: 5 }, () => pool.acquire())
+        Array.from({ length: 5 }, () => pool.acquire()),
       );
 
       const queuedPromise = pool.acquire();
@@ -772,7 +785,7 @@ describe("ChannelAccountsPool - Stress Tests", () => {
           sequence: seq.toString(),
         }),
       })),
-      { concurrency: 10 }
+      { concurrency: 10 },
     );
 
     const successCount = results.filter((r) => r.success).length;
@@ -791,12 +804,12 @@ describe("ChannelAccountsPool - Stress Tests", () => {
           transactionsByAccount.get(source)!.push(seq);
           return { id: i, source, seq: Number(seq) };
         });
-      })
+      }),
     );
 
     // Verify sequence numbers are unique per account
     for (const [account, sequences] of transactionsByAccount) {
-      const uniqueSeqs = new Set(sequences.map(s => s.toString()));
+      const uniqueSeqs = new Set(sequences.map((s) => s.toString()));
       expect(uniqueSeqs.size).toBe(sequences.length);
     }
   });
@@ -807,13 +820,16 @@ describe("ChannelAccountsPool - Stress Tests", () => {
 
     for (let i = 0; i < 30; i++) {
       try {
-        await pool.submitTransaction(async () => {
-          if (i < 10) {
-            errorCount++;
-            throw new Error("Simulated error");
-          }
-          return { id: i };
-        }, { maxRetries: 1 });
+        await pool.submitTransaction(
+          async () => {
+            if (i < 10) {
+              errorCount++;
+              throw new Error("Simulated error");
+            }
+            return { id: i };
+          },
+          { maxRetries: 1 },
+        );
         results.push(true);
       } catch {
         results.push(false);

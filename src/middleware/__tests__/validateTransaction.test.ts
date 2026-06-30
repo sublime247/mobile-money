@@ -35,7 +35,8 @@ describe("validateTransaction middleware", () => {
         amount: 100,
         phoneNumber: "+1234567890",
         provider: "mtn",
-        stellarAddress: "GBYSA76FFFKKFM5SRZP7QZNSDJMZZJ6KC6U3GJWZ6MHQJTQKJ5XHFV3A",
+        stellarAddress:
+          "GBYSA76FFFKKFM5SRZP7QZNSDJMZZJ6KC6U3GJWZ6MHQJTQKJ5XHFV3A",
         userId: "user123",
       };
 
@@ -53,7 +54,8 @@ describe("validateTransaction middleware", () => {
         phoneNumber: "+1234567890",
         provider: "mtn",
         // M-address with memo ID 123456
-        stellarAddress: "MDQEVDDKALTIIVIMVLYJ5YZOOU32DELTA7GFF2Y4YESRLG53XCISYMCB2X6ROUTE",
+        stellarAddress:
+          "MDQEVDDKALTIIVIMVLYJ5YZOOU32DELTA7GFF2Y4YESRLG53XCISYMCB2X6ROUTE",
         userId: "user123",
       };
 
@@ -82,7 +84,7 @@ describe("validateTransaction middleware", () => {
         expect.objectContaining({
           error: "Validation failed",
           details: expect.any(Array),
-        })
+        }),
       );
     });
 
@@ -91,7 +93,8 @@ describe("validateTransaction middleware", () => {
         amount: 100,
         phoneNumber: "+1234567890",
         provider: "mtn",
-        stellarAddress: "MDQEVDDKALTIIVIMVLYJ5YZOOU32DELTA7GFF2Y4YESRLG53XCISYNOTVALIDMUXED",
+        stellarAddress:
+          "MDQEVDDKALTIIVIMVLYJ5YZOOU32DELTA7GFF2Y4YESRLG53XCISYNOTVALIDMUXED",
         userId: "user123",
       };
 
@@ -123,7 +126,8 @@ describe("validateTransaction middleware", () => {
         amount: -100,
         phoneNumber: "+1234567890",
         provider: "mtn",
-        stellarAddress: "GBYSA76FFFKKFM5SRZP7QZNSDJMZZJ6KC6U3GJWZ6MHQJTQKJ5XHFV3A",
+        stellarAddress:
+          "GBYSA76FFFKKFM5SRZP7QZNSDJMZZJ6KC6U3GJWZ6MHQJTQKJ5XHFV3A",
         userId: "user123",
       };
 
@@ -138,7 +142,8 @@ describe("validateTransaction middleware", () => {
         amount: 100,
         phoneNumber: "+1234567890",
         provider: "invalid_provider",
-        stellarAddress: "GBYSA76FFFKKFM5SRZP7QZNSDJMZZJ6KC6U3GJWZ6MHQJTQKJ5XHFV3A",
+        stellarAddress:
+          "GBYSA76FFFKKFM5SRZP7QZNSDJMZZJ6KC6U3GJWZ6MHQJTQKJ5XHFV3A",
         userId: "user123",
       };
 
@@ -153,7 +158,8 @@ describe("validateTransaction middleware", () => {
         amount: 100,
         phoneNumber: "123", // too short
         provider: "mtn",
-        stellarAddress: "GBYSA76FFFKKFM5SRZP7QZNSDJMZZJ6KC6U3GJWZ6MHQJTQKJ5XHFV3A",
+        stellarAddress:
+          "GBYSA76FFFKKFM5SRZP7QZNSDJMZZJ6KC6U3GJWZ6MHQJTQKJ5XHFV3A",
         userId: "user123",
       };
 
@@ -168,7 +174,8 @@ describe("validateTransaction middleware", () => {
         amount: 50.5,
         phoneNumber: "+237670000000",
         provider: "mtn",
-        stellarAddress: "GBYSA76FFFKKFM5SRZP7QZNSDJMZZJ6KC6U3GJWZ6MHQJTQKJ5XHFV3A",
+        stellarAddress:
+          "GBYSA76FFFKKFM5SRZP7QZNSDJMZZJ6KC6U3GJWZ6MHQJTQKJ5XHFV3A",
         userId: "user123",
       };
 

@@ -1,59 +1,59 @@
 // Import the service under test
-import { LedgerService, LedgerEntry } from '../../src/services/ledgerService';
+import { LedgerService, LedgerEntry } from "../../src/services/ledgerService";
 
 // Mock the database pool to avoid real DB interactions
-jest.mock('../../src/config/database', () => ({
+jest.mock("../../src/config/database", () => ({
   pool: {
     query: jest.fn(),
     connect: jest.fn(),
-    end: jest.fn()
-  }
+    end: jest.fn(),
+  },
 }));
 
-jest.mock('../../src/models/users', () => ({
+jest.mock("../../src/models/users", () => ({
   UserModel: jest.fn().mockImplementation(() => ({
-    findById: jest.fn().mockResolvedValue({ settlementDelayDays: 0 })
-  }))
+    findById: jest.fn().mockResolvedValue({ settlementDelayDays: 0 }),
+  })),
 }));
 
-import { pool } from '../../src/config/database';
+import { pool } from "../../src/config/database";
 
 const buildPostedRows = (entries: LedgerEntry[]) =>
   entries.map((entry, index) => ({
     entry_id: `entry-${index + 1}`,
     account_code: entry.account_code,
     debit: String(entry.debit_amount || 0),
-    credit: String(entry.credit_amount || 0)
+    credit: String(entry.credit_amount || 0),
   }));
 
 const buildLedgerEntryRows = (accountCode: string, transactionId?: string) => [
   {
-    id: 'entry-1',
-    entry_date: '2026-04-15',
+    id: "entry-1",
+    entry_date: "2026-04-15",
     account_code: accountCode,
-    account_name: 'Test Account',
-    debit_amount: '200',
-    credit_amount: '0',
-    description: 'Test ledger entry',
-    reference_number: 'TEST-REF-011',
+    account_name: "Test Account",
+    debit_amount: "200",
+    credit_amount: "0",
+    description: "Test ledger entry",
+    reference_number: "TEST-REF-011",
     transaction_id: transactionId || null,
-    created_at: '2026-04-15T12:00:00.000Z'
+    created_at: "2026-04-15T12:00:00.000Z",
   },
   {
-    id: 'entry-2',
-    entry_date: '2026-04-15',
+    id: "entry-2",
+    entry_date: "2026-04-15",
     account_code: accountCode,
-    account_name: 'Test Account',
-    debit_amount: '0',
-    credit_amount: '200',
-    description: 'Balancing ledger entry',
-    reference_number: 'TEST-REF-011',
+    account_name: "Test Account",
+    debit_amount: "0",
+    credit_amount: "200",
+    description: "Balancing ledger entry",
+    reference_number: "TEST-REF-011",
     transaction_id: transactionId || null,
-    created_at: '2026-04-15T12:01:00.000Z'
-  }
+    created_at: "2026-04-15T12:01:00.000Z",
+  },
 ];
 
-describe('LedgerService', () => {
+describe("LedgerService", () => {
   let ledgerService: LedgerService;
   let testTransactionId: string;
   let testUserId: string;
@@ -64,104 +64,137 @@ describe('LedgerService', () => {
 
   beforeAll(async () => {
     ledgerService = new LedgerService();
-    testUserId = 'mock-user-id';
-    testTransactionId = 'mock-tx-id';
+    testUserId = "mock-user-id";
+    testTransactionId = "mock-tx-id";
   });
 
   beforeEach(() => {
     mockClient = {
       query: jest.fn(),
-      release: jest.fn()
+      release: jest.fn(),
     };
 
     (pool.connect as jest.Mock).mockResolvedValue(mockClient);
 
-    mockClient.query.mockImplementation(async (queryText: string, values?: unknown[]) => {
-      if (queryText === 'BEGIN' || queryText === 'COMMIT' || queryText === 'ROLLBACK') {
-        return { rows: [] };
-      }
-
-      if (queryText.includes('SELECT * FROM post_transaction')) {
-        const entries = JSON.parse(String(values?.[4] || '[]')) as LedgerEntry[];
-
-        if (entries.some(entry => entry.account_code === 'INVALID')) {
-          throw new Error('Account not found or inactive: INVALID');
+    mockClient.query.mockImplementation(
+      async (queryText: string, values?: unknown[]) => {
+        if (
+          queryText === "BEGIN" ||
+          queryText === "COMMIT" ||
+          queryText === "ROLLBACK"
+        ) {
+          return { rows: [] };
         }
 
-        return { rows: buildPostedRows(entries) };
-      }
+        if (queryText.includes("SELECT * FROM post_transaction")) {
+          const entries = JSON.parse(
+            String(values?.[4] || "[]"),
+          ) as LedgerEntry[];
 
-      return { rows: [] };
-    });
+          if (entries.some((entry) => entry.account_code === "INVALID")) {
+            throw new Error("Account not found or inactive: INVALID");
+          }
 
-    (pool.query as jest.Mock).mockImplementation(async (queryText: string, values?: unknown[]) => {
-      if (queryText.includes('SELECT get_account_balance')) {
-        return { rows: [{ balance: '500' }] };
-      }
+          return { rows: buildPostedRows(entries) };
+        }
 
-      if (queryText.includes('SELECT * FROM check_ledger_balance()')) {
-        return {
-          rows: [{ total_debits: '500', total_credits: '500', difference: '0', is_balanced: true }]
-        };
-      }
-
-      if (queryText.includes('SELECT * FROM get_trial_balance')) {
-        return {
-          rows: [
-            {
-              account_code: '1100',
-              account_name: 'Mobile Money Float',
-              account_type: 'asset',
-              debit_balance: 500,
-              credit_balance: 0
-            },
-            {
-              account_code: '2000',
-              account_name: 'Customer Balances',
-              account_type: 'liability',
-              debit_balance: 0,
-              credit_balance: 500
-            }
-          ]
-        };
-      }
-
-      if (queryText.includes('FROM ledger_entries le') && queryText.includes('WHERE le.transaction_id = $1')) {
-        return { rows: buildLedgerEntryRows('1100', String(values?.[0] || testTransactionId)) };
-      }
-
-      if (queryText.includes('FROM ledger_entries le') && queryText.includes('WHERE a.code = $1')) {
-        return { rows: buildLedgerEntryRows(String(values?.[0] || '1100')) };
-      }
-
-      if (queryText.includes('UPDATE ledger_entries') || queryText.includes('DELETE FROM ledger_entries')) {
-        throw new Error('Ledger entries are immutable and cannot be modified or deleted');
-      }
-
-      if (queryText.includes('SELECT refresh_account_balances()')) {
         return { rows: [] };
-      }
+      },
+    );
 
-      if (queryText.includes('SELECT * FROM account_balances')) {
-        return {
-          rows: [
-            {
-              account_id: 'account-1',
-              code: '1100',
-              name: 'Mobile Money Float',
-              type: 'asset',
-              normal_balance: 'debit',
-              total_debits: '500',
-              total_credits: '0',
-              balance: '500',
-              last_entry_at: new Date('2026-04-15T12:00:00.000Z')
-            }
-          ]
-        };
-      }
+    (pool.query as jest.Mock).mockImplementation(
+      async (queryText: string, values?: unknown[]) => {
+        if (queryText.includes("SELECT get_account_balance")) {
+          return { rows: [{ balance: "500" }] };
+        }
 
-      return { rows: [] };
-    });
+        if (queryText.includes("SELECT * FROM check_ledger_balance()")) {
+          return {
+            rows: [
+              {
+                total_debits: "500",
+                total_credits: "500",
+                difference: "0",
+                is_balanced: true,
+              },
+            ],
+          };
+        }
+
+        if (queryText.includes("SELECT * FROM get_trial_balance")) {
+          return {
+            rows: [
+              {
+                account_code: "1100",
+                account_name: "Mobile Money Float",
+                account_type: "asset",
+                debit_balance: 500,
+                credit_balance: 0,
+              },
+              {
+                account_code: "2000",
+                account_name: "Customer Balances",
+                account_type: "liability",
+                debit_balance: 0,
+                credit_balance: 500,
+              },
+            ],
+          };
+        }
+
+        if (
+          queryText.includes("FROM ledger_entries le") &&
+          queryText.includes("WHERE le.transaction_id = $1")
+        ) {
+          return {
+            rows: buildLedgerEntryRows(
+              "1100",
+              String(values?.[0] || testTransactionId),
+            ),
+          };
+        }
+
+        if (
+          queryText.includes("FROM ledger_entries le") &&
+          queryText.includes("WHERE a.code = $1")
+        ) {
+          return { rows: buildLedgerEntryRows(String(values?.[0] || "1100")) };
+        }
+
+        if (
+          queryText.includes("UPDATE ledger_entries") ||
+          queryText.includes("DELETE FROM ledger_entries")
+        ) {
+          throw new Error(
+            "Ledger entries are immutable and cannot be modified or deleted",
+          );
+        }
+
+        if (queryText.includes("SELECT refresh_account_balances()")) {
+          return { rows: [] };
+        }
+
+        if (queryText.includes("SELECT * FROM account_balances")) {
+          return {
+            rows: [
+              {
+                account_id: "account-1",
+                code: "1100",
+                name: "Mobile Money Float",
+                type: "asset",
+                normal_balance: "debit",
+                total_debits: "500",
+                total_credits: "0",
+                balance: "500",
+                last_entry_at: new Date("2026-04-15T12:00:00.000Z"),
+              },
+            ],
+          };
+        }
+
+        return { rows: [] };
+      },
+    );
   });
 
   afterAll(async () => {
@@ -172,123 +205,123 @@ describe('LedgerService', () => {
     jest.clearAllMocks();
   });
 
-  describe('postTransaction', () => {
-    it('should post a balanced double-entry transaction', async () => {
+  describe("postTransaction", () => {
+    it("should post a balanced double-entry transaction", async () => {
       const entries: LedgerEntry[] = [
         {
-          account_code: '1100', // Mobile Money Float
+          account_code: "1100", // Mobile Money Float
           debit_amount: 100,
-          description: 'Test debit'
+          description: "Test debit",
         },
         {
-          account_code: '2000', // Customer Balances
+          account_code: "2000", // Customer Balances
           credit_amount: 100,
-          description: 'Test credit'
-        }
+          description: "Test credit",
+        },
       ];
 
       const result = await ledgerService.postTransaction(
-        'TEST-REF-002',
-        'Test transaction',
+        "TEST-REF-002",
+        "Test transaction",
         entries,
         testTransactionId,
-        testUserId
+        testUserId,
       );
 
       expect(result).toHaveLength(2);
-      expect(result[0].account_code).toBe('1100');
+      expect(result[0].account_code).toBe("1100");
       expect(result[0].debit).toBe(100);
-      expect(result[1].account_code).toBe('2000');
+      expect(result[1].account_code).toBe("2000");
       expect(result[1].credit).toBe(100);
     });
 
-    it('should reject unbalanced transactions', async () => {
+    it("should reject unbalanced transactions", async () => {
       const entries: LedgerEntry[] = [
         {
-          account_code: '1100',
-          debit_amount: 100
+          account_code: "1100",
+          debit_amount: 100,
         },
         {
-          account_code: '2000',
-          credit_amount: 90 // Unbalanced!
-        }
+          account_code: "2000",
+          credit_amount: 90, // Unbalanced!
+        },
       ];
 
       await expect(
         ledgerService.postTransaction(
-          'TEST-REF-003',
-          'Unbalanced test',
+          "TEST-REF-003",
+          "Unbalanced test",
           entries,
           testTransactionId,
-          testUserId
-        )
+          testUserId,
+        ),
       ).rejects.toThrow(/not balanced/i);
     });
 
-    it('should reject transactions with less than 2 entries', async () => {
+    it("should reject transactions with less than 2 entries", async () => {
       const entries: LedgerEntry[] = [
         {
-          account_code: '1100',
-          debit_amount: 100
-        }
+          account_code: "1100",
+          debit_amount: 100,
+        },
       ];
 
       await expect(
         ledgerService.postTransaction(
-          'TEST-REF-004',
-          'Single entry test',
+          "TEST-REF-004",
+          "Single entry test",
           entries,
           testTransactionId,
-          testUserId
-        )
+          testUserId,
+        ),
       ).rejects.toThrow(/at least 2 entries/i);
     });
 
-    it('should reject transactions with invalid account codes', async () => {
+    it("should reject transactions with invalid account codes", async () => {
       const entries: LedgerEntry[] = [
         {
-          account_code: 'INVALID',
-          debit_amount: 100
+          account_code: "INVALID",
+          debit_amount: 100,
         },
         {
-          account_code: '2000',
-          credit_amount: 100
-        }
+          account_code: "2000",
+          credit_amount: 100,
+        },
       ];
 
       await expect(
         ledgerService.postTransaction(
-          'TEST-REF-005',
-          'Invalid account test',
+          "TEST-REF-005",
+          "Invalid account test",
           entries,
           testTransactionId,
-          testUserId
-        )
+          testUserId,
+        ),
       ).rejects.toThrow(/account not found/i);
     });
 
-    it('should handle complex multi-entry transactions', async () => {
+    it("should handle complex multi-entry transactions", async () => {
       const entries: LedgerEntry[] = [
         {
-          account_code: '1100', // Mobile Money Float
-          debit_amount: 100
+          account_code: "1100", // Mobile Money Float
+          debit_amount: 100,
         },
         {
-          account_code: '2000', // Customer Balances
-          credit_amount: 95
+          account_code: "2000", // Customer Balances
+          credit_amount: 95,
         },
         {
-          account_code: '4100', // Deposit Fee Revenue
-          credit_amount: 5
-        }
+          account_code: "4100", // Deposit Fee Revenue
+          credit_amount: 5,
+        },
       ];
 
       const result = await ledgerService.postTransaction(
-        'TEST-REF-006',
-        'Multi-entry test',
+        "TEST-REF-006",
+        "Multi-entry test",
         entries,
         testTransactionId,
-        testUserId
+        testUserId,
       );
 
       expect(result).toHaveLength(3);
@@ -298,338 +331,355 @@ describe('LedgerService', () => {
       expect(totalDebits).toBe(totalCredits);
     });
 
-    it('should reject zero-amount transactions', async () => {
+    it("should reject zero-amount transactions", async () => {
       const entries: LedgerEntry[] = [
         {
-          account_code: '1100',
-          debit_amount: 0
+          account_code: "1100",
+          debit_amount: 0,
         },
         {
-          account_code: '2000',
-          credit_amount: 0
-        }
+          account_code: "2000",
+          credit_amount: 0,
+        },
       ];
 
       await expect(
         ledgerService.postTransaction(
-          'TEST-REF-014',
-          'Zero amount test',
+          "TEST-REF-014",
+          "Zero amount test",
           entries,
           testTransactionId,
-          testUserId
-        )
+          testUserId,
+        ),
       ).rejects.toThrow(/exactly one non-zero amount/i);
 
       expect(pool.connect).not.toHaveBeenCalled();
     });
 
-    it('should reject entries with both debit and credit amounts', async () => {
+    it("should reject entries with both debit and credit amounts", async () => {
       const entries: LedgerEntry[] = [
         {
-          account_code: '1100',
+          account_code: "1100",
           debit_amount: 100,
-          credit_amount: 10
+          credit_amount: 10,
         },
         {
-          account_code: '2000',
-          credit_amount: 90
-        }
+          account_code: "2000",
+          credit_amount: 90,
+        },
       ];
 
       await expect(
         ledgerService.postTransaction(
-          'TEST-REF-015',
-          'Invalid sided entry test',
+          "TEST-REF-015",
+          "Invalid sided entry test",
           entries,
           testTransactionId,
-          testUserId
-        )
+          testUserId,
+        ),
       ).rejects.toThrow(/exactly one non-zero amount/i);
 
       expect(pool.connect).not.toHaveBeenCalled();
     });
 
-    it('should reject entries with neither debit nor credit amounts', async () => {
+    it("should reject entries with neither debit nor credit amounts", async () => {
       const entries: LedgerEntry[] = [
         {
-          account_code: '1100'
+          account_code: "1100",
         },
         {
-          account_code: '2000',
-          credit_amount: 100
-        }
+          account_code: "2000",
+          credit_amount: 100,
+        },
       ];
 
       await expect(
         ledgerService.postTransaction(
-          'TEST-REF-016',
-          'Missing amount test',
+          "TEST-REF-016",
+          "Missing amount test",
           entries,
           testTransactionId,
-          testUserId
-        )
+          testUserId,
+        ),
       ).rejects.toThrow(/exactly one non-zero amount/i);
 
       expect(pool.connect).not.toHaveBeenCalled();
     });
 
-    it('should reject balanced zero-total transactions before opening a database connection', async () => {
+    it("should reject balanced zero-total transactions before opening a database connection", async () => {
       const entries: LedgerEntry[] = [
         {
-          account_code: '1100',
-          debit_amount: 0.00000001
+          account_code: "1100",
+          debit_amount: 0.00000001,
         },
         {
-          account_code: '2000',
-          credit_amount: 0.00000001
-        }
+          account_code: "2000",
+          credit_amount: 0.00000001,
+        },
       ];
 
       await expect(
         ledgerService.postTransaction(
-          'TEST-REF-017',
-          'Near-zero amount test',
+          "TEST-REF-017",
+          "Near-zero amount test",
           entries,
           testTransactionId,
-          testUserId
-        )
+          testUserId,
+        ),
       ).rejects.toThrow(/transaction amounts cannot be zero/i);
 
       expect(pool.connect).not.toHaveBeenCalled();
     });
   });
 
-  describe('postDeposit', () => {
-    it('should post a deposit transaction correctly', async () => {
+  describe("postDeposit", () => {
+    it("should post a deposit transaction correctly", async () => {
       const result = await ledgerService.postDeposit(
         100,
         5,
-        'TEST-REF-007',
+        "TEST-REF-007",
         testTransactionId,
-        testUserId
+        testUserId,
       );
 
       expect(result).toHaveLength(3);
-      
+
       // Check debit to Mobile Money Float
-      const floatEntry = result.find(e => e.account_code === '1100');
+      const floatEntry = result.find((e) => e.account_code === "1100");
       expect(floatEntry?.debit).toBe(100);
 
       // Check credit to Customer Balances
-      const customerEntry = result.find(e => e.account_code === '2000');
+      const customerEntry = result.find((e) => e.account_code === "2000");
       expect(customerEntry?.credit).toBe(95);
 
       // Check credit to Fee Revenue
-      const feeEntry = result.find(e => e.account_code === '4100');
+      const feeEntry = result.find((e) => e.account_code === "4100");
       expect(feeEntry?.credit).toBe(5);
     });
 
-    it('should post deposit without fee', async () => {
+    it("should post deposit without fee", async () => {
       const result = await ledgerService.postDeposit(
         100,
         0,
-        'TEST-REF-008',
+        "TEST-REF-008",
         testTransactionId,
-        testUserId
+        testUserId,
       );
 
       expect(result).toHaveLength(2); // No fee entry
     });
   });
 
-  describe('postDepositWithCurrency', () => {
-    it('should post a deposit transaction in GHS correctly', async () => {
+  describe("postDepositWithCurrency", () => {
+    it("should post a deposit transaction in GHS correctly", async () => {
       // 150 GHS with 15 GHS fee.
       // With fallback rates: GHS = 15. So 150 GHS = 10 USD, 15 GHS fee = 1 USD.
       const result = await ledgerService.postDepositWithCurrency(
         150,
         15,
-        'GHS',
-        'TEST-REF-GHS-001',
+        "GHS",
+        "TEST-REF-GHS-001",
         testTransactionId,
-        testUserId
+        testUserId,
       );
 
       expect(result).toHaveLength(3);
-      
-      const floatEntry = result.find(e => e.account_code === '1100');
+
+      const floatEntry = result.find((e) => e.account_code === "1100");
       expect(floatEntry?.debit).toBe(10); // 150 / 15 = 10 USD
 
-      const customerEntry = result.find(e => e.account_code === '2000');
+      const customerEntry = result.find((e) => e.account_code === "2000");
       expect(customerEntry?.credit).toBe(9); // (150 - 15) / 15 = 9 USD
 
-      const feeEntry = result.find(e => e.account_code === '4100');
+      const feeEntry = result.find((e) => e.account_code === "4100");
       expect(feeEntry?.credit).toBe(1); // 15 / 15 = 1 USD
     });
 
-    it('should post a deposit transaction in NGN correctly', async () => {
+    it("should post a deposit transaction in NGN correctly", async () => {
       // 3100 NGN with 155 NGN fee.
       // With fallback rates: NGN = 1550. So 3100 NGN = 2 USD, 155 NGN fee = 0.1 USD.
       const result = await ledgerService.postDepositWithCurrency(
         3100,
         155,
-        'NGN',
-        'TEST-REF-NGN-001',
+        "NGN",
+        "TEST-REF-NGN-001",
         testTransactionId,
-        testUserId
+        testUserId,
       );
 
       expect(result).toHaveLength(3);
-      
-      const floatEntry = result.find(e => e.account_code === '1100');
+
+      const floatEntry = result.find((e) => e.account_code === "1100");
       expect(floatEntry?.debit).toBe(2);
 
-      const customerEntry = result.find(e => e.account_code === '2000');
+      const customerEntry = result.find((e) => e.account_code === "2000");
       expect(customerEntry?.credit).toBe(1.9);
 
-      const feeEntry = result.find(e => e.account_code === '4100');
+      const feeEntry = result.find((e) => e.account_code === "4100");
       expect(feeEntry?.credit).toBe(0.1);
     });
   });
 
-  describe('postWithdrawal', () => {
-    it('should post a withdrawal transaction correctly', async () => {
+  describe("postWithdrawal", () => {
+    it("should post a withdrawal transaction correctly", async () => {
       const result = await ledgerService.postWithdrawal(
         100,
         5,
-        'TEST-REF-009',
+        "TEST-REF-009",
         testTransactionId,
-        testUserId
+        testUserId,
       );
 
       expect(result).toHaveLength(3);
-      
+
       // Check debit to Customer Balances
-      const customerEntry = result.find(e => e.account_code === '2000');
+      const customerEntry = result.find((e) => e.account_code === "2000");
       expect(customerEntry?.debit).toBe(105);
 
       // Check credit to Mobile Money Float
-      const floatEntry = result.find(e => e.account_code === '1100');
+      const floatEntry = result.find((e) => e.account_code === "1100");
       expect(floatEntry?.credit).toBe(100);
 
       // Check credit to Fee Revenue
-      const feeEntry = result.find(e => e.account_code === '4200');
+      const feeEntry = result.find((e) => e.account_code === "4200");
       expect(feeEntry?.credit).toBe(5);
     });
   });
 
-  describe('postWithdrawalWithCurrency', () => {
-    it('should post a withdrawal transaction in GHS correctly', async () => {
+  describe("postWithdrawalWithCurrency", () => {
+    it("should post a withdrawal transaction in GHS correctly", async () => {
       // 150 GHS with 15 GHS fee.
       // With fallback rates: GHS = 15. So 150 GHS = 10 USD, 15 GHS fee = 1 USD.
       const result = await ledgerService.postWithdrawalWithCurrency(
         150,
         15,
-        'GHS',
-        'TEST-REF-GHS-WD-001',
+        "GHS",
+        "TEST-REF-GHS-WD-001",
         testTransactionId,
-        testUserId
+        testUserId,
       );
 
       expect(result).toHaveLength(3);
-      
-      const customerEntry = result.find(e => e.account_code === '2000');
+
+      const customerEntry = result.find((e) => e.account_code === "2000");
       expect(customerEntry?.debit).toBe(11);
 
-      const floatEntry = result.find(e => e.account_code === '1100');
+      const floatEntry = result.find((e) => e.account_code === "1100");
       expect(floatEntry?.credit).toBe(10);
 
-      const feeEntry = result.find(e => e.account_code === '4200');
+      const feeEntry = result.find((e) => e.account_code === "4200");
       expect(feeEntry?.credit).toBe(1);
     });
   });
 
-  describe('getAccountBalance', () => {
-    it('should return correct account balance', async () => {
+  describe("getAccountBalance", () => {
+    it("should return correct account balance", async () => {
       // Post a known transaction
       await ledgerService.postTransaction(
-        'TEST-REF-010',
-        'Balance test',
+        "TEST-REF-010",
+        "Balance test",
         [
-          { account_code: '1100', debit_amount: 500 },
-          { account_code: '2000', credit_amount: 500 }
+          { account_code: "1100", debit_amount: 500 },
+          { account_code: "2000", credit_amount: 500 },
         ],
         testTransactionId,
-        testUserId
+        testUserId,
       );
 
-      const balance = await ledgerService.getAccountBalance('1100');
+      const balance = await ledgerService.getAccountBalance("1100");
       expect(balance).toBeGreaterThanOrEqual(500);
     });
   });
 
-  describe('checkLedgerBalance', () => {
-    it('should confirm ledger is balanced', async () => {
+  describe("checkLedgerBalance", () => {
+    it("should confirm ledger is balanced", async () => {
       const result = await ledgerService.checkLedgerBalance();
-      
+
       expect(result.is_balanced).toBe(true);
       expect(result.total_debits).toBe(result.total_credits);
       expect(Math.abs(result.difference)).toBeLessThan(0.0000001);
     });
   });
 
-  describe('getTrialBalance', () => {
-    it('should return trial balance with all accounts', async () => {
+  describe("getTrialBalance", () => {
+    it("should return trial balance with all accounts", async () => {
       const trialBalance = await ledgerService.getTrialBalance();
-      
+
       expect(Array.isArray(trialBalance)).toBe(true);
       expect(trialBalance.length).toBeGreaterThan(0);
 
       // Verify structure
       const firstAccount = trialBalance[0];
-      expect(firstAccount).toHaveProperty('account_code');
-      expect(firstAccount).toHaveProperty('account_name');
-      expect(firstAccount).toHaveProperty('account_type');
-      expect(firstAccount).toHaveProperty('debit_balance');
-      expect(firstAccount).toHaveProperty('credit_balance');
+      expect(firstAccount).toHaveProperty("account_code");
+      expect(firstAccount).toHaveProperty("account_name");
+      expect(firstAccount).toHaveProperty("account_type");
+      expect(firstAccount).toHaveProperty("debit_balance");
+      expect(firstAccount).toHaveProperty("credit_balance");
 
       // Verify trial balance is balanced
-      const totalDebits = trialBalance.reduce((sum, a) => sum + a.debit_balance, 0);
-      const totalCredits = trialBalance.reduce((sum, a) => sum + a.credit_balance, 0);
+      const totalDebits = trialBalance.reduce(
+        (sum, a) => sum + a.debit_balance,
+        0,
+      );
+      const totalCredits = trialBalance.reduce(
+        (sum, a) => sum + a.credit_balance,
+        0,
+      );
       expect(Math.abs(totalDebits - totalCredits)).toBeLessThan(0.01);
     });
   });
 
-  describe('getEntriesByTransaction', () => {
-    it('should return all entries for a transaction', async () => {
+  describe("getEntriesByTransaction", () => {
+    it("should return all entries for a transaction", async () => {
       // Post a transaction
       await ledgerService.postTransaction(
-        'TEST-REF-011',
-        'Entry retrieval test',
+        "TEST-REF-011",
+        "Entry retrieval test",
         [
-          { account_code: '1100', debit_amount: 200 },
-          { account_code: '2000', credit_amount: 200 }
+          { account_code: "1100", debit_amount: 200 },
+          { account_code: "2000", credit_amount: 200 },
         ],
         testTransactionId,
-        testUserId
+        testUserId,
       );
 
-      const entries = await ledgerService.getEntriesByTransaction(testTransactionId);
-      
+      const entries =
+        await ledgerService.getEntriesByTransaction(testTransactionId);
+
       expect(entries.length).toBeGreaterThanOrEqual(2);
-      expect(entries[0]).toHaveProperty('account_code');
-      expect(entries[0]).toHaveProperty('debit_amount');
-      expect(entries[0]).toHaveProperty('credit_amount');
+      expect(entries[0]).toHaveProperty("account_code");
+      expect(entries[0]).toHaveProperty("debit_amount");
+      expect(entries[0]).toHaveProperty("credit_amount");
     });
   });
 
-  describe('getEntriesByAccount', () => {
-    it('should return entries for a specific account', async () => {
-      const entries = await ledgerService.getEntriesByAccount('1100', undefined, undefined, 10);
-      
+  describe("getEntriesByAccount", () => {
+    it("should return entries for a specific account", async () => {
+      const entries = await ledgerService.getEntriesByAccount(
+        "1100",
+        undefined,
+        undefined,
+        10,
+      );
+
       expect(Array.isArray(entries)).toBe(true);
-      entries.forEach(entry => {
-        expect(entry.account_code).toBe('1100');
+      entries.forEach((entry) => {
+        expect(entry.account_code).toBe("1100");
       });
     });
 
-    it('should filter entries by date range', async () => {
-      const startDate = new Date('2026-04-01');
-      const endDate = new Date('2026-04-30');
-      
-      const entries = await ledgerService.getEntriesByAccount('1100', startDate, endDate, 100);
-      
-      entries.forEach(entry => {
+    it("should filter entries by date range", async () => {
+      const startDate = new Date("2026-04-01");
+      const endDate = new Date("2026-04-30");
+
+      const entries = await ledgerService.getEntriesByAccount(
+        "1100",
+        startDate,
+        endDate,
+        100,
+      );
+
+      entries.forEach((entry) => {
         const entryDate = new Date(entry.entry_date);
         expect(entryDate >= startDate).toBe(true);
         expect(entryDate <= endDate).toBe(true);
@@ -637,70 +687,75 @@ describe('LedgerService', () => {
     });
   });
 
-  describe('immutability', () => {
-    it('should prevent modification of ledger entries', async () => {
+  describe("immutability", () => {
+    it("should prevent modification of ledger entries", async () => {
       // Post a transaction
       const result = await ledgerService.postTransaction(
-        'TEST-REF-012',
-        'Immutability test',
+        "TEST-REF-012",
+        "Immutability test",
         [
-          { account_code: '1100', debit_amount: 100 },
-          { account_code: '2000', credit_amount: 100 }
+          { account_code: "1100", debit_amount: 100 },
+          { account_code: "2000", credit_amount: 100 },
         ],
         testTransactionId,
-        testUserId
+        testUserId,
       );
 
       const entryId = result[0].entry_id;
 
       // Attempt to update should fail
       await expect(
-        pool.query('UPDATE ledger_entries SET debit_amount = 200 WHERE id = $1', [entryId])
+        pool.query(
+          "UPDATE ledger_entries SET debit_amount = 200 WHERE id = $1",
+          [entryId],
+        ),
       ).rejects.toThrow(/immutable/i);
     });
 
-    it('should prevent deletion of ledger entries', async () => {
+    it("should prevent deletion of ledger entries", async () => {
       // Post a transaction
       const result = await ledgerService.postTransaction(
-        'TEST-REF-013',
-        'Deletion test',
+        "TEST-REF-013",
+        "Deletion test",
         [
-          { account_code: '1100', debit_amount: 100 },
-          { account_code: '2000', credit_amount: 100 }
+          { account_code: "1100", debit_amount: 100 },
+          { account_code: "2000", credit_amount: 100 },
         ],
         testTransactionId,
-        testUserId
+        testUserId,
       );
 
       const entryId = result[0].entry_id;
 
       // Attempt to delete should fail
       await expect(
-        pool.query('DELETE FROM ledger_entries WHERE id = $1', [entryId])
+        pool.query("DELETE FROM ledger_entries WHERE id = $1", [entryId]),
       ).rejects.toThrow(/immutable/i);
     });
   });
 
-  describe('refreshAccountBalances', () => {
-    it('should refresh materialized view without error', async () => {
-      await expect(ledgerService.refreshAccountBalances()).resolves.not.toThrow();
+  describe("refreshAccountBalances", () => {
+    it("should refresh materialized view without error", async () => {
+      await expect(
+        ledgerService.refreshAccountBalances(),
+      ).resolves.not.toThrow();
     });
   });
 
-  describe('getAllAccountBalances', () => {
-    it('should return all account balances from materialized view', async () => {
+  describe("getAllAccountBalances", () => {
+    it("should return all account balances from materialized view", async () => {
       await ledgerService.refreshAccountBalances();
       const balances = await ledgerService.getAllAccountBalances();
-      
+
       expect(Array.isArray(balances)).toBe(true);
       expect(balances.length).toBeGreaterThan(0);
 
-      balances.forEach(balance => {
-        expect(balance).toHaveProperty('account_id');
-        expect(balance).toHaveProperty('code');
-        expect(balance).toHaveProperty('name');
-        expect(balance).toHaveProperty('type');
-        expect(balance).toHaveProperty('balance');
+      balances.forEach((balance) => {
+        expect(balance).toHaveProperty("account_id");
+        expect(balance).toHaveProperty("code");
+        expect(balance).toHaveProperty("name");
+        expect(balance).toHaveProperty("type");
+        expect(balance).toHaveProperty("balance");
       });
     });
   });

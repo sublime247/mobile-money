@@ -10,7 +10,9 @@ export interface EscrowEvent {
   created_at: Date;
 }
 
-export async function insertEscrowEvent(event: EscrowEvent): Promise<QueryResult<any>> {
+export async function insertEscrowEvent(
+  event: EscrowEvent,
+): Promise<QueryResult<any>> {
   const query = `
     INSERT INTO escrow_events (tx_hash, ledger, event_type, payload, created_at)
     VALUES ($1, $2, $3, $4, $5)

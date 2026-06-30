@@ -17,7 +17,9 @@ jest.mock("../../services/logger", () => ({
 // Import after mocks are set up
 import { verifyMtnCallbackSignature } from "../mtnCallbackSignature";
 
-function makeReq(overrides: Partial<Request> & { rawBody?: Buffer } = {}): Request {
+function makeReq(
+  overrides: Partial<Request> & { rawBody?: Buffer } = {},
+): Request {
   return {
     headers: {},
     body: {},
@@ -52,7 +54,8 @@ beforeEach(() => {
   // Default config: secret configured, header name = x-callback-signature
   mockGetConfigValue.mockImplementation((key: string) => {
     if (key === "providers.mtn.callbackSecret") return SECRET;
-    if (key === "providers.mtn.callbackSignatureHeader") return "x-callback-signature";
+    if (key === "providers.mtn.callbackSignatureHeader")
+      return "x-callback-signature";
     return undefined;
   });
 });
@@ -77,7 +80,9 @@ describe("verifyMtnCallbackSignature", () => {
       });
       expect(next).not.toHaveBeenCalled();
       expect(mockLogSecurityAnomaly).toHaveBeenCalledWith(
-        expect.objectContaining({ reason: "mtn_callback_secret_not_configured" }),
+        expect.objectContaining({
+          reason: "mtn_callback_secret_not_configured",
+        }),
       );
     });
   });
@@ -146,7 +151,8 @@ describe("verifyMtnCallbackSignature", () => {
       // Configure primary header to something else so alt header is used
       mockGetConfigValue.mockImplementation((key: string) => {
         if (key === "providers.mtn.callbackSecret") return SECRET;
-        if (key === "providers.mtn.callbackSignatureHeader") return "x-other-header";
+        if (key === "providers.mtn.callbackSignatureHeader")
+          return "x-other-header";
         return undefined;
       });
 
@@ -228,10 +234,16 @@ describe("verifyMtnCallbackSignature", () => {
       // The catch block re-throws, so logSecurityAnomaly is called twice:
       // once for "mtn_callback_signature_invalid" and once for "mtn_callback_signature_error"
       expect(mockLogSecurityAnomaly).toHaveBeenCalledWith(
-        expect.objectContaining({ reason: "mtn_callback_signature_invalid", headerPresent: true }),
+        expect.objectContaining({
+          reason: "mtn_callback_signature_invalid",
+          headerPresent: true,
+        }),
       );
       expect(mockLogSecurityAnomaly).toHaveBeenCalledWith(
-        expect.objectContaining({ reason: "mtn_callback_signature_error", headerPresent: true }),
+        expect.objectContaining({
+          reason: "mtn_callback_signature_error",
+          headerPresent: true,
+        }),
       );
     });
   });

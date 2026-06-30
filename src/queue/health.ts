@@ -31,7 +31,10 @@ export async function getQueueHealth(req: Request, res: Response) {
     res.json(body);
   } catch (err) {
     logger.error("Failed to fetch queue health:", err);
-    throw createError(ERROR_CODES.INTERNAL_ERROR, "Failed to fetch queue health");
+    throw createError(
+      ERROR_CODES.INTERNAL_ERROR,
+      "Failed to fetch queue health",
+    );
   }
 }
 

@@ -232,7 +232,7 @@ authRoutes.post(
       // Device verification check for all users
       const ipAddress = getCurrentRequestIp(req);
       const fingerprint = extractFingerprint(req);
-      
+
       if (ipAddress && fingerprint) {
         const deviceCheck = await checkDeviceVerification(
           user.id,
@@ -243,18 +243,21 @@ authRoutes.post(
         if (deviceCheck.requiresVerification && deviceCheck.verificationId) {
           // Generate OTP
           const otp = await generateVerificationOTP(deviceCheck.verificationId);
-          
+
           if (otp) {
             // Mark verification as pending for this user
             await setVerificationPending(user.id, deviceCheck.verificationId);
-            
+
             // In production, send OTP via email/SMS
             // For now, return it in response for testing
-            logger.info({
-              userId: user.id,
-              verificationId: deviceCheck.verificationId,
-              reason: deviceCheck.reason,
-            }, "Device verification required - OTP generated");
+            logger.info(
+              {
+                userId: user.id,
+                verificationId: deviceCheck.verificationId,
+                reason: deviceCheck.reason,
+              },
+              "Device verification required - OTP generated",
+            );
 
             throw createError(
               ERROR_CODES.FORBIDDEN,
@@ -524,7 +527,7 @@ authRoutes.post(
   authenticateToken,
   async (req: Request, res: Response) => {
     const payload = req.jwtUser as JWTPayload;
-    
+
     if (!payload) {
       throw createError(ERROR_CODES.UNAUTHORIZED, "Authentication required", {
         error: "Authentication required",
@@ -534,9 +537,13 @@ authRoutes.post(
     const { verificationId, otp } = req.body;
 
     if (!verificationId || !otp) {
-      throw createError(ERROR_CODES.MISSING_FIELD, "Verification ID and OTP are required", {
-        error: "Missing required fields",
-      });
+      throw createError(
+        ERROR_CODES.MISSING_FIELD,
+        "Verification ID and OTP are required",
+        {
+          error: "Missing required fields",
+        },
+      );
     }
 
     try {
@@ -556,10 +563,13 @@ authRoutes.post(
         const refreshToken = await generateRefreshToken(payload.userId);
         const permissions = await getUserPermissions(payload.userId);
 
-        logger.info({
-          userId: payload.userId,
-          verificationId,
-        }, "Device verification successful");
+        logger.info(
+          {
+            userId: payload.userId,
+            verificationId,
+          },
+          "Device verification successful",
+        );
 
         res.json({
           message: "Device verification successful",
@@ -585,7 +595,7 @@ authRoutes.post(
       if (error && typeof error === "object" && "statusCode" in error) {
         throw error;
       }
-      
+
       throw createError(
         ERROR_CODES.INTERNAL_ERROR,
         error instanceof Error ? error.message : "Unknown error",
@@ -607,7 +617,7 @@ authRoutes.post(
   authenticateToken,
   async (req: Request, res: Response) => {
     const payload = req.jwtUser as JWTPayload;
-    
+
     if (!payload) {
       throw createError(ERROR_CODES.UNAUTHORIZED, "Authentication required", {
         error: "Authentication required",
@@ -641,10 +651,13 @@ authRoutes.post(
         );
       }
 
-      logger.info({
-        userId: payload.userId,
-        verificationId,
-      }, "Verification code resent");
+      logger.info(
+        {
+          userId: payload.userId,
+          verificationId,
+        },
+        "Verification code resent",
+      );
 
       // In production, send OTP via email/SMS
       res.json({
@@ -657,7 +670,7 @@ authRoutes.post(
       if (error && typeof error === "object" && "statusCode" in error) {
         throw error;
       }
-      
+
       throw createError(
         ERROR_CODES.INTERNAL_ERROR,
         error instanceof Error ? error.message : "Unknown error",

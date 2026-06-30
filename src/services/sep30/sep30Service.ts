@@ -1,9 +1,9 @@
-import * as StellarSdk from 'stellar-sdk';
-import { pool } from '../../config/database';
-import { getStellarServer } from '../../config/stellar';
-import { KeyVault, EncryptedPayload } from './keyVault';
-import { transactionTotal, transactionErrorsTotal } from '../../utils/metrics';
-import crypto from 'crypto';
+import * as StellarSdk from "stellar-sdk";
+import { pool } from "../../config/database";
+import { getStellarServer } from "../../config/stellar";
+import { KeyVault, EncryptedPayload } from "./keyVault";
+import { transactionTotal, transactionErrorsTotal } from "../../utils/metrics";
+import crypto from "crypto";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -43,11 +43,11 @@ export interface RecoveryToken {
 
 /** All possible states in the multi-sig recovery state machine */
 export type RecoverySessionState =
-  | 'pending'
-  | 'collecting_approvals'
-  | 'awaiting_completion'
-  | 'completed'
-  | 'rejected';
+  | "pending"
+  | "collecting_approvals"
+  | "awaiting_completion"
+  | "completed"
+  | "rejected";
 
 export interface RecoverySession {
   id: string;
@@ -75,7 +75,10 @@ export interface KeyRotationResult {
 
 // ─── Session TTL ──────────────────────────────────────────────────────────────
 
-const SESSION_TTL_MINUTES = parseInt(process.env.RECOVERY_SESSION_TTL_MINUTES || '30', 10);
+const SESSION_TTL_MINUTES = parseInt(
+  process.env.RECOVERY_SESSION_TTL_MINUTES || "30",
+  10,
+);
 
 // ─── SEP-30 Managed Key Service ──────────────────────────────────────────────
 
@@ -113,7 +116,7 @@ export class Sep30Service {
    */
   async createManagedKey(
     userId: string,
-    recoveryThreshold: number = 1
+    recoveryThreshold: number = 1,
   ): Promise<{ publicKey: string; keyId: string }> {
     const keypair = StellarSdk.Keypair.random();
     const publicKey = keypair.publicKey();
@@ -126,11 +129,11 @@ export class Sep30Service {
          (user_id, public_key, encrypted_secret, recovery_threshold, is_active)
        VALUES ($1, $2, $3, $4, true)
        RETURNING id, public_key, created_at`,
-      [userId, publicKey, JSON.stringify(encryptedSecret), recoveryThreshold]
+      [userId, publicKey, JSON.stringify(encryptedSecret), recoveryThreshold],
     );
 
     const row = result.rows[0];
-    console.info('Managed key created', { keyId: row.id, userId, publicKey });
+    console.info("Managed key created", { keyId: row.id, userId, publicKey });
     return { publicKey, keyId: row.id };
   }
 
@@ -143,8 +146,8 @@ export class Sep30Service {
     keyId: string,
     userId: string,
     buildTransaction: (
-      sourceAccount: StellarSdk.Horizon.AccountResponse
-    ) => StellarSdk.Transaction
+      sourceAccount: StellarSdk.Horizon.AccountResponse,
+    ) => StellarSdk.Transaction,
   ): Promise<string> {
     const managedKey = await this.getManagedKey(keyId, userId);
     const secretKey = this.vault.decrypt(managedKey.encryptedSecret);
@@ -157,10 +160,18 @@ export class Sep30Service {
       tx.sign(keypair);
 
       const result = await this.server.submitTransaction(tx);
-      transactionTotal.inc({ type: 'sep30_sign', provider: 'stellar', status: 'success' });
+      transactionTotal.inc({
+        type: "sep30_sign",
+        provider: "stellar",
+        status: "success",
+      });
       return result.hash;
     } catch (error) {
-      transactionErrorsTotal.inc({ type: 'sep30_sign', provider: 'stellar', error_type: 'sign_error' });
+      transactionErrorsTotal.inc({
+        type: "sep30_sign",
+        provider: "stellar",
+        error_type: "sign_error",
+      });
       throw error;
     }
   }
@@ -172,33 +183,38 @@ export class Sep30Service {
     keyId: string,
     userId: string,
     signerPublicKey: string,
-    signerLabel: string
+    signerLabel: string,
   ): Promise<RecoverySigner> {
     await this.getManagedKey(keyId, userId);
 
     try {
       StellarSdk.Keypair.fromPublicKey(signerPublicKey);
     } catch {
-      throw new Error(`Invalid Stellar public key for recovery signer: ${signerPublicKey}`);
+      throw new Error(
+        `Invalid Stellar public key for recovery signer: ${signerPublicKey}`,
+      );
     }
 
     const result = await pool.query(
       `INSERT INTO recovery_signers (managed_key_id, signer_public_key, signer_label)
        VALUES ($1, $2, $3)
        RETURNING *`,
-      [keyId, signerPublicKey, signerLabel]
+      [keyId, signerPublicKey, signerLabel],
     );
 
     return this.mapRecoverySigner(result.rows[0]);
   }
 
   /** List all recovery signers for a managed key. */
-  async listRecoverySigners(keyId: string, userId: string): Promise<RecoverySigner[]> {
+  async listRecoverySigners(
+    keyId: string,
+    userId: string,
+  ): Promise<RecoverySigner[]> {
     await this.getManagedKey(keyId, userId);
 
     const result = await pool.query(
-      'SELECT * FROM recovery_signers WHERE managed_key_id = $1 ORDER BY created_at',
-      [keyId]
+      "SELECT * FROM recovery_signers WHERE managed_key_id = $1 ORDER BY created_at",
+      [keyId],
     );
 
     return result.rows.map(this.mapRecoverySigner);
@@ -211,7 +227,7 @@ export class Sep30Service {
   async removeRecoverySigner(
     keyId: string,
     userId: string,
-    signerPublicKey: string
+    signerPublicKey: string,
   ): Promise<void> {
     const managedKey = await this.getManagedKey(keyId, userId);
     const signers = await this.listRecoverySigners(keyId, userId);
@@ -219,14 +235,14 @@ export class Sep30Service {
     if (signers.length - 1 < managedKey.recoveryThreshold) {
       throw new Error(
         `Cannot remove signer: would leave ${signers.length - 1} signers ` +
-        `but threshold is ${managedKey.recoveryThreshold}. ` +
-        `Lower the threshold first or add another signer.`
+          `but threshold is ${managedKey.recoveryThreshold}. ` +
+          `Lower the threshold first or add another signer.`,
       );
     }
 
     await pool.query(
-      'DELETE FROM recovery_signers WHERE managed_key_id = $1 AND signer_public_key = $2',
-      [keyId, signerPublicKey]
+      "DELETE FROM recovery_signers WHERE managed_key_id = $1 AND signer_public_key = $2",
+      [keyId, signerPublicKey],
     );
   }
 
@@ -241,7 +257,7 @@ export class Sep30Service {
   async openRecoverySession(
     keyId: string,
     requestedNewAddress?: string,
-    initiatedByIp?: string
+    initiatedByIp?: string,
   ): Promise<RecoverySession> {
     const key = await this.getActiveManagedKeyById(keyId);
 
@@ -250,7 +266,9 @@ export class Sep30Service {
       try {
         StellarSdk.Keypair.fromPublicKey(requestedNewAddress);
       } catch {
-        throw new Error(`Invalid Stellar public key for requested_new_address: ${requestedNewAddress}`);
+        throw new Error(
+          `Invalid Stellar public key for requested_new_address: ${requestedNewAddress}`,
+        );
       }
     }
 
@@ -260,13 +278,13 @@ export class Sep30Service {
        WHERE managed_key_id = $1
          AND state NOT IN ('completed', 'rejected')
          AND expires_at > NOW()`,
-      [keyId]
+      [keyId],
     );
 
     if (existingActive.rows.length > 0) {
       throw new Error(
         `An active recovery session already exists for this key: ${existingActive.rows[0].id}. ` +
-        `Cancel it first or wait for it to expire.`
+          `Cancel it first or wait for it to expire.`,
       );
     }
 
@@ -278,21 +296,28 @@ export class Sep30Service {
           initiated_by_ip, expires_at, old_public_key)
        VALUES ($1, $2, 'pending', $3, $4::inet, $5, $6)
        RETURNING *`,
-      [keyId, key.recovery_threshold, requestedNewAddress ?? null, initiatedByIp ?? null, expiresAt, key.public_key]
+      [
+        keyId,
+        key.recovery_threshold,
+        requestedNewAddress ?? null,
+        initiatedByIp ?? null,
+        expiresAt,
+        key.public_key,
+      ],
     );
 
     const session = this.mapSession(result.rows[0]);
 
     await this.writeAuditLog({
       sessionId: session.id,
-      eventType: 'session_opened',
+      eventType: "session_opened",
       fromState: null,
-      toState: 'pending',
+      toState: "pending",
       metadata: { requiredApprovals: session.requiredApprovals },
       ip: initiatedByIp,
     });
 
-    console.info('Recovery session opened', {
+    console.info("Recovery session opened", {
       sessionId: session.id,
       keyId,
       requiredApprovals: session.requiredApprovals,
@@ -312,16 +337,18 @@ export class Sep30Service {
   async initiateRecovery(
     keyId: string,
     signerPublicKey: string,
-    sessionId?: string
+    sessionId?: string,
   ): Promise<{ token: string; expiresAt: Date; sessionId: string }> {
     // Verify signer is registered
     const signerResult = await pool.query(
-      'SELECT * FROM recovery_signers WHERE managed_key_id = $1 AND signer_public_key = $2',
-      [keyId, signerPublicKey]
+      "SELECT * FROM recovery_signers WHERE managed_key_id = $1 AND signer_public_key = $2",
+      [keyId, signerPublicKey],
     );
 
     if (signerResult.rows.length === 0) {
-      throw new Error('Public key is not a registered recovery signer for this managed key');
+      throw new Error(
+        "Public key is not a registered recovery signer for this managed key",
+      );
     }
 
     // Resolve or create session
@@ -329,7 +356,7 @@ export class Sep30Service {
     if (sessionId) {
       session = await this.getRecoverySession(sessionId);
       if (session.managedKeyId !== keyId) {
-        throw new Error('Session does not belong to this managed key');
+        throw new Error("Session does not belong to this managed key");
       }
       this.assertSessionActive(session);
     } else {
@@ -344,30 +371,38 @@ export class Sep30Service {
        WHERE managed_key_id = $1
          AND signer_public_key = $2
          AND used_at IS NULL`,
-      [keyId, signerPublicKey]
+      [keyId, signerPublicKey],
     );
 
-    const rawToken = crypto.randomBytes(32).toString('hex');
-    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+    const rawToken = crypto.randomBytes(32).toString("hex");
+    const tokenHash = crypto
+      .createHash("sha256")
+      .update(rawToken)
+      .digest("hex");
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15-minute window
 
     await pool.query(
       `INSERT INTO recovery_tokens
          (managed_key_id, token_hash, signer_public_key, expires_at)
        VALUES ($1, $2, $3, $4)`,
-      [keyId, tokenHash, signerPublicKey, expiresAt]
+      [keyId, tokenHash, signerPublicKey, expiresAt],
     );
 
     await this.writeAuditLog({
       sessionId: session.id,
-      eventType: 'token_issued',
+      eventType: "token_issued",
       signerPublicKey,
       fromState: session.state,
       toState: session.state,
       ip: undefined,
     });
 
-    console.info('Recovery token issued', { keyId, signerPublicKey, expiresAt, sessionId: session.id });
+    console.info("Recovery token issued", {
+      keyId,
+      signerPublicKey,
+      expiresAt,
+      sessionId: session.id,
+    });
     return { token: rawToken, expiresAt, sessionId: session.id };
   }
 
@@ -391,31 +426,35 @@ export class Sep30Service {
     token: string,
     signature: string,
     signerPublicKey: string,
-    ip?: string
+    ip?: string,
   ): Promise<{ approved: boolean; session: RecoverySession }> {
     const session = await this.getRecoverySession(sessionId);
 
     if (session.managedKeyId !== keyId) {
-      throw new Error('Session does not belong to this managed key');
+      throw new Error("Session does not belong to this managed key");
     }
     this.assertSessionActive(session);
 
     // Guard: this signer has not already approved this session
     if (session.approvedBy.includes(signerPublicKey)) {
-      throw new Error(`Signer ${signerPublicKey} has already approved this recovery session`);
+      throw new Error(
+        `Signer ${signerPublicKey} has already approved this recovery session`,
+      );
     }
 
     // Verify signer is registered
     const signerResult = await pool.query(
-      'SELECT * FROM recovery_signers WHERE managed_key_id = $1 AND signer_public_key = $2',
-      [keyId, signerPublicKey]
+      "SELECT * FROM recovery_signers WHERE managed_key_id = $1 AND signer_public_key = $2",
+      [keyId, signerPublicKey],
     );
     if (signerResult.rows.length === 0) {
-      throw new Error('Public key is not a registered recovery signer for this managed key');
+      throw new Error(
+        "Public key is not a registered recovery signer for this managed key",
+      );
     }
 
     // Verify the challenge token exists, is unused, and not expired
-    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
     const tokenResult = await pool.query(
       `SELECT * FROM recovery_tokens
        WHERE managed_key_id = $1
@@ -423,27 +462,27 @@ export class Sep30Service {
          AND signer_public_key = $3
          AND used_at IS NULL
          AND expires_at > NOW()`,
-      [keyId, tokenHash, signerPublicKey]
+      [keyId, tokenHash, signerPublicKey],
     );
 
     if (tokenResult.rows.length === 0) {
-      throw new Error('Recovery token not found, already used, or expired');
+      throw new Error("Recovery token not found, already used, or expired");
     }
 
     // Cryptographically verify the Stellar signature
     const keypair = StellarSdk.Keypair.fromPublicKey(signerPublicKey);
-    const tokenBytes = Buffer.from(token, 'utf8');
-    const signatureBytes = Buffer.from(signature, 'base64');
+    const tokenBytes = Buffer.from(token, "utf8");
+    const signatureBytes = Buffer.from(signature, "base64");
     const isValid = keypair.verify(tokenBytes, signatureBytes);
 
     if (!isValid) {
-      throw new Error('Invalid Stellar signature — signer verification failed');
+      throw new Error("Invalid Stellar signature — signer verification failed");
     }
 
     // Mark token as consumed
     await pool.query(
-      'UPDATE recovery_tokens SET used_at = NOW() WHERE managed_key_id = $1 AND token_hash = $2',
-      [keyId, tokenHash]
+      "UPDATE recovery_tokens SET used_at = NOW() WHERE managed_key_id = $1 AND token_hash = $2",
+      [keyId, tokenHash],
     );
 
     // Append signer to approved_by and compute next state
@@ -452,27 +491,30 @@ export class Sep30Service {
 
     const fromState = session.state;
     const toState: RecoverySessionState = thresholdReached
-      ? 'awaiting_completion'
-      : 'collecting_approvals';
+      ? "awaiting_completion"
+      : "collecting_approvals";
 
     await pool.query(
       `UPDATE key_recovery_sessions
        SET approved_by = $1, state = $2, updated_at = NOW()
        WHERE id = $3`,
-      [newApprovedBy, toState, sessionId]
+      [newApprovedBy, toState, sessionId],
     );
 
     await this.writeAuditLog({
       sessionId,
-      eventType: thresholdReached ? 'threshold_reached' : 'signer_approved',
+      eventType: thresholdReached ? "threshold_reached" : "signer_approved",
       signerPublicKey,
       fromState,
       toState,
-      metadata: { approvedCount: newApprovedBy.length, required: session.requiredApprovals },
+      metadata: {
+        approvedCount: newApprovedBy.length,
+        required: session.requiredApprovals,
+      },
       ip,
     });
 
-    console.info('Recovery approval recorded', {
+    console.info("Recovery approval recorded", {
       sessionId,
       signerPublicKey,
       approvedCount: newApprovedBy.length,
@@ -493,24 +535,28 @@ export class Sep30Service {
   async completeRecovery(
     keyId: string,
     sessionId: string,
-    ip?: string
+    ip?: string,
   ): Promise<KeyRotationResult & { sessionId: string }> {
     const session = await this.getRecoverySession(sessionId);
 
     if (session.managedKeyId !== keyId) {
-      throw new Error('Session does not belong to this managed key');
+      throw new Error("Session does not belong to this managed key");
     }
 
-    if (session.state !== 'awaiting_completion') {
+    if (session.state !== "awaiting_completion") {
       throw new Error(
         `Cannot complete recovery: session is in state '${session.state}'. ` +
-        `Need state 'awaiting_completion' (i.e. M-of-N approvals must be collected first).`
+          `Need state 'awaiting_completion' (i.e. M-of-N approvals must be collected first).`,
       );
     }
 
     if (new Date() > session.expiresAt) {
-      await this.rejectSession(sessionId, 'Session expired before completion', ip);
-      throw new Error('Recovery session has expired');
+      await this.rejectSession(
+        sessionId,
+        "Session expired before completion",
+        ip,
+      );
+      throw new Error("Recovery session has expired");
     }
 
     // Perform key rotation inside a transaction
@@ -525,12 +571,12 @@ export class Sep30Service {
 
     const client = await pool.connect();
     try {
-      await client.query('BEGIN');
+      await client.query("BEGIN");
 
       // Deactivate old key
       await client.query(
-        'UPDATE managed_keys SET is_active = false, updated_at = NOW() WHERE id = $1',
-        [keyId]
+        "UPDATE managed_keys SET is_active = false, updated_at = NOW() WHERE id = $1",
+        [keyId],
       );
 
       // Insert new key with the same threshold and signers carried over
@@ -538,7 +584,12 @@ export class Sep30Service {
         `INSERT INTO managed_keys
            (user_id, public_key, encrypted_secret, recovery_threshold, is_active)
          VALUES ($1, $2, $3, $4, true)`,
-        [key.user_id, newPublicKey, JSON.stringify(newEncryptedSecret), key.recovery_threshold]
+        [
+          key.user_id,
+          newPublicKey,
+          JSON.stringify(newEncryptedSecret),
+          key.recovery_threshold,
+        ],
       );
 
       // Mark session completed
@@ -549,12 +600,12 @@ export class Sep30Service {
              new_public_key = $1,
              updated_at = NOW()
          WHERE id = $2`,
-        [newPublicKey, sessionId]
+        [newPublicKey, sessionId],
       );
 
-      await client.query('COMMIT');
+      await client.query("COMMIT");
     } catch (error) {
-      await client.query('ROLLBACK');
+      await client.query("ROLLBACK");
       throw error;
     } finally {
       client.release();
@@ -562,21 +613,25 @@ export class Sep30Service {
 
     await this.writeAuditLog({
       sessionId,
-      eventType: 'recovery_completed',
-      fromState: 'awaiting_completion',
-      toState: 'completed',
+      eventType: "recovery_completed",
+      fromState: "awaiting_completion",
+      toState: "completed",
       metadata: { oldPublicKey, newPublicKey },
       ip,
     });
 
-    console.info('Recovery completed — key rotated', {
+    console.info("Recovery completed — key rotated", {
       sessionId,
       oldPublicKey,
       newPublicKey,
       rotatedAt,
     });
 
-    transactionTotal.inc({ type: 'sep30_recovery_complete', provider: 'stellar', status: 'success' });
+    transactionTotal.inc({
+      type: "sep30_recovery_complete",
+      provider: "stellar",
+      status: "success",
+    });
 
     return { newPublicKey, oldPublicKey, rotatedAt, sessionId };
   }
@@ -588,17 +643,19 @@ export class Sep30Service {
   async cancelRecoverySession(
     keyId: string,
     sessionId: string,
-    reason: string = 'Cancelled by user',
-    ip?: string
+    reason: string = "Cancelled by user",
+    ip?: string,
   ): Promise<void> {
     const session = await this.getRecoverySession(sessionId);
 
     if (session.managedKeyId !== keyId) {
-      throw new Error('Session does not belong to this managed key');
+      throw new Error("Session does not belong to this managed key");
     }
 
-    if (session.state === 'completed' || session.state === 'rejected') {
-      throw new Error(`Session is already in terminal state '${session.state}'`);
+    if (session.state === "completed" || session.state === "rejected") {
+      throw new Error(
+        `Session is already in terminal state '${session.state}'`,
+      );
     }
 
     await this.rejectSession(sessionId, reason, ip);
@@ -607,8 +664,8 @@ export class Sep30Service {
   /** Retrieve a recovery session by ID (public). */
   async getRecoverySession(sessionId: string): Promise<RecoverySession> {
     const result = await pool.query(
-      'SELECT * FROM key_recovery_sessions WHERE id = $1',
-      [sessionId]
+      "SELECT * FROM key_recovery_sessions WHERE id = $1",
+      [sessionId],
     );
 
     if (result.rows.length === 0) {
@@ -622,13 +679,13 @@ export class Sep30Service {
   async listRecoverySessions(
     keyId: string,
     userId: string,
-    stateFilter?: RecoverySessionState
+    stateFilter?: RecoverySessionState,
   ): Promise<RecoverySession[]> {
     await this.getManagedKey(keyId, userId);
 
     const query = stateFilter
-      ? 'SELECT * FROM key_recovery_sessions WHERE managed_key_id = $1 AND state = $2 ORDER BY created_at DESC'
-      : 'SELECT * FROM key_recovery_sessions WHERE managed_key_id = $1 ORDER BY created_at DESC';
+      ? "SELECT * FROM key_recovery_sessions WHERE managed_key_id = $1 AND state = $2 ORDER BY created_at DESC"
+      : "SELECT * FROM key_recovery_sessions WHERE managed_key_id = $1 ORDER BY created_at DESC";
 
     const params = stateFilter ? [keyId, stateFilter] : [keyId];
     const result = await pool.query(query, params);
@@ -638,8 +695,8 @@ export class Sep30Service {
   /** Get the audit log for a recovery session. */
   async getRecoveryAuditLog(sessionId: string): Promise<any[]> {
     const result = await pool.query(
-      'SELECT * FROM key_recovery_audit_log WHERE session_id = $1 ORDER BY occurred_at',
-      [sessionId]
+      "SELECT * FROM key_recovery_audit_log WHERE session_id = $1 ORDER BY occurred_at",
+      [sessionId],
     );
     return result.rows;
   }
@@ -654,9 +711,9 @@ export class Sep30Service {
     keyId: string,
     token: string,
     signature: string,
-    signerPublicKey: string
+    signerPublicKey: string,
   ): Promise<boolean> {
-    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
 
     const tokenResult = await pool.query(
       `SELECT * FROM recovery_tokens
@@ -665,22 +722,22 @@ export class Sep30Service {
          AND signer_public_key = $3
          AND used_at IS NULL
          AND expires_at > NOW()`,
-      [keyId, tokenHash, signerPublicKey]
+      [keyId, tokenHash, signerPublicKey],
     );
 
     if (tokenResult.rows.length === 0) {
-      throw new Error('Recovery token not found, already used, or expired');
+      throw new Error("Recovery token not found, already used, or expired");
     }
 
     const keypair = StellarSdk.Keypair.fromPublicKey(signerPublicKey);
-    const tokenBytes = Buffer.from(token, 'utf8');
-    const signatureBytes = Buffer.from(signature, 'base64');
+    const tokenBytes = Buffer.from(token, "utf8");
+    const signatureBytes = Buffer.from(signature, "base64");
     const isValid = keypair.verify(tokenBytes, signatureBytes);
 
     if (isValid) {
       await pool.query(
-        'UPDATE recovery_tokens SET used_at = NOW() WHERE managed_key_id = $1 AND token_hash = $2',
-        [keyId, tokenHash]
+        "UPDATE recovery_tokens SET used_at = NOW() WHERE managed_key_id = $1 AND token_hash = $2",
+        [keyId, tokenHash],
       );
     }
 
@@ -696,7 +753,7 @@ export class Sep30Service {
   async rotateKey(
     keyId: string,
     userId: string,
-    newStellarAddress?: string
+    newStellarAddress?: string,
   ): Promise<KeyRotationResult> {
     const existing = await this.getManagedKey(keyId, userId);
     const oldPublicKey = existing.publicKey;
@@ -709,27 +766,41 @@ export class Sep30Service {
 
     const client = await pool.connect();
     try {
-      await client.query('BEGIN');
+      await client.query("BEGIN");
       await client.query(
-        'UPDATE managed_keys SET is_active = false, updated_at = NOW() WHERE id = $1',
-        [keyId]
+        "UPDATE managed_keys SET is_active = false, updated_at = NOW() WHERE id = $1",
+        [keyId],
       );
       await client.query(
         `INSERT INTO managed_keys
            (user_id, public_key, encrypted_secret, recovery_threshold, is_active)
          VALUES ($1, $2, $3, $4, true)`,
-        [userId, newPublicKey, JSON.stringify(newEncryptedSecret), existing.recoveryThreshold]
+        [
+          userId,
+          newPublicKey,
+          JSON.stringify(newEncryptedSecret),
+          existing.recoveryThreshold,
+        ],
       );
-      await client.query('COMMIT');
+      await client.query("COMMIT");
     } catch (error) {
-      await client.query('ROLLBACK');
+      await client.query("ROLLBACK");
       throw error;
     } finally {
       client.release();
     }
 
-    console.info('Key rotated (planned)', { userId, oldPublicKey, newPublicKey, rotatedAt });
-    transactionTotal.inc({ type: 'sep30_rotate', provider: 'stellar', status: 'success' });
+    console.info("Key rotated (planned)", {
+      userId,
+      oldPublicKey,
+      newPublicKey,
+      rotatedAt,
+    });
+    transactionTotal.inc({
+      type: "sep30_rotate",
+      provider: "stellar",
+      status: "success",
+    });
 
     return { newPublicKey, oldPublicKey, rotatedAt };
   }
@@ -739,52 +810,57 @@ export class Sep30Service {
   async updateRecoveryThreshold(
     keyId: string,
     userId: string,
-    newThreshold: number
+    newThreshold: number,
   ): Promise<void> {
     const signers = await this.listRecoverySigners(keyId, userId);
 
     if (newThreshold < 1) {
-      throw new Error('Recovery threshold must be at least 1');
+      throw new Error("Recovery threshold must be at least 1");
     }
 
     if (newThreshold > signers.length) {
       throw new Error(
-        `Threshold ${newThreshold} exceeds registered signer count ${signers.length}`
+        `Threshold ${newThreshold} exceeds registered signer count ${signers.length}`,
       );
     }
 
     await pool.query(
-      'UPDATE managed_keys SET recovery_threshold = $1, updated_at = NOW() WHERE id = $2',
-      [newThreshold, keyId]
+      "UPDATE managed_keys SET recovery_threshold = $1, updated_at = NOW() WHERE id = $2",
+      [newThreshold, keyId],
     );
   }
 
   // ─── Queries ──────────────────────────────────────────────────────────────
 
-  async listManagedKeys(userId: string): Promise<Omit<ManagedKey, 'encryptedSecret'>[]> {
+  async listManagedKeys(
+    userId: string,
+  ): Promise<Omit<ManagedKey, "encryptedSecret">[]> {
     const result = await pool.query(
       `SELECT id, user_id, public_key, recovery_threshold, created_at, updated_at, is_active
        FROM managed_keys
        WHERE user_id = $1
        ORDER BY created_at DESC`,
-      [userId]
+      [userId],
     );
     return result.rows;
   }
 
   // ─── Internal helpers ─────────────────────────────────────────────────────
 
-  private async getManagedKey(keyId: string, userId: string): Promise<ManagedKey> {
+  private async getManagedKey(
+    keyId: string,
+    userId: string,
+  ): Promise<ManagedKey> {
     const result = await pool.query(
       `SELECT id, user_id, public_key, encrypted_secret,
               recovery_threshold, created_at, updated_at, is_active
        FROM managed_keys
        WHERE id = $1 AND user_id = $2 AND is_active = true`,
-      [keyId, userId]
+      [keyId, userId],
     );
 
     if (result.rows.length === 0) {
-      throw new Error('Managed key not found or does not belong to this user');
+      throw new Error("Managed key not found or does not belong to this user");
     }
 
     const row = result.rows[0];
@@ -803,41 +879,47 @@ export class Sep30Service {
   /** Fetch an active managed key without user ownership check (used internally during recovery). */
   private async getActiveManagedKeyById(keyId: string): Promise<any> {
     const result = await pool.query(
-      'SELECT * FROM managed_keys WHERE id = $1 AND is_active = true',
-      [keyId]
+      "SELECT * FROM managed_keys WHERE id = $1 AND is_active = true",
+      [keyId],
     );
 
     if (result.rows.length === 0) {
-      throw new Error('Managed key not found or is inactive');
+      throw new Error("Managed key not found or is inactive");
     }
 
     return result.rows[0];
   }
 
   private assertSessionActive(session: RecoverySession): void {
-    if (session.state === 'completed' || session.state === 'rejected') {
-      throw new Error(`Recovery session is already in terminal state '${session.state}'`);
+    if (session.state === "completed" || session.state === "rejected") {
+      throw new Error(
+        `Recovery session is already in terminal state '${session.state}'`,
+      );
     }
     if (new Date() > session.expiresAt) {
-      throw new Error('Recovery session has expired');
+      throw new Error("Recovery session has expired");
     }
   }
 
-  private async rejectSession(sessionId: string, reason: string, ip?: string): Promise<void> {
+  private async rejectSession(
+    sessionId: string,
+    reason: string,
+    ip?: string,
+  ): Promise<void> {
     const session = await this.getRecoverySession(sessionId);
 
     await pool.query(
       `UPDATE key_recovery_sessions
        SET state = 'rejected', rejected_reason = $1, completed_at = NOW(), updated_at = NOW()
        WHERE id = $2`,
-      [reason, sessionId]
+      [reason, sessionId],
     );
 
     await this.writeAuditLog({
       sessionId,
-      eventType: 'session_rejected',
+      eventType: "session_rejected",
       fromState: session.state,
-      toState: 'rejected',
+      toState: "rejected",
       metadata: { reason },
       ip,
     });
@@ -864,7 +946,7 @@ export class Sep30Service {
         params.toState,
         params.metadata ? JSON.stringify(params.metadata) : null,
         params.ip ?? null,
-      ]
+      ],
     );
   }
 

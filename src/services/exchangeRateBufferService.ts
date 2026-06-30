@@ -95,7 +95,11 @@ async function cacheGet(key: string): Promise<ExchangeRateBuffer | null> {
 async function cacheSet(key: string, value: ExchangeRateBuffer): Promise<void> {
   try {
     if (!redisClient?.isOpen) return;
-    await redisClient.setEx(`${CACHE_PREFIX}${key}`, CACHE_TTL, JSON.stringify(value));
+    await redisClient.setEx(
+      `${CACHE_PREFIX}${key}`,
+      CACHE_TTL,
+      JSON.stringify(value),
+    );
   } catch {
     // Non-fatal
   }
@@ -164,12 +168,19 @@ export class ExchangeRateBufferService {
 
     // Dynamic mode: compute volatility-adjusted buffer
     if (config && mode === "dynamic") {
-      bufferPct = await this.computeDynamicBuffer(config, fromCurrency, toCurrency);
+      bufferPct = await this.computeDynamicBuffer(
+        config,
+        fromCurrency,
+        toCurrency,
+      );
     }
 
     // Clamp to configured bounds
     if (config) {
-      bufferPct = Math.max(config.minBufferPct, Math.min(config.maxBufferPct, bufferPct));
+      bufferPct = Math.max(
+        config.minBufferPct,
+        Math.min(config.maxBufferPct, bufferPct),
+      );
     }
 
     // Apply buffer based on direction
@@ -232,7 +243,10 @@ export class ExchangeRateBufferService {
 
       return dynamicBuffer;
     } catch (err) {
-      logger.warn({ err }, "[ERB] Dynamic buffer computation failed, using static fallback");
+      logger.warn(
+        { err },
+        "[ERB] Dynamic buffer computation failed, using static fallback",
+      );
       return config.bufferPercent;
     }
   }
@@ -357,7 +371,15 @@ export class ExchangeRateBufferService {
 
     const updated = mapRow(result.rows[0]);
     await cacheInvalidate(`${old.provider}:${old.currencyPair}`);
-    await this.logAudit(id, "UPDATE", old, updated, updatedBy, ipAddress, userAgent);
+    await this.logAudit(
+      id,
+      "UPDATE",
+      old,
+      updated,
+      updatedBy,
+      ipAddress,
+      userAgent,
+    );
     return updated;
   }
 
@@ -370,11 +392,22 @@ export class ExchangeRateBufferService {
     const old = await this.getBufferById(id);
     if (!old) return false;
 
-    const result = await pool.query("DELETE FROM exchange_rate_buffers WHERE id = $1", [id]);
+    const result = await pool.query(
+      "DELETE FROM exchange_rate_buffers WHERE id = $1",
+      [id],
+    );
     if ((result.rowCount ?? 0) === 0) return false;
 
     await cacheInvalidate(`${old.provider}:${old.currencyPair}`);
-    await this.logAudit(id, "DELETE", old, null, deletedBy, ipAddress, userAgent);
+    await this.logAudit(
+      id,
+      "DELETE",
+      old,
+      null,
+      deletedBy,
+      ipAddress,
+      userAgent,
+    );
     return true;
   }
 
@@ -388,7 +421,10 @@ export class ExchangeRateBufferService {
   }
 
   async getBufferById(id: string): Promise<ExchangeRateBuffer | null> {
-    const result = await pool.query("SELECT * FROM exchange_rate_buffers WHERE id = $1", [id]);
+    const result = await pool.query(
+      "SELECT * FROM exchange_rate_buffers WHERE id = $1",
+      [id],
+    );
     return result.rows.length ? mapRow(result.rows[0]) : null;
   }
 

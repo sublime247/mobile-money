@@ -183,7 +183,10 @@ describe("SupportService", () => {
       });
 
       const service = new SupportService();
-      const result = await service.createDisputeTicket(mockDispute, mockTransaction);
+      const result = await service.createDisputeTicket(
+        mockDispute,
+        mockTransaction,
+      );
 
       expect(result.results).toHaveLength(1);
       expect(result.results[0].success).toBe(false);
@@ -199,7 +202,10 @@ describe("SupportService", () => {
       });
 
       const service = new SupportService();
-      const result = await service.createDisputeTicket(mockDispute, mockTransaction);
+      const result = await service.createDisputeTicket(
+        mockDispute,
+        mockTransaction,
+      );
 
       expect(result.results).toHaveLength(1);
       expect(result.results[0].success).toBe(false);
@@ -211,7 +217,10 @@ describe("SupportService", () => {
       process.env.ZENDESK_API_TOKEN = "";
 
       const service = new SupportService();
-      const result = await service.createDisputeTicket(mockDispute, mockTransaction);
+      const result = await service.createDisputeTicket(
+        mockDispute,
+        mockTransaction,
+      );
 
       expect(result.results).toHaveLength(1);
       expect(result.results[0].success).toBe(false);
@@ -274,7 +283,10 @@ describe("SupportService", () => {
       });
 
       const service = new SupportService();
-      const result = await service.createDisputeTicket(mockDispute, mockTransaction);
+      const result = await service.createDisputeTicket(
+        mockDispute,
+        mockTransaction,
+      );
 
       expect(result.results).toHaveLength(1);
       expect(result.results[0].success).toBe(false);
@@ -282,7 +294,7 @@ describe("SupportService", () => {
     });
   });
 
-  describe('createDisputeTicket - Both providers', () => {
+  describe("createDisputeTicket - Both providers", () => {
     beforeEach(() => {
       process.env.SUPPORT_PROVIDER = "both";
       process.env.ZENDESK_SUBDOMAIN = "testcompany";
@@ -324,7 +336,10 @@ describe("SupportService", () => {
         });
 
       const service = new SupportService();
-      const result = await service.createDisputeTicket(mockDispute, mockTransaction);
+      const result = await service.createDisputeTicket(
+        mockDispute,
+        mockTransaction,
+      );
 
       expect(result.results).toHaveLength(2);
       expect(result.results.filter((r) => r.success)).toHaveLength(2);
@@ -355,7 +370,10 @@ describe("SupportService", () => {
         });
 
       const service = new SupportService();
-      const result = await service.createDisputeTicket(mockDispute, mockTransaction);
+      const result = await service.createDisputeTicket(
+        mockDispute,
+        mockTransaction,
+      );
 
       expect(result.results).toHaveLength(2);
       expect(result.results.filter((r) => r.success)).toHaveLength(1);
@@ -391,7 +409,9 @@ describe("SupportService", () => {
       expect(mockFetch).toHaveBeenCalledTimes(1);
 
       const [url, options] = mockFetch.mock.calls[0];
-      expect(url).toBe("https://testcompany.zendesk.com/api/v2/tickets/12345.json");
+      expect(url).toBe(
+        "https://testcompany.zendesk.com/api/v2/tickets/12345.json",
+      );
       expect(options.method).toBe("PUT");
     });
 
@@ -447,7 +467,10 @@ describe("SupportService", () => {
       });
 
       const service = new SupportService();
-      const result = await service.addIntercomReply("invalid-conv", "Test reply");
+      const result = await service.addIntercomReply(
+        "invalid-conv",
+        "Test reply",
+      );
 
       expect(result.success).toBe(false);
       expect(result.error).toContain("404");
@@ -588,7 +611,10 @@ describe("SupportService", () => {
       });
 
       const service = new SupportService();
-      const result = await service.createDisputeTicket(disputeWithNulls, mockTransaction);
+      const result = await service.createDisputeTicket(
+        disputeWithNulls,
+        mockTransaction,
+      );
 
       expect(result.results[0].success).toBe(true);
     });
@@ -643,7 +669,10 @@ describe("SupportService", () => {
         .mockRejectedValueOnce(new Error("Connection refused"));
 
       const service = new SupportService();
-      const result = await service.createDisputeTicket(mockDispute, mockTransaction);
+      const result = await service.createDisputeTicket(
+        mockDispute,
+        mockTransaction,
+      );
 
       expect(result.results).toHaveLength(2);
       expect(result.results.filter((r) => r.success)).toHaveLength(0);
@@ -690,7 +719,10 @@ describe("SupportService", () => {
         });
 
       const service = new SupportService();
-      const result = await service.createDisputeTicket(mockDispute, mockTransaction);
+      const result = await service.createDisputeTicket(
+        mockDispute,
+        mockTransaction,
+      );
 
       expect(result.results[0].success).toBe(true);
       expect(mockFetch).toHaveBeenCalledTimes(3);
@@ -706,7 +738,10 @@ describe("SupportService", () => {
       });
 
       const service = new SupportService();
-      const result = await service.createDisputeTicket(mockDispute, mockTransaction);
+      const result = await service.createDisputeTicket(
+        mockDispute,
+        mockTransaction,
+      );
 
       expect(result.results[0].success).toBe(false);
       // Should only try once for 4xx errors

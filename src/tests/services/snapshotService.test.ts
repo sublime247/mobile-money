@@ -50,10 +50,12 @@ describe("SnapshotService", () => {
     const result = await service.performDailySnapshot();
 
     expect(result).toEqual(mockSnapshot);
-    expect(mockSnapshotModel.create).toHaveBeenCalledWith(expect.objectContaining({
-      totalBalance: "1500",
-      dailyVolume: "200.00",
-    }));
+    expect(mockSnapshotModel.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        totalBalance: "1500",
+        dailyVolume: "200.00",
+      }),
+    );
     expect(mockEmailService.sendManagementSummary).toHaveBeenCalled();
   });
 
@@ -61,7 +63,9 @@ describe("SnapshotService", () => {
     // Mock today's data
     mockQueryRead.mockResolvedValueOnce({ rows: [{ balance: "1200.00" }] });
     mockQueryRead.mockResolvedValueOnce({ rows: [{ balance: "600.00" }] });
-    mockQueryRead.mockResolvedValueOnce({ rows: [{ volume: "300.00", count: 10 }] });
+    mockQueryRead.mockResolvedValueOnce({
+      rows: [{ volume: "300.00", count: 10 }],
+    });
 
     const mockSnapshot = {
       snapshotDate: "2026-04-24",
@@ -92,7 +96,7 @@ describe("SnapshotService", () => {
       {
         volumeGrowth: 50, // (300 - 200) / 200 * 100
         balanceGrowth: 20, // (1800 - 1500) / 1500 * 100
-      }
+      },
     );
   });
 });

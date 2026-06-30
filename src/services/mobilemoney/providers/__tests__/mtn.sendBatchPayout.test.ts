@@ -7,8 +7,6 @@ jest.mock("axios");
 const axiosMock = axios as any;
 
 describe("MTNProvider.sendBatchPayout", () => {
-
-
   beforeEach(() => {
     jest.resetAllMocks();
     process.env = { ...env };
@@ -215,4 +213,3 @@ describe("MTNProvider.sendBatchPayout", () => {
     ]);
   });
 });
-

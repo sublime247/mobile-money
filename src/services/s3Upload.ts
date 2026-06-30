@@ -5,7 +5,11 @@ import { PutObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import crypto from "crypto";
 import { getS3Client, s3Config, getS3ObjectUrl } from "../config/s3";
 import { generateUniqueFilename, generateS3Key } from "../middleware/upload";
-import { KmsFileSigner, createFileSignerFromEnv, FileSignature } from "./stellar/hsmService";
+import {
+  KmsFileSigner,
+  createFileSignerFromEnv,
+  FileSignature,
+} from "./stellar/hsmService";
 
 const DEV_UPLOAD_DIR = path.join(process.cwd(), "uploads", "kyc-dev");
 
@@ -51,7 +55,10 @@ export const uploadToS3 = async (
       fs.mkdirSync(DEV_UPLOAD_DIR, { recursive: true });
       const localPath = path.join(DEV_UPLOAD_DIR, maskedFilename);
       fs.writeFileSync(localPath, file.buffer);
-      logger.info({ userId, localPath }, "KYC file saved to local disk (dev mode)");
+      logger.info(
+        { userId, localPath },
+        "KYC file saved to local disk (dev mode)",
+      );
       return {
         success: true,
         fileUrl: `file://${localPath}`,
@@ -96,8 +103,8 @@ export const uploadToS3 = async (
     // Prepare upload command
     // Generate a random 256-bit (32-byte) key for SSE-C encryption
     const sseKey = crypto.randomBytes(32);
-    const sseKeyBase64 = sseKey.toString('base64');
-    const sseKeyMD5 = crypto.createHash('md5').update(sseKey).digest('base64');
+    const sseKeyBase64 = sseKey.toString("base64");
+    const sseKeyMD5 = crypto.createHash("md5").update(sseKey).digest("base64");
 
     const command = new PutObjectCommand({
       Bucket: s3Config.bucket,
@@ -110,7 +117,7 @@ export const uploadToS3 = async (
         uploadedAt: new Date().toISOString(),
         ...metadata,
       },
-      SSECustomerAlgorithm: 'AES256',
+      SSECustomerAlgorithm: "AES256",
       SSECustomerKey: sseKeyBase64,
       SSECustomerKeyMD5: sseKeyMD5,
       // Set appropriate ACL (private by default)

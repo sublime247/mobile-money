@@ -17,10 +17,15 @@ const federationQuerySchema = z.object({
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function sha256(value: string): string {
-  return crypto.createHash("sha256").update(value.toLowerCase().trim()).digest("hex");
+  return crypto
+    .createHash("sha256")
+    .update(value.toLowerCase().trim())
+    .digest("hex");
 }
 
-function parseFederationAddress(address: string): { localPart: string; domain: string } | null {
+function parseFederationAddress(
+  address: string,
+): { localPart: string; domain: string } | null {
   if (!address || typeof address !== "string") return null;
   const parts = address.split("*");
   if (parts.length !== 2) return null;
@@ -32,11 +37,18 @@ function parseFederationAddress(address: string): { localPart: string; domain: s
 export class FederationService {
   constructor(private db: Pool) {}
 
-  async lookupByName(address: string): Promise<{ stellar_address: string; account_id: string; memo_type?: string; memo?: string } | null> {
+  async lookupByName(address: string): Promise<{
+    stellar_address: string;
+    account_id: string;
+    memo_type?: string;
+    memo?: string;
+  } | null> {
     const parsed = parseFederationAddress(address);
     if (!parsed) return null;
 
-    const domain = (process.env.STELLAR_FEDERATION_DOMAIN || "mobilemoney.com").toLowerCase().trim();
+    const domain = (process.env.STELLAR_FEDERATION_DOMAIN || "mobilemoney.com")
+      .toLowerCase()
+      .trim();
     if (parsed.domain.toLowerCase().trim() !== domain) {
       return null;
     }
@@ -47,7 +59,7 @@ export class FederationService {
     try {
       const usernameRes = await this.db.query(
         "SELECT id, stellar_address, username, phone_hash, email_hash FROM users WHERE LOWER(username) = $1",
-        [localPart.toLowerCase().trim()]
+        [localPart.toLowerCase().trim()],
       );
       if (usernameRes.rows.length > 0) {
         const row = usernameRes.rows[0];
@@ -65,7 +77,7 @@ export class FederationService {
     try {
       const phoneRes = await this.db.query(
         "SELECT id, stellar_address, username, phone_hash, email_hash FROM users WHERE phone_hash = $1",
-        [hashed]
+        [hashed],
       );
       if (phoneRes.rows.length > 0) {
         const row = phoneRes.rows[0];
@@ -82,7 +94,7 @@ export class FederationService {
     try {
       const emailRes = await this.db.query(
         "SELECT id, stellar_address, username, phone_hash, email_hash FROM users WHERE email_hash = $1",
-        [hashed]
+        [hashed],
       );
       if (emailRes.rows.length > 0) {
         const row = emailRes.rows[0];
@@ -98,12 +110,19 @@ export class FederationService {
     return null;
   }
 
-  async lookupById(accountId: string): Promise<{ stellar_address: string; account_id: string; memo_type?: string; memo?: string } | null> {
-    const domain = (process.env.STELLAR_FEDERATION_DOMAIN || "mobilemoney.com").toLowerCase().trim();
+  async lookupById(accountId: string): Promise<{
+    stellar_address: string;
+    account_id: string;
+    memo_type?: string;
+    memo?: string;
+  } | null> {
+    const domain = (process.env.STELLAR_FEDERATION_DOMAIN || "mobilemoney.com")
+      .toLowerCase()
+      .trim();
     try {
       const res = await this.db.query(
         "SELECT id, stellar_address, username, phone_hash, email_hash FROM users WHERE stellar_address = $1",
-        [accountId]
+        [accountId],
       );
       if (res.rows.length > 0) {
         const row = res.rows[0];
@@ -135,7 +154,9 @@ export function createFederationRouter(db: Pool): Router {
     const { q, type } = parsed.data;
 
     if (type === "txid" || type === "forward") {
-      return res.status(501).json({ detail: `Lookup type '${type}' not implemented` });
+      return res
+        .status(501)
+        .json({ detail: `Lookup type '${type}' not implemented` });
     }
 
     if (type === "name") {
@@ -168,6 +189,6 @@ export function buildStellarToml(): string {
 
   return [
     `FEDERATION_SERVER="https://${domain}/federation"`,
-    `NETWORK_PASSPHRASE="${passphrase}"`
+    `NETWORK_PASSPHRASE="${passphrase}"`,
   ].join("\n");
 }

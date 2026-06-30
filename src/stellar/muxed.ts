@@ -145,7 +145,7 @@ export function routePayment(destinationAddress: string): {
 
 /**
  * Resolve any Stellar address (G- or M-) to its base G-address.
- * 
+ *
  * - For G-addresses, returns the address unchanged.
  * - For M-addresses, extracts and returns the underlying G-address.
  * - Throws an Error if the address is invalid.

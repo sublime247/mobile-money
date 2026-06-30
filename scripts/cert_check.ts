@@ -39,19 +39,29 @@ function parseArgs(): CheckOptions {
       thresholdDays = parseInt(args[i + 1], 10);
       i++;
     } else if (args[i] === "--domains" && args[i + 1]) {
-      domains = args[i + 1].split(",").map((d) => d.trim()).filter(Boolean);
+      domains = args[i + 1]
+        .split(",")
+        .map((d) => d.trim())
+        .filter(Boolean);
       i++;
     }
   }
 
   // Environment variable override
   if (domains.length === 0 && process.env.CERT_CHECK_DOMAINS) {
-    domains = process.env.CERT_CHECK_DOMAINS.split(",").map((d) => d.trim()).filter(Boolean);
+    domains = process.env.CERT_CHECK_DOMAINS.split(",")
+      .map((d) => d.trim())
+      .filter(Boolean);
   }
 
   // Fall back to config file
   if (domains.length === 0) {
-    const configPath = path.resolve(__dirname, "..", "config", "cert_domains.json");
+    const configPath = path.resolve(
+      __dirname,
+      "..",
+      "config",
+      "cert_domains.json",
+    );
     if (fs.existsSync(configPath)) {
       try {
         const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
@@ -64,7 +74,9 @@ function parseArgs(): CheckOptions {
   }
 
   if (domains.length === 0) {
-    console.error("[cert-check] No domains configured. Provide via --domains, CERT_CHECK_DOMAINS env, or config/cert_domains.json.");
+    console.error(
+      "[cert-check] No domains configured. Provide via --domains, CERT_CHECK_DOMAINS env, or config/cert_domains.json.",
+    );
     process.exit(2);
   }
 
@@ -87,7 +99,10 @@ interface CertResult {
   error: string | null;
 }
 
-function checkCertificate(domain: string, timeoutMs = 10_000): Promise<CertResult> {
+function checkCertificate(
+  domain: string,
+  timeoutMs = 10_000,
+): Promise<CertResult> {
   return new Promise((resolve) => {
     const [host, portStr] = domain.split(":");
     const port = parseInt(portStr || "443", 10);
@@ -121,7 +136,9 @@ function checkCertificate(domain: string, timeoutMs = 10_000): Promise<CertResul
         const daysRemaining = Math.floor(msRemaining / (1000 * 60 * 60 * 24));
 
         const issuerOrg: string = cert.issuer
-          ? String(cert.issuer.O || cert.issuer.CN || JSON.stringify(cert.issuer))
+          ? String(
+              cert.issuer.O || cert.issuer.CN || JSON.stringify(cert.issuer),
+            )
           : "Unknown";
 
         socket.destroy();
@@ -181,27 +198,37 @@ async function main(): Promise<void> {
     if (result.error) {
       console.log(`  ❌  ${domain}`);
       console.log(`      Error: ${result.error}\n`);
-    } else if (result.daysRemaining !== null && result.daysRemaining <= thresholdDays) {
+    } else if (
+      result.daysRemaining !== null &&
+      result.daysRemaining <= thresholdDays
+    ) {
       console.log(`  ⚠️  ${domain}`);
-      console.log(`      Expires: ${result.expiresAt}  (${result.daysRemaining} days remaining)`);
+      console.log(
+        `      Expires: ${result.expiresAt}  (${result.daysRemaining} days remaining)`,
+      );
       console.log(`      Issuer:  ${result.issuer}\n`);
     } else {
       console.log(`  ✅  ${domain}`);
-      console.log(`      Expires: ${result.expiresAt}  (${result.daysRemaining} days remaining)`);
+      console.log(
+        `      Expires: ${result.expiresAt}  (${result.daysRemaining} days remaining)`,
+      );
       console.log(`      Issuer:  ${result.issuer}\n`);
     }
   }
 
   // Summary
   const expiring = results.filter(
-    (r) => r.error || (r.daysRemaining !== null && r.daysRemaining <= thresholdDays),
+    (r) =>
+      r.error || (r.daysRemaining !== null && r.daysRemaining <= thresholdDays),
   );
 
   if (expiring.length > 0) {
     console.log(`\n🚨 ${expiring.length} domain(s) need attention!\n`);
     process.exit(1);
   } else {
-    console.log(`\n✅ All ${results.length} certificates are valid for > ${thresholdDays} days.\n`);
+    console.log(
+      `\n✅ All ${results.length} certificates are valid for > ${thresholdDays} days.\n`,
+    );
     process.exit(0);
   }
 }

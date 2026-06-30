@@ -18,7 +18,7 @@ const BN = ORDER.constructor as any;
 
 export interface RangeProof {
   bitCommitments: string[]; // hex commitments
-  bitProofs: any[];         // BitProof objects
+  bitProofs: any[]; // BitProof objects
 }
 
 /**
@@ -31,7 +31,7 @@ export function proveRange(
   opening: Opening,
   threshold: bigint,
   k = 8,
-  params: ZkParams = DEFAULT_PARAMS
+  params: ZkParams = DEFAULT_PARAMS,
 ): RangeProof {
   const value = opening.value;
   if (value < threshold) {
@@ -58,7 +58,7 @@ export function proveRange(
     // Generate random scalar
     const ri = ec.genKeyPair().getPrivate();
     rBits.push(ri);
-    
+
     // sumR = sumR + ri * 2^i mod ORDER
     const factor = two.pow(new BN(i));
     sumR = sumR.add(ri.mul(factor)).umod(ORDER);
@@ -78,7 +78,7 @@ export function proveRange(
     const { commitment: bitCommit, proof: bitPrf } = proveBit(
       bits[i],
       BigInt("0x" + rBits[i].toString(16)),
-      params
+      params,
     );
     bitCommitments.push(bitCommit.hex);
     bitProofs.push(bitPrf);
@@ -98,7 +98,7 @@ export function verifyRange(
   proof: RangeProof,
   threshold: bigint,
   k = 8,
-  params: ZkParams = DEFAULT_PARAMS
+  params: ZkParams = DEFAULT_PARAMS,
 ): boolean {
   try {
     if (proof.bitCommitments.length !== k || proof.bitProofs.length !== k) {
@@ -148,7 +148,7 @@ export function verifyRange(
 export function signCommitment(
   privateKeyHex: string,
   commitmentHex: string,
-  attributeType: string
+  attributeType: string,
 ): string {
   const key = ec.keyFromPrivate(privateKeyHex, "hex");
   const msg = `${commitmentHex}:${attributeType}`;
@@ -164,7 +164,7 @@ export function verifyCommitmentSignature(
   publicKeyHex: string,
   commitmentHex: string,
   attributeType: string,
-  signatureHex: string
+  signatureHex: string,
 ): boolean {
   try {
     const key = ec.keyFromPublic(publicKeyHex, "hex");

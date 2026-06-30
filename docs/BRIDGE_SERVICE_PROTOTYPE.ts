@@ -1,22 +1,22 @@
 // src/services/bridge/bridgeService.ts
 // Bridge Service Prototype - Core orchestrator
 
-import { BigNumber } from 'ethers';
-import { Asset, Keypair, Network, Server } from 'stellar-sdk';
-import logger from '../../logger';
-import { BridgeTransaction, BridgeTransactionStatus } from './types';
-import { StellarLockService } from './stellarLockService';
-import { EVMMintService } from './evmMintService';
-import { ValidatorService } from './validatorService';
-import { ComplianceService } from './complianceService';
-import { BridgeMonitorService } from './bridgeMonitorService';
+import { BigNumber } from "ethers";
+import { Asset, Keypair, Network, Server } from "stellar-sdk";
+import logger from "../../logger";
+import { BridgeTransaction, BridgeTransactionStatus } from "./types";
+import { StellarLockService } from "./stellarLockService";
+import { EVMMintService } from "./evmMintService";
+import { ValidatorService } from "./validatorService";
+import { ComplianceService } from "./complianceService";
+import { BridgeMonitorService } from "./bridgeMonitorService";
 
 export interface LockRequest {
   userId: string;
   amount: BigNumber;
   assetCode: string;
-  sourceChain: 'stellar' | 'ethereum' | 'polygon';
-  targetChain: 'stellar' | 'ethereum' | 'polygon';
+  sourceChain: "stellar" | "ethereum" | "polygon";
+  targetChain: "stellar" | "ethereum" | "polygon";
   evmRecipient?: string;
   memo?: string;
 }
@@ -63,7 +63,7 @@ export class BridgeService {
       const limitCheck = await this.compliance.checkTransactionLimits(
         request.userId,
         request.amount,
-        kycResult.tier
+        kycResult.tier,
       );
       if (!limitCheck.allowed) {
         throw new Error(`Transaction exceeds limits: ${limitCheck.reason}`);
@@ -84,14 +84,14 @@ export class BridgeService {
         targetChain: request.targetChain,
         assetCode: request.assetCode,
         amount: request.amount,
-        status: 'kyc_verified',
-        evmRecipientAddress: request.evmRecipient || '',
+        status: "kyc_verified",
+        evmRecipientAddress: request.evmRecipient || "",
         createdAt: new Date(),
         updatedAt: new Date(),
         validatorSignatures: [],
         consensusRatio: 0,
         feeAmount: this.calculateFee(request.amount),
-        feePercent: Number(process.env.BRIDGE_FEE_PERCENT) || 0.5
+        feePercent: Number(process.env.BRIDGE_FEE_PERCENT) || 0.5,
       });
 
       // 5. Lock asset on Stellar
@@ -101,17 +101,17 @@ export class BridgeService {
         amount: request.amount,
         assetCode: request.assetCode,
         memo: txId,
-        escrowAccount: process.env.STELLAR_BRIDGE_ESCROW_KEY!
+        escrowAccount: process.env.STELLAR_BRIDGE_ESCROW_KEY!,
       });
 
       // Update transaction with lock details
       await this.updateBridgeTransaction(txId, {
-        status: 'stellar_locked',
+        status: "stellar_locked",
         stellarLockTxHash: lockResult.transactionHash,
         metadata: {
           lockTimestamp: new Date(),
-          escrowAccount: lockResult.escrowAccount
-        }
+          escrowAccount: lockResult.escrowAccount,
+        },
       });
 
       // 6. Initiate validator consensus collection
@@ -122,23 +122,27 @@ export class BridgeService {
         targetChain: request.targetChain,
         amount: request.amount,
         assetCode: request.assetCode,
-        recipient: request.evmRecipient || '',
-        stellarTxHash: lockResult.transactionHash
+        recipient: request.evmRecipient || "",
+        stellarTxHash: lockResult.transactionHash,
       });
 
       // Update with validator consensus
       await this.updateBridgeTransaction(txId, {
-        status: 'validator_consensus',
+        status: "validator_consensus",
         validatorSignatures: consensusResult.signatures,
-        consensusRatio: consensusResult.ratio
+        consensusRatio: consensusResult.ratio,
       });
 
       // 7. If consensus reached, mint on EVM
       if (consensusResult.consensusReached) {
-        logger.debug(`[Bridge:${txId}] Consensus reached, initiating EVM mint...`);
+        logger.debug(
+          `[Bridge:${txId}] Consensus reached, initiating EVM mint...`,
+        );
         await this.processMint(txId, consensusResult.signatures);
       } else {
-        logger.warn(`[Bridge:${txId}] Consensus not yet reached, awaiting more signatures`);
+        logger.warn(
+          `[Bridge:${txId}] Consensus not yet reached, awaiting more signatures`,
+        );
       }
 
       // 8. Start monitoring
@@ -149,8 +153,8 @@ export class BridgeService {
     } catch (error) {
       logger.error(`[Bridge:${txId}] lock failed:`, error);
       await this.updateBridgeTransaction(txId, {
-        status: 'failed',
-        metadata: { error: (error as Error).message }
+        status: "failed",
+        metadata: { error: (error as Error).message },
       });
       throw error;
     }
@@ -166,15 +170,15 @@ export class BridgeService {
     try {
       // 1. Verify original transaction
       const originalTx = await this.getTransaction(request.bridgeTxId);
-      if (originalTx.status !== 'completed') {
-        throw new Error('Original transaction not in completed state');
+      if (originalTx.status !== "completed") {
+        throw new Error("Original transaction not in completed state");
       }
 
       // 2. Burn wrapped token on EVM
       const burnResult = await this.evmMint.burn({
         bridgeTxId: request.bridgeTxId,
         amount: originalTx.amount,
-        txHash: request.evmTxHash
+        txHash: request.evmTxHash,
       });
 
       // 3. Unlock on Stellar
@@ -182,7 +186,7 @@ export class BridgeService {
         bridgeTxId: request.bridgeTxId,
         userId: originalTx.userId,
         amount: originalTx.amount,
-        assetCode: originalTx.assetCode
+        assetCode: originalTx.assetCode,
       });
 
       logger.info(`[Bridge:${txId}] Redemption completed`);
@@ -196,33 +200,30 @@ export class BridgeService {
   /**
    * Process minting after validator consensus
    */
-  private async processMint(
-    txId: string, 
-    signatures: any[]
-  ): Promise<void> {
+  private async processMint(txId: string, signatures: any[]): Promise<void> {
     try {
       const tx = await this.getTransaction(txId);
-      
+
       const mintResult = await this.evmMint.mint({
         bridgeTxId: txId,
         recipient: tx.evmRecipientAddress,
         amount: tx.amount,
         assetCode: tx.assetCode,
-        signatures: signatures
+        signatures: signatures,
       });
 
       await this.updateBridgeTransaction(txId, {
-        status: 'evm_minted',
+        status: "evm_minted",
         evmMintTxHash: mintResult.transactionHash,
         metadata: {
           mintTimestamp: new Date(),
-          gasUsed: mintResult.gasUsed
-        }
+          gasUsed: mintResult.gasUsed,
+        },
       });
 
       // Mark as completed
       await this.updateBridgeTransaction(txId, {
-        status: 'completed'
+        status: "completed",
       });
 
       logger.info(`[Bridge:${txId}] Mint completed successfully`);
@@ -243,14 +244,14 @@ export class BridgeService {
     const tx = await this.getTransaction(txId);
 
     const progressMap = {
-      'initiated': 10,
-      'kyc_verified': 20,
-      'stellar_locked': 40,
-      'validator_consensus': 60,
-      'evm_minted': 80,
-      'completed': 100,
-      'failed': 0,
-      'reversed': 0
+      initiated: 10,
+      kyc_verified: 20,
+      stellar_locked: 40,
+      validator_consensus: 60,
+      evm_minted: 80,
+      completed: 100,
+      failed: 0,
+      reversed: 0,
     };
 
     return {
@@ -263,8 +264,8 @@ export class BridgeService {
         stellarTxHash: tx.stellarLockTxHash,
         evmTxHash: tx.evmMintTxHash,
         validatorSignatures: tx.validatorSignatures?.length || 0,
-        createdAt: tx.createdAt
-      }
+        createdAt: tx.createdAt,
+      },
     };
   }
 
@@ -282,7 +283,7 @@ export class BridgeService {
   async getQuote(sourceChain: string, targetChain: string, amount: BigNumber) {
     const feePercent = Number(process.env.BRIDGE_FEE_PERCENT) || 0.5;
     const feeAmount = amount.mul(feePercent).div(100);
-    
+
     return {
       sourceChain,
       targetChain,
@@ -290,23 +291,25 @@ export class BridgeService {
       amountOut: amount.sub(feeAmount).toString(),
       fee: feeAmount.toString(),
       feePercent,
-      exchangeRate: '1.0',
-      estimatedTime: '5 minutes',
-      validUntil: new Date(Date.now() + 60000)
+      exchangeRate: "1.0",
+      estimatedTime: "5 minutes",
+      validUntil: new Date(Date.now() + 60000),
     };
   }
 
   // ========== Private Helper Methods ==========
 
-  private async createBridgeTransaction(tx: BridgeTransaction): Promise<BridgeTransaction> {
+  private async createBridgeTransaction(
+    tx: BridgeTransaction,
+  ): Promise<BridgeTransaction> {
     // TODO: Implement database insert
-    logger.debug('[Bridge] Creating transaction record:', tx);
+    logger.debug("[Bridge] Creating transaction record:", tx);
     return tx;
   }
 
   private async updateBridgeTransaction(
     txId: string,
-    updates: Partial<BridgeTransaction>
+    updates: Partial<BridgeTransaction>,
   ): Promise<void> {
     // TODO: Implement database update
     logger.debug(`[Bridge:${txId}] Updating transaction:`, updates);
@@ -314,7 +317,7 @@ export class BridgeService {
 
   private async getTransaction(txId: string): Promise<BridgeTransaction> {
     // TODO: Implement database query
-    throw new Error('Not implemented');
+    throw new Error("Not implemented");
   }
 
   private calculateFee(amount: BigNumber): BigNumber {

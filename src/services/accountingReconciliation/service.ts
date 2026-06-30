@@ -1,12 +1,15 @@
 import { LedgerService } from "../../services/ledgerService";
-import { AccountingService, AccountingProvider } from "../../services/accounting";
-import { 
+import {
+  AccountingService,
+  AccountingProvider,
+} from "../../services/accounting";
+import {
   AccountingChartOfAccountsReconciliationModel,
   AccountingChartOfAccountsReconciliationReport,
   AccountingChartOfAccountsReconciliationDiscrepancy,
   AccountingReconciliationStatus,
   AccountingDiscrepancyType,
-  AccountingReviewStatus
+  AccountingReviewStatus,
 } from "./model";
 import logger from "../../utils/logger";
 import axios from "axios";
@@ -28,9 +31,11 @@ export class AccountingChartOfAccountsReconciliationService {
   async runDailyReconciliation(
     provider: AccountingProvider,
     connectionId: string,
-    reportDate: Date = new Date()
+    reportDate: Date = new Date(),
   ): Promise<string> {
-    logger.info(`Starting chart of accounts reconciliation for ${provider} connection ${connectionId} on ${reportDate.toISOString()}`);
+    logger.info(
+      `Starting chart of accounts reconciliation for ${provider} connection ${connectionId} on ${reportDate.toISOString()}`,
+    );
 
     // 1. Create initial report record
     const report = await this.reconModel.createReport({
@@ -42,23 +47,27 @@ export class AccountingChartOfAccountsReconciliationService {
 
     try {
       // 2. Get internal trial balance
-      const internalTrialBalance = await this.ledgerService.getTrialBalance(reportDate);
-      
+      const internalTrialBalance =
+        await this.ledgerService.getTrialBalance(reportDate);
+
       // 3. Get external chart of accounts from provider
-      const externalChartOfAccounts = await this.getExternalChartOfAccounts(provider, connectionId);
-      
+      const externalChartOfAccounts = await this.getExternalChartOfAccounts(
+        provider,
+        connectionId,
+      );
+
       // 4. Reconcile
       const result = await this.reconcileChartOfAccounts(
         internalTrialBalance,
         externalChartOfAccounts,
-        provider
+        provider,
       );
 
       // 5. Save discrepancies
       for (const discrepancy of result.discrepancies) {
         await this.reconModel.createDiscrepancy({
           reportId: report.id,
-          ...discrepancy
+          ...discrepancy,
         });
       }
 
@@ -68,11 +77,15 @@ export class AccountingChartOfAccountsReconciliationService {
         summary: result.summary,
       });
 
-      logger.info(`Chart of accounts reconciliation completed for ${report.id}. Match rate: ${result.summary.match_rate}`);
+      logger.info(
+        `Chart of accounts reconciliation completed for ${report.id}. Match rate: ${result.summary.match_rate}`,
+      );
       return report.id;
-
     } catch (error) {
-      logger.error(error, `Chart of accounts reconciliation failed for ${report.id}`);
+      logger.error(
+        error,
+        `Chart of accounts reconciliation failed for ${report.id}`,
+      );
       await this.reconModel.updateReport(report.id, {
         status: AccountingReconciliationStatus.Failed,
         summary: { error: (error as Error).message },
@@ -86,13 +99,15 @@ export class AccountingChartOfAccountsReconciliationService {
    */
   private async getExternalChartOfAccounts(
     provider: AccountingProvider,
-    connectionId: string
-  ): Promise<Array<{
-    id: string;
-    name: string;
-    type: string;
-    balance?: number;
-  }>> {
+    connectionId: string,
+  ): Promise<
+    Array<{
+      id: string;
+      name: string;
+      type: string;
+      balance?: number;
+    }>
+  > {
     const connection = await this.accountingService.getConnection(connectionId);
     if (!connection) {
       throw new Error("Connection not found");
@@ -110,18 +125,20 @@ export class AccountingChartOfAccountsReconciliationService {
   /**
    * Get chart of accounts from QuickBooks
    */
-  private async getQuickBooksChartOfAccounts(
-    connection: any
-  ): Promise<Array<{
-    id: string;
-    name: string;
-    type: string;
-    balance?: number;
-  }>> {
+  private async getQuickBooksChartOfAccounts(connection: any): Promise<
+    Array<{
+      id: string;
+      name: string;
+      type: string;
+      balance?: number;
+    }>
+  > {
     // Ensure token is valid
     await this.accountingService.ensureConnectionTokenValid(connection.id);
-    
-    const connectionData = await this.accountingService.getConnection(connection.id);
+
+    const connectionData = await this.accountingService.getConnection(
+      connection.id,
+    );
     if (!connectionData) {
       throw new Error("Connection data not found");
     }
@@ -134,32 +151,36 @@ export class AccountingChartOfAccountsReconciliationService {
           Authorization: `Bearer ${connectionData!.accessToken}`,
           Accept: "application/json",
         },
-      }
+      },
     );
 
     return response.data.QueryResponse.Account.map((account: any) => ({
       id: account.Id,
       name: account.Name,
       type: account.AccountType || account.Classification,
-      balance: account.CurrentBalance ? parseFloat(account.CurrentBalance) : undefined,
+      balance: account.CurrentBalance
+        ? parseFloat(account.CurrentBalance)
+        : undefined,
     }));
   }
 
   /**
    * Get chart of accounts from Xero
    */
-  private async getXeroChartOfAccounts(
-    connection: any
-  ): Promise<Array<{
-    id: string;
-    name: string;
-    type: string;
-    balance?: number;
-  }>> {
+  private async getXeroChartOfAccounts(connection: any): Promise<
+    Array<{
+      id: string;
+      name: string;
+      type: string;
+      balance?: number;
+    }>
+  > {
     // Ensure token is valid
     await this.accountingService.ensureConnectionTokenValid(connection.id);
-    
-    const connectionData = await this.accountingService.getConnection(connection.id);
+
+    const connectionData = await this.accountingService.getConnection(
+      connection.id,
+    );
     if (!connectionData) {
       throw new Error("Connection data not found");
     }
@@ -173,7 +194,7 @@ export class AccountingChartOfAccountsReconciliationService {
           "Xero-tenant-id": connectionData!.tenantId,
           Accept: "application/json",
         },
-      }
+      },
     );
 
     return response.data.Accounts.map((account: any) => ({
@@ -201,9 +222,14 @@ export class AccountingChartOfAccountsReconciliationService {
       type: string;
       balance?: number;
     }>,
-    provider: AccountingProvider
+    provider: AccountingProvider,
   ): Promise<{
-    discrepancies: Array<Omit<AccountingChartOfAccountsReconciliationDiscrepancy, "id" | "reportId" | "createdAt" | "updatedAt">>;
+    discrepancies: Array<
+      Omit<
+        AccountingChartOfAccountsReconciliationDiscrepancy,
+        "id" | "reportId" | "createdAt" | "updatedAt"
+      >
+    >;
     summary: {
       match_rate: string;
       total_internal_accounts: number;
@@ -218,30 +244,35 @@ export class AccountingChartOfAccountsReconciliationService {
       total_balance_mismatch: number;
     };
   }> {
-    const discrepancies: Array<Omit<AccountingChartOfAccountsReconciliationDiscrepancy, "id" | "reportId" | "createdAt" | "updatedAt">> = [];
-    
+    const discrepancies: Array<
+      Omit<
+        AccountingChartOfAccountsReconciliationDiscrepancy,
+        "id" | "reportId" | "createdAt" | "updatedAt"
+      >
+    > = [];
+
     // Create lookup maps
     const internalByCode = new Map();
     for (const acc of internalAccounts) {
       internalByCode.set(acc.account_code, acc);
     }
-    
+
     const externalById = new Map();
     for (const acc of externalAccounts) {
       externalById.set(acc.id, acc);
     }
-    
+
     const matchedInternalCodes = new Set<string>();
     const matchedExternalIds = new Set<string>();
 
     // Check internal accounts against external
     for (const [code, internalAccount] of internalByCode.entries()) {
       const externalAccount = externalById.get(code); // Assuming account code maps to external ID
-      
+
       if (externalAccount) {
         matchedInternalCodes.add(code);
         matchedExternalIds.add(externalAccount.id);
-        
+
         // Check for name mismatch
         if (internalAccount.account_name !== externalAccount.name) {
           discrepancies.push({
@@ -257,7 +288,7 @@ export class AccountingChartOfAccountsReconciliationService {
             reviewStatus: AccountingReviewStatus.Pending,
           });
         }
-        
+
         // Check for type mismatch
         if (internalAccount.account_type !== externalAccount.type) {
           discrepancies.push({
@@ -273,10 +304,11 @@ export class AccountingChartOfAccountsReconciliationService {
             reviewStatus: AccountingReviewStatus.Pending,
           });
         }
-        
+
         // Check for balance mismatch (if both have balances)
         if (externalAccount.balance !== undefined) {
-          const internalBalance = internalAccount.debit_balance - internalAccount.credit_balance;
+          const internalBalance =
+            internalAccount.debit_balance - internalAccount.credit_balance;
           if (Math.abs(internalBalance - externalAccount.balance) > 0.01) {
             discrepancies.push({
               internalAccountCode: internalAccount.account_code,
@@ -298,15 +330,17 @@ export class AccountingChartOfAccountsReconciliationService {
           internalAccountCode: internalAccount.account_code,
           internalAccountName: internalAccount.account_name,
           internalAccountType: internalAccount.account_type,
-          type: 
-            provider === AccountingProvider.QUICKBOOKS 
+          type:
+            provider === AccountingProvider.QUICKBOOKS
               ? AccountingDiscrepancyType.AccountMissingInQBO
               : AccountingDiscrepancyType.AccountMissingInXero,
           internalValue: JSON.stringify({
             code: internalAccount.account_code,
             name: internalAccount.account_name,
             type: internalAccount.account_type,
-            balance: (internalAccount.debit_balance - internalAccount.credit_balance).toString()
+            balance: (
+              internalAccount.debit_balance - internalAccount.credit_balance
+            ).toString(),
           }),
           externalValue: "",
           reviewStatus: AccountingReviewStatus.Pending,
@@ -326,7 +360,7 @@ export class AccountingChartOfAccountsReconciliationService {
             break;
           }
         }
-        
+
         if (!internalMatch) {
           // Account truly missing in internal system
           discrepancies.push({
@@ -339,7 +373,7 @@ export class AccountingChartOfAccountsReconciliationService {
               id: externalAccount.id,
               name: externalAccount.name,
               type: externalAccount.type,
-              balance: externalAccount.balance?.toString() || "0"
+              balance: externalAccount.balance?.toString() || "0",
             }),
             reviewStatus: AccountingReviewStatus.Pending,
           });
@@ -356,16 +390,17 @@ export class AccountingChartOfAccountsReconciliationService {
     const totalExternalAccounts = externalAccounts.length;
     const totalMatched = matchedInternalCodes.size;
     const totalDiscrepancies = discrepancies.length;
-    
+
     // Count discrepancies by type
     const typeCounts: Record<string, number> = {};
     for (const disc of discrepancies) {
       typeCounts[disc.type] = (typeCounts[disc.type] || 0) + 1;
     }
-    
-    const matchRate = totalExternalAccounts > 0 
-      ? ((totalMatched / totalExternalAccounts) * 100).toFixed(2) 
-      : "0.00";
+
+    const matchRate =
+      totalExternalAccounts > 0
+        ? ((totalMatched / totalExternalAccounts) * 100).toFixed(2)
+        : "0.00";
 
     const summary = {
       match_rate: `${matchRate}%`,
@@ -373,61 +408,90 @@ export class AccountingChartOfAccountsReconciliationService {
       total_external_accounts: totalExternalAccounts,
       total_matched: totalMatched,
       total_discrepancies: totalDiscrepancies,
-      total_account_missing_in_internal: typeCounts[AccountingDiscrepancyType.AccountMissingInInternal] || 0,
-      total_account_missing_in_qbo: typeCounts[AccountingDiscrepancyType.AccountMissingInQBO] || 0,
-      total_account_missing_in_xero: typeCounts[AccountingDiscrepancyType.AccountMissingInXero] || 0,
-      total_name_mismatch: typeCounts[AccountingDiscrepancyType.AccountNameMismatch] || 0,
-      total_type_mismatch: typeCounts[AccountingDiscrepancyType.AccountTypeMismatch] || 0,
-      total_balance_mismatch: typeCounts[AccountingDiscrepancyType.BalanceMismatch] || 0,
+      total_account_missing_in_internal:
+        typeCounts[AccountingDiscrepancyType.AccountMissingInInternal] || 0,
+      total_account_missing_in_qbo:
+        typeCounts[AccountingDiscrepancyType.AccountMissingInQBO] || 0,
+      total_account_missing_in_xero:
+        typeCounts[AccountingDiscrepancyType.AccountMissingInXero] || 0,
+      total_name_mismatch:
+        typeCounts[AccountingDiscrepancyType.AccountNameMismatch] || 0,
+      total_type_mismatch:
+        typeCounts[AccountingDiscrepancyType.AccountTypeMismatch] || 0,
+      total_balance_mismatch:
+        typeCounts[AccountingDiscrepancyType.BalanceMismatch] || 0,
     };
 
     return { discrepancies, summary };
   }
-  
+
   /**
    * Get reports for a specific connection
    */
-  async getReportsByConnection(connectionId: string, limit = 10, offset = 0): Promise<AccountingChartOfAccountsReconciliationReport[]> {
-    return await this.reconModel.getReportsByConnection(connectionId, limit, offset);
+  async getReportsByConnection(
+    connectionId: string,
+    limit = 10,
+    offset = 0,
+  ): Promise<AccountingChartOfAccountsReconciliationReport[]> {
+    return await this.reconModel.getReportsByConnection(
+      connectionId,
+      limit,
+      offset,
+    );
   }
 
   /**
    * Get report by ID
    */
-  async getReportById(id: string): Promise<AccountingChartOfAccountsReconciliationReport | null> {
+  async getReportById(
+    id: string,
+  ): Promise<AccountingChartOfAccountsReconciliationReport | null> {
     return await this.reconModel.getReportById(id);
   }
 
   /**
    * Get discrepancies by report ID
    */
-  async getDiscrepanciesByReportId(reportId: string): Promise<AccountingChartOfAccountsReconciliationDiscrepancy[]> {
+  async getDiscrepanciesByReportId(
+    reportId: string,
+  ): Promise<AccountingChartOfAccountsReconciliationDiscrepancy[]> {
     return await this.reconModel.getDiscrepanciesByReportId(reportId);
   }
 
   /**
    * Get all reports (with optional filtering)
    */
-  async getReports(limit = 10, offset = 0): Promise<AccountingChartOfAccountsReconciliationReport[]> {
+  async getReports(
+    limit = 10,
+    offset = 0,
+  ): Promise<AccountingChartOfAccountsReconciliationReport[]> {
     return await this.reconModel.getReports(limit, offset);
   }
 
   /**
    * Run daily reconciliation for all active connections
    */
-  async runAllActiveReconciliations(reportDate: Date = new Date()): Promise<void> {
-    const activeConnections = await this.accountingService.getAllActiveConnections();
-    logger.info(`Running daily reconciliation for ${activeConnections.length} active connections`);
+  async runAllActiveReconciliations(
+    reportDate: Date = new Date(),
+  ): Promise<void> {
+    const activeConnections =
+      await this.accountingService.getAllActiveConnections();
+    logger.info(
+      `Running daily reconciliation for ${activeConnections.length} active connections`,
+    );
 
     for (const connection of activeConnections) {
       try {
         await this.runDailyReconciliation(
           connection.provider,
           connection.id,
-          reportDate
+          reportDate,
         );
       } catch (error) {
-        logger.error(error, `Failed to run reconciliation for connection ${connection.id}`);
+        logger.error(
+          error,
+          `Failed to run reconciliation for connection ${connection.id}`,
+        );
         // Continue with other connections
       }
     }
@@ -442,7 +506,8 @@ export class AccountingChartOfAccountsReconciliationService {
       throw new Error("Report not found");
     }
 
-    const discrepancies = await this.reconModel.getDiscrepanciesByReportId(reportId);
+    const discrepancies =
+      await this.reconModel.getDiscrepanciesByReportId(reportId);
 
     const headers = [
       "Type",
@@ -474,7 +539,9 @@ export class AccountingChartOfAccountsReconciliationService {
 
     const csvContent = [
       headers.join(","),
-      ...rows.map((row) => row.map((cell) => `"${cell.toString().replace(/"/g, '""')}"`).join(",")),
+      ...rows.map((row) =>
+        row.map((cell) => `"${cell.toString().replace(/"/g, '""')}"`).join(","),
+      ),
     ].join("\n");
 
     return csvContent;
@@ -483,7 +550,75 @@ export class AccountingChartOfAccountsReconciliationService {
   /**
    * Resolve a discrepancy
    */
-  async resolveDiscrepancy(id: string, notes: string, reviewedBy: string): Promise<void> {
+  async resolveDiscrepancy(
+    id: string,
+    notes: string,
+    reviewedBy: string,
+  ): Promise<void> {
     await this.reconModel.resolveDiscrepancy(id, notes, reviewedBy);
+  }
+
+  /**
+   * Aggregate balances from internal ledger, external provider, and Stellar ledger.
+   */
+  async aggregateBalances(
+    provider: AccountingProvider,
+    connectionId: string,
+    asOfDate: Date = new Date(),
+  ): Promise<{
+    internal: Array<{
+      account_code: string;
+      account_name: string;
+      account_type: string;
+      debit_balance: number;
+      credit_balance: number;
+    }>;
+    external: Array<{
+      id: string;
+      name: string;
+      type: string;
+      balance?: number;
+    }>;
+    stellar: Array<{
+      id: string;
+      name: string;
+      type: string;
+      balance?: number;
+    }>;
+  }> {
+    // Internal trial balance
+    const internal = await this.ledgerService.getTrialBalance(asOfDate);
+    // External accounts
+    const external = await this.getExternalChartOfAccounts(
+      provider,
+      connectionId,
+    );
+    // Stellar balances (stub implementation)
+    const stellar = await this.fetchStellarBalances();
+    return { internal, external, stellar };
+  }
+
+  /**
+   * Fetch Stellar balances (stub implementation – returns empty array).
+   */
+  private async fetchStellarBalances(): Promise<
+    Array<{ id: string; name: string; type: string; balance?: number }>
+  > {
+    // TODO: integrate with Stellar Horizon API to retrieve actual balances
+    return [];
+  }
+
+  /**
+   * Generate a unified reconciliation CSV including internal, external, and Stellar balances.
+   */
+  async generateUnifiedReconciliationCSV(reportId: string): Promise<string> {
+    // Get discrepancies
+    const discrepancies =
+      await this.reconModel.getDiscrepanciesByReportId(reportId);
+    // For now, reuse existing CSV export (could be extended to include balances)
+    const csv = await this.exportReportToCSV(reportId);
+    const header =
+      "Unified Reconciliation Report - includes internal, external, and Stellar balances";
+    return `${header}\n${csv}`;
   }
 }

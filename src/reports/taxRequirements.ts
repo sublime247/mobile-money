@@ -13,18 +13,18 @@ export const taxRequirements = {
     vatRate: parseRate(process.env.TAX_CMR_VAT, 0.1925), // 19.25% VAT
     transferTaxRate: parseRate(process.env.TAX_CMR_TRANSFER, 0.01), // 1% transfer tax
     formats: ["CSV", "XML"],
-    notes: "Cameroon VAT and transfer tax. CSV/XML required."
+    notes: "Cameroon VAT and transfer tax. CSV/XML required.",
   },
   NGA: {
     vatRate: parseRate(process.env.TAX_NGA_VAT, 0.075), // 7.5% VAT
     transferTaxRate: parseRate(process.env.TAX_NGA_TRANSFER, 0.01), // 1% transfer tax
     formats: ["CSV", "XML"],
-    notes: "Nigeria VAT and transfer tax. CSV/XML required."
+    notes: "Nigeria VAT and transfer tax. CSV/XML required.",
   },
   GHA: {
     vatRate: parseRate(process.env.TAX_GHA_VAT, 0.125), // 12.5% VAT
     transferTaxRate: parseRate(process.env.TAX_GHA_TRANSFER, 0.015), // 1.5% transfer tax
     formats: ["CSV", "XML"],
-    notes: "Ghana VAT and transfer tax. CSV/XML required."
-  }
+    notes: "Ghana VAT and transfer tax. CSV/XML required.",
+  },
 };

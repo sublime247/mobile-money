@@ -1,6 +1,9 @@
 import { FallbackRouter } from "../fallbackRouter";
 import { SmsPortalProvider } from "../smsPortalProvider";
-import { MobileMoneyProvider, ProviderTransactionStatus } from "../../mobileMoneyService";
+import {
+  MobileMoneyProvider,
+  ProviderTransactionStatus,
+} from "../../mobileMoneyService";
 
 jest.mock("../smsPortalSimulator", () => ({
   SmsPortalSimulator: jest.fn().mockImplementation(() => ({
@@ -33,7 +36,10 @@ describe("FallbackRouter", () => {
     process.env.FALLBACK_ROUTER_TIMEOUT_MS = "5000";
     primary = createMockProvider("primary");
     fallback = new SmsPortalProvider();
-    router = new FallbackRouter(primary, fallback, { timeoutMs: 5000, enableMetrics: false });
+    router = new FallbackRouter(primary, fallback, {
+      timeoutMs: 5000,
+      enableMetrics: false,
+    });
   });
 
   afterAll(() => {
@@ -42,7 +48,10 @@ describe("FallbackRouter", () => {
 
   describe("requestPayment", () => {
     it("returns primary result on success", async () => {
-      primary.requestPayment.mockResolvedValue({ success: true, data: { reference: "ref-1" } });
+      primary.requestPayment.mockResolvedValue({
+        success: true,
+        data: { reference: "ref-1" },
+      });
 
       const result = await router.requestPayment("+261700000000", "5000");
 
@@ -52,16 +61,26 @@ describe("FallbackRouter", () => {
 
     it("falls back to SMS portal when primary times out", async () => {
       primary.requestPayment.mockRejectedValue(new Error("ETIMEDOUT"));
-      jest.spyOn(fallback, "requestPayment").mockResolvedValue({ success: true, data: { reference: "fallback-ref" } });
+      jest.spyOn(fallback, "requestPayment").mockResolvedValue({
+        success: true,
+        data: { reference: "fallback-ref" },
+      });
 
       const result = await router.requestPayment("+261700000000", "5000");
 
-      expect(result).toEqual({ success: true, data: { reference: "fallback-ref" } });
+      expect(result).toEqual({
+        success: true,
+        data: { reference: "fallback-ref" },
+      });
     });
 
     it("falls back when primary returns a timeout error code", async () => {
-      primary.requestPayment.mockRejectedValue(Object.assign(new Error("timeout"), { code: "ECONNABORTED" }));
-      jest.spyOn(fallback, "requestPayment").mockResolvedValue({ success: true, data: {} });
+      primary.requestPayment.mockRejectedValue(
+        Object.assign(new Error("timeout"), { code: "ECONNABORTED" }),
+      );
+      jest
+        .spyOn(fallback, "requestPayment")
+        .mockResolvedValue({ success: true, data: {} });
 
       const result = await router.requestPayment("+261700000000", "5000");
 
@@ -70,7 +89,9 @@ describe("FallbackRouter", () => {
 
     it("returns failure when both primary and fallback fail", async () => {
       primary.requestPayment.mockRejectedValue(new Error("ETIMEDOUT"));
-      jest.spyOn(fallback, "requestPayment").mockResolvedValue({ success: false, error: "Fallback failed" });
+      jest
+        .spyOn(fallback, "requestPayment")
+        .mockResolvedValue({ success: false, error: "Fallback failed" });
 
       const result = await router.requestPayment("+261700000000", "5000");
 
@@ -91,7 +112,10 @@ describe("FallbackRouter", () => {
 
   describe("sendPayout", () => {
     it("returns primary result on success", async () => {
-      primary.sendPayout.mockResolvedValue({ success: true, data: { reference: "payout-1" } });
+      primary.sendPayout.mockResolvedValue({
+        success: true,
+        data: { reference: "payout-1" },
+      });
 
       const result = await router.sendPayout("+261700000000", "10000");
 
@@ -100,7 +124,9 @@ describe("FallbackRouter", () => {
 
     it("falls back when primary times out", async () => {
       primary.sendPayout.mockRejectedValue(new Error("timed out"));
-      jest.spyOn(fallback, "sendPayout").mockResolvedValue({ success: true, data: {} });
+      jest
+        .spyOn(fallback, "sendPayout")
+        .mockResolvedValue({ success: true, data: {} });
 
       const result = await router.sendPayout("+261700000000", "10000");
 
@@ -109,7 +135,9 @@ describe("FallbackRouter", () => {
 
     it("returns failure when both primary and fallback fail", async () => {
       primary.sendPayout.mockRejectedValue(new Error("ETIMEDOUT"));
-      jest.spyOn(fallback, "sendPayout").mockResolvedValue({ success: false, error: "Fallback error" });
+      jest
+        .spyOn(fallback, "sendPayout")
+        .mockResolvedValue({ success: false, error: "Fallback error" });
 
       const result = await router.sendPayout("+261700000000", "10000");
 
@@ -128,7 +156,9 @@ describe("FallbackRouter", () => {
 
     it("falls back when primary throws", async () => {
       primary.getTransactionStatus.mockRejectedValue(new Error("timeout"));
-      jest.spyOn(fallback, "getTransactionStatus").mockResolvedValue({ status: "pending" });
+      jest
+        .spyOn(fallback, "getTransactionStatus")
+        .mockResolvedValue({ status: "pending" });
 
       const result = await router.getTransactionStatus("ref-1");
 
@@ -137,7 +167,9 @@ describe("FallbackRouter", () => {
 
     it("returns unknown when both fail", async () => {
       primary.getTransactionStatus.mockRejectedValue(new Error("timeout"));
-      jest.spyOn(fallback, "getTransactionStatus").mockResolvedValue({ status: "unknown" });
+      jest
+        .spyOn(fallback, "getTransactionStatus")
+        .mockResolvedValue({ status: "unknown" });
 
       const result = await router.getTransactionStatus("ref-1");
 
@@ -167,9 +199,13 @@ describe("FallbackRouter", () => {
 
     it("falls back to individual payouts when primary throws", async () => {
       primary.sendBatchPayout.mockRejectedValue(new Error("timeout"));
-      jest.spyOn(fallback, "sendPayout").mockResolvedValue({ success: true, data: { reference: "fb-1" } });
+      jest
+        .spyOn(fallback, "sendPayout")
+        .mockResolvedValue({ success: true, data: { reference: "fb-1" } });
 
-      const items = [{ referenceId: "tx1", phoneNumber: "+261700000001", amount: "500" }];
+      const items = [
+        { referenceId: "tx1", phoneNumber: "+261700000001", amount: "500" },
+      ];
       const result = await router.sendBatchPayout(items);
 
       expect(result.success).toBe(true);
@@ -178,9 +214,13 @@ describe("FallbackRouter", () => {
 
     it("reports individual failures in batch fallback", async () => {
       primary.sendBatchPayout.mockRejectedValue(new Error("timeout"));
-      jest.spyOn(fallback, "sendPayout").mockResolvedValue({ success: false, error: "Provider down" });
+      jest
+        .spyOn(fallback, "sendPayout")
+        .mockResolvedValue({ success: false, error: "Provider down" });
 
-      const items = [{ referenceId: "tx1", phoneNumber: "+261700000001", amount: "500" }];
+      const items = [
+        { referenceId: "tx1", phoneNumber: "+261700000001", amount: "500" },
+      ];
       const result = await router.sendBatchPayout(items);
 
       expect(result.success).toBe(false);

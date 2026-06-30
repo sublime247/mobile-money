@@ -45,7 +45,12 @@ jest.mock("bullmq", () => ({
 import { createKYCRoutes } from "../../src/routes/kycRoutes";
 import KYCService from "../../src/services/kyc";
 import { errorHandler } from "../../src/middleware/errorHandler";
-import { commit, proveOpening, commitWithBlinding, proveEqualOpenings } from "../../src/crypto/zkBalanceProof";
+import {
+  commit,
+  proveOpening,
+  commitWithBlinding,
+  proveEqualOpenings,
+} from "../../src/crypto/zkBalanceProof";
 import { proveRange, signCommitment } from "../../src/crypto/zkKycProof";
 
 jest.mock("../../src/services/kyc");
@@ -116,7 +121,11 @@ describe("ZK KYC Routes", () => {
       const threshold = 18n;
       const { commitment, opening } = commit(age);
 
-      const signature = signCommitment(authorityPrivateKey, commitment.hex, "age");
+      const signature = signCommitment(
+        authorityPrivateKey,
+        commitment.hex,
+        "age",
+      );
 
       // 2. Generate proof
       const proof = proveRange(commitment, opening, threshold, 8);
@@ -133,7 +142,10 @@ describe("ZK KYC Routes", () => {
 
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
-      expect(mockKycService.updateUserKYCLevel).toHaveBeenCalledWith("test-user-id", "full");
+      expect(mockKycService.updateUserKYCLevel).toHaveBeenCalledWith(
+        "test-user-id",
+        "full",
+      );
     });
 
     it("should reject tampered authority signature", async () => {
@@ -165,16 +177,15 @@ describe("ZK KYC Routes", () => {
       const countryCode = 840n; // USA
       const { commitment, opening } = commit(countryCode);
 
-      const signature = signCommitment(authorityPrivateKey, commitment.hex, "nationality");
+      const signature = signCommitment(
+        authorityPrivateKey,
+        commitment.hex,
+        "nationality",
+      );
 
       // Prove that commitment commits to countryCode (840) by equality proof with cRef (blinding 0)
       const cRef = commitWithBlinding(countryCode, 0n);
-      const proof = proveEqualOpenings(
-        commitment,
-        cRef,
-        opening.blinding,
-        0n
-      );
+      const proof = proveEqualOpenings(commitment, cRef, opening.blinding, 0n);
 
       const response = await request(app)
         .post("/api/kyc/zk/verify-proof")
@@ -188,7 +199,10 @@ describe("ZK KYC Routes", () => {
 
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
-      expect(mockKycService.updateUserKYCLevel).toHaveBeenCalledWith("test-user-id", "full");
+      expect(mockKycService.updateUserKYCLevel).toHaveBeenCalledWith(
+        "test-user-id",
+        "full",
+      );
     });
   });
 });

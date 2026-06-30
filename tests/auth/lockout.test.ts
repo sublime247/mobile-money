@@ -217,7 +217,10 @@ describe("Account lockout — Redis-backed", () => {
       await recordFailedAttempt(PHONE);
       await recordSuccessfulLogin(PHONE);
       expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ identifier: PHONE, reason: "successful_login" }),
+        expect.objectContaining({
+          identifier: PHONE,
+          reason: "successful_login",
+        }),
       );
     });
 

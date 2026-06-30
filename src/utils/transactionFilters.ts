@@ -36,7 +36,8 @@ export interface TransactionFilters {
 /**
  * Regex pattern for strict ISO 8601 with correct UTC offset (e.g. Z or [+-]HH:MM or [+-]HHMM)
  */
-export const ISO_8601_UTC_REGEX = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})$/;
+export const ISO_8601_UTC_REGEX =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})$/;
 
 /**
  * Parse and validate status query parameter
@@ -46,7 +47,9 @@ export const ISO_8601_UTC_REGEX = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)
  * @returns Array of valid status values
  * @throws Error if invalid status provided
  */
-export const parseStatusFilter = (statusParam: string | undefined): TransactionStatus[] => {
+export const parseStatusFilter = (
+  statusParam: string | undefined,
+): TransactionStatus[] => {
   if (!statusParam) {
     return [];
   }
@@ -61,11 +64,13 @@ export const parseStatusFilter = (statusParam: string | undefined): TransactionS
   }
 
   // Validate all statuses
-  const invalidStatuses = statuses.filter((s) => !VALID_STATUSES.includes(s as TransactionStatus));
+  const invalidStatuses = statuses.filter(
+    (s) => !VALID_STATUSES.includes(s as TransactionStatus),
+  );
 
   if (invalidStatuses.length > 0) {
     throw new Error(
-      `Invalid status values: ${invalidStatuses.join(", ")}. Valid values are: ${VALID_STATUSES.join(", ")}`
+      `Invalid status values: ${invalidStatuses.join(", ")}. Valid values are: ${VALID_STATUSES.join(", ")}`,
     );
   }
 
@@ -77,7 +82,9 @@ export const parseStatusFilter = (statusParam: string | undefined): TransactionS
  * @param statuses Array of statuses to filter by
  * @returns SQL WHERE clause fragment
  */
-export const buildStatusWhereClause = (statuses: TransactionStatus[]): string => {
+export const buildStatusWhereClause = (
+  statuses: TransactionStatus[],
+): string => {
   if (statuses.length === 0) return "";
   if (statuses.length === VALID_STATUSES.length) return "";
 
@@ -91,10 +98,17 @@ export const buildStatusWhereClause = (statuses: TransactionStatus[]): string =>
 export const validateTransactionFilters = (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
-    const { status, limit = 50, offset = 0, reference, startDate, endDate } = req.query;
+    const {
+      status,
+      limit = 50,
+      offset = 0,
+      reference,
+      startDate,
+      endDate,
+    } = req.query;
 
     // Validate limit
     const limitNum = parseInt(limit as string, 10);
@@ -117,20 +131,30 @@ export const validateTransactionFilters = (
 
     // Validate startDate timezone offset
     if (startDate) {
-      if (typeof startDate !== "string" || !ISO_8601_UTC_REGEX.test(startDate) || isNaN(Date.parse(startDate))) {
+      if (
+        typeof startDate !== "string" ||
+        !ISO_8601_UTC_REGEX.test(startDate) ||
+        isNaN(Date.parse(startDate))
+      ) {
         return res.status(400).json({
           error: "Invalid startDate parameter",
-          message: "startDate must follow strict ISO 8601 formatting with a correct UTC offset (e.g., YYYY-MM-DDTHH:mm:ssZ or YYYY-MM-DDTHH:mm:ss+HH:MM)",
+          message:
+            "startDate must follow strict ISO 8601 formatting with a correct UTC offset (e.g., YYYY-MM-DDTHH:mm:ssZ or YYYY-MM-DDTHH:mm:ss+HH:MM)",
         });
       }
     }
 
     // Validate endDate timezone offset
     if (endDate) {
-      if (typeof endDate !== "string" || !ISO_8601_UTC_REGEX.test(endDate) || isNaN(Date.parse(endDate))) {
+      if (
+        typeof endDate !== "string" ||
+        !ISO_8601_UTC_REGEX.test(endDate) ||
+        isNaN(Date.parse(endDate))
+      ) {
         return res.status(400).json({
           error: "Invalid endDate parameter",
-          message: "endDate must follow strict ISO 8601 formatting with a correct UTC offset (e.g., YYYY-MM-DDTHH:mm:ssZ or YYYY-MM-DDTHH:mm:ss+HH:MM)",
+          message:
+            "endDate must follow strict ISO 8601 formatting with a correct UTC offset (e.g., YYYY-MM-DDTHH:mm:ssZ or YYYY-MM-DDTHH:mm:ss+HH:MM)",
         });
       }
     }
@@ -172,7 +196,7 @@ export const validateTransactionFilters = (
 export const getPaginationInfo = (
   total: number,
   limit: number,
-  offset: number
+  offset: number,
 ) => {
   return {
     total,

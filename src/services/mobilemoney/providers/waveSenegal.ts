@@ -126,9 +126,7 @@ export class WaveSenegalProvider {
 
     const expected =
       "sha256=" +
-      createHmac("sha256", this.webhookSecret)
-        .update(rawBody)
-        .digest("hex");
+      createHmac("sha256", this.webhookSecret).update(rawBody).digest("hex");
 
     // Constant-time comparison to prevent timing attacks
     if (expected.length !== signature.length) return false;

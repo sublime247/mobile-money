@@ -164,9 +164,7 @@ describe("momo-cli retry-batch", () => {
       expect.stringContaining("Completed: 1"),
     );
     expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("Failed: 1"));
-    expect(logSpy).toHaveBeenCalledWith(
-      expect.stringContaining("Pending: 1"),
-    );
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("Pending: 1"));
     expect(logSpy).toHaveBeenCalledWith(
       expect.stringContaining("Cancelled: 1"),
     );

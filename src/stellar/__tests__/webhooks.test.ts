@@ -508,7 +508,10 @@ describe("Stellar Webhooks", () => {
       expect(response.status).toBe(200);
       expect(response.body.updated).toBe(1);
       expect(mockFindByReferenceNumber).toHaveBeenCalledWith("REF-MEMO-001");
-      expect(mockUpdateStatus).toHaveBeenCalledWith("tx-memo-text", TransactionStatus.Completed);
+      expect(mockUpdateStatus).toHaveBeenCalledWith(
+        "tx-memo-text",
+        TransactionStatus.Completed,
+      );
     });
 
     it("should match transaction by id memo via metadata fallback", async () => {
@@ -532,7 +535,7 @@ describe("Stellar Webhooks", () => {
 
       // No match by hash, no match by reference number, match by metadata memo
       mockFindByMetadata
-        .mockResolvedValueOnce([])   // stellar_hash lookup
+        .mockResolvedValueOnce([]) // stellar_hash lookup
         .mockResolvedValueOnce([mockTransaction]); // memo metadata lookup
       mockFindByReferenceNumber.mockResolvedValue([]);
       mockUpdateStatus.mockResolvedValue(undefined);
@@ -550,7 +553,10 @@ describe("Stellar Webhooks", () => {
       expect(response.status).toBe(200);
       expect(response.body.updated).toBe(1);
       expect(mockFindByMetadata).toHaveBeenCalledWith({ memo: "9876543210" });
-      expect(mockUpdateStatus).toHaveBeenCalledWith("tx-memo-id", TransactionStatus.Completed);
+      expect(mockUpdateStatus).toHaveBeenCalledWith(
+        "tx-memo-id",
+        TransactionStatus.Completed,
+      );
     });
 
     it("should match transaction by hash memo via metadata fallback", async () => {
@@ -590,7 +596,10 @@ describe("Stellar Webhooks", () => {
 
       expect(response.status).toBe(200);
       expect(response.body.updated).toBe(1);
-      expect(mockUpdateStatus).toHaveBeenCalledWith("tx-memo-hash", TransactionStatus.Completed);
+      expect(mockUpdateStatus).toHaveBeenCalledWith(
+        "tx-memo-hash",
+        TransactionStatus.Completed,
+      );
     });
 
     it("should return 404 when neither hash nor memo matches any transaction", async () => {

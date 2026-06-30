@@ -5,6 +5,7 @@
 ### 1. Object Pooling
 
 **Before:**
+
 ```go
 func handleIngest(ctx *fasthttp.RequestCtx) {
     var payload CallbackPayload  // Allocates on each request
@@ -13,6 +14,7 @@ func handleIngest(ctx *fasthttp.RequestCtx) {
 ```
 
 **After:**
+
 ```go
 func handleIngest(ctx *fasthttp.RequestCtx) {
     payload := payloadPool.Get().(*CallbackPayload)  // Reuse from pool
@@ -24,6 +26,7 @@ func handleIngest(ctx *fasthttp.RequestCtx) {
 ### 2. Parser Pooling
 
 **Before:**
+
 ```go
 func parseCallbackPayload(body []byte) (*CallbackPayload, error) {
     v, err := fastjson.ParseBytes(body)  // Allocates new parser each time
@@ -32,6 +35,7 @@ func parseCallbackPayload(body []byte) (*CallbackPayload, error) {
 ```
 
 **After:**
+
 ```go
 func parseCallbackPayload(body []byte) (*CallbackPayload, error) {
     parser := parserPool.Get().(*fastjson.Parser)  // Reuse parser
@@ -44,6 +48,7 @@ func parseCallbackPayload(body []byte) (*CallbackPayload, error) {
 ### 3. Buffer Pooling for Metadata
 
 **Before:**
+
 ```go
 if metaVal := v.Get("metadata"); metaVal != nil {
     buf, err := metaVal.MarshalTo(nil)  // Allocates new buffer
@@ -59,6 +64,7 @@ if metaVal := v.Get("metadata"); metaVal != nil {
 ```
 
 **After:**
+
 ```go
 if metaVal := v.Get("metadata"); metaVal != nil {
     buf := bufferPool.Get().([]byte)[:0]  // Get pooled buffer
@@ -74,6 +80,7 @@ if metaVal := v.Get("metadata"); metaVal != nil {
 ### 4. Unsafe String Conversion
 
 **Before:**
+
 ```go
 func getStringField(v *fastjson.Value, key string) (string, error) {
     if bytes, err := v.GetStringBytes(key); err == nil {
@@ -84,6 +91,7 @@ func getStringField(v *fastjson.Value, key string) (string, error) {
 ```
 
 **After:**
+
 ```go
 func getStringFieldOptimized(v *fastjson.Value, key string) (string, error) {
     bytes := v.GetStringBytes(key)
@@ -102,6 +110,7 @@ func unsafeString(b []byte) string {
 ### 5. JSON Marshaling with Buffer Pooling
 
 **Before:**
+
 ```go
 func publish(p *CallbackPayload) error {
     data, err := json.Marshal(p)  // Allocates new buffer
@@ -113,11 +122,12 @@ func publish(p *CallbackPayload) error {
 ```
 
 **After:**
+
 ```go
 func publish(p *CallbackPayload) error {
     buf := bufferPool.Get().([]byte)[:0]  // Get pooled buffer
     defer bufferPool.Put(buf)
-    
+
     buf, err = json.Marshal(p)  // Reuses pooled buffer capacity
     if err != nil {
         return err
@@ -188,16 +198,19 @@ go test -bench=BenchmarkPooledVsNonPooled -benchmem
 ## Expected Benchmark Results
 
 **Before Optimization:**
+
 ```
 BenchmarkParsePayload-8    100000    12500 ns/op    4580 B/op    45 allocs/op
 ```
 
 **After Optimization:**
+
 ```
 BenchmarkParsePayload-8    500000    2400 ns/op    340 B/op    3 allocs/op
 ```
 
 **Improvement Summary:**
+
 - ⚡ **5x faster** (12.5μs → 2.4μs)
 - 📉 **90% less memory** (4580B → 340B)
 - 🎯 **93% fewer allocations** (45 → 3)

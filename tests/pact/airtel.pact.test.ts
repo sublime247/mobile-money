@@ -115,8 +115,17 @@ describe("Airtel Money API Contract", () => {
             `${mockServer.url}/ng/merchant/v1/payments/`,
             {
               reference: REFERENCE,
-              subscriber: { country: "NG", currency: "NGN", msisdn: "2348012345678" },
-              transaction: { amount: 100, country: "NG", currency: "NGN", id: REFERENCE },
+              subscriber: {
+                country: "NG",
+                currency: "NGN",
+                msisdn: "2348012345678",
+              },
+              transaction: {
+                amount: 100,
+                country: "NG",
+                currency: "NGN",
+                id: REFERENCE,
+              },
             },
             {
               headers: {

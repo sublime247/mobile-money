@@ -292,9 +292,9 @@ describe("WaveSenegalProvider", () => {
 
     it("returns false for a tampered body", () => {
       const sig = makeSignature(body, secret);
-      expect(
-        provider.verifyWebhookSignature(body + " tampered", sig),
-      ).toBe(false);
+      expect(provider.verifyWebhookSignature(body + " tampered", sig)).toBe(
+        false,
+      );
     });
 
     it("returns false for a wrong secret", () => {
@@ -366,8 +366,7 @@ describe("WaveSenegalProvider", () => {
         data: { id: "tx_payout_1", status: "succeeded" },
       });
 
-      const statusResult =
-        await provider.getTransactionStatus("tx_payout_1");
+      const statusResult = await provider.getTransactionStatus("tx_payout_1");
       expect(statusResult.status).toBe("completed");
     });
 

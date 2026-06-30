@@ -137,9 +137,12 @@ describe("vault transfer locking", () => {
 
   it("rejects overlapping vault transfers when the lock is already held", async () => {
     mockWithLock.mockRejectedValue(
-      new LockAcquisitionError(LockKeys.vaultTransfer("user-123", "vault-123"), {
-        isContention: true,
-      }),
+      new LockAcquisitionError(
+        LockKeys.vaultTransfer("user-123", "vault-123"),
+        {
+          isContention: true,
+        },
+      ),
     );
 
     const response = await request(createApp())
@@ -161,10 +164,13 @@ describe("vault transfer locking", () => {
 
   it("returns service unavailable when the lock backend fails", async () => {
     mockWithLock.mockRejectedValue(
-      new LockAcquisitionError(LockKeys.vaultTransfer("user-123", "vault-123"), {
-        cause: new Error("redis unavailable"),
-        isContention: false,
-      }),
+      new LockAcquisitionError(
+        LockKeys.vaultTransfer("user-123", "vault-123"),
+        {
+          cause: new Error("redis unavailable"),
+          isContention: false,
+        },
+      ),
     );
 
     const response = await request(createApp())

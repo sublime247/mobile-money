@@ -220,8 +220,7 @@ export function createSubscriptionResolvers(pubsub: TypedPubSub) {
               SubscriptionChannels.BULK_IMPORT_JOB_UPDATED,
             );
           },
-          (payload: any, variables: any) =>
-            payload?.jobId === variables.jobId,
+          (payload: any, variables: any) => payload?.jobId === variables.jobId,
         ),
         resolve: (payload: BulkImportJobUpdatedPayload) =>
           formatBulkImportJobPayload(payload),

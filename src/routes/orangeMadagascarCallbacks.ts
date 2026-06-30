@@ -33,17 +33,21 @@ const orangeMadagascarBatchCallbackSchema = z.object({
   ),
 });
 
-router.post("/callback", validateRequest(orangeMadagascarCallbackSchema), async (req: Request, res: Response) => {
-  logger.info(
-    {
-      reference: req.body.reference,
-      status: req.body.status,
-      transactionId: req.body.transactionId,
-    },
-    "OrangeMadagascar: Callback received",
-  );
-  res.status(200).json({ status: "accepted" });
-});
+router.post(
+  "/callback",
+  validateRequest(orangeMadagascarCallbackSchema),
+  async (req: Request, res: Response) => {
+    logger.info(
+      {
+        reference: req.body.reference,
+        status: req.body.status,
+        transactionId: req.body.transactionId,
+      },
+      "OrangeMadagascar: Callback received",
+    );
+    res.status(200).json({ status: "accepted" });
+  },
+);
 
 router.post(
   "/callback/batch",

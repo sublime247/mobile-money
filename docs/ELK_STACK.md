@@ -38,16 +38,19 @@ Endpoints:
 Before running the ELK stack, deploy the ILM policy to Elasticsearch:
 
 **On Unix/Linux/macOS:**
+
 ```bash
 sh elk/scripts/apply-ilm-policy.sh
 ```
 
 **On Windows PowerShell:**
+
 ```powershell
 powershell -File .\elk\scripts\apply-ilm-policy.ps1
 ```
 
 For container Elasticsearch, set the URL:
+
 ```bash
 ELASTICSEARCH_URL=http://elasticsearch:9200 sh elk/scripts/apply-ilm-policy.sh
 ```

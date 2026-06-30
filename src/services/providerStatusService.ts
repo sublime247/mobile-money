@@ -8,7 +8,7 @@ export type StatusColor = "green" | "yellow" | "red";
 export interface ProviderStatusSummary {
   provider: ProviderName;
   status: StatusColor;
-  successRate: number;   // 0–1
+  successRate: number; // 0–1
   totalCalls: number;
   avgDurationMs: number | null;
   lastCalledAt: string | null;
@@ -25,22 +25,38 @@ const lastStatuses = new Map<ProviderName, StatusColor>();
 
 export const providerStatusEvents = new EventEmitter();
 
-providerStatusEvents.on("statusChange", (provider: ProviderName, oldStatus: StatusColor | undefined, newStatus: StatusColor) => {
-  if (newStatus === "red") {
-    logger.warn({ provider, oldStatus, newStatus }, `Provider ${provider} is offline (status: ${newStatus})`);
-  } else if (oldStatus === "red") {
-    logger.info({ provider, oldStatus, newStatus }, `Provider ${provider} is back online (status: ${newStatus})`);
-  } else {
-    logger.info({ provider, oldStatus, newStatus }, `Provider ${provider} status changed to ${newStatus}`);
-  }
-});
+providerStatusEvents.on(
+  "statusChange",
+  (
+    provider: ProviderName,
+    oldStatus: StatusColor | undefined,
+    newStatus: StatusColor,
+  ) => {
+    if (newStatus === "red") {
+      logger.warn(
+        { provider, oldStatus, newStatus },
+        `Provider ${provider} is offline (status: ${newStatus})`,
+      );
+    } else if (oldStatus === "red") {
+      logger.info(
+        { provider, oldStatus, newStatus },
+        `Provider ${provider} is back online (status: ${newStatus})`,
+      );
+    } else {
+      logger.info(
+        { provider, oldStatus, newStatus },
+        `Provider ${provider} status changed to ${newStatus}`,
+      );
+    }
+  },
+);
 
 // Green  : success rate >= 95%
 // Yellow : success rate >= 80%
 // Red    : success rate <  80%
 function toStatusColor(successRate: number): StatusColor {
   if (successRate >= 0.95) return "green";
-  if (successRate >= 0.80) return "yellow";
+  if (successRate >= 0.8) return "yellow";
   return "red";
 }
 
@@ -88,8 +104,13 @@ export async function getProvidersStatus(): Promise<ProvidersStatusResult> {
       status: toStatusColor(successRate),
       successRate: Math.round(successRate * 1000) / 1000,
       totalCalls: total,
-      avgDurationMs: row.avg_duration_ms != null ? Math.round(Number(row.avg_duration_ms)) : null,
-      lastCalledAt: row.last_called_at ? row.last_called_at.toISOString() : null,
+      avgDurationMs:
+        row.avg_duration_ms != null
+          ? Math.round(Number(row.avg_duration_ms))
+          : null,
+      lastCalledAt: row.last_called_at
+        ? row.last_called_at.toISOString()
+        : null,
     };
   });
 
@@ -97,7 +118,12 @@ export async function getProvidersStatus(): Promise<ProvidersStatusResult> {
   for (const p of providers) {
     const oldStatus = lastStatuses.get(p.provider);
     if (oldStatus !== p.status) {
-      providerStatusEvents.emit("statusChange", p.provider, oldStatus, p.status);
+      providerStatusEvents.emit(
+        "statusChange",
+        p.provider,
+        oldStatus,
+        p.status,
+      );
       lastStatuses.set(p.provider, p.status);
     }
   }

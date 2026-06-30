@@ -1,5 +1,8 @@
 import { createHmac } from "crypto";
-import { webhookPayloadSchema, flatWebhookPayloadSchema } from "./webhookSchema";
+import {
+  webhookPayloadSchema,
+  flatWebhookPayloadSchema,
+} from "./webhookSchema";
 import { gzip } from "zlib";
 import { promisify } from "util";
 import { Transaction, WebhookDeliveryUpdate } from "../models/transaction";
@@ -177,7 +180,8 @@ export class WebhookService {
     this.sleepImpl = options.sleep ?? wait;
     this.now = options.now ?? (() => new Date());
     this.logger = options.logger ?? console;
-    this.compress = options.compress ?? (process.env.WEBHOOK_COMPRESSION === "true");
+    this.compress =
+      options.compress ?? process.env.WEBHOOK_COMPRESSION === "true";
     // Zod schemas for payload validation
     // Imported lazily to avoid circular dependencies
   }
@@ -215,7 +219,11 @@ export class WebhookService {
       phone_number: transaction.phoneNumber,
       provider: transaction.provider,
       stellar_address: transaction.stellarAddress,
-      status: transaction.status as "pending" | "completed" | "failed" | "cancelled",
+      status: transaction.status as
+        | "pending"
+        | "completed"
+        | "failed"
+        | "cancelled",
       user_id: transaction.userId || undefined,
       notes: transaction.notes || undefined,
       tags: transaction.tags ? transaction.tags.join(",") : undefined,
@@ -272,8 +280,16 @@ export class WebhookService {
     const payload = this.buildPayload(event, transaction);
     const validation = webhookPayloadSchema.safeParse(payload);
     if (!validation.success) {
-      this.logger.warn(`[webhook] payload validation failed: ${validation.error}`);
-      return { status: "failed", attempts: 0, lastAttemptAt: null, deliveredAt: null, lastError: "Payload validation failed" };
+      this.logger.warn(
+        `[webhook] payload validation failed: ${validation.error}`,
+      );
+      return {
+        status: "failed",
+        attempts: 0,
+        lastAttemptAt: null,
+        deliveredAt: null,
+        lastError: "Payload validation failed",
+      };
     }
     const rawPayload = JSON.stringify(payload);
     const signature = this.signPayload(rawPayload);
@@ -363,8 +379,16 @@ export class WebhookService {
     const payload = this.buildFlatPayload(event, transaction);
     const validation = flatWebhookPayloadSchema.safeParse(payload);
     if (!validation.success) {
-      this.logger.warn(`[webhook] flat payload validation failed: ${validation.error}`);
-      return { status: "failed", attempts: 0, lastAttemptAt: null, deliveredAt: null, lastError: "Payload validation failed" };
+      this.logger.warn(
+        `[webhook] flat payload validation failed: ${validation.error}`,
+      );
+      return {
+        status: "failed",
+        attempts: 0,
+        lastAttemptAt: null,
+        deliveredAt: null,
+        lastError: "Payload validation failed",
+      };
     }
     const rawPayload = JSON.stringify(payload);
     const signature = this.signPayload(rawPayload);
@@ -539,7 +563,10 @@ export async function notifyTransactionWebhook(
       url: webhookService.getWebhookUrl(),
       secret: webhookService.getWebhookSecret(),
       eventType: event,
-      payload: webhookService.buildPayload(event, transaction) as unknown as Record<string, unknown>,
+      payload: webhookService.buildPayload(
+        event,
+        transaction,
+      ) as unknown as Record<string, unknown>,
       useFlatPayload: false,
     });
   }
@@ -623,7 +650,10 @@ export async function notifyFlatTransactionWebhook(
       url: webhookService.getWebhookUrl(),
       secret: webhookService.getWebhookSecret(),
       eventType: event,
-      payload: webhookService.buildFlatPayload(event, transaction) as unknown as Record<string, unknown>,
+      payload: webhookService.buildFlatPayload(
+        event,
+        transaction,
+      ) as unknown as Record<string, unknown>,
       useFlatPayload: true,
     });
   }

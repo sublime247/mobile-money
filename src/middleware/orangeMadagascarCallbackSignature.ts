@@ -9,13 +9,17 @@ const DEFAULT_SIGNATURE_HEADER = "x-callback-signature";
 const ALT_SIGNATURE_HEADER = "x-orange-signature";
 
 function getCallbackSecret(): string {
-  return String(getConfigValue("providers.orangeMadagascar.callbackSecret") ?? "").trim();
+  return String(
+    getConfigValue("providers.orangeMadagascar.callbackSecret") ?? "",
+  ).trim();
 }
 
 function getSignatureHeaderName(): string {
   const configured = String(
     getConfigValue("providers.orangeMadagascar.callbackSignatureHeader") ?? "",
-  ).trim().toLowerCase();
+  )
+    .trim()
+    .toLowerCase();
   return configured || DEFAULT_SIGNATURE_HEADER;
 }
 
@@ -26,14 +30,26 @@ function getSignatureHeader(req: Request): string | undefined {
   return req.headers[ALT_SIGNATURE_HEADER] as string | undefined;
 }
 
-function computeExpectedSignature(rawBody: Buffer, secret: string, headerValue: string): string {
+function computeExpectedSignature(
+  rawBody: Buffer,
+  secret: string,
+  headerValue: string,
+): string {
   const hasPrefix = headerValue.startsWith("sha256=");
-  return createHmac("sha256", secret).update(rawBody).digest(hasPrefix ? "hex" : "base64");
+  return createHmac("sha256", secret)
+    .update(rawBody)
+    .digest(hasPrefix ? "hex" : "base64");
 }
 
-function verifySignature(rawBody: Buffer, headerValue: string, secret: string): boolean {
+function verifySignature(
+  rawBody: Buffer,
+  headerValue: string,
+  secret: string,
+): boolean {
   const expected = computeExpectedSignature(rawBody, secret, headerValue);
-  const incoming = headerValue.startsWith("sha256=") ? headerValue.slice(7) : headerValue;
+  const incoming = headerValue.startsWith("sha256=")
+    ? headerValue.slice(7)
+    : headerValue;
 
   if (incoming.length !== expected.length) return false;
   return timingSafeEqual(Buffer.from(incoming), Buffer.from(expected));
@@ -56,7 +72,9 @@ export async function verifyOrangeMadagascarCallbackSignature(
       provider: "orange_madagascar",
       headerPresent: false,
     });
-    res.status(500).json({ error: "Orange Madagascar callback verification not configured" });
+    res.status(500).json({
+      error: "Orange Madagascar callback verification not configured",
+    });
     return;
   }
 

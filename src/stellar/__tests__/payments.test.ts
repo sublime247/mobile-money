@@ -23,31 +23,31 @@ import { getStellarServer } from "../../config/stellar";
 import { AssetService } from "../../services/stellar/assetService";
 
 const mockGetStellarServer = getStellarServer as jest.Mock;
-const mockAssetService     = AssetService as jest.Mock;
+const mockAssetService = AssetService as jest.Mock;
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
 const USDC_ISSUER = "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5";
-const XAF_ISSUER  = "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5";
+const XAF_ISSUER = "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5";
 
-const xafAsset  = new StellarSdk.Asset("XAF",  XAF_ISSUER);
+const xafAsset = new StellarSdk.Asset("XAF", XAF_ISSUER);
 const usdcAsset = new StellarSdk.Asset("USDC", USDC_ISSUER);
 
-const senderKeypair      = StellarSdk.Keypair.random();
+const senderKeypair = StellarSdk.Keypair.random();
 const destinationAccount = StellarSdk.Keypair.random().publicKey();
 
 /** A minimal path record returned by Horizon's strict-receive endpoint. */
 function makePathRecord(overrides: Partial<Record<string, unknown>> = {}) {
   return {
-    source_asset_type:          "credit_alphanum4",
-    source_asset_code:          xafAsset.getCode(),
-    source_asset_issuer:        xafAsset.getIssuer(),
-    source_amount:              "500.0000000",
-    destination_asset_type:     "credit_alphanum4",
-    destination_asset_code:     usdcAsset.getCode(),
-    destination_asset_issuer:   usdcAsset.getIssuer(),
-    destination_amount:         "5.0000000",
-    path:                       [],
+    source_asset_type: "credit_alphanum4",
+    source_asset_code: xafAsset.getCode(),
+    source_asset_issuer: xafAsset.getIssuer(),
+    source_amount: "500.0000000",
+    destination_asset_type: "credit_alphanum4",
+    destination_asset_code: usdcAsset.getCode(),
+    destination_asset_issuer: usdcAsset.getIssuer(),
+    destination_amount: "5.0000000",
+    path: [],
     ...overrides,
   };
 }
@@ -55,7 +55,7 @@ function makePathRecord(overrides: Partial<Record<string, unknown>> = {}) {
 /** Build a minimal mock Horizon server. */
 function mockServer(overrides: Partial<Record<string, jest.Mock>> = {}) {
   const submitTransaction = jest.fn().mockResolvedValue({
-    hash:   "txhash123",
+    hash: "txhash123",
     ledger: 55,
   });
 
@@ -64,10 +64,10 @@ function mockServer(overrides: Partial<Record<string, jest.Mock>> = {}) {
   });
 
   const loadAccount = jest.fn().mockResolvedValue({
-    account_id:              senderKeypair.publicKey(),
-    sequence:                "1000",
+    account_id: senderKeypair.publicKey(),
+    sequence: "1000",
     incrementSequenceNumber: jest.fn(),
-    balances:                [],
+    balances: [],
   });
 
   return {
@@ -79,14 +79,16 @@ function mockServer(overrides: Partial<Record<string, jest.Mock>> = {}) {
 }
 
 /** Default params for executePathPayment. */
-function makeParams(overrides: Partial<PathPaymentParams> = {}): PathPaymentParams {
+function makeParams(
+  overrides: Partial<PathPaymentParams> = {},
+): PathPaymentParams {
   return {
     senderKeypair,
-    destination:  destinationAccount,
-    sendAsset:    xafAsset,
-    destAsset:    usdcAsset,
-    destAmount:   "5",
-    sendMax:      "600",
+    destination: destinationAccount,
+    sendAsset: xafAsset,
+    destAsset: usdcAsset,
+    destAmount: "5",
+    sendMax: "600",
     ...overrides,
   };
 }
@@ -105,19 +107,17 @@ describe("findPaymentPaths", () => {
       destinationAccount,
     );
 
-    expect(server.strictReceivePaths).toHaveBeenCalledWith(
-      xafAsset,
-      "5",
-      [destinationAccount],
-    );
+    expect(server.strictReceivePaths).toHaveBeenCalledWith(xafAsset, "5", [
+      destinationAccount,
+    ]);
     expect(paths).toHaveLength(1);
     expect(paths[0].destination_asset_code).toBe("USDC");
   });
 
   it("filters out records whose destination asset does not match", async () => {
     const wrongRecord = makePathRecord({
-      destination_asset_code:   "XLM",
-      destination_asset_type:   "native",
+      destination_asset_code: "XLM",
+      destination_asset_type: "native",
       destination_asset_issuer: undefined,
     });
 
@@ -181,12 +181,12 @@ describe("findPaymentPaths", () => {
 
   it("handles native XLM as the destination asset", async () => {
     const nativeRecord = {
-      destination_asset_type:   "native",
-      destination_asset_code:   undefined,
+      destination_asset_type: "native",
+      destination_asset_code: undefined,
       destination_asset_issuer: undefined,
-      source_asset_code:        "XAF",
-      source_amount:            "10.0000000",
-      path:                     [],
+      source_asset_code: "XAF",
+      source_amount: "10.0000000",
+      path: [],
     };
 
     const server = mockServer({
@@ -265,9 +265,7 @@ describe("executePathPayment", () => {
 
     const intermediateAsset = new StellarSdk.Asset("XLM", undefined);
 
-    await executePathPayment(
-      makeParams({ path: [intermediateAsset] }),
-    );
+    await executePathPayment(makeParams({ path: [intermediateAsset] }));
 
     // Transaction was built and submitted — path is encoded inside the tx XDR
     expect(server.submitTransaction).toHaveBeenCalledTimes(1);
@@ -291,7 +289,9 @@ describe("executePathPayment", () => {
     });
     mockGetStellarServer.mockReturnValue(server);
 
-    await expect(executePathPayment(makeParams())).rejects.toThrow(SlippageError);
+    await expect(executePathPayment(makeParams())).rejects.toThrow(
+      SlippageError,
+    );
     await expect(executePathPayment(makeParams())).rejects.toThrow(
       "Path payment rejected",
     );

@@ -2,7 +2,7 @@
 import { printError } from "./momo-cli";
 /**
  * Database Backup Verification Script (Issue #553)
- * 
+ *
  * Usage:
  *   npx tsx src/scripts/verify-backups.ts
  *
@@ -25,20 +25,28 @@ async function main() {
   console.log("🔄 Database Backup Verification Script");
   console.log("================================================");
   console.log(`Started: ${new Date().toISOString()}`);
-  console.log(`Backup Bucket: ${process.env.BACKUP_BUCKET || "mobile-money-backups"}`);
+  console.log(
+    `Backup Bucket: ${process.env.BACKUP_BUCKET || "mobile-money-backups"}`,
+  );
   console.log("");
 
   try {
     // 1. Verify general data safety
     console.log("🔐 Verifying general data safety...");
     const safety = await verifyDataSafety();
-    console.log(`   Bucket Accessible: ${safety.details.bucket_accessible ? "✓" : "✗"}`);
-    console.log(`   Encryption Enabled: ${safety.details.encryption_enabled ? "✓" : "✗"}`);
+    console.log(
+      `   Bucket Accessible: ${safety.details.bucket_accessible ? "✓" : "✗"}`,
+    );
+    console.log(
+      `   Encryption Enabled: ${safety.details.encryption_enabled ? "✓" : "✗"}`,
+    );
     console.log(`   Total Backups Found: ${safety.details.recent_backups}`);
     if (safety.details.most_recent_backup_age_hours !== undefined) {
-      console.log(`   Most Recent Backup Age: ${safety.details.most_recent_backup_age_hours} hours`);
+      console.log(
+        `   Most Recent Backup Age: ${safety.details.most_recent_backup_age_hours} hours`,
+      );
     }
-    
+
     if (!safety.safe) {
       printError("❌ Data safety check did not pass! General health is bad.");
       process.exit(1);
@@ -55,12 +63,17 @@ async function main() {
 
     // 3. Verify the latest backup's integrity
     const latest = backups[0];
-    console.log(`\n🔍 Verifying integrity of latest backup: ${latest.backupId}`);
+    console.log(
+      `\n🔍 Verifying integrity of latest backup: ${latest.backupId}`,
+    );
     console.log(`   Size: ${(latest.size / 1024 / 1024).toFixed(2)} MB`);
     console.log(`   Timestamp: ${latest.timestamp}`);
 
     const metadata = await getBackupMetadata(latest.backupId);
-    const integrityPassed = await validateBackupIntegrity(latest.backupId, metadata);
+    const integrityPassed = await validateBackupIntegrity(
+      latest.backupId,
+      metadata,
+    );
 
     if (integrityPassed) {
       console.log("\n✅ Integrity Verification Successful!");

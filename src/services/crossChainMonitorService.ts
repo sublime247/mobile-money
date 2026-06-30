@@ -28,35 +28,47 @@ async function getProviderBalance(
 ): Promise<string> {
   try {
     let result;
-    
+
     switch (provider) {
       case MobileMoneyProvider.MTN:
         const mtnProvider = new MTNProvider();
         result = await mtnProvider.getOperationalBalance();
         break;
-        
+
       case MobileMoneyProvider.AIRTEL:
         const airtelService = new AirtelService();
         result = await airtelService.getOperationalBalance();
         break;
-        
+
       case MobileMoneyProvider.ORANGE:
-        logger.warn({ provider, currency }, "Orange balance checks are not implemented");
+        logger.warn(
+          { provider, currency },
+          "Orange balance checks are not implemented",
+        );
         return "0";
-        
+
       default:
-        logger.warn({ provider, currency }, 'Unknown provider for balance check');
+        logger.warn(
+          { provider, currency },
+          "Unknown provider for balance check",
+        );
         return "0";
     }
-    
+
     if (result.success && result.data) {
       return result.data.availableBalance.toString();
     } else {
-      logger.error({ provider, currency, error: result.error }, 'Failed to fetch provider balance');
+      logger.error(
+        { provider, currency, error: result.error },
+        "Failed to fetch provider balance",
+      );
       return "0";
     }
   } catch (error) {
-    logger.error({ error, provider, currency }, 'Error fetching provider balance');
+    logger.error(
+      { error, provider, currency },
+      "Error fetching provider balance",
+    );
     return "0";
   }
 }
@@ -70,9 +82,7 @@ function getStellarAddresses(): string[] {
 }
 
 function getDropThreshold(): number {
-  const val = parseFloat(
-    process.env.CROSS_CHAIN_DROP_THRESHOLD_PCT || "20",
-  );
+  const val = parseFloat(process.env.CROSS_CHAIN_DROP_THRESHOLD_PCT || "20");
   return isNaN(val) ? 20 : val;
 }
 
@@ -113,10 +123,7 @@ export class CrossChainMonitorService {
           });
         }
       } catch (err) {
-        logger.error(
-          { error: err, address },
-          'Failed to load Stellar account'
-        );
+        logger.error({ error: err, address }, "Failed to load Stellar account");
       }
     }
 
@@ -127,8 +134,16 @@ export class CrossChainMonitorService {
       currency: string;
     }> = [
       { provider: MobileMoneyProvider.MTN, chain: "mtn", currency: "XAF" },
-      { provider: MobileMoneyProvider.AIRTEL, chain: "airtel", currency: "XAF" },
-      { provider: MobileMoneyProvider.ORANGE, chain: "orange", currency: "XAF" },
+      {
+        provider: MobileMoneyProvider.AIRTEL,
+        chain: "airtel",
+        currency: "XAF",
+      },
+      {
+        provider: MobileMoneyProvider.ORANGE,
+        chain: "orange",
+        currency: "XAF",
+      },
     ];
 
     for (const { provider, chain, currency } of providerCurrencyMap) {
@@ -181,7 +196,7 @@ export class CrossChainMonitorService {
                 thresholdPct: threshold,
                 reason,
               },
-              'Cross-chain balance anomaly detected'
+              "Cross-chain balance anomaly detected",
             );
           }
         }

@@ -16,22 +16,26 @@ The caching system reduces database load by caching expensive queries and invali
 ### Components
 
 #### 1. **CachedQueryManager** (`src/services/cachedQueryManager.ts`)
+
 - Main cache management service
 - Handles cache storage, retrieval, and invalidation
 - TTL policy definitions per query type
 - Tag management for selective invalidation
 
 #### 2. **CacheAside** (`src/services/cacheAside.ts`)
+
 - Cache-aside pattern implementation
 - Helper functions and middleware
 - Transaction cache invalidation hooks
 
 #### 3. **CachedTransactionService** (`src/services/cachedTransactionService.ts`)
+
 - Caching layer for transaction queries
 - Wraps `transactionModel.list()` and related methods
 - Automatic cache invalidation on transaction changes
 
 #### 4. **CachedStatsService** (`src/services/cachedStatsService.ts`)
+
 - Caching layer for statistics queries
 - Wraps expensive stats calculations
 - Supports multiple time-based aggregations
@@ -42,14 +46,14 @@ Different query types have different cache lifetimes:
 
 ```typescript
 QUERY_TTL_POLICIES = {
-  TRANSACTION_HISTORY: 300,        // 5 minutes - updated frequently
-  USER_STATS: 600,                 // 10 minutes - user-specific stats
-  GENERAL_STATS: 900,              // 15 minutes - global stats
-  VOLUME_BY_PROVIDER: 600,         // 10 minutes
-  ACTIVE_USERS_COUNT: 900,         // 15 minutes
-  PRICE_HISTORY: 3600,             // 1 hour - least frequently updated
-  USER_STATUS_HISTORY: 600,        // 10 minutes
-}
+  TRANSACTION_HISTORY: 300, // 5 minutes - updated frequently
+  USER_STATS: 600, // 10 minutes - user-specific stats
+  GENERAL_STATS: 900, // 15 minutes - global stats
+  VOLUME_BY_PROVIDER: 600, // 10 minutes
+  ACTIVE_USERS_COUNT: 900, // 15 minutes
+  PRICE_HISTORY: 3600, // 1 hour - least frequently updated
+  USER_STATUS_HISTORY: 600, // 10 minutes
+};
 ```
 
 ## Cache Tags
@@ -57,11 +61,11 @@ QUERY_TTL_POLICIES = {
 Tags are used for selective invalidation:
 
 ```typescript
-CacheTags.userHistory(userId)     // Invalidate user's transaction history
-CacheTags.userStats(userId)       // Invalidate user's statistics
-CacheTags.generalStats()          // Invalidate global statistics
-CacheTags.userTransaction(userId) // Invalidate all user transaction-related caches
-CacheTags.provider(provider)      // Invalidate provider-specific caches
+CacheTags.userHistory(userId); // Invalidate user's transaction history
+CacheTags.userStats(userId); // Invalidate user's statistics
+CacheTags.generalStats(); // Invalidate global statistics
+CacheTags.userTransaction(userId); // Invalidate all user transaction-related caches
+CacheTags.provider(provider); // Invalidate provider-specific caches
 ```
 
 ## Usage Examples
@@ -82,7 +86,10 @@ const transactions = await getCachedUserTransactionHistory("user-123", {
 ### Stats Caching
 
 ```typescript
-import { getCachedGeneralStats, getCachedVolumeByProvider } from "@/services/cachedStatsService";
+import {
+  getCachedGeneralStats,
+  getCachedVolumeByProvider,
+} from "@/services/cachedStatsService";
 
 // Cached for 15 minutes
 const stats = await getCachedGeneralStats();
@@ -90,7 +97,7 @@ const stats = await getCachedGeneralStats();
 // Provider stats also cached
 const byProvider = await getCachedVolumeByProvider(
   new Date("2024-01-01"),
-  new Date("2024-01-31")
+  new Date("2024-01-31"),
 );
 ```
 
@@ -135,21 +142,25 @@ This ensures data freshness while maintaining performance.
 Expected performance improvements:
 
 ### Database Load Reduction
+
 - **History queries**: 70-80% reduction (first cache miss pays cost, subsequent requests cache hits)
 - **Stats queries**: 80-90% reduction (expensive aggregations, long TTLs)
 - **Overall DB load**: 60-70% reduction across typical workloads
 
 ### Response Time
+
 - **Cache hit**: <10ms average (vs 200-500ms for DB query)
 - **Cache miss**: Same as DB query (backward compatible)
 
 ### Memory Usage
+
 - L2 Redis cache: ~100KB per 1000 cached queries
 - Automatic TTL-based cleanup prevents memory leaks
 
 ## Monitoring
 
 ### Cache Statistics
+
 ```typescript
 const stats = await cachedQueryManager.getStats();
 console.log(stats);
@@ -161,12 +172,16 @@ console.log(stats);
 ```
 
 ### Cache Headers
+
 All cached responses include an `X-Cache` header:
+
 - `X-Cache: HIT` - Response served from cache
 - `X-Cache: MISS` - Response fetched from database
 
 ### Logging
+
 All cache operations are logged:
+
 - `[cache] Cache hit` - Cache hit logged at debug level
 - `[cache] Cache invalidated by tag` - Invalidation logged at info level
 - `[cache] Cache set with tags` - Set operations logged at debug level
@@ -174,17 +189,19 @@ All cache operations are logged:
 ## Configuration
 
 ### Adjusting TTLs
+
 Update `QUERY_TTL_POLICIES` in `src/services/cachedQueryManager.ts`:
 
 ```typescript
 QUERY_TTL_POLICIES = {
-  TRANSACTION_HISTORY: 600,  // Increase to 10 minutes if DB load is non-issue
-  USER_STATS: 900,           // Increase if stats freshness isn't critical
+  TRANSACTION_HISTORY: 600, // Increase to 10 minutes if DB load is non-issue
+  USER_STATS: 900, // Increase if stats freshness isn't critical
   // ...
-}
+};
 ```
 
 ### Custom Tags
+
 Add new tags for custom invalidation patterns:
 
 ```typescript
@@ -197,11 +214,13 @@ static customQuery(id: string): string {
 ## Testing
 
 Run cache tests:
+
 ```bash
 npm test -- src/routes/__tests__/caching.test.ts
 ```
 
 Tests cover:
+
 - Cache-aside pattern
 - Tag-based invalidation
 - TTL policies
@@ -220,16 +239,19 @@ Tests cover:
 ## Troubleshooting
 
 ### Cache not invalidating
+
 - Check Redis connectivity
 - Verify tag names are correct
 - Check logs for invalidation errors
 
 ### High memory usage
+
 - Reduce TTL values for less critical queries
 - Check for pattern-based invalidation leaks
 - Monitor with `cachedQueryManager.getStats()`
 
 ### Low cache hit rate
+
 - Increase TTL values for appropriate queries
 - Check if invalidation is too aggressive
 - Verify caching is actually being used

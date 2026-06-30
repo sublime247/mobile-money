@@ -174,14 +174,19 @@ describe("redact — arrays containing sensitive objects", () => {
   });
 
   it("handles nested arrays", () => {
-    const input = { items: [{ password: "pw-test-1" }, { password: "pw-test-2" }] };
+    const input = {
+      items: [{ password: "pw-test-1" }, { password: "pw-test-2" }],
+    };
     const result = redact(input) as typeof input;
     expect(result.items[0].password).toBe(REDACTED);
     expect(result.items[1].password).toBe(REDACTED);
   });
 
   it("passes through arrays of non-sensitive objects unchanged", () => {
-    const input = [{ id: 1, name: "Alice" }, { id: 2, name: "Bob" }];
+    const input = [
+      { id: 1, name: "Alice" },
+      { id: 2, name: "Bob" },
+    ];
     expect(redact(input)).toEqual(input);
   });
 });

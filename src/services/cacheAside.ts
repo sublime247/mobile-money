@@ -1,5 +1,9 @@
 import { NextFunction, Request, Response } from "express";
-import { cachedQueryManager, QUERY_TTL_POLICIES, CacheTags } from "./cachedQueryManager";
+import {
+  cachedQueryManager,
+  QUERY_TTL_POLICIES,
+  CacheTags,
+} from "./cachedQueryManager";
 import logger from "../utils/logger";
 
 /**
@@ -26,16 +30,12 @@ export async function withCacheAside<T>(
   const ttl = options.ttlSeconds || QUERY_TTL_POLICIES.TRANSACTION_HISTORY;
   const fullParams = { ...params };
   const cacheKey = generateCacheKey(options.baseKey, fullParams);
-  
-  const result = await cachedQueryManager.getOrFetch(
-    cacheKey,
-    queryFn,
-    {
-      ttlSeconds: ttl,
-      tags: options.tags,
-    },
-  );
-  
+
+  const result = await cachedQueryManager.getOrFetch(cacheKey, queryFn, {
+    ttlSeconds: ttl,
+    tags: options.tags,
+  });
+
   return result.data;
 }
 
@@ -49,37 +49,42 @@ export function cacheAsideMiddleware(options: CacheAsideOptions) {
       const params = options.paramsExtractor?.(req) || req.query;
       const ttl = options.ttlSeconds || QUERY_TTL_POLICIES.TRANSACTION_HISTORY;
       const cacheKey = generateCacheKey(options.baseKey, params);
-      
+
       // Try to get from cache
       const cached = await cachedQueryManager.get(cacheKey);
       if (cached !== null) {
         res.setHeader("X-Cache", "HIT");
         return res.json(cached);
       }
-      
+
       // Mark cache miss
       res.setHeader("X-Cache", "MISS");
-      
+
       // Intercept response to cache it
       const originalJson = res.json.bind(res);
-      res.json = function(data: any) {
+      res.json = function (data: any) {
         // Cache successful responses
         if (res.statusCode === 200 && data) {
           setImmediate(() => {
-            cachedQueryManager.set(cacheKey, data, {
-              ttlSeconds: ttl,
-              tags: options.tags,
-            }).catch(error => {
-              logger.warn({ cacheKey, error }, "Failed to cache response");
-            });
+            cachedQueryManager
+              .set(cacheKey, data, {
+                ttlSeconds: ttl,
+                tags: options.tags,
+              })
+              .catch((error) => {
+                logger.warn({ cacheKey, error }, "Failed to cache response");
+              });
           });
         }
         return originalJson(data);
       };
-      
+
       next();
     } catch (error) {
-      logger.warn({ error }, "Cache-aside middleware error, continuing without cache");
+      logger.warn(
+        { error },
+        "Cache-aside middleware error, continuing without cache",
+      );
       next();
     }
   };
@@ -88,16 +93,19 @@ export function cacheAsideMiddleware(options: CacheAsideOptions) {
 /**
  * Helper to generate cache key with parameters
  */
-function generateCacheKey(baseKey: string, params?: Record<string, any>): string {
+function generateCacheKey(
+  baseKey: string,
+  params?: Record<string, any>,
+): string {
   if (!params || Object.keys(params).length === 0) {
     return `cache:${baseKey}`;
   }
-  
+
   const sortedParams = Object.keys(params)
     .sort()
-    .map(key => `${key}=${encodeURIComponent(JSON.stringify(params[key]))}`)
+    .map((key) => `${key}=${encodeURIComponent(JSON.stringify(params[key]))}`)
     .join("&");
-  
+
   return `cache:${baseKey}:${Buffer.from(sortedParams).toString("base64")}`;
 }
 
@@ -114,11 +122,11 @@ export class TransactionCacheInvalidation {
       CacheTags.userStats(userId),
       CacheTags.userTransaction(userId),
     ];
-    
+
     await cachedQueryManager.invalidateByTags(tags);
     logger.info({ userId, tags }, "User transaction caches invalidated");
   }
-  
+
   /**
    * Invalidate provider-wide stats when a new transaction is created
    */
@@ -132,7 +140,7 @@ export class TransactionCacheInvalidation {
     await cachedQueryManager.invalidateByTags(tags);
     logger.info({ provider, tags }, "Provider stats caches invalidated");
   }
-  
+
   /**
    * Invalidate all general statistics caches on any significant event
    */
@@ -140,7 +148,7 @@ export class TransactionCacheInvalidation {
     await cachedQueryManager.invalidateByTag(CacheTags.generalStats());
     logger.info("General stats cache invalidated");
   }
-  
+
   /**
    * Invalidate all caches (nuclear option for migrations, config changes)
    */
@@ -159,23 +167,29 @@ export class WebhookCacheInvalidation {
    * Invalidate merchant configuration caches when webhook recovers
    * This ensures fresh settings are loaded after a webhook client reconnects
    */
-  static async invalidateOnWebhookRecovery(userId: string, webhookId: string): Promise<void> {
+  static async invalidateOnWebhookRecovery(
+    userId: string,
+    webhookId: string,
+  ): Promise<void> {
     const tags = [
       CacheTags.merchantConfig(userId),
       CacheTags.merchantWebhooks(userId),
     ];
-    
+
     const invalidatedCount = await cachedQueryManager.invalidateByTags(tags);
-    
-    logger.info({
-      userId,
-      webhookId,
-      tags,
-      invalidatedCount,
-      event: "webhook_recovery",
-    }, "Merchant configuration caches invalidated on webhook recovery");
+
+    logger.info(
+      {
+        userId,
+        webhookId,
+        tags,
+        invalidatedCount,
+        event: "webhook_recovery",
+      },
+      "Merchant configuration caches invalidated on webhook recovery",
+    );
   }
-  
+
   /**
    * Invalidate all merchant-related caches for a specific user
    * Used when webhook configuration changes or when webhook is deleted
@@ -185,15 +199,18 @@ export class WebhookCacheInvalidation {
       CacheTags.merchantConfig(userId),
       CacheTags.merchantWebhooks(userId),
     ];
-    
+
     const invalidatedCount = await cachedQueryManager.invalidateByTags(tags);
-    
-    logger.info({
-      userId,
-      tags,
-      invalidatedCount,
-      event: "merchant_cache_invalidation",
-    }, "All merchant caches invalidated");
+
+    logger.info(
+      {
+        userId,
+        tags,
+        invalidatedCount,
+        event: "merchant_cache_invalidation",
+      },
+      "All merchant caches invalidated",
+    );
   }
 }
 
@@ -204,7 +221,9 @@ export const CacheKeyGenerators = {
   userTransactionHistory: (userId: string) => `user-history:${userId}`,
   userTransactionStats: (userId: string) => `user-stats:${userId}`,
   generalStats: () => "general-stats",
-  volumeByProvider: (startDate: string, endDate: string) => `volume-provider:${startDate}:${endDate}`,
-  activeUsersCount: (startDate: string, endDate: string) => `active-users:${startDate}:${endDate}`,
+  volumeByProvider: (startDate: string, endDate: string) =>
+    `volume-provider:${startDate}:${endDate}`,
+  activeUsersCount: (startDate: string, endDate: string) =>
+    `active-users:${startDate}:${endDate}`,
   userStatusHistory: (userId: string) => `status-history:${userId}`,
 };

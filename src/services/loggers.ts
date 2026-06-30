@@ -163,7 +163,10 @@ function truncate(value: string, maxChars: number): string {
   return `${value.slice(0, Math.max(0, maxChars - 14))}...truncated`;
 }
 
-function formatStack(error: Error | undefined, maxChars: number): string | null {
+function formatStack(
+  error: Error | undefined,
+  maxChars: number,
+): string | null {
   if (!error?.stack) return null;
   return truncate(error.stack, maxChars);
 }

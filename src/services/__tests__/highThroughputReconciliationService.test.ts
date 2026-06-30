@@ -55,7 +55,10 @@ REF003,150.00,completed`;
       };
 
       const startTime = Date.now();
-      const result = await service.runStreamingReconciliation(csvBuffer, config);
+      const result = await service.runStreamingReconciliation(
+        csvBuffer,
+        config,
+      );
       const executionTime = Date.now() - startTime;
 
       // Verify results
@@ -73,7 +76,11 @@ REF003,150.00,completed`;
       }));
 
       const csvHeaders = "reference_number,amount,status\n";
-      const csvData = csvHeaders + records.map((r) => `${r.reference_number},${r.amount},${r.status}`).join("\n");
+      const csvData =
+        csvHeaders +
+        records
+          .map((r) => `${r.reference_number},${r.amount},${r.status}`)
+          .join("\n");
 
       const mockDbRecords = records.slice(0, 800).map((r, i) => ({
         id: `${i}`,
@@ -97,7 +104,10 @@ REF003,150.00,completed`;
         reportDate: new Date("2024-01-01"),
       };
 
-      const result = await service.runStreamingReconciliation(csvBuffer, config);
+      const result = await service.runStreamingReconciliation(
+        csvBuffer,
+        config,
+      );
 
       // Verify high match rate (800 matched out of 1000)
       expect(result.matchedCount).toBe(800);
@@ -143,7 +153,10 @@ REF002,250.50,completed`;
         reportDate: new Date("2024-01-01"),
       };
 
-      const result = await service.runStreamingReconciliation(csvBuffer, config);
+      const result = await service.runStreamingReconciliation(
+        csvBuffer,
+        config,
+      );
 
       // Should detect 1 match and 1 discrepancy
       expect(result.matchedCount).toBe(1);
@@ -187,7 +200,10 @@ REF-002,200.50,COMPLETED`;
         reportDate: new Date("2024-01-01"),
       };
 
-      const result = await service.runStreamingReconciliation(csvBuffer, config);
+      const result = await service.runStreamingReconciliation(
+        csvBuffer,
+        config,
+      );
 
       // Should match despite case differences
       expect(result.matchedCount).toBeGreaterThanOrEqual(0);

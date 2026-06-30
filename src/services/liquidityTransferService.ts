@@ -26,7 +26,9 @@ interface LiquidityTransfer {
   completedAt?: Date | null;
 }
 
-const DEFAULT_THRESHOLD = parseFloat(process.env.PROVIDER_MIN_BALANCE_THRESHOLD || "1000");
+const DEFAULT_THRESHOLD = parseFloat(
+  process.env.PROVIDER_MIN_BALANCE_THRESHOLD || "1000",
+);
 const TRANSFER_TARGET_RATIO = 0.5; // rebalance to 50% of combined balance
 
 function getThreshold(provider: ProviderName): number {
@@ -35,9 +37,15 @@ function getThreshold(provider: ProviderName): number {
   return Number.isFinite(val) ? val : DEFAULT_THRESHOLD;
 }
 
-async function fetchBalance(provider: ProviderName): Promise<ProviderBalance | null> {
+async function fetchBalance(
+  provider: ProviderName,
+): Promise<ProviderBalance | null> {
   try {
-    let result: { success: boolean; data?: { availableBalance: number; currency: string }; error?: unknown };
+    let result: {
+      success: boolean;
+      data?: { availableBalance: number; currency: string };
+      error?: unknown;
+    };
 
     if (provider === "mtn") {
       result = await new MTNProvider().getOperationalBalance();
@@ -49,7 +57,11 @@ async function fetchBalance(provider: ProviderName): Promise<ProviderBalance | n
     }
 
     if (!result.success || !result.data) return null;
-    return { provider, balance: result.data.availableBalance, currency: result.data.currency };
+    return {
+      provider,
+      balance: result.data.availableBalance,
+      currency: result.data.currency,
+    };
   } catch {
     return null;
   }
@@ -68,12 +80,24 @@ async function recordTransfer(
     `INSERT INTO liquidity_transfers (from_provider, to_provider, amount, currency, triggered_by, admin_id, note)
      VALUES ($1, $2, $3, $4, $5, $6, $7)
      RETURNING id`,
-    [fromProvider, toProvider, amount, currency, triggeredBy, adminId ?? null, note ?? null],
+    [
+      fromProvider,
+      toProvider,
+      amount,
+      currency,
+      triggeredBy,
+      adminId ?? null,
+      note ?? null,
+    ],
   );
   return result.rows[0].id;
 }
 
-async function markTransferDone(id: string, status: "completed" | "failed", error?: string) {
+async function markTransferDone(
+  id: string,
+  status: "completed" | "failed",
+  error?: string,
+) {
   await queryWrite(
     `UPDATE liquidity_transfers
      SET status = $1, error = $2, completed_at = CURRENT_TIMESTAMP
@@ -93,13 +117,17 @@ export async function runLiquidityRebalance(): Promise<void> {
   );
 
   if (balances.length < 2) {
-    console.log("[liquidity] Not enough provider balances available to rebalance");
+    console.log(
+      "[liquidity] Not enough provider balances available to rebalance",
+    );
     return;
   }
 
   const low = balances.filter((b) => b.balance < getThreshold(b.provider));
   if (low.length === 0) {
-    console.log("[liquidity] All providers above threshold, no transfer needed");
+    console.log(
+      "[liquidity] All providers above threshold, no transfer needed",
+    );
     return;
   }
 
@@ -168,7 +196,9 @@ export async function triggerManualTransfer(
   note?: string,
 ): Promise<{ transferId: string }> {
   const balances = await Promise.all(
-    [fromProvider as ProviderName, toProvider as ProviderName].map(fetchBalance),
+    [fromProvider as ProviderName, toProvider as ProviderName].map(
+      fetchBalance,
+    ),
   );
 
   const donor = balances[0];
@@ -203,7 +233,10 @@ export async function triggerManualTransfer(
   return { transferId };
 }
 
-export async function getLiquidityTransfers(limit = 50, offset = 0): Promise<LiquidityTransfer[]> {
+export async function getLiquidityTransfers(
+  limit = 50,
+  offset = 0,
+): Promise<LiquidityTransfer[]> {
   const result = await queryRead<{
     id: string;
     from_provider: string;

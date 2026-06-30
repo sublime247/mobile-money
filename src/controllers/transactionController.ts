@@ -1063,9 +1063,9 @@ export const listTransactionsHandler = async (req: Request, res: Response) => {
 
     const totalCount = await transactionModel.countByStatuses(filters.statuses);
     const transactions = await transactionModel.findByStatuses(
-       filters.statuses,
-       filters.limit,
-       filters.offset,
+      filters.statuses,
+      filters.limit,
+      filters.offset,
     );
     const results = await transactionModel.list(
       filters.limit,
@@ -1094,7 +1094,10 @@ export const listTransactionsHandler = async (req: Request, res: Response) => {
         currentPage: Math.floor(filters.offset / filters.limit) + 1,
       },
       filters: {
-        statuses: filters.statuses.length === 0 ? Object.values(TransactionStatus) : filters.statuses,
+        statuses:
+          filters.statuses.length === 0
+            ? Object.values(TransactionStatus)
+            : filters.statuses,
       },
     });
   } catch (err) {

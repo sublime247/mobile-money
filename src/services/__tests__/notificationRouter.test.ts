@@ -1,4 +1,7 @@
-import { NotificationRouter, NotificationSeverity } from "../notificationRouter";
+import {
+  NotificationRouter,
+  NotificationSeverity,
+} from "../notificationRouter";
 import { UserModel } from "../../models/users";
 import { Transaction } from "../../models/transaction";
 
@@ -59,7 +62,6 @@ const mockSmsService = (global as any).mockSmsService;
 const mockPushService = (global as any).mockPushService;
 const mockWhatsappService = (global as any).mockWhatsappService;
 const mockPagerDutyService = (global as any).mockPagerDutyService;
-
 
 describe("NotificationRouter", () => {
   let notificationRouter: NotificationRouter;

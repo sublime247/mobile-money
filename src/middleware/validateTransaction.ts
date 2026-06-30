@@ -11,7 +11,7 @@ function validateStellarAddress(address: string): boolean {
   if (!address || typeof address !== "string") {
     return false;
   }
-  
+
   try {
     resolveToBaseAddress(address);
     return true;
@@ -28,9 +28,10 @@ const transactionSchema = z.object({
   provider: z.enum(["MTN", "AIRTEL", "ORANGE"], {
     message: "Provider must be one of: MTN, AIRTEL, ORANGE",
   }),
-  stellarAddress: z
-    .string()
-    .refine(validateStellarAddress, { message: "Invalid Stellar address format (must be valid G-address or M-address)" }),
+  stellarAddress: z.string().refine(validateStellarAddress, {
+    message:
+      "Invalid Stellar address format (must be valid G-address or M-address)",
+  }),
   userId: z.string().nonempty({ message: "userId is required" }),
 });
 

@@ -33,12 +33,14 @@ The Low Liquidity Alert System monitors Stellar hot wallet balances and sends al
 ## Alert Format
 
 Alerts are sent to Slack with the following information:
+
 - Wallet public key
 - Asset type and current balance
 - Threshold value
 - Timestamp
 
 Example alert:
+
 ```
 Low balance alert: GABC123 has 50 XLM (threshold: 100)
 ```
@@ -53,6 +55,7 @@ Low balance alert: GABC123 has 50 XLM (threshold: 100)
 ## Testing
 
 Run the balance monitor job manually:
+
 ```bash
 npm run test -- --testPathPattern=balanceMonitorJob
 ```
@@ -64,6 +67,7 @@ npm run test -- --testPathPattern=balanceMonitorJob
 - ✅ Slack webhook integration
 - ✅ Configurable monitoring frequency
 - ✅ Error handling and failure alerts
+
 ---
 
 ## PagerDuty Escalation Tiers (issue #1018)
@@ -75,11 +79,11 @@ escalation path, with the boundary at the upper tier (`>=` semantics).
 
 ### Tier Matrix
 
-| Tier     | Shortfall % range                                          | PagerDuty Severity | Escalation Path           | Routing        |
-|----------|------------------------------------------------------------|--------------------|---------------------------|----------------|
-| minor    | `>= BALANCE_SHORTFALL_MINOR_PCT` and `< _MODERATE_PCT`     | `warning`          | `team-notification`       | Team on-call   |
-| moderate | `>= BALANCE_SHORTFALL_MODERATE_PCT` and `< _CRITICAL_PCT`  | `error`            | `operational-escalation`  | Ops on-call    |
-| critical | `>= BALANCE_SHORTFALL_CRITICAL_PCT`                        | `critical`         | `immediate-escalation`    | Immediate page |
+| Tier     | Shortfall % range                                         | PagerDuty Severity | Escalation Path          | Routing        |
+| -------- | --------------------------------------------------------- | ------------------ | ------------------------ | -------------- |
+| minor    | `>= BALANCE_SHORTFALL_MINOR_PCT` and `< _MODERATE_PCT`    | `warning`          | `team-notification`      | Team on-call   |
+| moderate | `>= BALANCE_SHORTFALL_MODERATE_PCT` and `< _CRITICAL_PCT` | `error`            | `operational-escalation` | Ops on-call    |
+| critical | `>= BALANCE_SHORTFALL_CRITICAL_PCT`                       | `critical`         | `immediate-escalation`   | Immediate page |
 
 Below `BALANCE_SHORTFALL_MINOR_PCT` the shortfall is treated as **noise** and no
 PagerDuty event is raised (existing incidents are not auto-resolved until the

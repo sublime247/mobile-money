@@ -5,6 +5,7 @@ This guide explains how to set up and use Two-Factor Authentication (2FA) in the
 ## Overview
 
 2FA adds an extra layer of security by requiring users to provide two forms of authentication:
+
 1. Something they know (password/phone number)
 2. Something they have (authenticator app code or backup code)
 
@@ -25,15 +26,28 @@ This guide explains how to set up and use Two-Factor Authentication (2FA) in the
 **Description**: Generate TOTP secret and QR code for 2FA setup
 
 **Headers**:
+
 - `Authorization: Bearer <jwt_token>`
 
 **Response**:
+
 ```json
 {
   "message": "2FA setup initiated",
   "secret": "JBSWY3DPEHPK3PXP",
   "qrCode": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
-  "backupCodes": ["AB12CD34", "EF56GH78", "IJ90KL12", "MN34OP56", "QR78ST90", "UV12WX34", "YZ56AB78", "CD90EF12", "GH34IJ56", "KL78MN90"],
+  "backupCodes": [
+    "AB12CD34",
+    "EF56GH78",
+    "IJ90KL12",
+    "MN34OP56",
+    "QR78ST90",
+    "UV12WX34",
+    "YZ56AB78",
+    "CD90EF12",
+    "GH34IJ56",
+    "KL78MN90"
+  ],
   "instructions": {
     "step1": "Scan the QR code with your authenticator app (Google Authenticator, Authy, etc.)",
     "step2": "Enter the 6-digit code from your app to verify setup",
@@ -49,9 +63,11 @@ This guide explains how to set up and use Two-Factor Authentication (2FA) in the
 **Description**: Verify TOTP token and enable 2FA for user
 
 **Headers**:
+
 - `Authorization: Bearer <jwt_token>`
 
 **Body**:
+
 ```json
 {
   "secret": "JBSWY3DPEHPK3PXP",
@@ -60,6 +76,7 @@ This guide explains how to set up and use Two-Factor Authentication (2FA) in the
 ```
 
 **Response**:
+
 ```json
 {
   "message": "2FA enabled successfully",
@@ -78,9 +95,11 @@ This guide explains how to set up and use Two-Factor Authentication (2FA) in the
 **Description**: Verify TOTP token for 2FA-protected operations
 
 **Headers**:
+
 - `Authorization: Bearer <jwt_token>`
 
 **Body**:
+
 ```json
 {
   "token": "123456"
@@ -88,6 +107,7 @@ This guide explains how to set up and use Two-Factor Authentication (2FA) in the
 ```
 
 **Response**:
+
 ```json
 {
   "message": "2FA authentication successful",
@@ -102,9 +122,11 @@ This guide explains how to set up and use Two-Factor Authentication (2FA) in the
 **Description**: Authenticate using backup code
 
 **Headers**:
+
 - `Authorization: Bearer <jwt_token>`
 
 **Body**:
+
 ```json
 {
   "backupCode": "AB12CD34"
@@ -112,6 +134,7 @@ This guide explains how to set up and use Two-Factor Authentication (2FA) in the
 ```
 
 **Response**:
+
 ```json
 {
   "message": "Backup code authentication successful",
@@ -127,9 +150,11 @@ This guide explains how to set up and use Two-Factor Authentication (2FA) in the
 **Description**: Disable 2FA for user
 
 **Headers**:
+
 - `Authorization: Bearer <jwt_token>`
 
 **Body**:
+
 ```json
 {
   "token": "123456"
@@ -137,6 +162,7 @@ This guide explains how to set up and use Two-Factor Authentication (2FA) in the
 ```
 
 **Response**:
+
 ```json
 {
   "message": "2FA disabled successfully",
@@ -162,6 +188,7 @@ This guide explains how to set up and use Two-Factor Authentication (2FA) in the
 ### Step 3: Using 2FA
 
 For sensitive operations, provide either:
+
 - **TOTP Token**: In `X-2FA-Token` header
 - **Backup Code**: In request body as `backupCode` or `backup_code`
 
@@ -171,11 +198,11 @@ For sensitive operations, provide either:
 
 ```javascript
 const headers = {
-  'Authorization': 'Bearer <jwt_token>',
-  'X-2FA-Token': '123456' // Code from authenticator app
+  Authorization: "Bearer <jwt_token>",
+  "X-2FA-Token": "123456", // Code from authenticator app
 };
 
-fetch('/api/sensitive-operation', { headers });
+fetch("/api/sensitive-operation", { headers });
 ```
 
 ### Using Backup Code
@@ -183,32 +210,35 @@ fetch('/api/sensitive-operation', { headers });
 ```javascript
 const body = {
   // ... other data
-  backupCode: 'AB12CD34' // One of your backup codes
+  backupCode: "AB12CD34", // One of your backup codes
 };
 
-fetch('/api/sensitive-operation', {
-  method: 'POST',
+fetch("/api/sensitive-operation", {
+  method: "POST",
   headers: {
-    'Authorization': 'Bearer <jwt_token>',
-    'Content-Type': 'application/json'
+    Authorization: "Bearer <jwt_token>",
+    "Content-Type": "application/json",
   },
-  body: JSON.stringify(body)
+  body: JSON.stringify(body),
 });
 ```
 
 ## Security Considerations
 
 ### Backup Codes
+
 - Store backup codes in a secure, offline location
 - Each backup code can only be used once
 - Consider regenerating backup codes if you use more than 2-3 codes
 
 ### TOTP Secret
+
 - The secret is stored encrypted in the database
 - Never share your secret with anyone
 - If you suspect your secret is compromised, disable and re-enable 2FA
 
 ### Recovery Options
+
 - Keep backup codes accessible but secure
 - If you lose all backup codes and access to your authenticator app, you may need account recovery support
 
@@ -223,18 +253,23 @@ fetch('/api/sensitive-operation', {
 ## Troubleshooting
 
 ### Time Sync Issues
+
 If your authenticator app codes aren't working:
+
 1. Check your device's time is set to automatic
 2. Ensure time zone is correct
 3. Try resyncing in your authenticator app
 
 ### Lost Access
+
 If you lose access to your authenticator app:
+
 1. Use one of your backup codes
 2. Immediately disable and re-enable 2FA to generate new backup codes
 3. Contact support if you've lost all backup codes
 
 ### Invalid Codes
+
 - Codes expire every 30 seconds
 - Wait for a new code if the current one shows as invalid
 - Ensure you're using the correct account in your authenticator app
@@ -244,8 +279,9 @@ If you lose access to your authenticator app:
 The following tables are added to support 2FA:
 
 ### users table additions
+
 ```sql
-ALTER TABLE users 
+ALTER TABLE users
 ADD COLUMN two_factor_secret VARCHAR(32),
 ADD COLUMN two_factor_enabled BOOLEAN DEFAULT FALSE,
 ADD COLUMN two_factor_verified BOOLEAN DEFAULT FALSE,
@@ -253,6 +289,7 @@ ADD COLUMN email VARCHAR(255);
 ```
 
 ### backup_codes table
+
 ```sql
 CREATE TABLE backup_codes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -269,18 +306,24 @@ CREATE TABLE backup_codes (
 Use the provided middleware to protect sensitive operations:
 
 ```typescript
-import { requireTwoFactor } from '../middleware/twoFactor';
+import { requireTwoFactor } from "../middleware/twoFactor";
 
 // Require 2FA for sensitive operations
-router.post('/transfer', authenticateToken, requireTwoFactor, transferHandler);
+router.post("/transfer", authenticateToken, requireTwoFactor, transferHandler);
 
 // Optional 2FA (allows operation if 2FA not enabled)
-router.post('/profile-update', authenticateToken, optionalTwoFactor, updateProfile);
+router.post(
+  "/profile-update",
+  authenticateToken,
+  optionalTwoFactor,
+  updateProfile,
+);
 ```
 
 ## Testing
 
 The implementation includes comprehensive error handling and validation:
+
 - Invalid TOTP tokens
 - Used backup codes
 - Missing authentication

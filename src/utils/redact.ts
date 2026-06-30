@@ -108,7 +108,9 @@ export function isSensitiveKey(key: string): boolean {
  * Returns the parsed value on success, or null if the string is not valid JSON
  * or does not parse to an object/array (primitives are left as-is).
  */
-function tryParseJson(value: string): Record<string, unknown> | unknown[] | null {
+function tryParseJson(
+  value: string,
+): Record<string, unknown> | unknown[] | null {
   const trimmed = value.trim();
   if (trimmed[0] !== "{" && trimmed[0] !== "[") return null;
   try {

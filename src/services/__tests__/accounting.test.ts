@@ -78,21 +78,34 @@ describe("AccountingService", () => {
 
     mockPool.query.mockImplementation((queryText: string, values?: any[]) => {
       const sql = queryText.toLowerCase();
-      if (sql.includes("select * from accounting_connections where id =") || sql.includes("select * from accounting_connections where id = $1")) {
+      if (
+        sql.includes("select * from accounting_connections where id =") ||
+        sql.includes("select * from accounting_connections where id = $1")
+      ) {
         const id = values?.[0];
         const conn = dbConnections.find((c) => c.id === id);
         return Promise.resolve({ rows: conn ? [toDbRow(conn)] : [] });
       }
-      if (sql.includes("select * from accounting_connections where user_id =")) {
+      if (
+        sql.includes("select * from accounting_connections where user_id =")
+      ) {
         const userId = values?.[0];
-        const conns = dbConnections.filter((c) => c.userId === userId && c.isActive);
+        const conns = dbConnections.filter(
+          (c) => c.userId === userId && c.isActive,
+        );
         return Promise.resolve({ rows: conns.map(toDbRow) });
       }
-      if (sql.includes("select * from accounting_connections where is_active = true")) {
+      if (
+        sql.includes(
+          "select * from accounting_connections where is_active = true",
+        )
+      ) {
         const conns = dbConnections.filter((c) => c.isActive);
         return Promise.resolve({ rows: conns.map(toDbRow) });
       }
-      if (sql.includes("select * from category_mappings where connection_id =")) {
+      if (
+        sql.includes("select * from category_mappings where connection_id =")
+      ) {
         return Promise.resolve({ rows: dbCategoryMappings });
       }
       if (sql.includes("count(*)") && sql.includes("from transactions")) {
@@ -490,7 +503,7 @@ describe("AccountingService", () => {
           recordsProcessed: 1,
           recordsSucceeded: 1,
           recordsFailed: 0,
-        })
+        }),
       ]);
       expect(mockPool.query).toHaveBeenCalledWith(
         "SELECT * FROM sync_logs WHERE connection_id = $1 ORDER BY synced_at DESC LIMIT $2",
@@ -630,7 +643,9 @@ describe("AccountingService", () => {
       dbConnections = [xeroConnection];
       dbCategoryMappings = mappingRows;
 
-      mockAxios.post.mockResolvedValue({ data: { Bills: [{ BillID: "test-bill-id" }] } });
+      mockAxios.post.mockResolvedValue({
+        data: { Bills: [{ BillID: "test-bill-id" }] },
+      });
 
       await accountingService.syncTransaction({
         id: "txn-123",
@@ -669,12 +684,12 @@ describe("AccountingService", () => {
             Authorization: "Bearer test-access-token",
             "Xero-tenant-id": "test-tenant-id",
           }),
-        })
+        }),
       );
 
       expect(mockPool.query).toHaveBeenCalledWith(
         expect.stringContaining("INSERT INTO accounting_sync_queue"),
-        ["txn-123", "test-connection-id"]
+        ["txn-123", "test-connection-id"],
       );
     });
   });

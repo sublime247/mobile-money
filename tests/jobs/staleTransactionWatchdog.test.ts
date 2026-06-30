@@ -58,7 +58,12 @@ describe("runStaleTransactionWatchdog", () => {
   it("finalises a completed transaction when provider reports completed", async () => {
     mockPoolQuery.mockResolvedValueOnce({
       rows: [
-        { id: "tx-1", reference_number: "REF-001", provider: "mtn", created_at: new Date() },
+        {
+          id: "tx-1",
+          reference_number: "REF-001",
+          provider: "mtn",
+          created_at: new Date(),
+        },
       ],
     });
 
@@ -73,7 +78,12 @@ describe("runStaleTransactionWatchdog", () => {
   it("expires a transaction when provider reports failed", async () => {
     mockPoolQuery.mockResolvedValueOnce({
       rows: [
-        { id: "tx-2", reference_number: "REF-002", provider: "airtel", created_at: new Date() },
+        {
+          id: "tx-2",
+          reference_number: "REF-002",
+          provider: "airtel",
+          created_at: new Date(),
+        },
       ],
     });
 
@@ -88,7 +98,12 @@ describe("runStaleTransactionWatchdog", () => {
   it("expires a transaction when provider reports pending (still stuck)", async () => {
     mockPoolQuery.mockResolvedValueOnce({
       rows: [
-        { id: "tx-3", reference_number: "REF-003", provider: "orange", created_at: new Date() },
+        {
+          id: "tx-3",
+          reference_number: "REF-003",
+          provider: "orange",
+          created_at: new Date(),
+        },
       ],
     });
 
@@ -100,7 +115,12 @@ describe("runStaleTransactionWatchdog", () => {
   it("expires a transaction when provider returns unknown", async () => {
     mockPoolQuery.mockResolvedValueOnce({
       rows: [
-        { id: "tx-4", reference_number: "REF-004", provider: "mtn", created_at: new Date() },
+        {
+          id: "tx-4",
+          reference_number: "REF-004",
+          provider: "mtn",
+          created_at: new Date(),
+        },
       ],
     });
 
@@ -112,14 +132,33 @@ describe("runStaleTransactionWatchdog", () => {
   it("handles multiple transactions with mixed outcomes", async () => {
     mockPoolQuery.mockResolvedValueOnce({
       rows: [
-        { id: "tx-5", reference_number: "REF-005", provider: "mtn", created_at: new Date() },
-        { id: "tx-6", reference_number: "REF-006", provider: "airtel", created_at: new Date() },
-        { id: "tx-7", reference_number: "REF-007", provider: "orange", created_at: new Date() },
+        {
+          id: "tx-5",
+          reference_number: "REF-005",
+          provider: "mtn",
+          created_at: new Date(),
+        },
+        {
+          id: "tx-6",
+          reference_number: "REF-006",
+          provider: "airtel",
+          created_at: new Date(),
+        },
+        {
+          id: "tx-7",
+          reference_number: "REF-007",
+          provider: "orange",
+          created_at: new Date(),
+        },
       ],
     });
 
     await runStaleTransactionWatchdog(
-      makeService({ "REF-005": "completed", "REF-006": "failed", "REF-007": "unknown" }),
+      makeService({
+        "REF-005": "completed",
+        "REF-006": "failed",
+        "REF-007": "unknown",
+      }),
     );
 
     expect(mockUpdateStatus).toHaveBeenCalledWith("tx-5", "completed");
@@ -133,7 +172,12 @@ describe("runStaleTransactionWatchdog", () => {
   it("counts errors and continues when updateStatus throws", async () => {
     mockPoolQuery.mockResolvedValueOnce({
       rows: [
-        { id: "tx-8", reference_number: "REF-008", provider: "mtn", created_at: new Date() },
+        {
+          id: "tx-8",
+          reference_number: "REF-008",
+          provider: "mtn",
+          created_at: new Date(),
+        },
       ],
     });
     mockUpdateStatus.mockRejectedValueOnce(new Error("DB error"));

@@ -77,8 +77,12 @@ function connectClient(client: MockClient, token = "test-token"): void {
 }
 
 describe("WebSocketManager", () => {
-  const mockVerifyToken = verifyToken as jest.MockedFunction<typeof verifyToken>;
-  const mockCreateClient = createClient as jest.MockedFunction<typeof createClient>;
+  const mockVerifyToken = verifyToken as jest.MockedFunction<
+    typeof verifyToken
+  >;
+  const mockCreateClient = createClient as jest.MockedFunction<
+    typeof createClient
+  >;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -162,8 +166,12 @@ describe("WebSocketManager", () => {
     };
 
     mockCreateClient
-      .mockImplementationOnce(() => pubClient as unknown as ReturnType<typeof createClient>)
-      .mockImplementationOnce(() => subClient as unknown as ReturnType<typeof createClient>);
+      .mockImplementationOnce(
+        () => pubClient as unknown as ReturnType<typeof createClient>,
+      )
+      .mockImplementationOnce(
+        () => subClient as unknown as ReturnType<typeof createClient>,
+      );
 
     const manager = new WebSocketManager({} as Server);
     const client = createMockClient();
@@ -202,17 +210,25 @@ describe("WebSocketManager", () => {
 
     const subClient = {
       connect: jest.fn().mockResolvedValue(undefined),
-      subscribe: jest.fn().mockImplementation((channel: string, callback: (message: string) => void) => {
-        subscriberCallback = callback;
-        return Promise.resolve();
-      }),
+      subscribe: jest
+        .fn()
+        .mockImplementation(
+          (channel: string, callback: (message: string) => void) => {
+            subscriberCallback = callback;
+            return Promise.resolve();
+          },
+        ),
       unsubscribe: jest.fn().mockResolvedValue(undefined),
       disconnect: jest.fn().mockResolvedValue(undefined),
     };
 
     mockCreateClient
-      .mockImplementationOnce(() => pubClient as unknown as ReturnType<typeof createClient>)
-      .mockImplementationOnce(() => subClient as unknown as ReturnType<typeof createClient>);
+      .mockImplementationOnce(
+        () => pubClient as unknown as ReturnType<typeof createClient>,
+      )
+      .mockImplementationOnce(
+        () => subClient as unknown as ReturnType<typeof createClient>,
+      );
 
     const manager = new WebSocketManager({} as Server);
     const client = createMockClient();
@@ -270,8 +286,12 @@ describe("WebSocketManager", () => {
     };
 
     mockCreateClient
-      .mockImplementationOnce(() => pubClient as unknown as ReturnType<typeof createClient>)
-      .mockImplementationOnce(() => subClient as unknown as ReturnType<typeof createClient>);
+      .mockImplementationOnce(
+        () => pubClient as unknown as ReturnType<typeof createClient>,
+      )
+      .mockImplementationOnce(
+        () => subClient as unknown as ReturnType<typeof createClient>,
+      );
 
     const manager = new WebSocketManager({} as Server);
 
@@ -328,17 +348,25 @@ describe("WebSocketManager", () => {
 
     const subClient = {
       connect: jest.fn().mockResolvedValue(undefined),
-      subscribe: jest.fn().mockImplementation((channel: string, callback: (message: string) => void) => {
-        subscriberCallback = callback;
-        return Promise.resolve();
-      }),
+      subscribe: jest
+        .fn()
+        .mockImplementation(
+          (channel: string, callback: (message: string) => void) => {
+            subscriberCallback = callback;
+            return Promise.resolve();
+          },
+        ),
       unsubscribe: jest.fn().mockResolvedValue(undefined),
       disconnect: jest.fn().mockResolvedValue(undefined),
     };
 
     mockCreateClient
-      .mockImplementationOnce(() => pubClient as unknown as ReturnType<typeof createClient>)
-      .mockImplementationOnce(() => subClient as unknown as ReturnType<typeof createClient>);
+      .mockImplementationOnce(
+        () => pubClient as unknown as ReturnType<typeof createClient>,
+      )
+      .mockImplementationOnce(
+        () => subClient as unknown as ReturnType<typeof createClient>,
+      );
 
     const manager = new WebSocketManager({} as Server);
     const client = createMockClient();
@@ -350,9 +378,11 @@ describe("WebSocketManager", () => {
 
     // Simulate client subscribing to a transaction
     const handlers = new Map<string, (...args: unknown[]) => void>();
-    client.on.mockImplementation((event: string, handler: (...args: unknown[]) => void) => {
-      handlers.set(event, handler);
-    });
+    client.on.mockImplementation(
+      (event: string, handler: (...args: unknown[]) => void) => {
+        handlers.set(event, handler);
+      },
+    );
 
     // Send subscription message
     const messageHandler = handlers.get("message");

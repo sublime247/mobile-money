@@ -12,6 +12,7 @@
 This document outlines a comprehensive strategy for enabling asset bridging between Stellar and Ethereum Virtual Machine (EVM) chains. The proposed architecture enables seamless liquidity flow, supports locked-minted asset models, and positions the platform for future multi-chain expansion while maintaining security, compliance, and operational efficiency.
 
 ### Key Objectives
+
 1. Enable cross-chain asset transfers between Stellar and EVM ecosystems
 2. Support locked-minted asset model with custodian verification
 3. Maintain compliance and risk management across chains
@@ -27,6 +28,7 @@ This document outlines a comprehensive strategy for enabling asset bridging betw
 **Overview:** Multi-chain bridge specializing in stablecoin transfers with a focus on emerging markets and reduced transaction costs.
 
 **Strengths:**
+
 - ✅ Active Stellar support (native integration)
 - ✅ EVM ecosystem coverage (Ethereum, Polygon, BSC, Arbitrum, Optimism)
 - ✅ Non-custodial bridge model (liquidity pools, not wrapped tokens)
@@ -36,17 +38,19 @@ This document outlines a comprehensive strategy for enabling asset bridging betw
 - ✅ Strong DeFi alignment
 
 **Weaknesses:**
+
 - ❌ Limited KYC/AML native capabilities
 - ❌ Smaller liquidity pools than major bridges
 - ❌ Less mature compliance infrastructure
 - ❌ Community-run validator set (decentralized but less predictable)
 
 **Technical Architecture:**
+
 ```
 User -> Allbridge Portal
          ├── Stellar Lock (deposit)
          └── EVM Mint (release on target chain)
-         
+
 Liquidity Model: Incentivized Pools (LP farmers)
 Token Model: Canonical allocation (1:1 representation)
 ```
@@ -58,15 +62,18 @@ Token Model: Canonical allocation (1:1 representation)
 ### 1.2 Stellar's Native Bridge Options
 
 #### 1.2.1 Stellar SEP-41 (Stellar-to-EVM)
+
 **Status:** Emerging standard, community support
 
 **Strengths:**
+
 - ✅ Fully decentralized, peer-to-peer model
 - ✅ No intermediary custodian required
 - ✅ Directly integrated with Stellar protocol
 - ✅ Supports custom asset issuance
 
 **Weaknesses:**
+
 - ❌ Still in standardization phase
 - ❌ Limited EVM tooling
 - ❌ Requires significant validation setup
@@ -78,12 +85,14 @@ Token Model: Canonical allocation (1:1 representation)
 **Overview:** Cross-chain messaging protocol supporting 30+ chains including Stellar.
 
 **Strengths:**
+
 - ✅ Proven security (audited, $2B+ TVL)
 - ✅ Extensive EVM support
 - ✅ Guardian network for validation
 - ✅ Flexible token models (wrapped+canonical)
 
 **Weaknesses:**
+
 - ❌ Guardian-set centralization concerns
 - ❌ Complex integration requirements
 - ❌ Higher gas costs on some chains
@@ -97,12 +106,14 @@ Token Model: Canonical allocation (1:1 representation)
 **Overview:** Enterprise-grade cross-chain messaging.
 
 **Strengths:**
+
 - ✅ Institutional backing and security audits
 - ✅ Robust risk management framework
 - ✅ Deep EVM integration
 - ✅ Oracle-based finality
 
 **Weaknesses:**
+
 - ❌ **No native Stellar support**
 - ❌ High implementation cost
 - ❌ Designed for institutional users
@@ -114,11 +125,13 @@ Token Model: Canonical allocation (1:1 representation)
 **Overview:** Cosmos ecosystem's cross-chain protocol, expanding beyond Cosmos.
 
 **Strengths:**
+
 - ✅ Battle-tested in Cosmos ecosystem
 - ✅ Highly secure (validator consensus-based)
 - ✅ Standard protocol (ICS standards)
 
 **Weaknesses:**
+
 - ❌ Stellar integration would require wrapper chains
 - ❌ Higher complexity
 - ❌ Emerging Stellar-Cosmos bridge support
@@ -127,15 +140,15 @@ Token Model: Canonical allocation (1:1 representation)
 
 ### 1.6 Comparative Analysis Matrix
 
-| Feature | Allbridge | SEP-41 | Wormhole | CCIP | IBC |
-|---------|-----------|--------|----------|------|-----|
-| **Stellar Support** | ✅ Native | ✅ Native | ❌ Deprecated | ❌ No | ⚠️ Emerging |
-| **EVM Coverage** | ✅ Full | ⚠️ Limited | ✅ 30+ chains | ✅ Full | ⚠️ Bridge only |
-| **Liquidity Models** | ✅ Pools | ✅ Natural | ✅ Wrapped | ✅ Canonical | ✅ Native |
-| **Compliance** | ⚠️ Basic | ⚠️ Basic | ⚠️ Basic | ✅ Advanced | ⚠️ Basic |
-| **Maturity** | ✅ Production | ⚠️ Beta | ✅ Mature | ✅ Mature | ⚠️ Emerging |
-| **Integration Cost** | Low | Medium | Medium | High | High |
-| **Custody Model** | Non-custodial | P2P | Custodial | Canonical | Non-custodial |
+| Feature              | Allbridge     | SEP-41     | Wormhole      | CCIP         | IBC            |
+| -------------------- | ------------- | ---------- | ------------- | ------------ | -------------- |
+| **Stellar Support**  | ✅ Native     | ✅ Native  | ❌ Deprecated | ❌ No        | ⚠️ Emerging    |
+| **EVM Coverage**     | ✅ Full       | ⚠️ Limited | ✅ 30+ chains | ✅ Full      | ⚠️ Bridge only |
+| **Liquidity Models** | ✅ Pools      | ✅ Natural | ✅ Wrapped    | ✅ Canonical | ✅ Native      |
+| **Compliance**       | ⚠️ Basic      | ⚠️ Basic   | ⚠️ Basic      | ✅ Advanced  | ⚠️ Basic       |
+| **Maturity**         | ✅ Production | ⚠️ Beta    | ✅ Mature     | ✅ Mature    | ⚠️ Emerging    |
+| **Integration Cost** | Low           | Medium     | Medium        | High         | High           |
+| **Custody Model**    | Non-custodial | P2P        | Custodial     | Canonical    | Non-custodial  |
 
 ---
 
@@ -192,6 +205,7 @@ EVM SIDE:
 ### 2.3 Locked-Minted Components
 
 #### 2.3.1 Stellar Lockup Mechanism
+
 ```typescript
 // Pseudo-code architecture
 interface StellarLockUp {
@@ -231,20 +245,21 @@ interface StellarLockUp {
 ```
 
 #### 2.3.2 EVM Mint Mechanism
+
 ```solidity
 // Smart contract architecture
 contract BridgedAssetVault {
     // Minting state
     mapping(bytes32 => bool) public processedBridgeTxns;
     mapping(address => uint256) public userMintedBalance;
-    
+
     // Asset representation on EVM
     IERC20 public wrappedToken;
-    
+
     // Validator attestation
     mapping(address => bool) public approvedValidators;
     mapping(bytes32 => uint8) public validatorSignatures;
-    
+
     // Core function: mint wrapped token
     function mintFromBridge(
         bytes32 stellarTxnHash,
@@ -254,13 +269,13 @@ contract BridgedAssetVault {
     ) external nonReentrant {
         require(!processedBridgeTxns[stellarTxnHash], "Already minted");
         require(verifyValidatorConsensus(validatorSigs, 2, 3), "Insufficient signatures");
-        
+
         processedBridgeTxns[stellarTxnHash] = true;
         wrappedToken.mint(recipient, amount);
-        
+
         emit WrappedTokenMinted(recipient, amount, stellarTxnHash);
     }
-    
+
     // Redemption: burn wrapped token, unlock on Stellar
     function burnForRedemption(uint256 amount) external {
         wrappedToken.burn(msg.sender, amount);
@@ -270,6 +285,7 @@ contract BridgedAssetVault {
 ```
 
 #### 2.3.3 Validator Network
+
 ```typescript
 interface ValidatorNetwork {
   // Multi-sig requirements
@@ -280,8 +296,8 @@ interface ValidatorNetwork {
 
   // Validator types
   validators: {
-    primary: ValidatorNode[];      // Foundation-run
-    secondary: PartnerNodes[];      // Exchange operators (Kraken, Coinbase)
+    primary: ValidatorNode[]; // Foundation-run
+    secondary: PartnerNodes[]; // Exchange operators (Kraken, Coinbase)
     community: CommunityValidators[]; // Decentralized set
   };
 
@@ -313,9 +329,11 @@ interface ValidatorNetwork {
 ### 3.1 Phase-Based Implementation
 
 #### **Phase 1: MVP (Q2-Q3 2026)** ← Current Focus
+
 **Scope:** Stellar ↔ Ethereum (testnet), locked-minted model
 
 **Deliverables:**
+
 - [ ] Allbridge integration API client
 - [ ] Stellar escrow lock mechanism
 - [ ] Mock EVM smart contracts (testnet)
@@ -324,6 +342,7 @@ interface ValidatorNetwork {
 - [ ] End-to-end test suite
 
 **Architecture Components:**
+
 ```
 src/services/bridge/
 ├── allbridgeService.ts          # Allbridge API integration
@@ -340,6 +359,7 @@ src/jobs/
 ```
 
 **Success Metrics:**
+
 - Testnet transactions: 1000+ test transfers
 - Latency: <5 mins lock→mint
 - Validator consensus: 100% signed transactions
@@ -348,9 +368,11 @@ src/jobs/
 ---
 
 #### **Phase 2: Production & Optimization (Q4 2026)**
+
 **Scope:** Mainnet deployment, liquidity optimization, UX polish
 
 **New Deliverables:**
+
 - [ ] Production validator set (3-5 validators)
 - [ ] Liquidity bootstrapping mechanisms
 - [ ] Fee optimization engine
@@ -358,27 +380,33 @@ src/jobs/
 - [ ] Real-time bridge analytics
 
 **Extended Coverage:**
+
 - Add Polygon network support
 - Integrate CCIP messaging layer
 
 ---
 
 #### **Phase 3: Multi-Asset Support (Q1-Q2 2027)**
-**Scope:** Multiple assets, advanced bridging MechanicsNew Assets:**
+
+**Scope:** Multiple assets, advanced bridging MechanicsNew Assets:\*\*
+
 - USDC, EUROC, NGNT (Nigerian Naira)
 - Custom mobile money-backed tokens
 - NFT bridging (future)
 
 **Integrations:**
+
 - Chainlink Data Feeds (price oracles)
 - Uniswap liquidity aggregation
 
 ---
 
 #### **Phase 4: Expanded Chains (Q3-Q4 2027)**
+
 **Scope:** Multi-chain architecture foundation
 
 **Target Chains:**
+
 1. **Solana** - High velocity, mobile-friendly
 2. **Polygon** - EVM compatible, low costs
 3. **Cosmos** - IBC protocol integration
@@ -462,6 +490,7 @@ interface HubAndSpokeArchitecture {
 #### 3.3.1 Validator Network Setup
 
 **Validator Node Specifications:**
+
 ```yaml
 Primary Validators (2):
   - Foundation-run nodes (Stellar Dev Foundation, Project Partner)
@@ -504,9 +533,9 @@ interface BridgeComplianceFramework {
   };
 
   userTiers: {
-    tier1: { dailyLimit: "$5K", kycRequirement: "Basic" };
-    tier2: { dailyLimit: "$50K", kycRequirement: "Enhanced" };
-    tier3: { dailyLimit: "$500K", kycRequirement: "Institutional" };
+    tier1: { dailyLimit: "$5K"; kycRequirement: "Basic" };
+    tier2: { dailyLimit: "$50K"; kycRequirement: "Enhanced" };
+    tier3: { dailyLimit: "$500K"; kycRequirement: "Institutional" };
   };
 
   reporting: {
@@ -581,23 +610,23 @@ CREATE TABLE bridge_transactions (
   asset_code VARCHAR(12) NOT NULL,
   amount DECIMAL(19, 7) NOT NULL,
   status VARCHAR(50) NOT NULL,  -- 'pending', 'locked', 'minted', 'completed'
-  
+
   -- Lock side (Stellar)
   stellar_lock_tx_hash VARCHAR(64),
   stellar_lock_timestamp TIMESTAMP,
-  
+
   -- Mint side (EVM)
   evm_mint_tx_hash VARCHAR(66),
   evm_mint_timestamp TIMESTAMP,
   evm_recipient_address VARCHAR(42),
-  
+
   -- Validator signatures
   validator_signatures JSONB,
   consensus_ratio DECIMAL(3, 2),
-  
+
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW(),
-  
+
   UNIQUE(stellar_lock_tx_hash),
   UNIQUE(evm_mint_tx_hash)
 );
@@ -653,7 +682,7 @@ STELLAR_BRIDGE_ESCROW_KEY=S...              # Multi-sig escrow private key
 STELLAR_BRIDGE_ISSUER_KEY=S...
 BRIDGE_STELLAR_ADDRESSES=GABC...,GDEF...
 
-# EVM Bridge Configuration  
+# EVM Bridge Configuration
 EVM_BRIDGE_VAULT_ADDRESS=0x...              # Deployed bridge vault contract
 EVM_RPC_URL=https://eth-mainnet.infura.io
 EVM_BRIDGE_DEPLOYER_KEY=0x...
@@ -679,29 +708,29 @@ BRIDGE_MONITOR_POLL_INTERVAL_MS=300000     # 5 minutes
 
 ### 5.1 Security Risks
 
-| Risk | Severity | Mitigation |
-|------|----------|-----------|
-| **Smart Contract Exploit** | 🔴 Critical | Formal verification, bug bounty, staged rollout |
-| **Validator Collusion** | 🔴 Critical | Diverse validator set, slashing conditions, time-locks |
-| **Bridge Liquidity Attack** | 🟠 High | Rate limiting, circuit breakers, insurance fund |
-| **Network Fork** | 🟠 High | Consensus voting, finality checkpoints |
-| **Key Compromise** | 🔴 Critical | HSM storage, multi-sig, key rotation |
+| Risk                        | Severity    | Mitigation                                             |
+| --------------------------- | ----------- | ------------------------------------------------------ |
+| **Smart Contract Exploit**  | 🔴 Critical | Formal verification, bug bounty, staged rollout        |
+| **Validator Collusion**     | 🔴 Critical | Diverse validator set, slashing conditions, time-locks |
+| **Bridge Liquidity Attack** | 🟠 High     | Rate limiting, circuit breakers, insurance fund        |
+| **Network Fork**            | 🟠 High     | Consensus voting, finality checkpoints                 |
+| **Key Compromise**          | 🔴 Critical | HSM storage, multi-sig, key rotation                   |
 
 ### 5.2 Operational Risks
 
-| Risk | Mitigation |
-|------|-----------|
-| **Bridge Downtime** | Redundant validators, failover mechanisms |
-| **Liquidity Drain** | Automatic liquidity pools, DEX integration |
+| Risk                         | Mitigation                                             |
+| ---------------------------- | ------------------------------------------------------ |
+| **Bridge Downtime**          | Redundant validators, failover mechanisms              |
+| **Liquidity Drain**          | Automatic liquidity pools, DEX integration             |
 | **Validator Unavailability** | Community validators as backup, incentive optimization |
 
 ### 5.3 Regulatory Risks
 
-| Risk | Mitigation |
-|------|-----------|
-| **Cross-border Classification** | Consult with legal, OFAC compliance, UTCR reporting |
-| **AML/KYC Requirements** | Enhanced tier system, transaction limits, audit trails |
-| **Tax Implications** | User warnings, transaction receipts, tax integration |
+| Risk                            | Mitigation                                             |
+| ------------------------------- | ------------------------------------------------------ |
+| **Cross-border Classification** | Consult with legal, OFAC compliance, UTCR reporting    |
+| **AML/KYC Requirements**        | Enhanced tier system, transaction limits, audit trails |
+| **Tax Implications**            | User warnings, transaction receipts, tax integration   |
 
 ---
 
@@ -756,19 +785,19 @@ Risk:
 interface ComplianceFramework {
   jurisdiction: {
     eu: {
-      regulation: "MiCA (Markets in Crypto-Assets)",
-      requirement: "Licensed crypto-asset service provider",
-      status: "In progress"
+      regulation: "MiCA (Markets in Crypto-Assets)";
+      requirement: "Licensed crypto-asset service provider";
+      status: "In progress";
     };
     us: {
-      regulation: "FinCEN guidance + OFAC",
-      requirement: "MSB registration in relevant states",
-      status: "Planned"
+      regulation: "FinCEN guidance + OFAC";
+      requirement: "MSB registration in relevant states";
+      status: "Planned";
     };
     africa: {
-      regulation: "Variable (country-specific)",
-      requirement: "Local partnership for regulatory alignment",
-      status: "In progress"
+      regulation: "Variable (country-specific)";
+      requirement: "Local partnership for regulatory alignment";
+      status: "In progress";
     };
   };
 
@@ -860,7 +889,7 @@ Phase 1-2: Allbridge Integration (External)
   - Fast time-to-market
   - Proven liquidity pools
   - Lower implementation risk
-  
+
 Phase 1-2: Custom Validator Consensus (Internal)
   - Locked-minted asset management
   - Compliance control
@@ -888,17 +917,21 @@ Phase 3+: Hub-and-Spoke (Evolutionary)
 
 ```typescript
 // allbridgeService.ts
-import axios from 'axios';
+import axios from "axios";
 
 export class AllbridgeService {
   private client = axios.create({
-    baseURL: 'https://api.allbridge.io/v2',
-    headers: { Authorization: `Bearer ${process.env.ALLBRIDGE_API_KEY}` }
+    baseURL: "https://api.allbridge.io/v2",
+    headers: { Authorization: `Bearer ${process.env.ALLBRIDGE_API_KEY}` },
   });
 
-  async queryBridgeLiquidity(sourceChain: string, targetChain: string, asset: string) {
-    return this.client.get('/liquidity', {
-      params: { sourceChain, targetChain, asset }
+  async queryBridgeLiquidity(
+    sourceChain: string,
+    targetChain: string,
+    asset: string,
+  ) {
+    return this.client.get("/liquidity", {
+      params: { sourceChain, targetChain, asset },
     });
   }
 
@@ -910,7 +943,7 @@ export class AllbridgeService {
     amount: string;
     asset: string;
   }) {
-    return this.client.post('/bridge/initiate', params);
+    return this.client.post("/bridge/initiate", params);
   }
 
   async trackBridgeStatus(bridgeId: string) {
@@ -928,11 +961,11 @@ pragma solidity ^0.8.19;
 contract BridgeAssetVault {
     event BridgeDeposit(address indexed user, uint256 amount);
     event WrappedTokensMinted(address indexed user, uint256 amount);
-    
+
     // Validator consensus
     mapping(bytes32 => uint8) public txnValidatorSignatures;
     address[] public validators;
-    
+
     function verifyValidatorConsensus(
         bytes32 txnHash,
         bytes[] calldata signatures
@@ -953,23 +986,23 @@ contract BridgeAssetVault {
 
 ```typescript
 // bridgeSyncJob.ts
-import { Job } from 'bullmq';
-import { StellarService } from './stellar';
-import { EVMService } from './evm';
-import { ValidatorService } from './validator';
+import { Job } from "bullmq";
+import { StellarService } from "./stellar";
+import { EVMService } from "./evm";
+import { ValidatorService } from "./validator";
 
 export async function bridgeSyncJob(job: Job) {
   const transactions = await BridgeTransaction.findPending();
-  
+
   for (const tx of transactions) {
     try {
       // Check Stellar lock status
       const lockStatus = await StellarService.verifyLock(tx.stellarTxHash);
-      
+
       if (lockStatus.confirmed) {
         // Collect validator signatures
         const signatures = await ValidatorService.collectSignatures(tx.id);
-        
+
         // Mint on EVM
         if (ValidatorService.verifyConsensus(signatures)) {
           const mint = await EVMService.mintWrapped(tx.id, tx.amount);
@@ -989,16 +1022,19 @@ export async function bridgeSyncJob(job: Job) {
 ## Appendix B: Additional Resources
 
 **Stellar Documentation:**
+
 - [Stellar Developer Guide](https://developers.stellar.org)
 - [SEP-10 Authentication](https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0010.md)
 - [SEP-41 Bridged Assets](https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0041.md)
 
 **EVM Bridge References:**
+
 - [Allbridge Documentation](https://allbridge.io/developer-docs)
 - [OpenZeppelin Bridge Contracts](https://docs.openzeppelin.com)
 - [AAVE Portal Bridge](https://governance.aave.com/t/portal-bridge)
 
 **Compliance Resources:**
+
 - [FATF Travel Rule Guidance](https://www.fatf-gafi.org/publications/fatfrecommendations)
 - [FinCEN Crypto Guidance](https://www.fincen.gov/news)
 - [MiCA European Regulation](https://www.europarl.europa.eu/news/en/headlines/economy/20220927STO00019)

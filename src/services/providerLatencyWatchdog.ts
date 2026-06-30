@@ -1,5 +1,8 @@
 import logger from "../utils/logger";
-import { providerCircuitBreakerTransitionsTotal, providerCircuitBreakerState } from "../utils/metrics";
+import {
+  providerCircuitBreakerTransitionsTotal,
+  providerCircuitBreakerState,
+} from "../utils/metrics";
 
 export type WatchdogProvider = "mtn" | "airtel" | "orange";
 
@@ -45,11 +48,15 @@ export async function recordProviderLatency(
         { provider, samples: window, thresholdMs: LATENCY_THRESHOLD_MS },
         `Latency watchdog: ${provider} exceeded ${LATENCY_THRESHOLD_MS}ms for ${CONSECUTIVE_THRESHOLD} consecutive requests — tripping circuit breaker`,
       );
-      providerCircuitBreakerTransitionsTotal.inc({ provider, operation: OPERATION, state: "open" });
+      providerCircuitBreakerTransitionsTotal.inc({
+        provider,
+        operation: OPERATION,
+        state: "open",
+      });
       providerCircuitBreakerState.set({ provider, operation: OPERATION }, 1);
 
       // Dynamically trip via the circuit breaker utility
-      const { tripCircuitBreaker } = await import("../utils/circuitBreaker");
+      const { tripCircuitBreaker } = await import("../utils/circuitBreaker.js");
       await tripCircuitBreaker(provider, OPERATION);
     }
   } else {

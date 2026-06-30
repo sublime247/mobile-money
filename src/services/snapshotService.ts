@@ -85,18 +85,27 @@ export class SnapshotService {
     if (yesterdaySnapshot) {
       const prevVolume = parseFloat(yesterdaySnapshot.dailyVolume);
       if (prevVolume > 0) {
-        growth.volumeGrowth = ((parseFloat(dailyVolume) - prevVolume) / prevVolume) * 100;
+        growth.volumeGrowth =
+          ((parseFloat(dailyVolume) - prevVolume) / prevVolume) * 100;
       }
 
       const prevBalance = parseFloat(yesterdaySnapshot.totalBalance);
       if (prevBalance > 0) {
-        growth.balanceGrowth = ((parseFloat(totalBalance) - prevBalance) / prevBalance) * 100;
+        growth.balanceGrowth =
+          ((parseFloat(totalBalance) - prevBalance) / prevBalance) * 100;
       }
     }
 
     // 7. Send Management Summary Email
-    const managementEmail = process.env.MANAGEMENT_EMAIL || process.env.ORG_SUPPORT_EMAIL || "support@mobilemoney.com";
-    await this.emailService.sendManagementSummary(managementEmail, snapshot, growth);
+    const managementEmail =
+      process.env.MANAGEMENT_EMAIL ||
+      process.env.ORG_SUPPORT_EMAIL ||
+      "support@mobilemoney.com";
+    await this.emailService.sendManagementSummary(
+      managementEmail,
+      snapshot,
+      growth,
+    );
 
     return snapshot;
   }

@@ -93,7 +93,10 @@ import settingsRoutes from "./routes/settings";
 import { statementsRoutes } from "./routes/statements";
 import { paymentLinkRoutes } from "./routes/paymentLinkRoutes.js";
 import providerStatusRouter from "./routes/providerStatus";
-import { startHeartbeatService, stopHeartbeatService } from "./services/heartbeatService";
+import {
+  startHeartbeatService,
+  stopHeartbeatService,
+} from "./services/heartbeatService";
 import { startStellarExporter } from "./services/stellarExporter";
 import { StellarService } from "./services/stellar/stellarService";
 
@@ -443,7 +446,7 @@ app.use(
 );
 
 if (process.env.SENTRY_DSN) {
-  app.use(Sentry.expressErrorHandler());
+  app.use(Sentry.expressErrorHandler() as any);
 }
 
 app.use(timeoutErrorHandler);
@@ -587,7 +590,8 @@ async function initializeRuntime(): Promise<void> {
     await layeredCache.init();
     console.log("Layered cache (L1/L2) initialized");
 
-    const { providerSettingsService } = await import("./services/providerSettingsService.js");
+    const { providerSettingsService } =
+      await import("./services/providerSettingsService.js");
     await providerSettingsService.getAllSettings();
     console.log("Provider settings cache initialized");
 
@@ -619,7 +623,10 @@ async function initializeRuntime(): Promise<void> {
       cert: fs.readFileSync(path.join(__dirname, "../certs/cert.pem")),
     };
 
-    const http2Server = http2.createSecureServer({ ...sslOptions, allowHTTP1: true }, app);
+    const http2Server = http2.createSecureServer(
+      { ...sslOptions, allowHTTP1: true },
+      app as any,
+    );
     http2Server.listen(PORT, () => {
       console.log(`HTTP/2 server running on https://localhost:${PORT}`);
     });

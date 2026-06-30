@@ -7,13 +7,15 @@ const accountingService = new AccountingService();
 /**
  * Determine provider type from user's active accounting connections
  */
-async function getProviderTypeForUser(userId: string): Promise<'quickbooks' | 'xero' | null> {
+async function getProviderTypeForUser(
+  userId: string,
+): Promise<"quickbooks" | "xero" | null> {
   const result = await pool.query(
-    'SELECT provider FROM accounting_connections WHERE user_id = $1 AND is_active = true LIMIT 1',
-    [userId]
+    "SELECT provider FROM accounting_connections WHERE user_id = $1 AND is_active = true LIMIT 1",
+    [userId],
   );
   if (result.rows.length === 0) return null;
-  return result.rows[0].provider as 'quickbooks' | 'xero';
+  return result.rows[0].provider as "quickbooks" | "xero";
 }
 
 /**
@@ -21,7 +23,7 @@ async function getProviderTypeForUser(userId: string): Promise<'quickbooks' | 'x
  */
 async function logAccountingSyncError(
   transactionId: string,
-  providerType: 'quickbooks' | 'xero',
+  providerType: "quickbooks" | "xero",
   errorMessage: string,
 ): Promise<void> {
   await pool.query(
@@ -65,14 +67,16 @@ export async function runAccountingWebhookJob(): Promise<void> {
          WHERE q.transaction_id = t.id AND q.status = 'synced'
        )
      ORDER BY t.created_at ASC
-     LIMIT 50`
+     LIMIT 50`,
   );
 
   if (result.rows.length === 0) {
     return;
   }
 
-  console.log(`[accounting-webhook] Syncing ${result.rows.length} transaction(s)`);
+  console.log(
+    `[accounting-webhook] Syncing ${result.rows.length} transaction(s)`,
+  );
 
   for (const row of result.rows) {
     try {
@@ -88,7 +92,10 @@ export async function runAccountingWebhookJob(): Promise<void> {
         createdAt: row.created_at,
       });
     } catch (err) {
-      logger.error(`[accounting-webhook] Failed to sync transaction ${row.id}:`, err);
+      logger.error(
+        `[accounting-webhook] Failed to sync transaction ${row.id}:`,
+        err,
+      );
       const errorMessage = err instanceof Error ? err.message : String(err);
       const providerType = await getProviderTypeForUser(row.user_id);
       if (providerType) {

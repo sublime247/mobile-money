@@ -1,6 +1,10 @@
 import logger from "../utils/logger";
 import crypto from "crypto";
-import { MerchantModel, CreateMerchantInput, Merchant } from "../models/merchant";
+import {
+  MerchantModel,
+  CreateMerchantInput,
+  Merchant,
+} from "../models/merchant";
 import { EmailService } from "./email";
 import { resolveLocale, translate } from "../utils/i18n";
 
@@ -29,18 +33,18 @@ export class MerchantService {
     }
 
     const merchant = await this.merchantModel.create(input);
-    
+
     // Send invitation email
     await this.sendInvitationEmail(merchant);
-    
+
     await this.merchantModel.markInvitationSent(merchant.id);
-    
+
     return merchant;
   }
 
   async bulkCreateMerchants(
     inputs: CreateMerchantInput[],
-    createdBy: string
+    createdBy: string,
   ): Promise<{
     jobId: string;
     total: number;
@@ -58,7 +62,7 @@ export class MerchantService {
     }
 
     const jobId = crypto.randomUUID();
-    
+
     // Create batch job record
     await this.merchantModel.createBatchJob(jobId, inputs.length, createdBy);
 
@@ -76,7 +80,7 @@ export class MerchantService {
   private async processBulkImport(
     jobId: string,
     inputs: CreateMerchantInput[],
-    createdBy: string
+    createdBy: string,
   ): Promise<void> {
     await this.merchantModel.updateBatchJob(jobId, { status: "processing" });
 
@@ -87,51 +91,63 @@ export class MerchantService {
 
     // Filter out duplicates by email first
     const uniqueInputs = this.deduplicateByEmail(inputs);
-    
+
     // Pre-validate all inputs
     const validationErrors = this.validateAllInputs(uniqueInputs);
-    
+
     if (validationErrors.length > 0) {
       // If there are validation errors, we still try to process valid ones
       const validInputs = uniqueInputs.filter((_, index) => {
-        const rowErrors = validationErrors.filter(e => e.row === index + 2);
+        const rowErrors = validationErrors.filter((e) => e.row === index + 2);
         return rowErrors.length === 0;
       });
-      
+
       errors.push(...validationErrors);
       failed += validationErrors.length;
-      
+
       // Process valid inputs
       if (validInputs.length > 0) {
-        const result = await this.merchantModel.createMany(validInputs, createdBy);
+        const result = await this.merchantModel.createMany(
+          validInputs,
+          createdBy,
+        );
         succeeded += result.created.length;
         errors.push(...result.errors);
         failed += result.errors.length;
-        
+
         // Send invitation emails for created merchants
         for (const merchant of result.created) {
           try {
             await this.sendInvitationEmail(merchant);
             await this.merchantModel.markInvitationSent(merchant.id);
           } catch (emailError) {
-            logger.error(`[MerchantService] Failed to send invitation email to ${merchant.email}:`, emailError);
+            logger.error(
+              `[MerchantService] Failed to send invitation email to ${merchant.email}:`,
+              emailError,
+            );
           }
         }
       }
     } else {
       // All inputs are valid, process all
-      const result = await this.merchantModel.createMany(uniqueInputs, createdBy);
+      const result = await this.merchantModel.createMany(
+        uniqueInputs,
+        createdBy,
+      );
       succeeded += result.created.length;
       errors.push(...result.errors);
       failed += result.errors.length;
-      
+
       // Send invitation emails for created merchants
       for (const merchant of result.created) {
         try {
           await this.sendInvitationEmail(merchant);
           await this.merchantModel.markInvitationSent(merchant.id);
         } catch (emailError) {
-          logger.error(`[MerchantService] Failed to send invitation email to ${merchant.email}:`, emailError);
+          logger.error(
+            `[MerchantService] Failed to send invitation email to ${merchant.email}:`,
+            emailError,
+          );
         }
       }
     }
@@ -148,10 +164,12 @@ export class MerchantService {
     });
   }
 
-  private deduplicateByEmail(inputs: CreateMerchantInput[]): CreateMerchantInput[] {
+  private deduplicateByEmail(
+    inputs: CreateMerchantInput[],
+  ): CreateMerchantInput[] {
     const seen = new Set<string>();
     const unique: CreateMerchantInput[] = [];
-    
+
     for (const input of inputs) {
       const email = input.email.toLowerCase().trim();
       if (!seen.has(email)) {
@@ -159,71 +177,116 @@ export class MerchantService {
         unique.push(input);
       }
     }
-    
+
     return unique;
   }
 
-  private validateAllInputs(inputs: CreateMerchantInput[]): Array<{ row: number; error: string; email?: string }> {
+  private validateAllInputs(
+    inputs: CreateMerchantInput[],
+  ): Array<{ row: number; error: string; email?: string }> {
     const errors: Array<{ row: number; error: string; email?: string }> = [];
-    
+
     for (let i = 0; i < inputs.length; i++) {
       const input = inputs[i];
       const rowNum = i + 2; // Row 1 is header
-      
+
       const validationErrors = this.validateMerchantInput(input, rowNum);
       errors.push(...validationErrors);
     }
-    
+
     return errors;
   }
 
-  private validateMerchantInput(input: CreateMerchantInput, rowNum: number): Array<{ row: number; error: string; email?: string }> {
+  private validateMerchantInput(
+    input: CreateMerchantInput,
+    rowNum: number,
+  ): Array<{ row: number; error: string; email?: string }> {
     const errors: Array<{ row: number; error: string; email?: string }> = [];
-    
+
     // Validate name
     if (!input.name || input.name.trim().length === 0) {
-      errors.push({ row: rowNum, error: "Name is required", email: input.email });
+      errors.push({
+        row: rowNum,
+        error: "Name is required",
+        email: input.email,
+      });
     } else if (input.name.length > 255) {
-      errors.push({ row: rowNum, error: "Name must be less than 255 characters", email: input.email });
+      errors.push({
+        row: rowNum,
+        error: "Name must be less than 255 characters",
+        email: input.email,
+      });
     }
-    
+
     // Validate email
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!input.email || !emailRegex.test(input.email)) {
-      errors.push({ row: rowNum, error: "Valid email is required", email: input.email });
+      errors.push({
+        row: rowNum,
+        error: "Valid email is required",
+        email: input.email,
+      });
     } else if (input.email.length > 255) {
-      errors.push({ row: rowNum, error: "Email must be less than 255 characters", email: input.email });
+      errors.push({
+        row: rowNum,
+        error: "Email must be less than 255 characters",
+        email: input.email,
+      });
     }
-    
+
     // Validate phone number
     const phoneRegex = /^\+?\d{7,15}$/;
-    if (!input.phoneNumber || !phoneRegex.test(input.phoneNumber.replace(/[\s\-()]/g, ''))) {
-      errors.push({ row: rowNum, error: "Valid phone number is required (7-15 digits)", email: input.email });
+    if (
+      !input.phoneNumber ||
+      !phoneRegex.test(input.phoneNumber.replace(/[\s\-()]/g, ""))
+    ) {
+      errors.push({
+        row: rowNum,
+        error: "Valid phone number is required (7-15 digits)",
+        email: input.email,
+      });
     }
-    
+
     // Validate country code (ISO 3166-1 alpha-2)
     if (input.country && !/^[A-Z]{2}$/.test(input.country.toUpperCase())) {
-      errors.push({ row: rowNum, error: "Country must be a valid ISO 3166-1 alpha-2 code", email: input.email });
+      errors.push({
+        row: rowNum,
+        error: "Country must be a valid ISO 3166-1 alpha-2 code",
+        email: input.email,
+      });
     }
-    
+
     // Validate business type if provided
     if (input.businessType && input.businessType.length > 100) {
-      errors.push({ row: rowNum, error: "Business type must be less than 100 characters", email: input.email });
+      errors.push({
+        row: rowNum,
+        error: "Business type must be less than 100 characters",
+        email: input.email,
+      });
     }
-    
+
     // Validate tax ID if provided
     if (input.taxId && input.taxId.length > 50) {
-      errors.push({ row: rowNum, error: "Tax ID must be less than 50 characters", email: input.email });
+      errors.push({
+        row: rowNum,
+        error: "Tax ID must be less than 50 characters",
+        email: input.email,
+      });
     }
-    
+
     return errors;
   }
 
-  private async sendInvitationEmail(merchant: Merchant, locale = "en"): Promise<void> {
+  private async sendInvitationEmail(
+    merchant: Merchant,
+    locale = "en",
+  ): Promise<void> {
     const resolvedLocale = resolveLocale(locale);
     const invitationUrl = `${process.env.FRONTEND_URL || "https://app.mobilemoney.com"}/merchant/invite/${merchant.invitationToken}`;
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); // 7 days
-    
+    const expiresAt = new Date(
+      Date.now() + 7 * 24 * 60 * 60 * 1000,
+    ).toISOString(); // 7 days
+
     const emailData: MerchantInvitationEmailData = {
       merchantName: merchant.name,
       businessName: merchant.businessName,
@@ -233,7 +296,7 @@ export class MerchantService {
     };
 
     const templateId = process.env.SENDGRID_MERCHANT_INVITATION_TEMPLATE_ID;
-    
+
     if (templateId) {
       await this.emailService.sendEmail({
         to: merchant.email,
@@ -250,26 +313,36 @@ export class MerchantService {
         templateId: "",
         dynamicTemplateData: {},
       });
-      
+
       // Direct send for fallback
       const sgMail = require("@sendgrid/mail");
-      const from = process.env.EMAIL_FROM || '"Mobile Money" <no-reply@mobilemoney.com>';
-      
+      const from =
+        process.env.EMAIL_FROM || '"Mobile Money" <no-reply@mobilemoney.com>';
+
       try {
         await sgMail.send({
           from,
           to: merchant.email,
-          subject: translate("email.merchant_invitation.subject", resolvedLocale),
+          subject: translate(
+            "email.merchant_invitation.subject",
+            resolvedLocale,
+          ),
           html: this.buildInvitationEmailHtml(emailData, resolvedLocale),
           text: this.buildInvitationEmailText(emailData, resolvedLocale),
         });
       } catch (error) {
-        logger.error("[MerchantService] Invitation email delivery failed:", error);
+        logger.error(
+          "[MerchantService] Invitation email delivery failed:",
+          error,
+        );
       }
     }
   }
 
-  private buildInvitationEmailHtml(data: MerchantInvitationEmailData, locale: string): string {
+  private buildInvitationEmailHtml(
+    data: MerchantInvitationEmailData,
+    locale: string,
+  ): string {
     return `
       <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;">
         <h2 style="color:#2c3e50;">Welcome to Mobile Money!</h2>
@@ -295,7 +368,10 @@ export class MerchantService {
     `;
   }
 
-  private buildInvitationEmailText(data: MerchantInvitationEmailData, locale: string): string {
+  private buildInvitationEmailText(
+    data: MerchantInvitationEmailData,
+    locale: string,
+  ): string {
     return `
 Hello ${data.merchantName}${data.businessName ? ` from ${data.businessName}` : ""},
 
@@ -354,9 +430,9 @@ If you didn't expect this invitation, please ignore this email.
   }): Promise<{ merchants: Merchant[]; total: number; pagination: any }> {
     const page = options?.page || 1;
     const limit = options?.limit || 50;
-    
+
     const result = await this.merchantModel.list(options);
-    
+
     return {
       ...result,
       pagination: {
@@ -367,4 +443,3 @@ If you didn't expect this invitation, please ignore this email.
     };
   }
 }
-

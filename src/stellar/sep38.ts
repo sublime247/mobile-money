@@ -42,9 +42,10 @@ interface SupportedAssetPair {
 // ─── Supported assets ───────────────────────────────────────────────────────
 
 function getUsdcAssetId(): string {
-  const issuer = process.env.SEP38_USDC_ISSUER
-    || process.env.STELLAR_ASSET_ISSUER
-    || "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN";
+  const issuer =
+    process.env.SEP38_USDC_ISSUER ||
+    process.env.STELLAR_ASSET_ISSUER ||
+    "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN";
   return `stellar:USDC:${issuer}`;
 }
 
@@ -104,7 +105,10 @@ function isValidPositiveNumber(value: string): boolean {
   return !isNaN(num) && isFinite(num) && num > 0;
 }
 
-function findSupportedPair(sellAsset: string, buyAsset: string): SupportedAssetPair | undefined {
+function findSupportedPair(
+  sellAsset: string,
+  buyAsset: string,
+): SupportedAssetPair | undefined {
   return SUPPORTED_PAIRS.find(
     (p) => p.sell_asset === sellAsset && p.buy_asset === buyAsset,
   );
@@ -131,7 +135,9 @@ router.get("/prices", async (req: Request, res: Response) => {
     const { sell_asset, buy_asset } = req.query;
 
     if (!sell_asset || !buy_asset) {
-      res.status(400).json({ error: "Missing required parameters: sell_asset and buy_asset" });
+      res.status(400).json({
+        error: "Missing required parameters: sell_asset and buy_asset",
+      });
       return;
     }
 
@@ -140,7 +146,8 @@ router.get("/prices", async (req: Request, res: Response) => {
 
     if (!isValidAsset(sellAsset) || !isValidAsset(buyAsset)) {
       res.status(400).json({
-        error: "Invalid asset format. Assets must be in format 'stellar:*' or 'iso4217:*'",
+        error:
+          "Invalid asset format. Assets must be in format 'stellar:*' or 'iso4217:*'",
       });
       return;
     }
@@ -153,7 +160,9 @@ router.get("/prices", async (req: Request, res: Response) => {
     const result = await rateProvider.getIndicativePrice(sellAsset, buyAsset);
 
     if (!result) {
-      res.status(503).json({ error: "Insufficient liquidity for the requested asset pair" });
+      res
+        .status(503)
+        .json({ error: "Insufficient liquidity for the requested asset pair" });
       return;
     }
 
@@ -174,7 +183,9 @@ router.get("/price", async (req: Request, res: Response) => {
   const { sell_asset, buy_asset } = req.query;
 
   if (!sell_asset || !buy_asset) {
-    res.status(400).json({ error: "Missing required parameters: sell_asset and buy_asset" });
+    res
+      .status(400)
+      .json({ error: "Missing required parameters: sell_asset and buy_asset" });
     return;
   }
 
@@ -183,7 +194,8 @@ router.get("/price", async (req: Request, res: Response) => {
 
   if (!isValidAsset(sellAsset) || !isValidAsset(buyAsset)) {
     res.status(400).json({
-      error: "Invalid asset format. Assets must be in format 'stellar:*' or 'iso4217:*'",
+      error:
+        "Invalid asset format. Assets must be in format 'stellar:*' or 'iso4217:*'",
     });
     return;
   }
@@ -196,7 +208,9 @@ router.get("/price", async (req: Request, res: Response) => {
   const result = await rateProvider.getIndicativePrice(sellAsset, buyAsset);
 
   if (!result) {
-    res.status(503).json({ error: "Insufficient liquidity for the requested asset pair" });
+    res
+      .status(503)
+      .json({ error: "Insufficient liquidity for the requested asset pair" });
     return;
   }
 
@@ -214,20 +228,27 @@ router.post("/quote", async (req: Request, res: Response) => {
     const { sell_asset, buy_asset, sell_amount, buy_amount, ttl } = req.body;
 
     if (!sell_asset || !buy_asset) {
-      res.status(400).json({ error: "Missing required parameters: sell_asset and buy_asset" });
+      res.status(400).json({
+        error: "Missing required parameters: sell_asset and buy_asset",
+      });
       return;
     }
 
     if (!sell_amount && !buy_amount) {
       res.status(400).json({
-        error: "Missing required parameters: either sell_amount or buy_amount must be provided",
+        error:
+          "Missing required parameters: either sell_amount or buy_amount must be provided",
       });
       return;
     }
 
-    if (!isValidAsset(sell_asset as string) || !isValidAsset(buy_asset as string)) {
+    if (
+      !isValidAsset(sell_asset as string) ||
+      !isValidAsset(buy_asset as string)
+    ) {
       res.status(400).json({
-        error: "Invalid asset format. Assets must be in format 'stellar:*' or 'iso4217:*'",
+        error:
+          "Invalid asset format. Assets must be in format 'stellar:*' or 'iso4217:*'",
       });
       return;
     }
@@ -265,7 +286,9 @@ router.post("/quote", async (req: Request, res: Response) => {
     const quoteResult = await rateProvider.getFirmPrice(sellAsset, buyAsset);
 
     if (!quoteResult) {
-      res.status(503).json({ error: "Insufficient liquidity for the requested asset pair" });
+      res
+        .status(503)
+        .json({ error: "Insufficient liquidity for the requested asset pair" });
       return;
     }
 
@@ -275,10 +298,14 @@ router.post("/quote", async (req: Request, res: Response) => {
 
     if (sell_amount) {
       computedSellAmount = parseFloat(sell_amount).toFixed(PRICE_PRECISION);
-      computedBuyAmount = (parseFloat(sell_amount) * priceNum).toFixed(PRICE_PRECISION);
+      computedBuyAmount = (parseFloat(sell_amount) * priceNum).toFixed(
+        PRICE_PRECISION,
+      );
     } else {
       computedBuyAmount = parseFloat(buy_amount!).toFixed(PRICE_PRECISION);
-      computedSellAmount = (parseFloat(buy_amount!) / priceNum).toFixed(PRICE_PRECISION);
+      computedSellAmount = (parseFloat(buy_amount!) / priceNum).toFixed(
+        PRICE_PRECISION,
+      );
     }
 
     const quoteId = uuidv4();

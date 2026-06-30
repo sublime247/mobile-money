@@ -46,7 +46,9 @@ describe("SanctionSyncJob", () => {
   });
 
   it("should successfully run the sync job with mock data on axios error (fallback behavior)", async () => {
-    (mockedAxios.get as any).mockRejectedValue(new Error("Network connection timeout"));
+    (mockedAxios.get as any).mockRejectedValue(
+      new Error("Network connection timeout"),
+    );
 
     await runSanctionSyncJob();
 

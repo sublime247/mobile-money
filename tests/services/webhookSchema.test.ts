@@ -65,30 +65,30 @@ describe("Webhook Schema Validator", () => {
   it("should reject payload if version number is missing", () => {
     const { version, ...badPayload } = validV1Payload as any;
     expect(() => parseWebhookPayload(badPayload)).toThrow(
-      "Invalid payload: version is missing or is not a string"
+      "Invalid payload: version is missing or is not a string",
     );
   });
 
   it("should reject payload if version number is not a string", () => {
     const badPayload = { ...validV1Payload, version: 1 };
     expect(() => parseWebhookPayload(badPayload)).toThrow(
-      "Invalid payload: version is missing or is not a string"
+      "Invalid payload: version is missing or is not a string",
     );
   });
 
   it("should reject unsupported version numbers", () => {
     const badPayload = { ...validV1Payload, version: "3.0.0" };
     expect(() => parseWebhookPayload(badPayload)).toThrow(
-      "Unsupported schema version: 3.0.0"
+      "Unsupported schema version: 3.0.0",
     );
   });
 
   it("should reject payload if it is not an object", () => {
     expect(() => parseWebhookPayload("invalid")).toThrow(
-      "Invalid payload: payload must be an object"
+      "Invalid payload: payload must be an object",
     );
     expect(() => parseWebhookPayload(null)).toThrow(
-      "Invalid payload: payload must be an object"
+      "Invalid payload: payload must be an object",
     );
   });
 

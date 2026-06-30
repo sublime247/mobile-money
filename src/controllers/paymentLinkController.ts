@@ -41,12 +41,9 @@ export async function createPaymentLinkHandler(
     }
 
     if (!stellarAddress || !/^G[A-Z2-7]{55}$/.test(stellarAddress)) {
-      return res
-        .status(400)
-        .json({
-          error:
-            "A valid target Stellar public key (stellarAddress) is required",
-        });
+      return res.status(400).json({
+        error: "A valid target Stellar public key (stellarAddress) is required",
+      });
     }
 
     // Get active merchant ID from the authenticated session
@@ -225,11 +222,9 @@ export async function processPaymentHandler(
     });
   } catch (error: any) {
     logger.error("Failed to process payment link transaction:", error);
-    return res
-      .status(500)
-      .json({
-        error: error.message || "Failed to process payment link transaction",
-      });
+    return res.status(500).json({
+      error: error.message || "Failed to process payment link transaction",
+    });
   }
 }
 

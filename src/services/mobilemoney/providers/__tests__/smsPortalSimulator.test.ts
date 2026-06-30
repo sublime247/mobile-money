@@ -31,7 +31,16 @@ function mockContext() {
     close: jest.fn().mockResolvedValue(undefined),
     newPage: jest.fn(),
     cookies: jest.fn().mockResolvedValue([
-      { name: "session_id", value: "abc123", domain: "portal.example.com", path: "/", expires: 0, httpOnly: false, secure: false, sameSite: "Lax" as const },
+      {
+        name: "session_id",
+        value: "abc123",
+        domain: "portal.example.com",
+        path: "/",
+        expires: 0,
+        httpOnly: false,
+        secure: false,
+        sameSite: "Lax" as const,
+      },
     ]),
     addCookies: jest.fn().mockResolvedValue(undefined),
   };
@@ -90,7 +99,11 @@ describe("SmsPortalSimulator", () => {
 
   describe("ensureSession", () => {
     it("returns cached session when not expired", async () => {
-      const sim = new SmsPortalSimulator({ portalUrl: "https://portal.com", username: "u", password: "p" });
+      const sim = new SmsPortalSimulator({
+        portalUrl: "https://portal.com",
+        username: "u",
+        password: "p",
+      });
       // expiresAt well beyond default refreshSkewMs (60000ms)
       const session = {
         cookies: {},
@@ -104,7 +117,11 @@ describe("SmsPortalSimulator", () => {
     });
 
     it("calls login when no cached session exists", async () => {
-      const sim = new SmsPortalSimulator({ portalUrl: "https://portal.com", username: "u", password: "p" });
+      const sim = new SmsPortalSimulator({
+        portalUrl: "https://portal.com",
+        username: "u",
+        password: "p",
+      });
 
       const session = await sim.ensureSession();
 
@@ -115,7 +132,11 @@ describe("SmsPortalSimulator", () => {
 
     it("re-logins when cached session is expired", async () => {
       jest.useFakeTimers({ now: Date.now() });
-      const sim = new SmsPortalSimulator({ portalUrl: "https://portal.com", username: "u", password: "p" });
+      const sim = new SmsPortalSimulator({
+        portalUrl: "https://portal.com",
+        username: "u",
+        password: "p",
+      });
       (sim as any).session = {
         cookies: { old: { value: "x" } },
         expiresAt: Date.now() - 1000,
@@ -131,10 +152,17 @@ describe("SmsPortalSimulator", () => {
 
   describe("navigateAndExtract", () => {
     it("navigates to URL and calls extract function", async () => {
-      const sim = new SmsPortalSimulator({ portalUrl: "https://portal.com", username: "u", password: "p" });
+      const sim = new SmsPortalSimulator({
+        portalUrl: "https://portal.com",
+        username: "u",
+        password: "p",
+      });
       const extract = jest.fn().mockResolvedValue("extracted-data");
 
-      const result = await sim.navigateAndExtract("https://portal.com/status/ref-1", extract);
+      const result = await sim.navigateAndExtract(
+        "https://portal.com/status/ref-1",
+        extract,
+      );
 
       expect(result).toBe("extracted-data");
       expect(page.goto).toHaveBeenCalledWith(
@@ -144,16 +172,26 @@ describe("SmsPortalSimulator", () => {
     });
 
     it("propagates extract errors", async () => {
-      const sim = new SmsPortalSimulator({ portalUrl: "https://portal.com", username: "u", password: "p" });
+      const sim = new SmsPortalSimulator({
+        portalUrl: "https://portal.com",
+        username: "u",
+        password: "p",
+      });
       const extract = jest.fn().mockRejectedValue(new Error("extract-failed"));
 
-      await expect(sim.navigateAndExtract("https://portal.com/status/x", extract)).rejects.toThrow("extract-failed");
+      await expect(
+        sim.navigateAndExtract("https://portal.com/status/x", extract),
+      ).rejects.toThrow("extract-failed");
     });
   });
 
   describe("submitFormAndExtract", () => {
     it("fills form fields, submits, and calls extract", async () => {
-      const sim = new SmsPortalSimulator({ portalUrl: "https://portal.com", username: "u", password: "p" });
+      const sim = new SmsPortalSimulator({
+        portalUrl: "https://portal.com",
+        username: "u",
+        password: "p",
+      });
       const extract = jest.fn().mockResolvedValue({ success: true });
 
       const result = await sim.submitFormAndExtract(
@@ -164,7 +202,10 @@ describe("SmsPortalSimulator", () => {
       );
 
       expect(result).toEqual({ success: true });
-      expect(page.goto).toHaveBeenCalledWith("https://portal.com/payment", expect.any(Object));
+      expect(page.goto).toHaveBeenCalledWith(
+        "https://portal.com/payment",
+        expect.any(Object),
+      );
       expect(page.fill).toHaveBeenCalledWith('[name="phone"]', "+261700000000");
       expect(page.fill).toHaveBeenCalledWith('[name="amount"]', "5000");
       expect(page.click).toHaveBeenCalledWith('button[type="submit"]');
@@ -187,7 +228,10 @@ describe("SmsPortalSimulator", () => {
         captchaSolver: solver,
       });
 
-      await sim.navigateAndExtract("https://portal.com/status", async () => "ok");
+      await sim.navigateAndExtract(
+        "https://portal.com/status",
+        async () => "ok",
+      );
 
       expect(page.$).toHaveBeenCalledWith(".captcha-image");
       expect(solver).toHaveBeenCalled();
@@ -201,9 +245,14 @@ describe("SmsPortalSimulator", () => {
         password: "p",
       });
 
-      await sim.navigateAndExtract("https://portal.com/status", async () => "ok");
+      await sim.navigateAndExtract(
+        "https://portal.com/status",
+        async () => "ok",
+      );
 
-      expect(page.$).not.toHaveBeenCalledWith(expect.stringContaining("captcha"));
+      expect(page.$).not.toHaveBeenCalledWith(
+        expect.stringContaining("captcha"),
+      );
     });
 
     it("does not call solver when captcha element not found", async () => {
@@ -216,7 +265,10 @@ describe("SmsPortalSimulator", () => {
         captchaSolver: solver,
       });
 
-      await sim.navigateAndExtract("https://portal.com/status", async () => "ok");
+      await sim.navigateAndExtract(
+        "https://portal.com/status",
+        async () => "ok",
+      );
 
       expect(page.$).toHaveBeenCalledWith(".captcha-image");
       expect(solver).not.toHaveBeenCalled();
@@ -225,7 +277,11 @@ describe("SmsPortalSimulator", () => {
 
   describe("destroy", () => {
     it("clears the refresh timer and marks destroyed", () => {
-      const sim = new SmsPortalSimulator({ portalUrl: "https://portal.com", username: "u", password: "p" });
+      const sim = new SmsPortalSimulator({
+        portalUrl: "https://portal.com",
+        username: "u",
+        password: "p",
+      });
       (sim as any).refreshTimer = setTimeout(() => {}, 1000);
       sim.destroy();
       expect((sim as any).destroyed).toBe(true);

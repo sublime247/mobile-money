@@ -40,7 +40,8 @@ jest.mock("@aws-sdk/client-s3", () => {
                 "backup-encrypted": "true",
                 "backup-algorithm": "aes-256-gcm",
                 "backup-retention-days": "30",
-                "backup-checksum": "894086ea764a85fa1799276960d70eb06b12b591b93f1d9354020a67119ff39a",
+                "backup-checksum":
+                  "894086ea764a85fa1799276960d70eb06b12b591b93f1d9354020a67119ff39a",
               },
             });
           }
@@ -49,7 +50,7 @@ jest.mock("@aws-sdk/client-s3", () => {
             const stream = new Readable();
             stream.push(mockS3Payload);
             stream.push(null);
-            
+
             stream.transformToByteArray = () => {
               return Promise.resolve(new Uint8Array(mockS3Payload));
             };
@@ -58,18 +59,36 @@ jest.mock("@aws-sdk/client-s3", () => {
               Body: stream,
             });
           }
-          if (commandName === "HeadBucketCommand" || commandName === "PutObjectCommand") {
+          if (
+            commandName === "HeadBucketCommand" ||
+            commandName === "PutObjectCommand"
+          ) {
             return Promise.resolve({});
           }
           return Promise.resolve({});
         }),
       };
     }),
-    ListObjectsV2Command: jest.fn().mockImplementation(function (args) { this.args = args; this.commandName = "ListObjectsV2Command"; }),
-    GetObjectCommand: jest.fn().mockImplementation(function (args) { this.args = args; this.commandName = "GetObjectCommand"; }),
-    HeadObjectCommand: jest.fn().mockImplementation(function (args) { this.args = args; this.commandName = "HeadObjectCommand"; }),
-    PutObjectCommand: jest.fn().mockImplementation(function (args) { this.args = args; this.commandName = "PutObjectCommand"; }),
-    HeadBucketCommand: jest.fn().mockImplementation(function (args) { this.args = args; this.commandName = "HeadBucketCommand"; }),
+    ListObjectsV2Command: jest.fn().mockImplementation(function (args) {
+      this.args = args;
+      this.commandName = "ListObjectsV2Command";
+    }),
+    GetObjectCommand: jest.fn().mockImplementation(function (args) {
+      this.args = args;
+      this.commandName = "GetObjectCommand";
+    }),
+    HeadObjectCommand: jest.fn().mockImplementation(function (args) {
+      this.args = args;
+      this.commandName = "HeadObjectCommand";
+    }),
+    PutObjectCommand: jest.fn().mockImplementation(function (args) {
+      this.args = args;
+      this.commandName = "PutObjectCommand";
+    }),
+    HeadBucketCommand: jest.fn().mockImplementation(function (args) {
+      this.args = args;
+      this.commandName = "HeadBucketCommand";
+    }),
   };
 });
 

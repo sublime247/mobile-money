@@ -26,6 +26,7 @@ The Vaults API allows users to compartmentalize their balance into named savings
 Creates a new vault for the authenticated user.
 
 **Request Body:**
+
 ```json
 {
   "name": "Emergency Fund",
@@ -35,6 +36,7 @@ Creates a new vault for the authenticated user.
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -53,6 +55,7 @@ Creates a new vault for the authenticated user.
 ```
 
 **Validation Rules:**
+
 - `name`: Required, 1-100 characters, must be unique per user
 - `description`: Optional, max 1000 characters
 - `targetAmount`: Optional, valid decimal format
@@ -64,9 +67,11 @@ Creates a new vault for the authenticated user.
 Retrieves all vaults for the authenticated user.
 
 **Query Parameters:**
+
 - `includeInactive` (boolean): Include inactive vaults (default: false)
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -104,6 +109,7 @@ Retrieves all vaults for the authenticated user.
 Retrieves a comprehensive balance summary showing main balance, vault balances, and total balance.
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -133,6 +139,7 @@ Retrieves a comprehensive balance summary showing main balance, vault balances, 
 Retrieves details for a specific vault.
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -157,6 +164,7 @@ Retrieves details for a specific vault.
 Updates vault properties (name, description, target amount, active status).
 
 **Request Body:**
+
 ```json
 {
   "name": "Emergency Fund - Updated",
@@ -167,6 +175,7 @@ Updates vault properties (name, description, target amount, active status).
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -191,6 +200,7 @@ Updates vault properties (name, description, target amount, active status).
 Deletes a vault. Only allowed if vault balance is zero.
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -199,6 +209,7 @@ Deletes a vault. Only allowed if vault balance is zero.
 ```
 
 **Error Response (Non-zero balance):**
+
 ```json
 {
   "error": "Cannot delete vault",
@@ -213,6 +224,7 @@ Deletes a vault. Only allowed if vault balance is zero.
 Transfers funds between main balance and vault.
 
 **Request Body:**
+
 ```json
 {
   "type": "deposit",
@@ -222,11 +234,13 @@ Transfers funds between main balance and vault.
 ```
 
 **Parameters:**
+
 - `type`: "deposit" (main → vault) or "withdraw" (vault → main)
 - `amount`: Positive decimal amount
 - `description`: Optional transfer description
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -255,6 +269,7 @@ Transfers funds between main balance and vault.
 ```
 
 **Error Responses:**
+
 ```json
 // Insufficient main balance for deposit
 {
@@ -264,7 +279,7 @@ Transfers funds between main balance and vault.
 
 // Insufficient vault balance for withdrawal
 {
-  "error": "Insufficient funds", 
+  "error": "Insufficient funds",
   "message": "Insufficient vault balance"
 }
 ```
@@ -276,10 +291,12 @@ Transfers funds between main balance and vault.
 Retrieves transaction history for a specific vault.
 
 **Query Parameters:**
+
 - `limit` (number): Max results per page (default: 50, max: 100)
 - `offset` (number): Pagination offset (default: 0)
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -324,6 +341,7 @@ All endpoints return consistent error responses:
 ```
 
 **Common HTTP Status Codes:**
+
 - `200`: Success
 - `201`: Created (for vault creation)
 - `400`: Bad Request (validation errors, insufficient funds)
@@ -356,6 +374,7 @@ The vault system maintains ledger accuracy through:
 ## Usage Examples
 
 ### Creating a Savings Goal
+
 ```bash
 curl -X POST /api/v1/vaults \
   -H "Authorization: Bearer <jwt-token>" \
@@ -368,6 +387,7 @@ curl -X POST /api/v1/vaults \
 ```
 
 ### Monthly Savings Deposit
+
 ```bash
 curl -X POST /api/v1/vaults/vault-uuid/transfer \
   -H "Authorization: Bearer <jwt-token>" \
@@ -380,6 +400,7 @@ curl -X POST /api/v1/vaults/vault-uuid/transfer \
 ```
 
 ### Checking Progress
+
 ```bash
 curl -X GET /api/v1/vaults/balance-summary \
   -H "Authorization: Bearer <jwt-token>"

@@ -48,7 +48,13 @@ export async function handleSubscriptionFailure(
     const sub = await subscriptionModel.getById(subscriptionId);
     const attemptRow = await subscriptionModel.incrementRetry(subscriptionId);
     const attemptNumber = attemptRow ? attemptRow.retry_count : 1;
-    await subscriptionModel.recordAttempt(subscriptionId, transactionId, attemptNumber, "failed", getErrorMessage(error));
+    await subscriptionModel.recordAttempt(
+      subscriptionId,
+      transactionId,
+      attemptNumber,
+      "failed",
+      getErrorMessage(error),
+    );
 
     if (attemptRow && attemptRow.retry_count >= attemptRow.max_retries) {
       await subscriptionModel.pause(subscriptionId);
@@ -73,12 +79,18 @@ export async function handleSubscriptionFailure(
           });
         }
       } catch (notifyErr) {
-        log.error({ notifyErr }, "Failed to notify merchant about subscription pause");
+        log.error(
+          { notifyErr },
+          "Failed to notify merchant about subscription pause",
+        );
       }
     } else if (attemptRow) {
       const base = attemptRow.retry_backoff_seconds || 600;
       const delay = base * Math.pow(2, Math.max(0, attemptRow.retry_count - 1));
-      await queryWrite(`UPDATE subscriptions SET next_run_at = NOW() + ($1 || ' seconds')::interval, updated_at = NOW() WHERE id = $2`, [delay, subscriptionId]);
+      await queryWrite(
+        `UPDATE subscriptions SET next_run_at = NOW() + ($1 || ' seconds')::interval, updated_at = NOW() WHERE id = $2`,
+        [delay, subscriptionId],
+      );
       log.info({ subscriptionId, delay }, "Scheduled subscription retry");
     }
   } catch (ex) {
@@ -224,16 +236,23 @@ async function processTransaction(
       console.warn(
         `[ipBlacklist] Worker rejected job ${transactionId} — originating IP is blacklisted: ${clientIp}`,
       );
-      await transactionModel.updateStatus(transactionId, TransactionStatus.Failed);
+      await transactionModel.updateStatus(
+        transactionId,
+        TransactionStatus.Failed,
+      );
       await notifyTransactionWebhook(transactionId, "transaction.failed", {
         transactionModel,
         webhookService,
       });
-      await rabbitMQManager.publish(EXCHANGES.TRANSACTIONS, ROUTING_KEYS.TRANSACTION_FAILED, {
-        transactionId,
-        status: "failed",
-        error: "Request originated from a blacklisted IP address",
-      });
+      await rabbitMQManager.publish(
+        EXCHANGES.TRANSACTIONS,
+        ROUTING_KEYS.TRANSACTION_FAILED,
+        {
+          transactionId,
+          status: "failed",
+          error: "Request originated from a blacklisted IP address",
+        },
+      );
       return {
         success: false,
         transactionId,
@@ -244,10 +263,7 @@ async function processTransaction(
   // ───────────────────────────────────────────────────────────────────────────
 
   console.log(`[RabbitMQ] Processing ${type} transaction: ${transactionId}`);
-  const {
-    requestId,
-    _traceId,
-  } = data;
+  const { requestId, _traceId } = data;
 
   const logFields: Record<string, string> = { transactionId };
   if (requestId) logFields.requestId = requestId;
@@ -320,24 +336,28 @@ async function processTransaction(
     }
   };
 
-        const stellarResult = await withRetry(
-          () => {
-            // Use high-throughput pool service when available; falls back to single-account mode
-            const issuerSecret = process.env.STELLAR_ISSUER_SECRET?.trim();
-            if (highThroughputService.isServiceInitialized() && issuerSecret) {
-              const issuerKp = require("stellar-sdk").Keypair.fromSecret(issuerSecret);
-              return highThroughputService.submitPayment({
-                sourceAccount: issuerKp.publicKey(),
-                sourceSecret: issuerSecret,
-                destination: stellarAddress,
-                asset: "native",
-                amount: String(amount),
-              }).then(r => ({ hash: r.hash, submittedAt: new Date() }));
-            }
-            return stellarService.sendPayment(stellarAddress, amount, senderName, receiverName);
-          },
-          retryConfig,
-        );
+  const stellarResult = await withRetry(() => {
+    // Use high-throughput pool service when available; falls back to single-account mode
+    const issuerSecret = process.env.STELLAR_ISSUER_SECRET?.trim();
+    if (highThroughputService.isServiceInitialized() && issuerSecret) {
+      const issuerKp = require("stellar-sdk").Keypair.fromSecret(issuerSecret);
+      return highThroughputService
+        .submitPayment({
+          sourceAccount: issuerKp.publicKey(),
+          sourceSecret: issuerSecret,
+          destination: stellarAddress,
+          asset: "native",
+          amount: String(amount),
+        })
+        .then((r) => ({ hash: r.hash, submittedAt: new Date() }));
+    }
+    return stellarService.sendPayment(
+      stellarAddress,
+      amount,
+      senderName,
+      receiverName,
+    );
+  }, retryConfig);
 
   // Store Stellar transaction details in metadata
   if (stellarResult.hash) {
@@ -366,7 +386,6 @@ async function processTransaction(
           provider,
           phoneNumber,
           amount,
-          requestId,
         );
         if (!result.success) {
           throw new Error(getProviderFailureMessage(result));
@@ -394,24 +413,27 @@ async function processTransaction(
       }
       await updateProgress(transactionId, 70);
 
-      await withRetry(
-        () => {
-          // Use high-throughput pool service when available; falls back to single-account mode
-          const issuerSecret = process.env.STELLAR_ISSUER_SECRET?.trim();
-          if (highThroughputService.isServiceInitialized() && issuerSecret) {
-            const issuerKp = require("stellar-sdk").Keypair.fromSecret(issuerSecret);
-            return highThroughputService.submitPayment({
-              sourceAccount: issuerKp.publicKey(),
-              sourceSecret: issuerSecret,
-              destination: stellarAddress,
-              asset: "native",
-              amount: String(amount),
-            });
-          }
-          return stellarService.sendPayment(stellarAddress, amount, senderName, receiverName);
-        },
-        retryConfig,
-      );
+      await withRetry(() => {
+        // Use high-throughput pool service when available; falls back to single-account mode
+        const issuerSecret = process.env.STELLAR_ISSUER_SECRET?.trim();
+        if (highThroughputService.isServiceInitialized() && issuerSecret) {
+          const issuerKp =
+            require("stellar-sdk").Keypair.fromSecret(issuerSecret);
+          return highThroughputService.submitPayment({
+            sourceAccount: issuerKp.publicKey(),
+            sourceSecret: issuerSecret,
+            destination: stellarAddress,
+            asset: "native",
+            amount: String(amount),
+          });
+        }
+        return stellarService.sendPayment(
+          stellarAddress,
+          amount,
+          senderName,
+          receiverName,
+        );
+      }, retryConfig);
 
       if (stellarResult.hash) {
         const currentMetadata =
@@ -468,7 +490,6 @@ async function processTransaction(
           provider,
           phoneNumber,
           amount,
-          requestId,
         );
         if (!result.success) {
           throw new Error(getProviderFailureMessage(result));
@@ -560,9 +581,17 @@ async function processTransaction(
     // If this transaction was created by a subscription, record attempt and schedule retry if configured
     try {
       const tx = await transactionModel.findById(transactionId);
-      const subscriptionId = (tx?.metadata && (tx.metadata.subscription_id || tx.metadata.subscriptionId)) || null;
+      const subscriptionId =
+        (tx?.metadata &&
+          (tx.metadata.subscription_id || tx.metadata.subscriptionId)) ||
+        null;
       if (subscriptionId) {
-        await handleSubscriptionFailure(subscriptionId, transactionId, error, log);
+        await handleSubscriptionFailure(
+          subscriptionId,
+          transactionId,
+          error,
+          log,
+        );
       }
     } catch (subErr) {
       log.error({ subErr }, "Failed to record subscription retry info");
@@ -595,13 +624,15 @@ if (NATS_QUEUE_ENABLED) {
     )
     .catch((err) => logger.error({ err }, "NATS JetStream Consumer error"));
 } else {
-  rabbitMQManager.consume<TransactionJobData>(
-    QUEUES.TRANSACTION_PROCESSING,
-    async (data) => {
-      await processTransaction(data);
-    },
-    CONCURRENCY,
-  ).catch((err) => logger.error({ err }, "RabbitMQ Consumer error"));
+  rabbitMQManager
+    .consume<TransactionJobData>(
+      QUEUES.TRANSACTION_PROCESSING,
+      async (data) => {
+        await processTransaction(data);
+      },
+      CONCURRENCY,
+    )
+    .catch((err) => logger.error({ err }, "RabbitMQ Consumer error"));
 }
 
 export const transactionWorker = {

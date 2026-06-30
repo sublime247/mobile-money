@@ -404,7 +404,7 @@ export class TransactionModel {
        FROM transactions t
        JOIN users u ON t.user_id = u.id
        WHERE t.user_id=$1`,
-      [userId]
+      [userId],
     );
 
     return res.rows[0];

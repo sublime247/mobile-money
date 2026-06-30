@@ -30,9 +30,9 @@ export async function initCasbin(): Promise<Enforcer> {
     // Implement hot-loading
     if (!isWatching) {
       watcher = fs.watch(policyPath, async (eventType) => {
-        if (eventType === 'change') {
-          if (process.env.NODE_ENV !== 'test') {
-            console.log('Casbin policy file changed, reloading policies...');
+        if (eventType === "change") {
+          if (process.env.NODE_ENV !== "test") {
+            console.log("Casbin policy file changed, reloading policies...");
           }
           await enforcer.loadPolicy();
         }
@@ -83,7 +83,11 @@ async function getUserRole(
 /**
  * Middleware to explicitly check an object and action
  */
-export function authorizeObj(resourceType: string, action: string, requireOwnership: boolean = false) {
+export function authorizeObj(
+  resourceType: string,
+  action: string,
+  requireOwnership: boolean = false,
+) {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.jwtUser) {
@@ -107,7 +111,7 @@ export function authorizeObj(resourceType: string, action: string, requireOwners
 
       const sub = {
         id: req.jwtUser.userId,
-        role: userRole.role_name
+        role: userRole.role_name,
       };
 
       // In a middleware, we don't have the specific object ID's owner yet unless passed in URL or body.
@@ -116,7 +120,7 @@ export function authorizeObj(resourceType: string, action: string, requireOwners
       const obj = {
         type: resourceType,
         checkOwner: requireOwnership,
-        ownerUserId: requireOwnership ? req.jwtUser.userId : undefined // this assumes the user requests their OWN resource explicitly, but really it should be deferred if possible.
+        ownerUserId: requireOwnership ? req.jwtUser.userId : undefined, // this assumes the user requests their OWN resource explicitly, but really it should be deferred if possible.
       };
 
       const allowed = await e.enforce(sub, obj, action);
@@ -178,7 +182,7 @@ export function requirePermission(permission: string) {
       const allowed = await e.enforce(sub, { type: objType }, act);
 
       // If simple policy doesn't allow, check if they are "admin" implicitly by Casbin model.
-      if (!allowed && !['admin', 'admin:system'].includes(userRole.role_name)) {
+      if (!allowed && !["admin", "admin:system"].includes(userRole.role_name)) {
         return res.status(403).json({
           error: "Forbidden",
           message: `Insufficient permissions. Required: ${permission}`,
@@ -203,7 +207,10 @@ export function requireAnyPermission(permissions: string[]) {
       const e = await initCasbin();
       const sub = { id: req.jwtUser.userId, role: userRole.role_name };
 
-      if (userRole.role_name === 'admin' || userRole.role_name === 'admin:system') {
+      if (
+        userRole.role_name === "admin" ||
+        userRole.role_name === "admin:system"
+      ) {
         return next();
       }
 
@@ -223,7 +230,9 @@ export function requireAnyPermission(permissions: string[]) {
       }
 
       if (!hasPermission) {
-        return res.status(403).json({ error: "Forbidden", message: "Insufficient permissions." });
+        return res
+          .status(403)
+          .json({ error: "Forbidden", message: "Insufficient permissions." });
       }
 
       next();
@@ -243,7 +252,9 @@ export function requireRole(role: string) {
       req.userRole = userRole.role_name;
 
       if (userRole.role_name !== role && userRole.role_name !== "admin") {
-        return res.status(403).json({ error: "Forbidden", message: `Required: ${role}` });
+        return res
+          .status(403)
+          .json({ error: "Forbidden", message: `Required: ${role}` });
       }
       next();
     } catch (error) {
@@ -260,7 +271,11 @@ export const requireAdmin = requireRole("admin");
 export const requireReadAccess = authorizeObj("transaction", "read", false);
 export const requireWriteAccess = authorizeObj("transaction", "write", false);
 
-export async function attachUserContext(req: Request, res: Response, next: NextFunction) {
+export async function attachUserContext(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
   try {
     if (!req.jwtUser) return next();
     const userRole = await getUserRole(req.jwtUser.userId);
@@ -278,10 +293,21 @@ export async function attachUserContext(req: Request, res: Response, next: NextF
  * It verifies if the currently logged in user has the permission to perform
  * an 'action' on the specific 'resourceObj' loaded from DB.
  */
-export async function authorizeDynamic(userId: string, role: string, resourceType: string, resourceOwnerUserId: string, action: string, checkOwner: boolean = false): Promise<boolean> {
+export async function authorizeDynamic(
+  userId: string,
+  role: string,
+  resourceType: string,
+  resourceOwnerUserId: string,
+  action: string,
+  checkOwner: boolean = false,
+): Promise<boolean> {
   const e = await initCasbin();
   const sub = { id: userId, role: role };
-  const obj = { type: resourceType, checkOwner: checkOwner, ownerUserId: resourceOwnerUserId };
+  const obj = {
+    type: resourceType,
+    checkOwner: checkOwner,
+    ownerUserId: resourceOwnerUserId,
+  };
   return await e.enforce(sub, obj, action);
 }
 
@@ -309,7 +335,8 @@ export function checkApiKeyScope(requiredPermission: number) {
     if ((apiKeyPermissions & requiredPermission) !== requiredPermission) {
       return res.status(403).json({
         error: "Forbidden",
-        message: "API key does not have the required permission for this operation",
+        message:
+          "API key does not have the required permission for this operation",
         required_permission: requiredPermission,
         granted_permissions: apiKeyPermissions,
       });

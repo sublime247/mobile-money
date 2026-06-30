@@ -27,7 +27,7 @@ export async function generateReconciliationReportPDF(
   month: number,
   year: number,
   ledgerCheck: LedgerBalanceCheck,
-  trialBalance: TrialBalance[]
+  trialBalance: TrialBalance[],
 ): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     try {
@@ -46,7 +46,11 @@ export async function generateReconciliationReportPDF(
         .fontSize(10)
         .fillColor("#7f8c8d")
         .text(`Merchant: ${merchantName}`, 50, 70)
-        .text(`Period: ${new Date(year, month - 1).toLocaleString("default", { month: "long" })} ${year}`, 50, 85)
+        .text(
+          `Period: ${new Date(year, month - 1).toLocaleString("default", { month: "long" })} ${year}`,
+          50,
+          85,
+        )
         .text("System Reconciliation Service", 200, 45, { align: "right" })
         .moveDown();
 
@@ -63,12 +67,20 @@ export async function generateReconciliationReportPDF(
       doc
         .fontSize(10)
         .fillColor("#34495e")
-        .text(`Total Debits: ${ledgerCheck.total_debits.toFixed(2)} USD`, 50, 160)
-        .text(`Total Credits: ${ledgerCheck.total_credits.toFixed(2)} USD`, 50, 175)
+        .text(
+          `Total Debits: ${ledgerCheck.total_debits.toFixed(2)} USD`,
+          50,
+          160,
+        )
+        .text(
+          `Total Credits: ${ledgerCheck.total_credits.toFixed(2)} USD`,
+          50,
+          175,
+        )
         .text(`Difference: ${ledgerCheck.difference.toFixed(2)} USD`, 50, 190);
 
-      const balanceText = ledgerCheck.is_balanced 
-        ? "STATUS: LEDGER IS BALANCED" 
+      const balanceText = ledgerCheck.is_balanced
+        ? "STATUS: LEDGER IS BALANCED"
         : "STATUS: LEDGER IS OUT OF BALANCE";
       const balanceColor = ledgerCheck.is_balanced ? "#27ae60" : "#c0392b";
 
@@ -95,9 +107,13 @@ export async function generateReconciliationReportPDF(
       doc.text("Credits", 480, y);
       doc.font("Helvetica");
       y += 20;
-      doc.moveTo(50, y - 5).lineTo(550, y - 5).strokeColor("#ecf0f1").stroke();
+      doc
+        .moveTo(50, y - 5)
+        .lineTo(550, y - 5)
+        .strokeColor("#ecf0f1")
+        .stroke();
 
-      trialBalance.forEach(row => {
+      trialBalance.forEach((row) => {
         if (y > 700) {
           doc.addPage();
           y = 50;
@@ -121,7 +137,7 @@ export async function generateReconciliationReportPDF(
             "Confidential - Internal Merchant Financial Report. Generated automatically by Mobile Money.",
             50,
             750,
-            { align: "center", width: 500 }
+            { align: "center", width: 500 },
           );
       }
 
@@ -138,12 +154,14 @@ export async function runMonthlyReconciliationReportJob() {
   const year = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
   const month = now.getMonth() === 0 ? 12 : now.getMonth();
 
-  logger.info(`Starting monthly reconciliation report job for ${month}/${year}`);
+  logger.info(
+    `Starting monthly reconciliation report job for ${month}/${year}`,
+  );
 
   try {
     // 1. Fetch active merchants
     const merchantsResult = await pool.query(
-      "SELECT id, name, email FROM merchants WHERE status = 'active'"
+      "SELECT id, name, email FROM merchants WHERE status = 'active'",
     );
 
     if (merchantsResult.rows.length === 0) {
@@ -165,15 +183,19 @@ export async function runMonthlyReconciliationReportJob() {
           month,
           year,
           ledgerCheck,
-          trialBalance
+          trialBalance,
         );
 
         // 4. Dispatch Email with attachment
         await emailService.sendEmail({
           to: merchant.email,
-          templateId: process.env.SENDGRID_RECONCILIATION_REPORT_TEMPLATE_ID || "d-generic-reconciliation-report",
+          templateId:
+            process.env.SENDGRID_RECONCILIATION_REPORT_TEMPLATE_ID ||
+            "d-generic-reconciliation-report",
           dynamicTemplateData: {
-            month: new Date(year, month - 1).toLocaleString("default", { month: "long" }),
+            month: new Date(year, month - 1).toLocaleString("default", {
+              month: "long",
+            }),
             year: year,
             merchantName: merchant.name,
             isBalanced: ledgerCheck.is_balanced,
@@ -188,9 +210,14 @@ export async function runMonthlyReconciliationReportJob() {
           ],
         });
 
-        logger.info(`Successfully sent monthly reconciliation report to ${merchant.name} (${merchant.email})`);
+        logger.info(
+          `Successfully sent monthly reconciliation report to ${merchant.name} (${merchant.email})`,
+        );
       } catch (merchantErr) {
-        logger.error(merchantErr, `Failed to send reconciliation report to merchant ${merchant.id}`);
+        logger.error(
+          merchantErr,
+          `Failed to send reconciliation report to merchant ${merchant.id}`,
+        );
       }
     }
   } catch (err) {

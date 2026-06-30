@@ -45,7 +45,6 @@ export enum VipTier {
   DIAMOND = "DIAMOND",
 }
 
-
 export interface TierConfig {
   tier: VipTier;
   /** Minimum 30-day volume (inclusive) required to qualify for this tier. */
@@ -60,13 +59,32 @@ export interface TierConfig {
  * entry wins when iterating with `find()`.
  */
 export const VIP_TIERS: readonly TierConfig[] = [
-  { tier: VipTier.DIAMOND, minVolume: 50000, discountPercent: 65, label: "Diamond" },
-  { tier: VipTier.PLATINUM, minVolume: 20000, discountPercent: 50, label: "Platinum" },
+  {
+    tier: VipTier.DIAMOND,
+    minVolume: 50000,
+    discountPercent: 65,
+    label: "Diamond",
+  },
+  {
+    tier: VipTier.PLATINUM,
+    minVolume: 20000,
+    discountPercent: 50,
+    label: "Platinum",
+  },
   { tier: VipTier.GOLD, minVolume: 5000, discountPercent: 35, label: "Gold" },
-  { tier: VipTier.SILVER, minVolume: 1000, discountPercent: 20, label: "Silver" },
-  { tier: VipTier.STANDARD, minVolume: 0, discountPercent: 0, label: "Standard" },
+  {
+    tier: VipTier.SILVER,
+    minVolume: 1000,
+    discountPercent: 20,
+    label: "Silver",
+  },
+  {
+    tier: VipTier.STANDARD,
+    minVolume: 0,
+    discountPercent: 0,
+    label: "Standard",
+  },
 ] as const;
-
 
 // ---------------------------------------------------------------------------
 // Result interfaces
@@ -80,7 +98,7 @@ export interface FeeResult {
 
 export interface VipFeeResult extends FeeResult {
   /** The VIP tier the user currently qualifies for. */
-  tier: MerchantTier;
+  tier: VipTier;
   /** Discount percentage applied to the base fee rate. */
   discountPercent: number;
   /** The user's sum of completed transaction amounts in the last 30 days. */
@@ -104,7 +122,7 @@ export async function getThirtyDayVolume(userId: string): Promise<number> {
   try {
     const cached = await redisClient.get(cacheKey);
     if (cached !== null) {
-      const cachedStr = typeof cached === 'string' ? cached : cached.toString();
+      const cachedStr = typeof cached === "string" ? cached : cached.toString();
       return parseFloat(cachedStr);
     }
   } catch {

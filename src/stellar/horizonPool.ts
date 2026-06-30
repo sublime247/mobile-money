@@ -301,10 +301,7 @@ export class HorizonPool {
 
         if (DIRECT_METHODS.has(prop)) {
           return (...args: unknown[]) =>
-            pool.execute(
-              (server) => (server as any)[prop](...args),
-              prop,
-            );
+            pool.execute((server) => (server as any)[prop](...args), prop);
         }
 
         if (BUILDER_METHODS.has(prop)) {
@@ -326,7 +323,9 @@ export class HorizonPool {
    * is replayed against an alternative node on failure. `.stream()` is built on
    * the active server (long-lived streams aren't retried).
    */
-  private buildBuilderProxy(chain: Array<{ method: string; args: unknown[] }>): any {
+  private buildBuilderProxy(
+    chain: Array<{ method: string; args: unknown[] }>,
+  ): any {
     const pool = this;
 
     const replay = (server: StellarSdk.Horizon.Server) => {

@@ -10,7 +10,7 @@ describe("Webhooks Routes", () => {
     app = express();
     app.use(express.json());
     app.use("/api/webhooks", webhookRoutes);
-    
+
     // Set test environment variables
     process.env.WEBHOOK_SECRET = "test-webhook-secret";
   });
@@ -75,7 +75,7 @@ describe("Webhooks Routes", () => {
       const testPayload = {
         test: true,
         amount: "100.00",
-        transaction_id: "test_123"
+        transaction_id: "test_123",
       };
 
       const response = await request(app)
@@ -86,7 +86,10 @@ describe("Webhooks Routes", () => {
       expect(response.body.received).toBe(true);
       expect(response.body.payload).toEqual(testPayload);
       expect(response.body).toHaveProperty("timestamp");
-      expect(response.body.headers).toHaveProperty("content-type", "application/json");
+      expect(response.body.headers).toHaveProperty(
+        "content-type",
+        "application/json",
+      );
     });
 
     it("should include headers in test response", async () => {
@@ -98,7 +101,9 @@ describe("Webhooks Routes", () => {
         .expect(200);
 
       expect(response.body.headers["user-agent"]).toBe("Test-Agent");
-      expect(response.body.headers["x-webhook-signature"]).toBe("sha256=test123");
+      expect(response.body.headers["x-webhook-signature"]).toBe(
+        "sha256=test123",
+      );
     });
   });
 
@@ -162,7 +167,7 @@ describe("Webhooks Routes", () => {
     it("should return 404 for non-existent transaction", async () => {
       const payload = {
         ...SAMPLE_WEBHOOK_PAYLOAD,
-        transaction_id: "non-existent-id"
+        transaction_id: "non-existent-id",
       };
 
       const crypto = require("crypto");
@@ -193,9 +198,10 @@ describe("Webhooks Routes", () => {
         currency: "USD",
         phone_number: "+1234567890",
         provider: "mpesa",
-        stellar_address: "GD5DJQDQKEZBDQZBH4ENLN5JTQAVLHKUL2QHYK3LTJY2J5N2Z5Q5K7",
+        stellar_address:
+          "GD5DJQDQKEZBDQZBH4ENLN5JTQAVLHKUL2QHYK3LTJY2J5N2Z5Q5K7",
         status: "completed",
-        created_at: "2026-03-27T11:45:00.000Z"
+        created_at: "2026-03-27T11:45:00.000Z",
       };
 
       const crypto = require("crypto");
@@ -228,7 +234,8 @@ describe("Webhooks Routes", () => {
         currency: "USD",
         phone_number: "+0987654321",
         provider: "airtel",
-        stellar_address: "GD5DJQDQKEZBDQZBH4ENLN5JTQAVLHKUL2QHYK3LTJY2J5N2Z5Q5K7",
+        stellar_address:
+          "GD5DJQDQKEZBDQZBH4ENLN5JTQAVLHKUL2QHYK3LTJY2J5N2Z5Q5K7",
         status: "failed",
         user_id: "user_123",
         notes: "Test failed transaction",
@@ -236,7 +243,7 @@ describe("Webhooks Routes", () => {
         created_at: "2026-03-27T11:40:00.000Z",
         updated_at: "2026-03-27T11:46:00.000Z",
         metadata_key: "error_code",
-        metadata_value: "INSUFFICIENT_FUNDS"
+        metadata_value: "INSUFFICIENT_FUNDS",
       };
 
       const crypto = require("crypto");

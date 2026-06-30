@@ -12,7 +12,7 @@ statsRoutesV1.get(
   "/summary",
   TimeoutPresets.quick,
   haltOnTimedout,
-  setApiVersion("v1")
+  setApiVersion("v1"),
   // Add stats summary handler
 );
 
@@ -20,7 +20,7 @@ statsRoutesV1.get(
   "/daily",
   TimeoutPresets.quick,
   haltOnTimedout,
-  setApiVersion("v1")
+  setApiVersion("v1"),
   // Add daily stats handler
 );
 
@@ -28,6 +28,6 @@ statsRoutesV1.get(
   "/",
   TimeoutPresets.quick,
   haltOnTimedout,
-  setApiVersion("v1")
+  setApiVersion("v1"),
   // Add general stats handler
 );

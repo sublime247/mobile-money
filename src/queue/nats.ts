@@ -1,5 +1,11 @@
 import logger from "../utils/logger";
-import { connect, StringCodec, consumerOpts, type NatsConnection, type JsMsg } from "nats";
+import {
+  connect,
+  StringCodec,
+  consumerOpts,
+  type NatsConnection,
+  type JsMsg,
+} from "nats";
 
 const NATS_URL = process.env.NATS_URL || "nats://localhost:4222";
 

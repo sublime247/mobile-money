@@ -74,12 +74,25 @@ export class GDPRService {
       archive.pipe(passthrough);
 
       // Append each export file directly as in-memory buffers — no disk I/O.
-      archive.append(Buffer.from(JSON.stringify(this.serializeUser(user!), null, 2), "utf8"), {
-        name: "profile.json",
-      });
-      archive.append(Buffer.from(JSON.stringify(txs.map(tx => this.serializeTransaction(tx)), null, 2), "utf8"), {
-        name: "transactions.json",
-      });
+      archive.append(
+        Buffer.from(JSON.stringify(this.serializeUser(user!), null, 2), "utf8"),
+        {
+          name: "profile.json",
+        },
+      );
+      archive.append(
+        Buffer.from(
+          JSON.stringify(
+            txs.map((tx) => this.serializeTransaction(tx)),
+            null,
+            2,
+          ),
+          "utf8",
+        ),
+        {
+          name: "transactions.json",
+        },
+      );
 
       archive.finalize();
     });
@@ -282,9 +295,8 @@ export class GDPRService {
       });
       const result = await s3.send(listCmd);
       const objects =
-        result.Contents?.filter((obj) =>
-          obj.Key?.includes(`/${userId}/`),
-        ) ?? [];
+        result.Contents?.filter((obj) => obj.Key?.includes(`/${userId}/`)) ??
+        [];
       for (const obj of objects) {
         if (obj.Key) {
           const delCmd = new DeleteObjectCommand({

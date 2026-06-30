@@ -14,7 +14,9 @@ export async function generateFlaggedTransactionComplianceReport(
   alert: AMLAlert,
 ): Promise<{ pdfUrl: string }> {
   if (!transaction.userId) {
-    throw new Error("Transaction is missing userId for compliance report generation");
+    throw new Error(
+      "Transaction is missing userId for compliance report generation",
+    );
   }
 
   const pdfBuffer = await generatePDFBuffer(transaction, alert);
@@ -41,14 +43,23 @@ async function generatePDFBuffer(
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", (err) => reject(err));
 
-    doc.fillColor("#2c3e50").fontSize(18).text("Mobile Money", { align: "center" });
+    doc
+      .fillColor("#2c3e50")
+      .fontSize(18)
+      .text("Mobile Money", { align: "center" });
     doc.moveDown(0.25);
-    doc.fontSize(12).fillColor("#7f8c8d").text("Flagged Transaction Compliance Report", {
-      align: "center",
-    });
+    doc
+      .fontSize(12)
+      .fillColor("#7f8c8d")
+      .text("Flagged Transaction Compliance Report", {
+        align: "center",
+      });
     doc.moveDown(1);
 
-    doc.fillColor("#34495e").fontSize(12).text("Report Details", { underline: true });
+    doc
+      .fillColor("#34495e")
+      .fontSize(12)
+      .text("Report Details", { underline: true });
     doc.moveDown(0.5);
     doc.fontSize(10).fillColor("#000");
     doc.text(`Transaction ID: ${transaction.id}`);
@@ -68,7 +79,10 @@ async function generatePDFBuffer(
 
     if (transaction.notes) {
       doc.moveDown(0.5);
-      doc.fillColor("#2c3e50").fontSize(12).text("Transaction Notes", { underline: true });
+      doc
+        .fillColor("#2c3e50")
+        .fontSize(12)
+        .text("Transaction Notes", { underline: true });
       doc.moveDown(0.25);
       doc.fontSize(10).fillColor("#000").text(transaction.notes, {
         width: 500,
@@ -77,7 +91,10 @@ async function generatePDFBuffer(
     }
 
     doc.moveDown(1);
-    doc.fillColor("#34495e").fontSize(12).text("AML Alert Summary", { underline: true });
+    doc
+      .fillColor("#34495e")
+      .fontSize(12)
+      .text("AML Alert Summary", { underline: true });
     doc.moveDown(0.5);
     doc.fontSize(10).fillColor("#000");
     doc.text(`Alert ID: ${alert.id}`);
@@ -105,7 +122,10 @@ async function generatePDFBuffer(
     }
 
     doc.moveDown(1);
-    doc.fillColor("#34495e").fontSize(12).text("Compliance Narrative", { underline: true });
+    doc
+      .fillColor("#34495e")
+      .fontSize(12)
+      .text("Compliance Narrative", { underline: true });
     doc.moveDown(0.5);
     doc.fontSize(10).fillColor("#000");
 
@@ -113,20 +133,23 @@ async function generatePDFBuffer(
     doc.text(narrative, { align: "justify", width: 500 });
 
     doc.moveDown(2);
-    doc.fillColor("#999").fontSize(9).text(
-      `Generated at ${new Date().toLocaleString()}`,
-      { align: "center" },
-    );
+    doc
+      .fillColor("#999")
+      .fontSize(9)
+      .text(`Generated at ${new Date().toLocaleString()}`, { align: "center" });
 
     const pageRange = doc.bufferedPageRange();
     for (let i = pageRange.start; i < pageRange.start + pageRange.count; i++) {
       doc.switchToPage(i);
-      doc.fontSize(8).fillColor("#bdc3c7").text(
-        `CONFIDENTIAL - COMPLIANCE INTERNAL USE ONLY - Page ${i + 1} of ${pageRange.count}`,
-        50,
-        doc.page.height - 50,
-        { align: "center" },
-      );
+      doc
+        .fontSize(8)
+        .fillColor("#bdc3c7")
+        .text(
+          `CONFIDENTIAL - COMPLIANCE INTERNAL USE ONLY - Page ${i + 1} of ${pageRange.count}`,
+          50,
+          doc.page.height - 50,
+          { align: "center" },
+        );
     }
 
     doc.end();
@@ -135,7 +158,11 @@ async function generatePDFBuffer(
 
 function encryptBuffer(buffer: Buffer): Buffer {
   const iv = crypto.randomBytes(IV_LENGTH);
-  const secretKey = crypto.scryptSync(DB_ENCRYPTION_KEY, "compliance-report-salt", 32);
+  const secretKey = crypto.scryptSync(
+    DB_ENCRYPTION_KEY,
+    "compliance-report-salt",
+    32,
+  );
   const cipher = crypto.createCipheriv(ALGORITHM, secretKey, iv);
 
   const encrypted = Buffer.concat([cipher.update(buffer), cipher.final()]);
@@ -174,7 +201,9 @@ async function storeCompliancePdf(
   });
 
   if (!result.success || !result.fileUrl) {
-    throw new Error(`Failed to store compliance report PDF: ${result.error ?? "Unknown error"}`);
+    throw new Error(
+      `Failed to store compliance report PDF: ${result.error ?? "Unknown error"}`,
+    );
   }
 
   return result.fileUrl;

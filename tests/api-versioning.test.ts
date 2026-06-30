@@ -125,7 +125,9 @@ describe("API Versioning", () => {
         .expect(200)
         .expect((res: any) => {
           if (res.headers["api-version"] !== "v1")
-            throw new Error("URL path should take priority over Accept-Version");
+            throw new Error(
+              "URL path should take priority over Accept-Version",
+            );
         })
         .end(done);
     });

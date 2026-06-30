@@ -18,10 +18,7 @@ const transactionModel = new TransactionModel();
 export async function runStaleTransactionWatchdog(
   service?: InstanceType<typeof MobileMoneyService>,
 ): Promise<void> {
-  const staleHours = parseInt(
-    process.env.STALE_TRANSACTION_HOURS || "12",
-    10,
-  );
+  const staleHours = parseInt(process.env.STALE_TRANSACTION_HOURS || "12", 10);
 
   const result = await pool.query<{
     id: string;
@@ -37,13 +34,13 @@ export async function runStaleTransactionWatchdog(
   );
 
   if (result.rows.length === 0) {
-    logger.info('No stale transactions found');
+    logger.info("No stale transactions found");
     return;
   }
 
   logger.info(
     { count: result.rows.length, thresholdHours: staleHours },
-    'Found stale transactions'
+    "Found stale transactions",
   );
 
   const mobileMoneyService = service ?? new MobileMoneyService();
@@ -59,30 +56,40 @@ export async function runStaleTransactionWatchdog(
         row.provider as any,
         row.reference_number,
       );
-      
+
       if (statusResponse.success && statusResponse.data) {
         const providerStatus = statusResponse.data.status;
-        
+
         if (providerStatus === "completed" || providerStatus === "successful") {
-          await transactionModel.updateStatus(row.id, TransactionStatus.Completed);
+          await transactionModel.updateStatus(
+            row.id,
+            TransactionStatus.Completed,
+          );
           logger.info(
             { transactionId: row.id, reference: row.reference_number },
-            'Resolved stale transaction as completed'
+            "Resolved stale transaction as completed",
           );
           resolved++;
-        } else if (providerStatus === "failed" || providerStatus === "rejected") {
+        } else if (
+          providerStatus === "failed" ||
+          providerStatus === "rejected"
+        ) {
           await transactionModel.updateStatus(row.id, TransactionStatus.Failed);
           logger.info(
             { transactionId: row.id, reference: row.reference_number },
-            'Resolved stale transaction as failed'
+            "Resolved stale transaction as failed",
           );
           resolved++;
         } else {
           // Still pending or unknown - expire it as failed
           await transactionModel.updateStatus(row.id, TransactionStatus.Failed);
           logger.warn(
-            { transactionId: row.id, reference: row.reference_number, providerStatus },
-            'Expired stale transaction (still pending/unknown at provider)'
+            {
+              transactionId: row.id,
+              reference: row.reference_number,
+              providerStatus,
+            },
+            "Expired stale transaction (still pending/unknown at provider)",
           );
           expired++;
         }
@@ -90,15 +97,19 @@ export async function runStaleTransactionWatchdog(
         // Can't verify with provider - mark as failed after stale period
         await transactionModel.updateStatus(row.id, TransactionStatus.Failed);
         logger.warn(
-          { transactionId: row.id, reference: row.reference_number, error: statusResponse.error },
-          'Expired stale transaction (provider status check failed)'
+          {
+            transactionId: row.id,
+            reference: row.reference_number,
+            error: statusResponse.error,
+          },
+          "Expired stale transaction (provider status check failed)",
         );
         expired++;
       }
     } catch (err) {
       logger.error(
         { error: err, transactionId: row.id },
-        'Error processing stale transaction'
+        "Error processing stale transaction",
       );
       errors++;
     }
@@ -106,6 +117,6 @@ export async function runStaleTransactionWatchdog(
 
   logger.info(
     { resolved, expired, errors },
-    'Stale transaction watchdog completed'
+    "Stale transaction watchdog completed",
   );
 }

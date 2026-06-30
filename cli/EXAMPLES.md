@@ -24,6 +24,7 @@ $ momo-cli dashboard
 ```
 
 Output:
+
 ```
  __  __  ___  __  __   ___
 |  \/  |/ _ \|  \/  | / _ \
@@ -87,6 +88,7 @@ $ momo-cli dashboard --watch
 ```
 
 Output updates every 5 seconds:
+
 ```
 [Screen updates automatically every 5 seconds]
 
@@ -103,6 +105,7 @@ $ momo-cli dashboard:live
 ```
 
 Output:
+
 ```
 Live monitoring active. Press Ctrl+C to exit.
 
@@ -119,6 +122,7 @@ $ momo-cli dashboard:export
 ```
 
 Output:
+
 ```json
 {
   "timestamp": "2024-06-01T14:35:20.123Z",
@@ -138,7 +142,7 @@ Output:
   },
   "transactions": {
     "totalCount": 5678,
-    "successRate": 97.50,
+    "successRate": 97.5,
     "totalVolume": 45678900,
     "activeUsers": 234
   },
@@ -174,17 +178,17 @@ while true; do
   METRICS=$(momo-cli dashboard:export)
   PENDING=$(echo $METRICS | jq '.queue.pendingJobs')
   FAILED=$(echo $METRICS | jq '.queue.failedJobs')
-  
+
   echo "Queue Status - Pending: $PENDING, Failed: $FAILED"
-  
+
   if [ $PENDING -gt 500 ]; then
     echo "⚠️  WARNING: High pending queue ($PENDING)"
   fi
-  
+
   if [ $FAILED -gt 50 ]; then
     echo "🚨 ALERT: Many failed jobs ($FAILED)"
   fi
-  
+
   sleep 30
 done
 ```
@@ -268,7 +272,7 @@ mkdir -p /tmp/status
 while true; do
   # Update status JSON
   momo-cli dashboard:export > /tmp/status/metrics.json
-  
+
   # Serve it
   (
     echo "HTTP/1.1 200 OK"
@@ -282,6 +286,7 @@ done
 ```
 
 Then access via:
+
 ```bash
 curl http://localhost:8080/metrics.json
 ```
@@ -310,14 +315,14 @@ check_alert() {
   local threshold=$2
   local operator=$3
   local value=$(echo $METRICS | jq ".$(echo $metric | tr ':' '.')")
-  
+
   local triggered=false
   case $operator in
     gt) [ $value -gt $threshold ] && triggered=true ;;
     lt) [ $value -lt $threshold ] && triggered=true ;;
     eq) [ $value -eq $threshold ] && triggered=true ;;
   esac
-  
+
   if [ $triggered = true ]; then
     alert_slack "$metric is $value (threshold: $threshold)"
   fi
@@ -332,12 +337,14 @@ done < $CONFIG_FILE
 ## Usage Patterns
 
 ### Pattern 1: Scheduled Monitoring
+
 ```bash
 # In crontab: Check every 5 minutes
 */5 * * * * /usr/local/bin/momo-cli dashboard:export >> /var/log/momo-metrics.jsonl
 ```
 
 ### Pattern 2: Continuous Dashboard
+
 ```bash
 # Terminal 1: Watch mode
 momo-cli dashboard --watch
@@ -347,6 +354,7 @@ tail -f /var/log/momo.log
 ```
 
 ### Pattern 3: On-Demand Status
+
 ```bash
 # Quick health check before operations
 if momo-cli dashboard:export | jq -e '.health | all(. == "healthy")' > /dev/null; then
@@ -359,6 +367,7 @@ fi
 ```
 
 ### Pattern 4: Automated Remediation
+
 ```bash
 #!/bin/bash
 # Auto-detect and fix common issues

@@ -4,9 +4,9 @@ import { systemHeartbeat } from "../utils/metrics";
 /**
  * HeartbeatService manages the system heartbeat metric.
  * The heartbeat is a gauge that reports baseline availability state consistently.
- * 
+ *
  * Value: 1 = available, 0 = unavailable
- * 
+ *
  * This metric is useful for:
  * - Monitoring system uptime and availability
  * - Alerting on service degradation

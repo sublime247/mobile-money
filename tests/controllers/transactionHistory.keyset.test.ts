@@ -25,9 +25,12 @@ jest.mock("../../src/services/mobilemoney/mobileMoneyService", () => ({
   MobileMoneyService: jest.fn(),
 }));
 
-jest.mock("../../src/services/transactionLimit/transactionLimitService", () => ({
-  TransactionLimitService: jest.fn(),
-}));
+jest.mock(
+  "../../src/services/transactionLimit/transactionLimitService",
+  () => ({
+    TransactionLimitService: jest.fn(),
+  }),
+);
 
 jest.mock("../../src/services/kyc/kycService", () => ({
   KYCService: jest.fn(),
@@ -75,18 +78,12 @@ describe("transaction history keyset pagination route", () => {
       .get("/transactions?offset=5000&limit=2")
       .expect(200);
 
-    expect(mockList).toHaveBeenCalledWith(
-      3,
-      5000,
-      undefined,
-      undefined,
-      {
-        minAmount: undefined,
-        maxAmount: undefined,
-        provider: undefined,
-        tags: undefined,
-      },
-    );
+    expect(mockList).toHaveBeenCalledWith(3, 5000, undefined, undefined, {
+      minAmount: undefined,
+      maxAmount: undefined,
+      provider: undefined,
+      tags: undefined,
+    });
     expect(mockCount).not.toHaveBeenCalled();
     expect(res.body.data.map((tx: { id: string }) => tx.id)).toEqual([
       "tx-5000",

@@ -148,7 +148,11 @@ export class VodacomProvider {
             mapped?.message ??
               `C2B failed with code ${code}: ${response.data?.output_ResponseDesc || "Unknown error"}`,
           ),
-          { errorCode: mapped?.errorCode, retryable: mapped?.retryable, providerCode: code },
+          {
+            errorCode: mapped?.errorCode,
+            retryable: mapped?.retryable,
+            providerCode: code,
+          },
         );
       }
     } catch (error: any) {
@@ -217,7 +221,11 @@ export class VodacomProvider {
             mapped?.message ??
               `B2C failed with code ${code}: ${response.data?.output_ResponseDesc || "Unknown error"}`,
           ),
-          { errorCode: mapped?.errorCode, retryable: mapped?.retryable, providerCode: code },
+          {
+            errorCode: mapped?.errorCode,
+            retryable: mapped?.retryable,
+            providerCode: code,
+          },
         );
       }
     } catch (error: any) {
@@ -274,7 +282,10 @@ export class VodacomProvider {
       }
       const mapped = resolveVodacomError(code);
       if (mapped) {
-        return { status: mapped.errorCode === "TRANSACTION_FAILED" ? "failed" : "unknown" };
+        return {
+          status:
+            mapped.errorCode === "TRANSACTION_FAILED" ? "failed" : "unknown",
+        };
       }
       return { status: "unknown" };
     } catch {

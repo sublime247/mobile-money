@@ -16,7 +16,7 @@ bulkRoutesV1.post(
   (req: VersionedRequest, res, next) => {
     req.apiVersion = "v1";
     next();
-  }
+  },
   // Add your bulk operations handler here
 );
 
@@ -27,6 +27,6 @@ bulkRoutesV1.get(
   (req: VersionedRequest, res, next) => {
     req.apiVersion = "v1";
     next();
-  }
+  },
   // Add your batch status handler here
 );

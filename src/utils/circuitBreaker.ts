@@ -61,8 +61,13 @@ export function _resolveTimeoutMs(provider: string): number | null {
   return raw !== undefined ? Number(raw) : null;
 }
 
-async function getBreakerOptions(name: string, provider: string): Promise<CircuitBreakerOptions> {
-  let settings: import("../services/providerSettingsService").ProviderSettings | null = null;
+async function getBreakerOptions(
+  name: string,
+  provider: string,
+): Promise<CircuitBreakerOptions> {
+  let settings:
+    | import("../services/providerSettingsService").ProviderSettings
+    | null = null;
   try {
     settings = await providerSettingsService.getProviderSettings(provider);
   } catch {
@@ -72,12 +77,14 @@ async function getBreakerOptions(name: string, provider: string): Promise<Circui
   const providerThreshold = _resolveFailureThreshold(provider);
   const volumeThreshold = settings
     ? settings.failure_threshold
-    : (providerThreshold ?? Number(process.env.PROVIDER_CIRCUIT_BREAKER_VOLUME_THRESHOLD ?? 3));
+    : (providerThreshold ??
+      Number(process.env.PROVIDER_CIRCUIT_BREAKER_VOLUME_THRESHOLD ?? 3));
 
   const providerTimeout = _resolveTimeoutMs(provider);
   const timeoutMs = settings
     ? settings.timeout_ms
-    : (providerTimeout ?? Number(process.env.PROVIDER_CIRCUIT_BREAKER_TIMEOUT_MS ?? 5_000));
+    : (providerTimeout ??
+      Number(process.env.PROVIDER_CIRCUIT_BREAKER_TIMEOUT_MS ?? 5_000));
 
   return {
     name,
@@ -164,15 +171,21 @@ async function getOrCreateCircuitBreaker<T>(
   });
 
   breaker.on("open", () => {
-    logger.error(`Circuit breaker opened for ${provider}:${operation} due to high error rate`);
+    logger.error(
+      `Circuit breaker opened for ${provider}:${operation} due to high error rate`,
+    );
     emitStateTransitionMetric(provider, operation, "open");
   });
   breaker.on("halfOpen", () => {
-    console.log(`Circuit breaker half-open for ${provider}:${operation}, testing recovery`);
+    console.log(
+      `Circuit breaker half-open for ${provider}:${operation}, testing recovery`,
+    );
     emitStateTransitionMetric(provider, operation, "half_open");
   });
   breaker.on("close", () => {
-    console.log(`Circuit breaker closed for ${provider}:${operation}, service recovered`);
+    console.log(
+      `Circuit breaker closed for ${provider}:${operation}, service recovered`,
+    );
     emitStateTransitionMetric(provider, operation, "closed");
   });
 
@@ -194,9 +207,7 @@ export async function executeWithCircuitBreaker<T>(
 
 export function isCircuitBreakerOpenError(error: unknown): boolean {
   return (
-    error instanceof Error &&
-    "code" in error &&
-    error.code === "EOPENBREAKER"
+    error instanceof Error && "code" in error && error.code === "EOPENBREAKER"
   );
 }
 
@@ -220,7 +231,10 @@ export function resetCircuitBreakerForProvider(provider: string): void {
   }
 }
 
-export async function checkAndResetCircuitBreaker(provider: string, operation: string): Promise<boolean> {
+export async function checkAndResetCircuitBreaker(
+  provider: string,
+  operation: string,
+): Promise<boolean> {
   const key = getCircuitKey(provider, operation);
   const breaker = circuitBreakers.get(key);
   if (!breaker) {
@@ -228,17 +242,23 @@ export async function checkAndResetCircuitBreaker(provider: string, operation: s
   }
 
   // Only attempt to reset if the circuit is open or half-open
-  const state = (breaker as any).toJSON().state as { open: boolean; halfOpen: boolean };
+  const state = (breaker as any).toJSON().state as {
+    open: boolean;
+    halfOpen: boolean;
+  };
   if (!state?.open && !state?.halfOpen) {
     return false;
   }
 
   try {
     const healthResult = await checkMobileMoneyHealth();
-    const providerHealth = healthResult.providers[provider as keyof typeof healthResult.providers];
+    const providerHealth =
+      healthResult.providers[provider as keyof typeof healthResult.providers];
     if (providerHealth && providerHealth.status === "up") {
       breaker.close();
-      console.log(`Circuit breaker for ${provider}:${operation} reset due to health check`);
+      console.log(
+        `Circuit breaker for ${provider}:${operation} reset due to health check`,
+      );
       return true;
     }
   } catch (error) {

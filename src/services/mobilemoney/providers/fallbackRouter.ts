@@ -68,7 +68,11 @@ function isTimeoutError(error: unknown): boolean {
   return false;
 }
 
-function extractRequestId(phoneNumber: string, amount: string, requestId?: string): string | undefined {
+function extractRequestId(
+  phoneNumber: string,
+  amount: string,
+  requestId?: string,
+): string | undefined {
   return requestId ?? `FALLBACK-${phoneNumber}-${amount}-${Date.now()}`;
 }
 
@@ -87,7 +91,9 @@ export class FallbackRouter implements MobileMoneyProvider {
     this.primary = primary;
     this.fallback = fallback;
     this.config = {
-      timeoutMs: Number(config.timeoutMs ?? process.env.FALLBACK_ROUTER_TIMEOUT_MS ?? 15_000),
+      timeoutMs: Number(
+        config.timeoutMs ?? process.env.FALLBACK_ROUTER_TIMEOUT_MS ?? 15_000,
+      ),
       enableMetrics: config.enableMetrics ?? true,
       fallbackOnHttpStatus: config.fallbackOnHttpStatus ?? true,
     };
@@ -103,10 +109,14 @@ export class FallbackRouter implements MobileMoneyProvider {
 
     try {
       log.info("FallbackRouter: Trying primary provider");
-      const result = await this.executeWithTimeout(
-        () => this.primary.requestPayment(phoneNumber, amount, id),
+      const result = await this.executeWithTimeout(() =>
+        this.primary.requestPayment(phoneNumber, amount, id),
       );
-      return { success: result.success, data: result.data, error: result.error };
+      return {
+        success: result.success,
+        data: result.data,
+        error: result.error,
+      };
     } catch (primaryError: any) {
       if (!isTimeoutError(primaryError)) {
         log.warn(
@@ -131,8 +141,16 @@ export class FallbackRouter implements MobileMoneyProvider {
       }
 
       try {
-        const fallbackResult = await this.fallback.requestPayment(phoneNumber, amount, id);
-        return { success: fallbackResult.success, data: fallbackResult.data, error: fallbackResult.error };
+        const fallbackResult = await this.fallback.requestPayment(
+          phoneNumber,
+          amount,
+          id,
+        );
+        return {
+          success: fallbackResult.success,
+          data: fallbackResult.data,
+          error: fallbackResult.error,
+        };
       } catch (fallbackError: any) {
         logger.error(
           { error: fallbackError.message },
@@ -162,10 +180,14 @@ export class FallbackRouter implements MobileMoneyProvider {
 
     try {
       log.info("FallbackRouter: Trying primary provider");
-      const result = await this.executeWithTimeout(
-        () => this.primary.sendPayout(phoneNumber, amount, id),
+      const result = await this.executeWithTimeout(() =>
+        this.primary.sendPayout(phoneNumber, amount, id),
       );
-      return { success: result.success, data: result.data, error: result.error };
+      return {
+        success: result.success,
+        data: result.data,
+        error: result.error,
+      };
     } catch (primaryError: any) {
       if (!isTimeoutError(primaryError)) {
         log.warn(
@@ -190,8 +212,16 @@ export class FallbackRouter implements MobileMoneyProvider {
       }
 
       try {
-        const fallbackResult = await this.fallback.sendPayout(phoneNumber, amount, id);
-        return { success: fallbackResult.success, data: fallbackResult.data, error: fallbackResult.error };
+        const fallbackResult = await this.fallback.sendPayout(
+          phoneNumber,
+          amount,
+          id,
+        );
+        return {
+          success: fallbackResult.success,
+          data: fallbackResult.data,
+          error: fallbackResult.error,
+        };
       } catch (fallbackError: any) {
         logger.error(
           { error: fallbackError.message },
@@ -215,8 +245,8 @@ export class FallbackRouter implements MobileMoneyProvider {
     referenceId: string,
   ): Promise<{ status: ProviderTransactionStatus }> {
     try {
-      return await this.executeWithTimeout(
-        () => this.primary.getTransactionStatus(referenceId),
+      return await this.executeWithTimeout(() =>
+        this.primary.getTransactionStatus(referenceId),
       );
     } catch {
       logger.warn(
@@ -227,18 +257,18 @@ export class FallbackRouter implements MobileMoneyProvider {
     }
   }
 
-  async sendBatchPayout(
-    items: BatchPayoutItem[],
-  ): Promise<{ success: boolean; results: BatchPayoutResult[]; error?: unknown }> {
+  async sendBatchPayout(items: BatchPayoutItem[]): Promise<{
+    success: boolean;
+    results: BatchPayoutResult[];
+    error?: unknown;
+  }> {
     try {
-      return await this.executeWithTimeout(
-        () => {
-          if (this.primary.sendBatchPayout) {
-            return this.primary.sendBatchPayout(items);
-          }
-          throw new Error("Primary provider does not support batch payout");
-        },
-      );
+      return await this.executeWithTimeout(() => {
+        if (this.primary.sendBatchPayout) {
+          return this.primary.sendBatchPayout(items);
+        }
+        throw new Error("Primary provider does not support batch payout");
+      });
     } catch (primaryError: any) {
       logger.warn(
         { error: primaryError.message, itemCount: items.length },
@@ -250,11 +280,17 @@ export class FallbackRouter implements MobileMoneyProvider {
 
       for (const item of items) {
         try {
-          const result = await this.fallback.sendPayout(item.phoneNumber, item.amount, item.referenceId);
+          const result = await this.fallback.sendPayout(
+            item.phoneNumber,
+            item.amount,
+            item.referenceId,
+          );
           results.push({
             referenceId: item.referenceId,
             success: result.success ?? false,
-            ...(result.success ? { providerReference: String(result.data ?? "") } : { error: String(result.error ?? "") }),
+            ...(result.success
+              ? { providerReference: String(result.data ?? "") }
+              : { error: String(result.error ?? "") }),
           });
           if (result.success) anySuccess = true;
         } catch (itemError: any) {
@@ -270,16 +306,19 @@ export class FallbackRouter implements MobileMoneyProvider {
     }
   }
 
-  private async executeWithTimeout<T>(
-    fn: () => Promise<T>,
-  ): Promise<T> {
+  private async executeWithTimeout<T>(fn: () => Promise<T>): Promise<T> {
     const timeoutMs = this.config.timeoutMs;
 
     const result = await Promise.race([
       fn(),
       new Promise<never>((_, reject) =>
         setTimeout(
-          () => reject(new Error(`FallbackRouter: Operation timed out after ${timeoutMs}ms`)),
+          () =>
+            reject(
+              new Error(
+                `FallbackRouter: Operation timed out after ${timeoutMs}ms`,
+              ),
+            ),
           timeoutMs,
         ),
       ),

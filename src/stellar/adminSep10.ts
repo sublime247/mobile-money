@@ -1,6 +1,11 @@
 import logger from "../utils/logger";
 import { Router, Request, Response } from "express";
-import { Sep10Service, getSep10Config, Sep10ChallengeResponse, Sep10TokenResponse } from "./sep10";
+import {
+  Sep10Service,
+  getSep10Config,
+  Sep10ChallengeResponse,
+  Sep10TokenResponse,
+} from "./sep10";
 import { adminStellarKeyModel } from "../models/adminStellarKey";
 import { ERROR_CODES } from "../constants/errorCodes";
 import { createError } from "../middleware/errorHandler";
@@ -31,22 +36,28 @@ export class AdminSep10Service extends Sep10Service {
    */
   async verifyAdminChallenge(
     transactionXDR: string,
-    clientAccountID?: string
+    clientAccountID?: string,
   ): Promise<AdminSep10TokenResponse> {
     // First verify the standard SEP-10 challenge (now async)
-    const baseToken = await this.verifyChallenge(transactionXDR, clientAccountID);
+    const baseToken = await this.verifyChallenge(
+      transactionXDR,
+      clientAccountID,
+    );
 
     // Extract the client public key from the transaction
     const transaction = require("stellar-sdk").TransactionBuilder.fromXDR(
       transactionXDR,
-      this.config.networkPassphrase
+      this.config.networkPassphrase,
     ) as any;
 
-    const clientPublicKey = transaction.operations[0].source || transaction.source;
+    const clientPublicKey =
+      transaction.operations[0].source || transaction.source;
 
     // Check if this public key is authorized for admin access
     const isAdmin = await adminStellarKeyModel.isAdminKey(clientPublicKey);
-    const adminKey = isAdmin ? await adminStellarKeyModel.findByPublicKey(clientPublicKey) : null;
+    const adminKey = isAdmin
+      ? await adminStellarKeyModel.findByPublicKey(clientPublicKey)
+      : null;
 
     return {
       ...baseToken,
@@ -80,71 +91,87 @@ export function createAdminSep10Router(): Router {
    *
    * Generate a SEP-10 challenge transaction for admin authentication
    */
-router.get("/challenge", (req: Request, res: Response) => {
-  try {
-    const { account } = req.query;
+  router.get("/challenge", (req: Request, res: Response) => {
+    try {
+      const { account } = req.query;
 
-    if (!account || typeof account !== "string") {
-      throw createError(ERROR_CODES.INVALID_INPUT, "account parameter is required", {
-        error: "account parameter is required",
-      });
+      if (!account || typeof account !== "string") {
+        throw createError(
+          ERROR_CODES.INVALID_INPUT,
+          "account parameter is required",
+          {
+            error: "account parameter is required",
+          },
+        );
+      }
+
+      // Generate the challenge transaction
+      const challenge: Sep10ChallengeResponse =
+        service.generateChallenge(account);
+
+      return res.json(challenge);
+    } catch (error) {
+      logger.error("[Admin SEP-10] Error generating challenge:", error);
+
+      if (error instanceof Error) {
+        throw createError(ERROR_CODES.INVALID_INPUT, error.message, {
+          error: error.message,
+        });
+      }
+
+      throw createError(
+        ERROR_CODES.INTERNAL_ERROR,
+        "Failed to generate challenge transaction",
+      );
     }
-
-    // Generate the challenge transaction
-    const challenge: Sep10ChallengeResponse = service.generateChallenge(account);
-
-    return res.json(challenge);
-  } catch (error) {
-    logger.error("[Admin SEP-10] Error generating challenge:", error);
-
-    if (error instanceof Error) {
-      throw createError(ERROR_CODES.INVALID_INPUT, error.message, {
-        error: error.message,
-      });
-    }
-
-    throw createError(ERROR_CODES.INTERNAL_ERROR, "Failed to generate challenge transaction");
-  }
-});
+  });
 
   /**
    * POST /admin/auth/verify
    *
    * Verify a signed challenge transaction and authenticate admin
    */
- router.post("/verify", async (req: Request, res: Response) => {
-  try {
-    const { transaction } = req.body;
+  router.post("/verify", async (req: Request, res: Response) => {
+    try {
+      const { transaction } = req.body;
 
-    if (!transaction || typeof transaction !== "string") {
-      throw createError(ERROR_CODES.INVALID_INPUT, "transaction parameter is required", {
-        error: "transaction parameter is required",
-      });
+      if (!transaction || typeof transaction !== "string") {
+        throw createError(
+          ERROR_CODES.INVALID_INPUT,
+          "transaction parameter is required",
+          {
+            error: "transaction parameter is required",
+          },
+        );
+      }
+
+      // Verify the challenge and check admin authorization
+      const tokenResponse = await service.verifyAdminChallenge(transaction);
+
+      if (!tokenResponse.isAdmin) {
+        throw createError(ERROR_CODES.FORBIDDEN, "Unauthorized", {
+          error: "Unauthorized",
+          message:
+            "The provided Stellar public key is not authorized for admin access",
+        });
+      }
+
+      return res.json(tokenResponse);
+    } catch (error) {
+      logger.error("[Admin SEP-10] Error verifying challenge:", error);
+
+      if (error instanceof Error) {
+        throw createError(ERROR_CODES.INVALID_INPUT, error.message, {
+          error: error.message,
+        });
+      }
+
+      throw createError(
+        ERROR_CODES.INTERNAL_ERROR,
+        "Failed to verify challenge transaction",
+      );
     }
-
-    // Verify the challenge and check admin authorization
-    const tokenResponse = await service.verifyAdminChallenge(transaction);
-
-    if (!tokenResponse.isAdmin) {
-      throw createError(ERROR_CODES.FORBIDDEN, "Unauthorized", {
-        error: "Unauthorized",
-        message: "The provided Stellar public key is not authorized for admin access",
-      });
-    }
-
-    return res.json(tokenResponse);
-  } catch (error) {
-    logger.error("[Admin SEP-10] Error verifying challenge:", error);
-
-    if (error instanceof Error) {
-      throw createError(ERROR_CODES.INVALID_INPUT, error.message, {
-        error: error.message,
-      });
-    }
-
-    throw createError(ERROR_CODES.INTERNAL_ERROR, "Failed to verify challenge transaction");
-  }
-});
+  });
 
   /**
    * GET /admin/auth/health

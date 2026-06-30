@@ -2,7 +2,8 @@ import logger from "../utils/logger";
 import { sanctionService } from "../services/sanctionService";
 
 const SANCTION_FEED_URL =
-  process.env.SANCTION_FEED_URL ?? "https://scsanctions.un.org/resources/ndjson/consolidated.ndjson";
+  process.env.SANCTION_FEED_URL ??
+  "https://scsanctions.un.org/resources/ndjson/consolidated.ndjson";
 
 const BATCH_SIZE = parseInt(process.env.SANCTION_SYNC_BATCH_SIZE ?? "500", 10);
 
@@ -14,19 +15,32 @@ const BATCH_SIZE = parseInt(process.env.SANCTION_SYNC_BATCH_SIZE ?? "500", 10);
  * upserts each batch into the DB, then clears the match cache.
  */
 export async function runSanctionSyncJob(): Promise<void> {
-  console.log("[sanction-sync] Starting daily sanction list synchronization...");
-  
+  console.log(
+    "[sanction-sync] Starting daily sanction list synchronization...",
+  );
+
+  let totalIndexed = 0;
   try {
     const updates = await sanctionService.fetchSanctionUpdates();
-    console.log(`[sanction-sync] Fetched ${updates.length} entities from global lists.`);
-    
+    totalIndexed = updates.length;
+    console.log(
+      `[sanction-sync] Fetched ${updates.length} entities from global lists.`,
+    );
+
     await sanctionService.updateSanctionList(updates);
-    console.log("[sanction-sync] Successfully updated internal sanction blacklist.");
+    console.log(
+      "[sanction-sync] Successfully updated internal sanction blacklist.",
+    );
   } catch (error) {
-    logger.error("[sanction-sync] Critical failure during sanction sync:", error);
+    logger.error(
+      "[sanction-sync] Critical failure during sanction sync:",
+      error,
+    );
     throw error;
   }
 
   await sanctionService.clearSanctionMatchCache();
-  console.log(`[sanction-sync] Completed: ${totalIndexed} entities indexed, cache cleared`);
+  console.log(
+    `[sanction-sync] Completed: ${totalIndexed} entities indexed, cache cleared`,
+  );
 }

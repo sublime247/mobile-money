@@ -6,10 +6,10 @@ This document describes how the automated SDK publish pipeline works and how to 
 
 When a GitHub Release is **published** (not just drafted), the workflow at `.github/workflows/sdk-publish.yml` runs automatically and publishes two SDK packages in parallel:
 
-| SDK | Registry | Package |
-|-----|----------|---------|
+| SDK        | Registry                           | Package                            |
+| ---------- | ---------------------------------- | ---------------------------------- |
 | Kotlin/JVM | Maven Central (via Sonatype OSSRH) | `com.mobilemoney:mobile-money-sdk` |
-| TypeScript | npm registry | `mobile-money-sdk` |
+| TypeScript | npm registry                       | `mobile-money-sdk`                 |
 
 The version is derived directly from the release tag (e.g. `v1.2.3` → `1.2.3`).
 
@@ -33,9 +33,11 @@ resolve-version
 ```
 
 ### `resolve-version`
+
 Strips the leading `v` from the release tag and exposes the clean semver string as a job output used by both publish jobs.
 
 ### `publish-kotlin-sdk`
+
 1. Checks out the repo and sets up JDK 17 + Node 20.
 2. Starts the API server and generates the Kotlin SDK from the live OpenAPI spec (falls back to `public/openapi.json` if the server is unavailable).
 3. Runs `./gradlew test` to verify the generated SDK compiles and passes tests.
@@ -43,6 +45,7 @@ Strips the leading `v` from the release tag and exposes the clean semver string 
 5. Uploads the built JARs as a workflow artifact (retained 30 days).
 
 ### `publish-typescript-sdk`
+
 1. Sets up Node 20 with npm registry auth.
 2. Generates the TypeScript SDK from the OpenAPI spec.
 3. Runs `npm install && npm run build`.
@@ -50,6 +53,7 @@ Strips the leading `v` from the release tag and exposes the clean semver string 
 5. Uploads `dist/` as a workflow artifact (retained 30 days).
 
 ### `publish-summary`
+
 Writes a Markdown summary table to the GitHub Actions job summary and fails the workflow if either publish job failed.
 
 ## Required Secrets
@@ -58,12 +62,12 @@ Configure these in **Settings → Secrets and variables → Actions** on the rep
 
 ### Maven Central (Kotlin SDK)
 
-| Secret | Description |
-|--------|-------------|
-| `SONATYPE_USERNAME` | Sonatype OSSRH username. Use a [user token](https://central.sonatype.org/publish/generate-token/) rather than your account password. |
-| `SONATYPE_PASSWORD` | Sonatype OSSRH password / token. |
-| `GPG_SIGNING_KEY` | ASCII-armored GPG private key. Export with: `gpg --armor --export-secret-keys <KEY_ID>` |
-| `GPG_SIGNING_PASSWORD` | Passphrase for the GPG key. |
+| Secret                 | Description                                                                                                                          |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `SONATYPE_USERNAME`    | Sonatype OSSRH username. Use a [user token](https://central.sonatype.org/publish/generate-token/) rather than your account password. |
+| `SONATYPE_PASSWORD`    | Sonatype OSSRH password / token.                                                                                                     |
+| `GPG_SIGNING_KEY`      | ASCII-armored GPG private key. Export with: `gpg --armor --export-secret-keys <KEY_ID>`                                              |
+| `GPG_SIGNING_PASSWORD` | Passphrase for the GPG key.                                                                                                          |
 
 #### Generating a GPG key for signing
 
@@ -93,8 +97,8 @@ Paste the output of `--export-secret-keys` as the value of `GPG_SIGNING_KEY`.
 
 ### npm (TypeScript SDK)
 
-| Secret | Description |
-|--------|-------------|
+| Secret      | Description                                                                                                                                         |
+| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `NPM_TOKEN` | npm automation token. Generate at [https://www.npmjs.com/settings/\<username\>/tokens](https://www.npmjs.com/settings). Choose **Automation** type. |
 
 ## Optional: `sdk-publish` Environment
@@ -144,26 +148,30 @@ cd sdk-ts && npm install && npm run build
 
 The SDK version is always derived from the GitHub release tag:
 
-| Release tag | Published version |
-|-------------|-------------------|
-| `v1.2.3`    | `1.2.3`           |
-| `v2.0.0`    | `2.0.0`           |
-| `v1.3.0-rc.1` | `1.3.0-rc.1`   |
+| Release tag   | Published version |
+| ------------- | ----------------- |
+| `v1.2.3`      | `1.2.3`           |
+| `v2.0.0`      | `2.0.0`           |
+| `v1.3.0-rc.1` | `1.3.0-rc.1`      |
 
 Snapshot versions (ending in `-SNAPSHOT`) are published to the Sonatype snapshots repository instead of staging.
 
 ## Troubleshooting
 
 **Kotlin publish fails with "401 Unauthorized"**
+
 - Verify `SONATYPE_USERNAME` and `SONATYPE_PASSWORD` are set and use a user token (not account credentials).
 
 **Kotlin publish fails with "Signature invalid"**
+
 - Ensure `GPG_SIGNING_KEY` contains the full ASCII-armored key including the `-----BEGIN PGP PRIVATE KEY BLOCK-----` header/footer.
 - Verify the public key has been uploaded to a keyserver.
 
 **npm publish fails with "403 Forbidden"**
+
 - Ensure `NPM_TOKEN` is an **Automation** token, not a read-only token.
 - Verify the package name `mobile-money-sdk` is not already claimed by another user/org on npm.
 
 **OpenAPI spec generation fails**
+
 - The workflow falls back to `public/openapi.json`. Ensure this file is kept up to date by running `npm run generate:openapi` before tagging a release.

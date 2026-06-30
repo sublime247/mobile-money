@@ -10,9 +10,13 @@ export async function runSnapshotJob(): Promise<void> {
   const service = new SnapshotService();
   try {
     const snapshot = await service.performDailySnapshot();
-    console.log(`[snapshot] Daily snapshot completed for ${snapshot.snapshotDate}`);
+    console.log(
+      `[snapshot] Daily snapshot completed for ${snapshot.snapshotDate}`,
+    );
     console.log(`[snapshot]   Total Balance: ${snapshot.totalBalance}`);
-    console.log(`[snapshot]   Daily Volume: ${snapshot.dailyVolume} (${snapshot.transactionCount} txns)`);
+    console.log(
+      `[snapshot]   Daily Volume: ${snapshot.dailyVolume} (${snapshot.transactionCount} txns)`,
+    );
   } catch (error) {
     logger.error("[snapshot] Failed to perform daily snapshot:", error);
     throw error;

@@ -3,13 +3,25 @@ import { transactionQueue } from "./transactionQueue";
 import { transactionWorker, closeWorker } from "./worker";
 import { syncQueue } from "./syncQueue";
 import { syncWorker, closeSyncWorker } from "./syncWorker";
-import { accountingRetryQueue, closeAccountingRetryQueue } from "./accountingRetryQueue";
-import { accountingRetryWorker, closeAccountingRetryWorker } from "./accountingRetryWorker";
+import {
+  accountingRetryQueue,
+  closeAccountingRetryQueue,
+} from "./accountingRetryQueue";
+import {
+  accountingRetryWorker,
+  closeAccountingRetryWorker,
+} from "./accountingRetryWorker";
 import { connection } from "./config";
 import { startProviderBalanceAlertWorker } from "./providerBalanceAlertWorker";
 import { scheduleProviderBalanceAlertJob } from "./providerBalanceAlertQueue";
-import { startAccountingTokenRefreshWorker, closeAccountingTokenRefreshWorker } from "./accountingTokenRefreshWorker";
-import { startWebhookRetryWorker, closeWebhookRetryWorker } from "./webhookRetryWorker";
+import {
+  startAccountingTokenRefreshWorker,
+  closeAccountingTokenRefreshWorker,
+} from "./accountingTokenRefreshWorker";
+import {
+  startWebhookRetryWorker,
+  closeWebhookRetryWorker,
+} from "./webhookRetryWorker";
 
 export async function shutdownQueue(): Promise<void> {
   await Promise.all([
@@ -102,10 +114,7 @@ export {
   closeAccountMergeWorker,
 } from "./accountMergeWorker";
 
-export {
-  startAccountingTokenRefreshWorker,
-  closeAccountingTokenRefreshWorker,
-};
+export { startAccountingTokenRefreshWorker, closeAccountingTokenRefreshWorker };
 
 export {
   startWebhookRetryWorker,
@@ -113,4 +122,9 @@ export {
 } from "./webhookRetryWorker";
 
 // Trace-ID propagation utilities
-export { withTraceId, traceIdFromJob, childLoggerWithTrace, TRACE_ID_KEY } from "./trace";
+export {
+  withTraceId,
+  traceIdFromJob,
+  childLoggerWithTrace,
+  TRACE_ID_KEY,
+} from "./trace";

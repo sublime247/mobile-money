@@ -23,47 +23,60 @@ export class ProviderRateLimitService {
   private readonly RATE_LIMIT_PREFIX = "rate_limit:";
   private readonly DEFAULT_TTL = 3600; // 1 hour in seconds
 
-  private readonly defaultConfigs: Map<string, ProviderRateLimitConfig> = new Map([
-    ['mtn', {
-      provider: 'mtn',
-      maxConcurrentJobs: 20,
-      minConcurrentJobs: 2,
-      throttleStep: 3,
-      recoveryStep: 1,
-      recoveryInterval: 60000, // 1 minute
-    }],
-    ['airtel', {
-      provider: 'airtel',
-      maxConcurrentJobs: 15,
-      minConcurrentJobs: 2,
-      throttleStep: 2,
-      recoveryStep: 1,
-      recoveryInterval: 60000,
-    }],
-    ['orange', {
-      provider: 'orange',
-      maxConcurrentJobs: 18,
-      minConcurrentJobs: 2,
-      throttleStep: 3,
-      recoveryStep: 1,
-      recoveryInterval: 60000,
-    }],
-    ['vodacom', {
-      provider: 'vodacom',
-      maxConcurrentJobs: 15,
-      minConcurrentJobs: 2,
-      throttleStep: 2,
-      recoveryStep: 1,
-      recoveryInterval: 60000,
-    }],
-  ]);
+  private readonly defaultConfigs: Map<string, ProviderRateLimitConfig> =
+    new Map([
+      [
+        "mtn",
+        {
+          provider: "mtn",
+          maxConcurrentJobs: 20,
+          minConcurrentJobs: 2,
+          throttleStep: 3,
+          recoveryStep: 1,
+          recoveryInterval: 60000, // 1 minute
+        },
+      ],
+      [
+        "airtel",
+        {
+          provider: "airtel",
+          maxConcurrentJobs: 15,
+          minConcurrentJobs: 2,
+          throttleStep: 2,
+          recoveryStep: 1,
+          recoveryInterval: 60000,
+        },
+      ],
+      [
+        "orange",
+        {
+          provider: "orange",
+          maxConcurrentJobs: 18,
+          minConcurrentJobs: 2,
+          throttleStep: 3,
+          recoveryStep: 1,
+          recoveryInterval: 60000,
+        },
+      ],
+      [
+        "vodacom",
+        {
+          provider: "vodacom",
+          maxConcurrentJobs: 15,
+          minConcurrentJobs: 2,
+          throttleStep: 2,
+          recoveryStep: 1,
+          recoveryInterval: 60000,
+        },
+      ],
+    ]);
 
   /**
    * Extract rate limit headers from provider response
    */
   extractRateLimitHeaders(
     provider: string,
-    headers: Record<string, string | string[] | undefined>
+    headers: Record<string, string | string[] | undefined>,
   ): Partial<RateLimitState> {
     const rateLimit: Partial<RateLimitState> = {
       provider,
@@ -72,29 +85,29 @@ export class ProviderRateLimitService {
 
     // Common rate limit header patterns
     const remaining = this.extractHeaderValue(headers, [
-      'X-RateLimit-Remaining',
-      'X-Rate-Limit-Remaining',
-      'X-Remaining',
-      'ratelimit-remaining',
+      "X-RateLimit-Remaining",
+      "X-Rate-Limit-Remaining",
+      "X-Remaining",
+      "ratelimit-remaining",
     ]);
 
     const limit = this.extractHeaderValue(headers, [
-      'X-RateLimit-Limit',
-      'X-Rate-Limit-Limit',
-      'X-Limit',
-      'ratelimit-limit',
+      "X-RateLimit-Limit",
+      "X-Rate-Limit-Limit",
+      "X-Limit",
+      "ratelimit-limit",
     ]);
 
     const reset = this.extractHeaderValue(headers, [
-      'X-RateLimit-Reset',
-      'X-Rate-Limit-Reset',
-      'X-Reset',
-      'ratelimit-reset',
+      "X-RateLimit-Reset",
+      "X-Rate-Limit-Reset",
+      "X-Reset",
+      "ratelimit-reset",
     ]);
 
     const retryAfter = this.extractHeaderValue(headers, [
-      'Retry-After',
-      'retry-after',
+      "Retry-After",
+      "retry-after",
     ]);
 
     if (remaining !== undefined) {
@@ -132,11 +145,7 @@ export class ProviderRateLimitService {
     const ttl = this.calculateTTL(rateLimit.resetAt);
 
     try {
-      await redisClient.setEx(
-        key,
-        ttl,
-        JSON.stringify(rateLimit)
-      );
+      await redisClient.setEx(key, ttl, JSON.stringify(rateLimit));
 
       logger.debug(
         {
@@ -145,12 +154,12 @@ export class ProviderRateLimitService {
           limit: rateLimit.limit,
           resetAt: new Date(rateLimit.resetAt).toISOString(),
         },
-        "Updated provider rate limit state"
+        "Updated provider rate limit state",
       );
     } catch (error) {
       logger.error(
         { error, provider: rateLimit.provider },
-        "Failed to update rate limit state in Redis"
+        "Failed to update rate limit state in Redis",
       );
     }
   }
@@ -167,11 +176,11 @@ export class ProviderRateLimitService {
         return null;
       }
 
-      return JSON.parse(data) as RateLimitState;
+      return JSON.parse(data.toString()) as RateLimitState;
     } catch (error) {
       logger.error(
         { error, provider },
-        "Failed to get rate limit state from Redis"
+        "Failed to get rate limit state from Redis",
       );
       return null;
     }
@@ -195,7 +204,7 @@ export class ProviderRateLimitService {
       const currentConcurrency = await this.getCurrentConcurrency(provider);
       const throttledConcurrency = Math.max(
         config.minConcurrentJobs,
-        currentConcurrency - config.throttleStep
+        currentConcurrency - config.throttleStep,
       );
 
       logger.warn(
@@ -205,7 +214,7 @@ export class ProviderRateLimitService {
           limit: rateLimit.limit,
           recommendedConcurrency: throttledConcurrency,
         },
-        "Provider rate limited - throttling concurrency"
+        "Provider rate limited - throttling concurrency",
       );
 
       return throttledConcurrency;
@@ -220,7 +229,7 @@ export class ProviderRateLimitService {
       if (timeSinceUpdate >= config.recoveryInterval) {
         const recoveredConcurrency = Math.min(
           config.maxConcurrentJobs,
-          currentConcurrency + config.recoveryStep
+          currentConcurrency + config.recoveryStep,
         );
 
         logger.info(
@@ -229,7 +238,7 @@ export class ProviderRateLimitService {
             currentConcurrency,
             newConcurrency: recoveredConcurrency,
           },
-          "Recovering provider concurrency"
+          "Recovering provider concurrency",
         );
 
         return recoveredConcurrency;
@@ -251,8 +260,9 @@ export class ProviderRateLimitService {
     }
 
     // Check if remaining requests is critically low (less than 10% of limit)
-    const usagePercentage = (rateLimit.limit - rateLimit.remaining) / rateLimit.limit;
-    return usagePercentage >= 0.9 || (rateLimit.remaining === 0);
+    const usagePercentage =
+      (rateLimit.limit - rateLimit.remaining) / rateLimit.limit;
+    return usagePercentage >= 0.9 || rateLimit.remaining === 0;
   }
 
   /**
@@ -268,7 +278,7 @@ export class ProviderRateLimitService {
       return config.maxConcurrentJobs;
     }
 
-    return parseInt(concurrency, 10);
+    return parseInt(concurrency.toString(), 10);
   }
 
   /**
@@ -281,28 +291,31 @@ export class ProviderRateLimitService {
     // Clamp to valid range
     const clampedConcurrency = Math.max(
       config.minConcurrentJobs,
-      Math.min(config.maxConcurrentJobs, concurrency)
+      Math.min(config.maxConcurrentJobs, concurrency),
     );
 
     await redisClient.set(key, clampedConcurrency.toString());
 
     logger.info(
       { provider, concurrency: clampedConcurrency },
-      "Updated provider concurrency"
+      "Updated provider concurrency",
     );
   }
 
   /**
    * Handle 429 Too Many Requests response
    */
-  async handleRateLimitError(provider: string, retryAfter?: number): Promise<void> {
+  async handleRateLimitError(
+    provider: string,
+    retryAfter?: number,
+  ): Promise<void> {
     const config = this.getProviderConfig(provider);
     const currentConcurrency = await this.getCurrentConcurrency(provider);
 
     // Aggressively throttle on 429
     const newConcurrency = Math.max(
       config.minConcurrentJobs,
-      Math.floor(currentConcurrency / 2)
+      Math.floor(currentConcurrency / 2),
     );
 
     await this.setConcurrency(provider, newConcurrency);
@@ -325,7 +338,7 @@ export class ProviderRateLimitService {
         retryAfter: retryAfter || 60,
         newConcurrency,
       },
-      "Provider returned 429 - aggressively throttling"
+      "Provider returned 429 - aggressively throttling",
     );
   }
 
@@ -339,10 +352,7 @@ export class ProviderRateLimitService {
     const config = this.getProviderConfig(provider);
     await this.setConcurrency(provider, config.maxConcurrentJobs);
 
-    logger.info(
-      { provider },
-      "Reset provider rate limit state"
-    );
+    logger.info({ provider }, "Reset provider rate limit state");
   }
 
   /**
@@ -372,7 +382,7 @@ export class ProviderRateLimitService {
    */
   private extractHeaderValue(
     headers: Record<string, string | string[] | undefined>,
-    possibleKeys: string[]
+    possibleKeys: string[],
   ): string | undefined {
     for (const key of possibleKeys) {
       const value = headers[key.toLowerCase()] || headers[key];

@@ -1,4 +1,9 @@
-import { maskPhoneNumber, maskEmail, maskStellarAddress, maskSensitiveData } from "../masking";
+import {
+  maskPhoneNumber,
+  maskEmail,
+  maskStellarAddress,
+  maskSensitiveData,
+} from "../masking";
 
 describe("Masking Utility", () => {
   describe("maskPhoneNumber", () => {
@@ -47,8 +52,12 @@ describe("Masking Utility", () => {
   describe("maskSensitiveData", () => {
     it("should route to correct masking function", () => {
       expect(maskSensitiveData("+237677123456", "phone")).toBe("+237***56");
-      expect(maskSensitiveData("johndoe@example.com", "email")).toBe("jo***@example.com");
-      expect(maskSensitiveData("GBXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX1234", "stellar")).toBe("GBXX...1234");
+      expect(maskSensitiveData("johndoe@example.com", "email")).toBe(
+        "jo***@example.com",
+      );
+      expect(
+        maskSensitiveData("GBXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX1234", "stellar"),
+      ).toBe("GBXX...1234");
     });
   });
 });

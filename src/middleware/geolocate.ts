@@ -1,5 +1,9 @@
 import { Request, Response, NextFunction } from "express";
-import { geolocationService, LocationMetadata, UNKNOWN_LOCATION } from "../services/geolocation";
+import {
+  geolocationService,
+  LocationMetadata,
+  UNKNOWN_LOCATION,
+} from "../services/geolocation";
 
 /**
  * Trusted reverse-proxy CIDR ranges.
@@ -26,7 +30,9 @@ const extraTrusted = (process.env.TRUSTED_PROXY_CIDRS ?? "")
   .map((cidr) => {
     // Accept plain IP prefix strings like "10.0.0." or exact IPs
     try {
-      return new RegExp("^" + cidr.replace(/\./g, "\\.").replace(/\*/g, ".*") + "$");
+      return new RegExp(
+        "^" + cidr.replace(/\./g, "\\.").replace(/\*/g, ".*") + "$",
+      );
     } catch {
       return null;
     }
@@ -55,7 +61,10 @@ export function extractClientIp(req: Request): string {
   const forwarded = req.headers["x-forwarded-for"];
   if (forwarded) {
     const raw = Array.isArray(forwarded) ? forwarded.join(",") : forwarded;
-    const ips = raw.split(",").map((s) => s.trim()).filter(Boolean);
+    const ips = raw
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
 
     // Walk right-to-left; return the first non-trusted IP
     for (let i = ips.length - 1; i >= 0; i--) {

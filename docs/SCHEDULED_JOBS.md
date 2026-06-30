@@ -4,12 +4,12 @@ Scheduled background jobs run automatically when the server starts, powered by [
 
 ## Jobs
 
-| Job            | Default Schedule         | Description                                                                    |
-| -------------- | ------------------------ | ------------------------------------------------------------------------------ |
-| `cleanup`      | `0 2 * * *` (daily 2 AM) | Deletes completed/failed transactions older than `LOG_RETENTION_DAYS`          |
-| `report`       | `0 6 * * *` (daily 6 AM) | Logs a summary of the previous day's transactions                              |
-| `status-check` | `0 * * * *` (every hour) | Warns about pending transactions stuck longer than `STUCK_TRANSACTION_MINUTES` |
-| `index-reindex`| `0 3 * * *` (daily 3 AM) | Reindexes bloated indexes using `REINDEX INDEX CONCURRENTLY` during low traffic |
+| Job             | Default Schedule         | Description                                                                     |
+| --------------- | ------------------------ | ------------------------------------------------------------------------------- |
+| `cleanup`       | `0 2 * * *` (daily 2 AM) | Deletes completed/failed transactions older than `LOG_RETENTION_DAYS`           |
+| `report`        | `0 6 * * *` (daily 6 AM) | Logs a summary of the previous day's transactions                               |
+| `status-check`  | `0 * * * *` (every hour) | Warns about pending transactions stuck longer than `STUCK_TRANSACTION_MINUTES`  |
+| `index-reindex` | `0 3 * * *` (daily 3 AM) | Reindexes bloated indexes using `REINDEX INDEX CONCURRENTLY` during low traffic |
 
 ## Configuration
 

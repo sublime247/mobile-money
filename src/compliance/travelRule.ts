@@ -76,9 +76,13 @@ function decryptParty(row: {
   return {
     name: (decrypt(row.name) as string) ?? row.name,
     account: (decrypt(row.account) as string) ?? row.account,
-    address: row.address ? ((decrypt(row.address) as string) ?? undefined) : undefined,
+    address: row.address
+      ? ((decrypt(row.address) as string) ?? undefined)
+      : undefined,
     dob: row.dob ? ((decrypt(row.dob) as string) ?? undefined) : undefined,
-    idNumber: row.id_number ? ((decrypt(row.id_number) as string) ?? undefined) : undefined,
+    idNumber: row.id_number
+      ? ((decrypt(row.id_number) as string) ?? undefined)
+      : undefined,
   };
 }
 
@@ -178,7 +182,9 @@ export class TravelRuleService {
   }
 
   /** Fetch a single record by transaction ID (decrypted). */
-  async findByTransactionId(transactionId: string): Promise<TravelRuleRecord | null> {
+  async findByTransactionId(
+    transactionId: string,
+  ): Promise<TravelRuleRecord | null> {
     const result = await pool.query(
       `SELECT * FROM travel_rule_records WHERE transaction_id = $1`,
       [transactionId],
@@ -198,7 +204,8 @@ export class TravelRuleService {
     onlyUnexported?: boolean;
   }): Promise<TravelRuleRecord[]> {
     const to = options.to ?? new Date();
-    const from = options.from ?? new Date(to.getTime() - 90 * 24 * 60 * 60 * 1000);
+    const from =
+      options.from ?? new Date(to.getTime() - 90 * 24 * 60 * 60 * 1000);
 
     const whereClauses = ["created_at >= $1", "created_at <= $2"];
     const values: unknown[] = [from, to];

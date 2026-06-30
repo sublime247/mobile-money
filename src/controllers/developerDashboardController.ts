@@ -48,10 +48,7 @@ export class DeveloperDashboardController {
       return res.json({ webhooks });
     } catch (error) {
       logger.error("Get webhooks error:", error);
-      throw createError(
-        ERROR_CODES.INTERNAL_ERROR,
-        "Failed to fetch webhooks",
-      );
+      throw createError(ERROR_CODES.INTERNAL_ERROR, "Failed to fetch webhooks");
     }
   }
 
@@ -81,7 +78,10 @@ export class DeveloperDashboardController {
       return res.json(timeline);
     } catch (error) {
       logger.error("Get webhook timeline error:", error);
-      if (error instanceof Error && error.message === "Webhook not found or access denied") {
+      if (
+        error instanceof Error &&
+        error.message === "Webhook not found or access denied"
+      ) {
         throw createError(ERROR_CODES.NOT_FOUND, error.message, {
           error: "Webhook not found",
         });
@@ -112,7 +112,10 @@ export class DeveloperDashboardController {
       return res.json(result);
     } catch (error) {
       logger.error("Retry webhook delivery error:", error);
-      if (error instanceof Error && error.message === "Delivery log not found or access denied") {
+      if (
+        error instanceof Error &&
+        error.message === "Delivery log not found or access denied"
+      ) {
         throw createError(ERROR_CODES.NOT_FOUND, error.message, {
           error: "Delivery log not found",
         });

@@ -1,4 +1,9 @@
-export type MobileNetworkName = "MTN" | "AIRTEL" | "ORANGE" | "VODACOM" | "TIGO";
+export type MobileNetworkName =
+  | "MTN"
+  | "AIRTEL"
+  | "ORANGE"
+  | "VODACOM"
+  | "TIGO";
 
 /**
  * Common network prefixes for target mobile money providers.

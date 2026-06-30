@@ -31,7 +31,8 @@ import { notificationRouter } from "../../src/services/notificationRouter";
 
 const mockPoolQuery = pool.query as jest.Mock;
 const mockPoolConnect = pool.connect as jest.Mock;
-const mockRouteSystemNotification = notificationRouter.routeSystemNotification as jest.Mock;
+const mockRouteSystemNotification =
+  notificationRouter.routeSystemNotification as jest.Mock;
 
 describe("ComplianceController", () => {
   let controller: ComplianceController;
@@ -56,44 +57,74 @@ describe("ComplianceController", () => {
         address: "456 Oak Ave",
       };
 
-      const payload = controller.serializeToIVMS101(sender, receiver, "VASP-A", "VASP-B");
+      const payload = controller.serializeToIVMS101(
+        sender,
+        receiver,
+        "VASP-A",
+        "VASP-B",
+      );
 
       expect(payload.originator.accountNumbers).toContain("+1234567890");
       expect(payload.beneficiary.accountNumbers).toContain("+0987654321");
 
       const origPerson = payload.originator.originatorPersons[0].naturalPerson;
-      expect(origPerson?.name.nameIdentifier[0].primaryIdentifier).toBe("Alice Smith");
+      expect(origPerson?.name.nameIdentifier[0].primaryIdentifier).toBe(
+        "Alice Smith",
+      );
       expect(origPerson?.geographicAddress?.[0].streetName).toBe("123 Main St");
-      expect(origPerson?.nationalIdentification?.nationalIdentifier).toBe("ID-12345");
+      expect(origPerson?.nationalIdentification?.nationalIdentifier).toBe(
+        "ID-12345",
+      );
       expect(origPerson?.dateAndPlaceOfBirth?.dateOfBirth).toBe("1990-01-01");
 
-      const benefPerson = payload.beneficiary.beneficiaryPersons[0].naturalPerson;
-      expect(benefPerson?.name.nameIdentifier[0].primaryIdentifier).toBe("Bob Jones");
-      expect(benefPerson?.geographicAddress?.[0].streetName).toBe("456 Oak Ave");
+      const benefPerson =
+        payload.beneficiary.beneficiaryPersons[0].naturalPerson;
+      expect(benefPerson?.name.nameIdentifier[0].primaryIdentifier).toBe(
+        "Bob Jones",
+      );
+      expect(benefPerson?.geographicAddress?.[0].streetName).toBe(
+        "456 Oak Ave",
+      );
 
-      expect(payload.originatingVasp?.legalPerson.name.nameIdentifier[0].legalName).toBe("VASP-A");
-      expect(payload.beneficiaryVasp?.legalPerson.name.nameIdentifier[0].legalName).toBe("VASP-B");
+      expect(
+        payload.originatingVasp?.legalPerson.name.nameIdentifier[0].legalName,
+      ).toBe("VASP-A");
+      expect(
+        payload.beneficiaryVasp?.legalPerson.name.nameIdentifier[0].legalName,
+      ).toBe("VASP-B");
     });
   });
 
   describe("establishTLSConnection() in test mode", () => {
     it("should return success and a mock signature for general hosts", async () => {
       const payload = {} as any;
-      const result = await controller.establishTLSConnection("localhost", 4001, payload);
+      const result = await controller.establishTLSConnection(
+        "localhost",
+        4001,
+        payload,
+      );
       expect(result.status).toBe("success");
       expect(result.signature).toMatch(/^trisa_sig_[a-f0-9]{16}$/);
     });
 
     it("should return failed and error message when host represents a failing node", async () => {
       const payload = {} as any;
-      const result = await controller.establishTLSConnection("failing-node.mock", 4001, payload);
+      const result = await controller.establishTLSConnection(
+        "failing-node.mock",
+        4001,
+        payload,
+      );
       expect(result.status).toBe("failed");
       expect(result.error).toBe("TRISA compliance node rejected verification");
     });
 
     it("should return failed when localhost is called on port 9999", async () => {
       const payload = {} as any;
-      const result = await controller.establishTLSConnection("localhost", 9999, payload);
+      const result = await controller.establishTLSConnection(
+        "localhost",
+        9999,
+        payload,
+      );
       expect(result.status).toBe("failed");
       expect(result.error).toBe("TRISA compliance node rejected verification");
     });
@@ -113,13 +144,20 @@ describe("ComplianceController", () => {
         "localhost:4001",
         payload,
         "success",
-        "mock_sig_123"
+        "mock_sig_123",
       );
 
       expect(mockPoolConnect).toHaveBeenCalledTimes(1);
       expect(mockPoolQuery).toHaveBeenCalledWith(
         expect.stringContaining("INSERT INTO trisa_exchange_receipts"),
-        ["txn_abc", "localhost:4001", JSON.stringify(payload), "success", null, "mock_sig_123"]
+        [
+          "txn_abc",
+          "localhost:4001",
+          JSON.stringify(payload),
+          "success",
+          null,
+          "mock_sig_123",
+        ],
       );
     });
   });
@@ -159,13 +197,16 @@ describe("ComplianceController", () => {
     it("should return compliant: true and bypass checking if transaction amount is below threshold", async () => {
       mockReq.body.amount = 500; // below $1,000 threshold
 
-      await controller.validateComplianceStatus(mockReq as Request, mockRes as Response);
+      await controller.validateComplianceStatus(
+        mockReq as Request,
+        mockRes as Response,
+      );
 
       expect(jsonMock).toHaveBeenCalledWith(
         expect.objectContaining({
           compliant: true,
           message: expect.stringContaining("bypassed"),
-        })
+        }),
       );
       // DB shouldn't be queried
       expect(mockPoolConnect).not.toHaveBeenCalled();
@@ -175,27 +216,33 @@ describe("ComplianceController", () => {
       mockReq.body.beneficiaryHost = "localhost";
       mockReq.body.beneficiaryPort = 4001;
 
-      await controller.validateComplianceStatus(mockReq as Request, mockRes as Response);
+      await controller.validateComplianceStatus(
+        mockReq as Request,
+        mockRes as Response,
+      );
 
       expect(jsonMock).toHaveBeenCalledWith(
         expect.objectContaining({
           compliant: true,
           message: "Compliance verification successful",
           signature: expect.any(String),
-        })
+        }),
       );
 
       // Verify db insertion of receipt
       expect(mockPoolQuery).toHaveBeenCalledWith(
         expect.stringContaining("INSERT INTO trisa_exchange_receipts"),
-        expect.arrayContaining(["txn_123", "localhost:4001", "success"])
+        expect.arrayContaining(["txn_123", "localhost:4001", "success"]),
       );
     });
 
     it("should fail verification, log failed receipt, block transaction execution and alert admin on failure", async () => {
       mockReq.body.beneficiaryHost = "failing-node.mock";
 
-      await controller.validateComplianceStatus(mockReq as Request, mockRes as Response);
+      await controller.validateComplianceStatus(
+        mockReq as Request,
+        mockRes as Response,
+      );
 
       expect(statusMock).toHaveBeenCalledWith(400);
       expect(jsonMock).toHaveBeenCalledWith(
@@ -203,13 +250,18 @@ describe("ComplianceController", () => {
           compliant: false,
           error: "Compliance verification failed",
           details: "TRISA compliance node rejected verification",
-        })
+        }),
       );
 
       // Verify db insertion of failed receipt
       expect(mockPoolQuery).toHaveBeenCalledWith(
         expect.stringContaining("INSERT INTO trisa_exchange_receipts"),
-        expect.arrayContaining(["txn_123", "failing-node.mock:4001", "failed", "TRISA compliance node rejected verification"])
+        expect.arrayContaining([
+          "txn_123",
+          "failing-node.mock:4001",
+          "failed",
+          "TRISA compliance node rejected verification",
+        ]),
       );
 
       // Verify admin notification triggered
@@ -217,21 +269,26 @@ describe("ComplianceController", () => {
         "critical",
         "compliance",
         "Compliance Verification Failure",
-        expect.stringContaining("TRISA compliance check failed for transaction txn_123"),
-        expect.objectContaining({ transactionId: "txn_123" })
+        expect.stringContaining(
+          "TRISA compliance check failed for transaction txn_123",
+        ),
+        expect.objectContaining({ transactionId: "txn_123" }),
       );
     });
 
     it("should return status 400 validation error if body schema is invalid", async () => {
       mockReq.body = { invalid: "payload" };
 
-      await controller.validateComplianceStatus(mockReq as Request, mockRes as Response);
+      await controller.validateComplianceStatus(
+        mockReq as Request,
+        mockRes as Response,
+      );
 
       expect(statusMock).toHaveBeenCalledWith(400);
       expect(jsonMock).toHaveBeenCalledWith(
         expect.objectContaining({
           error: "Validation failed",
-        })
+        }),
       );
     });
   });

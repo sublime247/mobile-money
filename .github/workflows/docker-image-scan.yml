@@ -2,9 +2,9 @@ name: Docker Image Vulnerability Scan
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [main, master]
   pull_request:
-    branches: [ main, master ]
+    branches: [main, master]
 
 jobs:
   trivy-scan:
@@ -28,7 +28,7 @@ jobs:
           image-ref: mobile-money:${{ github.sha }}
           format: json
           output: trivy-report.json
-          exit-code: '1'
+          exit-code: "1"
           severity: CRITICAL,HIGH
 
       - name: Upload Trivy report

@@ -31,10 +31,8 @@ describe("providerBalanceAlertWorker", () => {
   });
 
   it("starts worker once and closes cleanly", async () => {
-    const {
-      startProviderBalanceAlertWorker,
-      closeProviderBalanceAlertWorker,
-    } = await import("../../queue/providerBalanceAlertWorker");
+    const { startProviderBalanceAlertWorker, closeProviderBalanceAlertWorker } =
+      await import("../../queue/providerBalanceAlertWorker");
 
     startProviderBalanceAlertWorker();
     startProviderBalanceAlertWorker();

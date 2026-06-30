@@ -49,13 +49,17 @@ describe("MoovProvider", () => {
     it("should throw error if private key is missing when signing", () => {
       delete process.env.MOOV_PRIVATE_KEY;
       const provider = new MoovProvider();
-      expect(() => provider.signPayload("<xml></xml>")).toThrow("Moov Provider: Private key (MOOV_PRIVATE_KEY) is missing");
+      expect(() => provider.signPayload("<xml></xml>")).toThrow(
+        "Moov Provider: Private key (MOOV_PRIVATE_KEY) is missing",
+      );
     });
 
     it("should throw error if public key is missing when verifying", () => {
       delete process.env.MOOV_PUBLIC_KEY;
       const provider = new MoovProvider();
-      expect(() => provider.verifyResponse("<xml></xml>", "sig")).toThrow("Moov Provider: Public key (MOOV_PUBLIC_KEY) is missing");
+      expect(() => provider.verifyResponse("<xml></xml>", "sig")).toThrow(
+        "Moov Provider: Public key (MOOV_PUBLIC_KEY) is missing",
+      );
     });
 
     it("should sign and verify successfully", () => {
@@ -79,7 +83,11 @@ describe("MoovProvider", () => {
 
       axiosMock.post.mockResolvedValue({ data: mockResponseXml });
 
-      const res = await provider.requestPayment("+22990000001", "5000", "test-req-123");
+      const res = await provider.requestPayment(
+        "+22990000001",
+        "5000",
+        "test-req-123",
+      );
 
       expect(res.success).toBe(true);
       expect(res.data).toEqual({
@@ -91,7 +99,11 @@ describe("MoovProvider", () => {
 
     it("should fail when phone number country code is unsupported", async () => {
       const provider = new MoovProvider();
-      const res = await provider.requestPayment("+2348000000001", "5000", "test-req-123");
+      const res = await provider.requestPayment(
+        "+2348000000001",
+        "5000",
+        "test-req-123",
+      );
 
       expect(res.success).toBe(false);
       expect(res.error).toContain("Moov Money only supports Benin");
@@ -115,7 +127,11 @@ describe("MoovProvider", () => {
 
       axiosMock.post.mockResolvedValue({ data: mockResponseXml });
 
-      const res = await provider.requestPayment("+22890000001", "5000", "test-req-123");
+      const res = await provider.requestPayment(
+        "+22890000001",
+        "5000",
+        "test-req-123",
+      );
 
       expect(res.success).toBe(false);
       expect(res.error).toContain("Response signature verification failed");
@@ -132,7 +148,11 @@ describe("MoovProvider", () => {
 
       axiosMock.post.mockResolvedValue({ data: mockResponseXml });
 
-      const res = await provider.requestPayment("+22590000001", "5000", "test-req-123");
+      const res = await provider.requestPayment(
+        "+22590000001",
+        "5000",
+        "test-req-123",
+      );
 
       expect(res.success).toBe(false);
       expect(res.error).toBe("Insufficient balance");
@@ -151,7 +171,11 @@ describe("MoovProvider", () => {
 
       axiosMock.post.mockResolvedValue({ data: mockResponseXml });
 
-      const res = await provider.sendPayout("+22990000001", "1000", "test-req-456");
+      const res = await provider.sendPayout(
+        "+22990000001",
+        "1000",
+        "test-req-456",
+      );
 
       expect(res.success).toBe(true);
       expect(res.data).toEqual({
@@ -162,7 +186,11 @@ describe("MoovProvider", () => {
 
     it("should fail when phone number country code is unsupported", async () => {
       const provider = new MoovProvider();
-      const res = await provider.sendPayout("+14155552671", "1000", "test-req-456");
+      const res = await provider.sendPayout(
+        "+14155552671",
+        "1000",
+        "test-req-456",
+      );
 
       expect(res.success).toBe(false);
       expect(res.error).toContain("Moov Money only supports Benin");
@@ -179,7 +207,11 @@ describe("MoovProvider", () => {
 
       axiosMock.post.mockResolvedValue({ data: mockResponseXml });
 
-      const res = await provider.sendPayout("+22590000001", "1000000", "test-req-456");
+      const res = await provider.sendPayout(
+        "+22590000001",
+        "1000000",
+        "test-req-456",
+      );
 
       expect(res.success).toBe(false);
       expect(res.error).toBe("Limit exceeded");

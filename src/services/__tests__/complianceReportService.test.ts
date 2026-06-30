@@ -60,7 +60,9 @@ describe("Compliance Report Service", () => {
     expect(s3Upload.uploadToS3).toHaveBeenCalledTimes(1);
 
     const uploadCall = (s3Upload.uploadToS3 as jest.Mock).mock.calls[0][0];
-    expect(uploadCall.file.originalname).toMatch(/COMPLIANCE_TX_tx-123_alert-123_\d+\.pdf\.enc$/);
+    expect(uploadCall.file.originalname).toMatch(
+      /COMPLIANCE_TX_tx-123_alert-123_\d+\.pdf\.enc$/,
+    );
     expect(uploadCall.file.mimetype).toBe("application/octet-stream");
 
     const encryptedBuffer: Buffer = uploadCall.file.buffer;
@@ -68,7 +70,9 @@ describe("Compliance Report Service", () => {
 
     const decryptedPdf = decryptBuffer(encryptedBuffer);
     expect(decryptedPdf.toString("utf8", 0, 4)).toBe("%PDF");
-    expect(decryptedPdf.toString("utf8")).toContain("Flagged Transaction Compliance Report");
+    expect(decryptedPdf.toString("utf8")).toContain(
+      "Flagged Transaction Compliance Report",
+    );
     expect(decryptedPdf.toString("utf8")).toContain("Alert ID: alert-123");
   });
 
@@ -88,7 +92,11 @@ function decryptBuffer(encryptedBuffer: Buffer): Buffer {
   const iv = encryptedBuffer.slice(0, 12);
   const authTag = encryptedBuffer.slice(12, 12 + 16);
   const encryptedData = encryptedBuffer.slice(12 + 16);
-  const secretKey = crypto.scryptSync(DB_ENCRYPTION_KEY, "compliance-report-salt", 32);
+  const secretKey = crypto.scryptSync(
+    DB_ENCRYPTION_KEY,
+    "compliance-report-salt",
+    32,
+  );
   const decipher = crypto.createDecipheriv("aes-256-gcm", secretKey, iv);
   decipher.setAuthTag(authTag);
   return Buffer.concat([decipher.update(encryptedData), decipher.final()]);

@@ -564,6 +564,5 @@ export const resolvers = {
 };
 
 // Subscription resolvers backed by the Redis pubsub singleton
-export const subscriptionResolvers = createSubscriptionResolvers(
-  getRedisPubSub(),
-);
+export const subscriptionResolvers =
+  createSubscriptionResolvers(getRedisPubSub());

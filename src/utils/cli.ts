@@ -88,4 +88,3 @@ export function printError(
     console.error(`${style("Details:", "gray", true)} ${String(error)}`);
   }
 }
-

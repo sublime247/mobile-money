@@ -1,16 +1,16 @@
 import logger from "../utils/logger";
 /**
  * Example: Integrating Fraud Detection with Transaction Processing
- * 
+ *
  * This file demonstrates how to integrate the enhanced fraud detection
  * system with existing transaction controllers and services.
  */
 
-import { Request, Response } from 'express';
-import { fraudDetectionMiddleware } from '../middleware/fraudDetection';
-import { TransactionModel } from '../models/transaction';
-import { fraudService, FraudTransactionInput } from '../services/fraud';
-import { TransactionStatus } from '../models/transaction';
+import { Request, Response } from "express";
+import { fraudDetectionMiddleware } from "../middleware/fraudDetection";
+import { TransactionModel } from "../models/transaction";
+import { fraudService, FraudTransactionInput } from "../services/fraud";
+import { TransactionStatus } from "../models/transaction";
 
 /**
  * Enhanced Transaction Controller with Fraud Detection
@@ -31,7 +31,7 @@ export class EnhancedTransactionController {
       await fraudDetectionMiddleware.detectFraud(req, res, async () => {
         // Transaction creation logic here
         const transactionData = req.body;
-        
+
         // Create transaction
         const transaction = await this.transactionModel.create({
           type: transactionData.type,
@@ -42,7 +42,7 @@ export class EnhancedTransactionController {
           status: TransactionStatus.Pending,
           userId: transactionData.userId || req.user?.id,
           metadata: transactionData.metadata,
-          locationMetadata: transactionData.locationMetadata
+          locationMetadata: transactionData.locationMetadata,
         });
 
         // Check if fraud was detected
@@ -50,25 +50,25 @@ export class EnhancedTransactionController {
         if (fraudResult?.isFraud) {
           // Transaction already set to Review status by middleware
           res.status(202).json({
-            message: 'Transaction created and flagged for review',
+            message: "Transaction created and flagged for review",
             transaction,
             fraudAnalysis: {
               score: fraudResult.score,
               riskLevel: fraudResult.riskLevel,
               reasons: fraudResult.reasons,
-              recommendedAction: fraudResult.recommendedAction
-            }
+              recommendedAction: fraudResult.recommendedAction,
+            },
           });
         } else {
           res.status(201).json({
-            message: 'Transaction created successfully',
-            transaction
+            message: "Transaction created successfully",
+            transaction,
           });
         }
       });
     } catch (error) {
-      logger.error('Transaction creation error:', error);
-      res.status(500).json({ error: 'Failed to create transaction' });
+      logger.error("Transaction creation error:", error);
+      res.status(500).json({ error: "Failed to create transaction" });
     }
   }
 
@@ -78,14 +78,14 @@ export class EnhancedTransactionController {
   async getTransactions(req: Request, res: Response): Promise<void> {
     try {
       const { limit = 50, offset = 0, status } = req.query;
-      
+
       // Get transactions with optional status filter
       const transactions = await this.transactionModel.list(
         parseInt(limit as string),
         parseInt(offset as string),
         undefined,
         undefined,
-        status ? { status } as any : undefined
+        status ? ({ status } as any) : undefined,
       );
 
       // Enrich with fraud analysis for review transactions
@@ -102,27 +102,27 @@ export class EnhancedTransactionController {
               location: null, // Extract from metadata if needed
               type: transaction.type as "deposit" | "withdraw",
               provider: transaction.provider,
-              metadata: transaction.metadata
+              metadata: transaction.metadata,
             };
 
             const fraudResult = await fraudService.detectFraud(fraudInput);
-            
+
             return {
               ...transaction,
-              fraudAnalysis: fraudResult
+              fraudAnalysis: fraudResult,
             };
           }
           return transaction;
-        })
+        }),
       );
 
       res.json({
         transactions: enrichedTransactions,
-        total: transactions.length
+        total: transactions.length,
       });
     } catch (error) {
-      logger.error('Get transactions error:', error);
-      res.status(500).json({ error: 'Failed to get transactions' });
+      logger.error("Get transactions error:", error);
+      res.status(500).json({ error: "Failed to get transactions" });
     }
   }
 
@@ -132,14 +132,14 @@ export class EnhancedTransactionController {
   async getReviewQueue(req: Request, res: Response): Promise<void> {
     try {
       const reviewQueue = fraudService.getReviewQueue();
-      
+
       res.json({
         reviewQueue,
-        count: reviewQueue.length
+        count: reviewQueue.length,
       });
     } catch (error) {
-      logger.error('Get review queue error:', error);
-      res.status(500).json({ error: 'Failed to get review queue' });
+      logger.error("Get review queue error:", error);
+      res.status(500).json({ error: "Failed to get review queue" });
     }
   }
 
@@ -149,37 +149,39 @@ export class EnhancedTransactionController {
   async processReviewTransaction(req: Request, res: Response): Promise<void> {
     try {
       const { transactionId, action, notes } = req.body;
-      
+
       if (!transactionId || !action) {
-        res.status(400).json({ error: 'Transaction ID and action are required' });
+        res
+          .status(400)
+          .json({ error: "Transaction ID and action are required" });
         return;
       }
 
       const transaction = await this.transactionModel.findById(transactionId);
       if (!transaction) {
-        res.status(404).json({ error: 'Transaction not found' });
+        res.status(404).json({ error: "Transaction not found" });
         return;
       }
 
       // Update transaction status based on action
       let newStatus: TransactionStatus;
       switch (action.toLowerCase()) {
-        case 'approve':
+        case "approve":
           newStatus = TransactionStatus.Completed;
           break;
-        case 'reject':
+        case "reject":
           newStatus = TransactionStatus.Failed;
           break;
-        case 'block':
+        case "block":
           newStatus = TransactionStatus.Cancelled;
           break;
         default:
-          res.status(400).json({ error: 'Invalid action' });
+          res.status(400).json({ error: "Invalid action" });
           return;
       }
 
       await this.transactionModel.updateStatus(transactionId, newStatus);
-      
+
       // Add admin notes if provided
       if (notes) {
         await this.transactionModel.updateAdminNotes(transactionId, notes);
@@ -187,18 +189,18 @@ export class EnhancedTransactionController {
 
       // Remove from review queue
       const reviewQueue = fraudService.getReviewQueue();
-      const updatedQueue = reviewQueue.filter(tx => tx.id !== transactionId);
+      const updatedQueue = reviewQueue.filter((tx) => tx.id !== transactionId);
       fraudService.clearReviewQueue();
-      updatedQueue.forEach(tx => fraudService.addToReviewQueue(tx));
+      updatedQueue.forEach((tx) => fraudService.addToReviewQueue(tx));
 
       res.json({
         message: `Transaction ${action.toLowerCase()}d successfully`,
         transactionId,
-        newStatus
+        newStatus,
       });
     } catch (error) {
-      logger.error('Process review transaction error:', error);
-      res.status(500).json({ error: 'Failed to process review transaction' });
+      logger.error("Process review transaction error:", error);
+      res.status(500).json({ error: "Failed to process review transaction" });
     }
   }
 
@@ -208,31 +210,38 @@ export class EnhancedTransactionController {
   async getFraudStatistics(req: Request, res: Response): Promise<void> {
     try {
       const { startDate, endDate } = req.query;
-      
+
       // Get transactions in date range
       const transactions = await this.transactionModel.list(
         1000, // Large limit for stats
         0,
         startDate as string,
-        endDate as string
+        endDate as string,
       );
 
       // Calculate fraud statistics
       const stats = {
         totalTransactions: transactions.length,
-        reviewTransactions: transactions.filter(t => t.status === TransactionStatus.Review).length,
-        completedTransactions: transactions.filter(t => t.status === TransactionStatus.Completed).length,
-        failedTransactions: transactions.filter(t => t.status === TransactionStatus.Failed).length,
+        reviewTransactions: transactions.filter(
+          (t) => t.status === TransactionStatus.Review,
+        ).length,
+        completedTransactions: transactions.filter(
+          (t) => t.status === TransactionStatus.Completed,
+        ).length,
+        failedTransactions: transactions.filter(
+          (t) => t.status === TransactionStatus.Failed,
+        ).length,
         fraudRate: 0,
-        reviewQueueSize: fraudService.getReviewQueue().length
+        reviewQueueSize: fraudService.getReviewQueue().length,
       };
 
-      stats.fraudRate = (stats.reviewTransactions / stats.totalTransactions) * 100;
+      stats.fraudRate =
+        (stats.reviewTransactions / stats.totalTransactions) * 100;
 
       res.json(stats);
     } catch (error) {
-      logger.error('Get fraud statistics error:', error);
-      res.status(500).json({ error: 'Failed to get fraud statistics' });
+      logger.error("Get fraud statistics error:", error);
+      res.status(500).json({ error: "Failed to get fraud statistics" });
     }
   }
 }
@@ -244,13 +253,26 @@ export function setupFraudDetectionRoutes(app: any): void {
   const controller = new EnhancedTransactionController();
 
   // Apply fraud detection middleware to transaction creation
-  app.post('/api/transactions', fraudDetectionMiddleware.detectFraud, controller.createTransaction.bind(controller));
-  
+  app.post(
+    "/api/transactions",
+    fraudDetectionMiddleware.detectFraud,
+    controller.createTransaction.bind(controller),
+  );
+
   // Other routes
-  app.get('/api/transactions', controller.getTransactions.bind(controller));
-  app.get('/api/fraud/review-queue', controller.getReviewQueue.bind(controller));
-  app.post('/api/fraud/review-queue/:transactionId/process', controller.processReviewTransaction.bind(controller));
-  app.get('/api/fraud/statistics', controller.getFraudStatistics.bind(controller));
+  app.get("/api/transactions", controller.getTransactions.bind(controller));
+  app.get(
+    "/api/fraud/review-queue",
+    controller.getReviewQueue.bind(controller),
+  );
+  app.post(
+    "/api/fraud/review-queue/:transactionId/process",
+    controller.processReviewTransaction.bind(controller),
+  );
+  app.get(
+    "/api/fraud/statistics",
+    controller.getFraudStatistics.bind(controller),
+  );
 }
 
 /**
@@ -259,8 +281,11 @@ export function setupFraudDetectionRoutes(app: any): void {
 export function enhanceExistingController(existingController: any): void {
   // Add fraud detection to existing create method
   const originalCreate = existingController.createTransaction;
-  
-  existingController.createTransaction = async (req: Request, res: Response) => {
+
+  existingController.createTransaction = async (
+    req: Request,
+    res: Response,
+  ) => {
     // Apply fraud detection middleware
     await fraudDetectionMiddleware.detectFraud(req, res, async () => {
       // Call original method
@@ -270,14 +295,20 @@ export function enhanceExistingController(existingController: any): void {
 
   // Add fraud analysis to existing transaction processing
   const originalProcess = existingController.processTransaction;
-  
-  existingController.processTransaction = async (req: Request, res: Response) => {
+
+  existingController.processTransaction = async (
+    req: Request,
+    res: Response,
+  ) => {
     // Call original method
     await originalProcess.call(existingController, req, res);
-    
+
     // Analyze completed transaction for fraud learning
     if (res.locals.transaction) {
-      await fraudDetectionMiddleware.analyzeCompletedTransaction(res.locals.transaction, req);
+      await fraudDetectionMiddleware.analyzeCompletedTransaction(
+        res.locals.transaction,
+        req,
+      );
     }
   };
 }

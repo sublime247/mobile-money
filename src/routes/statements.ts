@@ -73,17 +73,26 @@ statementsRoutes.get(
         return res.status(400).json({ error: "Invalid year or month" });
       }
 
-      const statement = await generateMonthlyStatement(userId, yearNum, monthNum);
+      const statement = await generateMonthlyStatement(
+        userId,
+        yearNum,
+        monthNum,
+      );
 
       if (!statement) {
-        return res.status(404).json({ error: "No data found for the specified period" });
+        return res
+          .status(404)
+          .json({ error: "No data found for the specified period" });
       }
 
       const pdfBuffer = await generateStatementPDF(statement);
 
       const filename = `statement-${year}-${month.padStart(2, "0")}.pdf`;
       res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${filename}"`,
+      );
       res.setHeader("Content-Length", pdfBuffer.length);
 
       res.send(pdfBuffer);
@@ -91,13 +100,13 @@ statementsRoutes.get(
       logger.error("Error generating monthly statement:", error);
       res.status(500).json({ error: "Failed to generate statement" });
     }
-  }
+  },
 );
 
 async function generateMonthlyStatement(
   userId: string,
   year: number,
-  month: number
+  month: number,
 ): Promise<MonthlyStatement | null> {
   const client = await pool.connect();
 
@@ -107,7 +116,7 @@ async function generateMonthlyStatement(
 
     const userResult = await client.query(
       "SELECT id, phone_number, kyc_level FROM users WHERE id = $1",
-      [userId]
+      [userId],
     );
 
     if (userResult.rows.length === 0) {
@@ -135,7 +144,7 @@ async function generateMonthlyStatement(
         AND status = 'completed'
       ORDER BY created_at ASC
     `,
-      [userId, startDate, endDate]
+      [userId, startDate, endDate],
     );
 
     const openingBalanceResult = await client.query(
@@ -150,35 +159,39 @@ async function generateMonthlyStatement(
         AND created_at < $2
         AND status = 'completed'
     `,
-      [userId, startDate]
+      [userId, startDate],
     );
 
-    const openingBalance = parseFloat(openingBalanceResult.rows[0]?.opening_balance || "0");
+    const openingBalance = parseFloat(
+      openingBalanceResult.rows[0]?.opening_balance || "0",
+    );
 
     let totalDeposits = 0;
     let totalWithdrawals = 0;
 
-    const transactions: StatementTransaction[] = transactionsResult.rows.map((row) => {
-      const amount = parseFloat(row.amount);
+    const transactions: StatementTransaction[] = transactionsResult.rows.map(
+      (row) => {
+        const amount = parseFloat(row.amount);
 
-      if (row.type === "deposit") {
-        totalDeposits += amount;
-      } else {
-        totalWithdrawals += amount;
-      }
+        if (row.type === "deposit") {
+          totalDeposits += amount;
+        } else {
+          totalWithdrawals += amount;
+        }
 
-      return {
-        id: row.id,
-        referenceNumber: row.referenceNumber,
-        type: row.type,
-        amount: row.amount,
-        currency: row.currency,
-        provider: row.provider,
-        status: row.status,
-        createdAt: row.createdAt,
-        notes: row.notes ? decrypt(row.notes) : undefined,
-      };
-    });
+        return {
+          id: row.id,
+          referenceNumber: row.referenceNumber,
+          type: row.type,
+          amount: row.amount,
+          currency: row.currency,
+          provider: row.provider,
+          status: row.status,
+          createdAt: row.createdAt,
+          notes: row.notes ? decrypt(row.notes) : undefined,
+        };
+      },
+    );
 
     const closingBalance = openingBalance + totalDeposits - totalWithdrawals;
 
@@ -235,8 +248,18 @@ function generateStatementPDF(statement: MonthlyStatement): Promise<Buffer> {
         .text("Monthly Account Statement", { align: "center" });
 
       const monthNames = [
-        "January", "February", "March", "April", "May", "June",
-        "July", "August", "September", "October", "November", "December",
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
       ];
       const periodText = `${monthNames[statement.period.month - 1]} ${statement.period.year}`;
 
@@ -265,11 +288,19 @@ function generateStatementPDF(statement: MonthlyStatement): Promise<Buffer> {
       doc
         .fontSize(10)
         .font("Helvetica")
-        .text(`Opening Balance:    ${formatCurrency(statement.summary.openingBalance)}`)
-        .text(`Total Deposits:     ${formatCurrency(statement.summary.totalDeposits)}`)
-        .text(`Total Withdrawals:  (${formatCurrency(statement.summary.totalWithdrawals)})`)
+        .text(
+          `Opening Balance:    ${formatCurrency(statement.summary.openingBalance)}`,
+        )
+        .text(
+          `Total Deposits:     ${formatCurrency(statement.summary.totalDeposits)}`,
+        )
+        .text(
+          `Total Withdrawals:  (${formatCurrency(statement.summary.totalWithdrawals)})`,
+        )
         .font("Helvetica-Bold")
-        .text(`Closing Balance:    ${formatCurrency(statement.summary.closingBalance)}`);
+        .text(
+          `Closing Balance:    ${formatCurrency(statement.summary.closingBalance)}`,
+        );
 
       const summaryBoxY = summaryTop - 10;
       const summaryBoxHeight = doc.y - summaryBoxY + 10;
@@ -333,10 +364,13 @@ function generateStatementPDF(statement: MonthlyStatement): Promise<Buffer> {
         }
 
         const rowTop = doc.y;
-        const rowHeight = Math.max(14, row.reduce((max, cell, i) => {
-          const lines = doc.heightOfString(cell, { width: colWidths[i] - 4 });
-          return Math.max(max, Math.ceil(lines) + 8);
-        }, 0));
+        const rowHeight = Math.max(
+          14,
+          row.reduce((max, cell, i) => {
+            const lines = doc.heightOfString(cell, { width: colWidths[i] - 4 });
+            return Math.max(max, Math.ceil(lines) + 8);
+          }, 0),
+        );
 
         doc
           .fillColor(rowIndex % 2 === 0 ? "#ffffff" : "#fafafa")
@@ -365,7 +399,11 @@ function generateStatementPDF(statement: MonthlyStatement): Promise<Buffer> {
         doc
           .fontSize(10)
           .font("Helvetica")
-          .text("No transactions found for this period.", margin, tableTop + 10);
+          .text(
+            "No transactions found for this period.",
+            margin,
+            tableTop + 10,
+          );
       }
 
       doc.font("Helvetica").fontSize(8).fillColor("#000000");
@@ -378,13 +416,13 @@ function generateStatementPDF(statement: MonthlyStatement): Promise<Buffer> {
           "This statement is generated electronically and is valid without signature.",
           margin,
           footerY,
-          { align: "center", width: pageWidth - 2 * margin }
+          { align: "center", width: pageWidth - 2 * margin },
         );
         doc.text(
           "For inquiries, please contact customer support.",
           margin,
           footerY + 10,
-          { align: "center", width: pageWidth - 2 * margin }
+          { align: "center", width: pageWidth - 2 * margin },
         );
         doc.text(`Page ${i + 1}`, pageWidth - margin - 20, footerY + 10, {
           align: "right",

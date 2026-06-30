@@ -1,4 +1,11 @@
-import { commit, DEFAULT_PARAMS, verifyOpening, proveOpening, proveBalanceEquals, verifyBalanceEquals } from "../../src/crypto/zkBalanceProof";
+import {
+  commit,
+  DEFAULT_PARAMS,
+  verifyOpening,
+  proveOpening,
+  proveBalanceEquals,
+  verifyBalanceEquals,
+} from "../../src/crypto/zkBalanceProof";
 import {
   proveRange,
   verifyRange,
@@ -66,7 +73,12 @@ describe("KYC Authority Signatures", () => {
     const attributeType = "age";
 
     const signature = signCommitment(privateKey, commitment.hex, attributeType);
-    const isValid = verifyCommitmentSignature(publicKey, commitment.hex, attributeType, signature);
+    const isValid = verifyCommitmentSignature(
+      publicKey,
+      commitment.hex,
+      attributeType,
+      signature,
+    );
     expect(isValid).toBe(true);
   });
 
@@ -77,7 +89,12 @@ describe("KYC Authority Signatures", () => {
     const signature = signCommitment(privateKey, commitment.hex, attributeType);
     const badSignature = signature.replace(/^[0-9a-f]{2}/, "00");
 
-    const isValid = verifyCommitmentSignature(publicKey, commitment.hex, attributeType, badSignature);
+    const isValid = verifyCommitmentSignature(
+      publicKey,
+      commitment.hex,
+      attributeType,
+      badSignature,
+    );
     expect(isValid).toBe(false);
   });
 
@@ -87,7 +104,12 @@ describe("KYC Authority Signatures", () => {
     const attributeType = "age";
 
     const signature = signCommitment(privateKey, commitment.hex, attributeType);
-    const isValid = verifyCommitmentSignature(publicKey, otherCommitment.hex, attributeType, signature);
+    const isValid = verifyCommitmentSignature(
+      publicKey,
+      otherCommitment.hex,
+      attributeType,
+      signature,
+    );
     expect(isValid).toBe(false);
   });
 });

@@ -7,17 +7,20 @@ This implementation provides automatic fee bumping for Stellar transactions that
 ## Features Implemented
 
 ### ✅ Transaction Monitoring
+
 - **Pending Transaction Tracking**: Monitors all pending Stellar transactions
 - **Submission Time Tracking**: Records when transactions are submitted to the network
 - **Confirmation Checking**: Verifies transaction status on Stellar Horizon
 
 ### ✅ Automatic Fee Bumping
+
 - **30-Second Threshold**: Transactions stuck for more than 30 seconds trigger fee bump
 - **Exponential Fee Increase**: Fee doubles with each bump attempt
 - **Maximum Fee Cap**: Prevents excessive fee increases (max 1 XLM)
 - **Maximum Attempts**: Limits to 3 fee bump attempts per transaction
 
 ### ✅ Failure Handling
+
 - **Stuck Transaction Detection**: Transactions failing after max attempts marked as failed
 - **Metadata Tracking**: Complete history of fee bumps stored in transaction metadata
 - **Logging**: Detailed logging of all fee bump operations
@@ -91,6 +94,7 @@ The system provides detailed logging:
 ## Testing
 
 Unit tests cover:
+
 - Fee bump job execution
 - Transaction confirmation checking
 - Fee calculation and limits
@@ -98,6 +102,7 @@ Unit tests cover:
 - Error handling
 
 Run tests with:
+
 ```bash
 npm test -- --testPathPattern=feeBump
 ```

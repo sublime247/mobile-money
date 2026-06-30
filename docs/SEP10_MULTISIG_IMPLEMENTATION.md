@@ -83,16 +83,19 @@ async verifyThresholdMet(
 #### verifyChallenge() - Now Async
 
 **Before:**
+
 ```typescript
 verifyChallenge(transactionXDR: string, clientAccountID?: string): Sep10TokenResponse
 ```
 
 **After:**
+
 ```typescript
 async verifyChallenge(transactionXDR: string, clientAccountID?: string): Promise<Sep10TokenResponse>
 ```
 
 The method now:
+
 1. Verifies server signature (required for SEP-10)
 2. Fetches account signers from Horizon
 3. Calculates combined weight of client signatures
@@ -127,9 +130,7 @@ console.log(response.token); // JWT token issued
 const challenge = service.generateChallenge(accountPublicKey);
 
 // Two signers sign the challenge
-const signedTx = transaction
-  .sign(masterKeypair)
-  .sign(signer1Keypair);
+const signedTx = transaction.sign(masterKeypair).sign(signer1Keypair);
 
 // Verification - checks weight meets threshold
 const response = await service.verifyChallenge(signedTx.toXDR());
@@ -149,7 +150,7 @@ const challenge = service.generateChallenge(accountPublicKey);
 
 // Two signers required (weight 2 + 1 = 3)
 const signedTx = transaction
-  .sign(signer1Keypair)  // weight 2
+  .sign(signer1Keypair) // weight 2
   .sign(signer2Keypair); // weight 1 (total = 3)
 
 // Verification succeeds
@@ -164,6 +165,7 @@ console.log(response.token); // JWT token issued
 **Scenario:** Multi-signature account with threshold not met
 
 **Before Implementation:**
+
 ```json
 {
   "error": "Transaction is not signed by the client account"
@@ -171,6 +173,7 @@ console.log(response.token); // JWT token issued
 ```
 
 **After Implementation:**
+
 ```json
 {
   "error": "Signing threshold not met. The account requires additional signatures to authorize this transaction."
@@ -200,17 +203,20 @@ The implementation maintains all existing error validations:
 ## Acceptance Criteria
 
 ✅ **Criterion 1: Single-signature accounts authenticate successfully**
+
 - Backward compatible with existing implementations
 - Works with standard Stellar accounts
 - No changes required for existing clients
 
 ✅ **Criterion 2: Multi-signature accounts authenticate when threshold met**
+
 - Correctly fetches signers from Horizon
 - Calculates signature weights
 - Verifies weight meets medium threshold
 - Issues JWT token on success
 
 ✅ **Criterion 3: Reject when threshold not met**
+
 - Returns 400 Bad Request
 - Clear error message about signing threshold
 - Includes helpful context about requirements
@@ -256,12 +262,14 @@ npm test -- src/stellar/__tests__/sep10.test.ts --verbose
 Since `verifyChallenge()` is now async, update your code:
 
 **Before:**
+
 ```typescript
 const response = service.verifyChallenge(transactionXDR);
 res.json(response);
 ```
 
 **After:**
+
 ```typescript
 const response = await service.verifyChallenge(transactionXDR);
 res.json(response);
@@ -305,7 +313,7 @@ No new configuration options are required. The implementation uses existing envi
    - Consider caching account signer data for high-volume scenarios
 
 2. **Signature Verification**
-   - O(n*m) where n = signatures, m = signers
+   - O(n\*m) where n = signatures, m = signers
    - Typically fast for account with <10 signers
 
 3. **Typical Latency**
@@ -320,6 +328,7 @@ No new configuration options are required. The implementation uses existing envi
 **Cause:** Account not found on Horizon API
 
 **Solution:**
+
 1. Verify account ID is correct
 2. Verify Horizon network matches (testnet vs mainnet)
 3. Check network connectivity to Horizon
@@ -329,6 +338,7 @@ No new configuration options are required. The implementation uses existing envi
 **Cause:** Insufficient signatures or weight
 
 **Solution:**
+
 1. Verify all required signers have signed
 2. Check signature count matches account's medium threshold
 3. Verify signer keys are correct (from account master key)
@@ -338,6 +348,7 @@ No new configuration options are required. The implementation uses existing envi
 **Cause:** Client didn't use the provided challenge
 
 **Solution:**
+
 1. Verify using the challenge returned by GET /sep10
 2. Check server signing key is configured
 3. Verify network passphrase matches

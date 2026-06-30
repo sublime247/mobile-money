@@ -5,6 +5,7 @@
 ---
 
 ## Table of Contents
+
 1. [Pre-Deployment Checklist](#pre-deployment-checklist)
 2. [Deployment Procedures](#deployment-procedures)
 3. [Operational Monitoring](#operational-monitoring)
@@ -17,6 +18,7 @@
 ## Pre-Deployment Checklist
 
 ### Code Quality
+
 - [ ] All unit tests passing (>90% coverage)
 - [ ] Integration tests passing on testnet
 - [ ] No critical security issues in code scan
@@ -25,6 +27,7 @@
 - [ ] Load testing completed (100+ tps)
 
 ### Infrastructure
+
 - [ ] Validators configured and tested (3-5 nodes)
 - [ ] Database migrations prepared and tested
 - [ ] Redis instance provisioned for jobs
@@ -33,6 +36,7 @@
 - [ ] On-call rotation established
 
 ### Compliance & Security
+
 - [ ] Legal review completed
 - [ ] KYC/AML partner integration tested
 - [ ] Sanctions check provider configured
@@ -41,6 +45,7 @@
 - [ ] Rate limiting configured
 
 ### Documentation
+
 - [ ] API documentation published
 - [ ] Operations runbook prepared
 - [ ] Disaster recovery plan documented
@@ -48,6 +53,7 @@
 - [ ] Troubleshooting guide available
 
 ### Staging Validation
+
 - [ ] E2E test passed on staging
 - [ ] Performance benchmarks met
 - [ ] Database backups tested
@@ -165,6 +171,7 @@ npm run monitor:bridge \
 ```
 
 **Success Criteria (Testnet):**
+
 - ✅ 50+ test transactions completed
 - ✅ 0 transaction failures
 - ✅ Validator consensus: 100%
@@ -176,6 +183,7 @@ npm run monitor:bridge \
 ### Phase 2: Production Deployment
 
 #### Prerequisites
+
 - [ ] Testnet deployment stable for 7+ days
 - [ ] All team members trained
 - [ ] Incident response plan reviewed
@@ -250,7 +258,7 @@ npm run bridge:enable-tier \
 
 # Monitor for 24 hours
 
-# Phase 2c: Increase transaction limits  
+# Phase 2c: Increase transaction limits
 npm run bridge:config:set \
   --daily-limit 500000 \
   --per-tx-limit 50000
@@ -274,6 +282,7 @@ npm run bridge:config:set \
 ```
 
 **Success Criteria (Production - Week 1):**
+
 - ✅ 100+ transactions completed
 - ✅ Uptime: >99.9%
 - ✅ Error rate: <0.1%
@@ -289,9 +298,9 @@ npm run bridge:config:set \
 ```yaml
 Bridge Health:
   uptime_target: 99.95%
-  error_rate_target: 0.1%  # Max 1 error per 1000 transactions
+  error_rate_target: 0.1% # Max 1 error per 1000 transactions
   consensus_time_target: 30s
-  transaction_latency_target: 5min  # Lock to Mint
+  transaction_latency_target: 5min # Lock to Mint
 
 Validator Performance:
   validator_uptime: 99.9% per validator
@@ -388,6 +397,7 @@ groups:
 ### Dashboards
 
 **Bridge Operations Dashboard (Grafana)**
+
 - Bridge transaction volume (hourly)
 - Error rate (5-minute rolling)
 - Validator consensus time
@@ -396,6 +406,7 @@ groups:
 - Top transaction corridors (Stellar→EVM pathways)
 
 **Validator Health Dashboard**
+
 - Validator uptime per validator
 - Response time per validator
 - Signature success rate
@@ -408,16 +419,17 @@ groups:
 
 ### Incident Severity Levels
 
-| Level | Response Time | Impact | Examples |
-|-------|---|---|---|
-| **P1 - Critical** | <15 min | Platform unavailable | Smart contract exploit, validator crash, liquidity drain |
-| **P2 - High** | <1 hour | Degraded service | High latency, 1 validator down, rate limiting triggered |
-| **P3 - Medium** | <4 hours | Minor issue | Slow consensus, high error rate, API 5xx errors |
-| **P4 - Low** | <1 day | Non-urgent | Documentation issues, analytics down |
+| Level             | Response Time | Impact               | Examples                                                 |
+| ----------------- | ------------- | -------------------- | -------------------------------------------------------- |
+| **P1 - Critical** | <15 min       | Platform unavailable | Smart contract exploit, validator crash, liquidity drain |
+| **P2 - High**     | <1 hour       | Degraded service     | High latency, 1 validator down, rate limiting triggered  |
+| **P3 - Medium**   | <4 hours      | Minor issue          | Slow consensus, high error rate, API 5xx errors          |
+| **P4 - Low**      | <1 day        | Non-urgent           | Documentation issues, analytics down                     |
 
 ### P1 Critical Response
 
 #### Bridge Locked or Compromised
+
 ```bash
 # 1. IMMEDIATE: Pause bridge (kill consensus)
 npm run bridge:emergency-pause
@@ -432,12 +444,12 @@ npm run bridge:backup-state --output /backups/incident-state
 # Check: validator logs, smart contract events, transaction history
 
 # 5. Once root cause identified:
-  
+
   # If smart contract bug:
   # a) Deploy patched contract
   # b) Migrate state to new contract
   # c) Gradually re-enable with tighter limits
-  
+
   # If validator issue:
   # a) Remove malfunction validator
   # b) Activate backup validator
@@ -452,6 +464,7 @@ npm run bridge:enable-tier --tier 2 --percentage 100  # Tier 2 users
 ```
 
 #### Lost Liquidity (Funds Drained)
+
 ```bash
 # 1. Emergency pause
 npm run bridge:emergency-pause
@@ -483,6 +496,7 @@ npm run security:audit:emergency -- \
 ### P2 High Severity
 
 #### Validator Down (1 of 3)
+
 ```bash
 # 1. Detect: Monitoring alerts
 # "ValidatorDown: validator-2"
@@ -507,6 +521,7 @@ npm run bridge:monitor:consensus --duration 1h
 ```
 
 #### High Error Rate (>1%)
+
 ```bash
 # 1. Alert triggered
 # "High error rate: 1.5% (threshold: 0.1%)"
@@ -539,24 +554,24 @@ Incident:
   severity: P3
   created_at: 2026-04-26T14:30:00Z
   title: "High transaction latency"
-  
+
   timeline:
     - 14:30 - Alert triggered: latency > 10 minutes
     - 14:35 - Investigation: Found Stellar network congestion
     - 14:40 - Mitigation: Increased timeout to 15 minutes
     - 15:00 - Resolution: Stellar network recovered, normal operation
-    
+
   impact:
     - 5 transactions delayed >10 minutes
     - 0 transactions failed
     - Revenue impact: $0
-    
+
   rootcause: "Stellar testnet network maintenance"
-  
+
   remediation:
     - Add monitoring for network status
     - Cache Stellar availability checks
-    
+
   postmortem_date: 2026-04-27
 ```
 
@@ -573,6 +588,7 @@ Frequency: Monthly or as needed
 ```
 
 ### Pre-Maintenance Checklist
+
 - [ ] Announce 72 hours before
 - [ ] Verify backup exists
 - [ ] Notify major users
@@ -686,13 +702,13 @@ Possible Causes:
   1. Validator network latency (check ping)
   2. Stellar network congestion (check horizon)
   3. Database query slowdown (check connections)
-  
+
 Steps:
   1. Run: npm run bridge:diagnostics
   2. If cause #1: Contact ISP, activate backup path
   3. If cause #2: Monitor trend, may resolve automatically
   4. If cause #3: Increase connection pool, restart service
-  
+
 Success: Consensus restores to <30s
 ```
 

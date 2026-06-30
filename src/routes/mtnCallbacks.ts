@@ -24,7 +24,10 @@ router.post("/callback", async (req: Request, res: Response) => {
 
     res.status(200).json({ status: "accepted" });
 
-    log.info({ event: "mtn.callback.acknowledged" }, "MTN callback acknowledged");
+    log.info(
+      { event: "mtn.callback.acknowledged" },
+      "MTN callback acknowledged",
+    );
   } catch (error: any) {
     log.error(
       { event: "mtn.callback.error", error: error.message },

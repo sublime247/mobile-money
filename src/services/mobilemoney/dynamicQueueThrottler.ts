@@ -15,7 +15,7 @@ export class DynamicQueueThrottler {
   constructor(config: QueueThrottlerConfig) {
     this.config = {
       checkInterval: config.checkInterval || 5000, // Default 5 seconds
-      providers: config.providers || ['mtn', 'airtel', 'orange', 'vodacom'],
+      providers: config.providers || ["mtn", "airtel", "orange", "vodacom"],
     };
   }
 
@@ -24,10 +24,7 @@ export class DynamicQueueThrottler {
    */
   registerWorker(provider: string, worker: unknown): void {
     this.workers.set(provider.toLowerCase(), worker);
-    logger.info(
-      { provider },
-      "Registered worker for dynamic throttling"
-    );
+    logger.info({ provider }, "Registered worker for dynamic throttling");
   }
 
   /**
@@ -41,8 +38,11 @@ export class DynamicQueueThrottler {
 
     this.isRunning = true;
     logger.info(
-      { checkInterval: this.config.checkInterval, providers: this.config.providers },
-      "Starting dynamic queue throttler"
+      {
+        checkInterval: this.config.checkInterval,
+        providers: this.config.providers,
+      },
+      "Starting dynamic queue throttler",
     );
 
     // Initial check
@@ -71,7 +71,7 @@ export class DynamicQueueThrottler {
    */
   private async adjustAllWorkers(): Promise<void> {
     const promises = this.config.providers.map((provider) =>
-      this.adjustWorkerConcurrency(provider)
+      this.adjustWorkerConcurrency(provider),
     );
 
     await Promise.allSettled(promises);
@@ -87,25 +87,24 @@ export class DynamicQueueThrottler {
     }
 
     try {
-      const recommendedConcurrency = await providerRateLimitService.getRecommendedConcurrency(
-        provider
-      );
+      const recommendedConcurrency =
+        await providerRateLimitService.getRecommendedConcurrency(provider);
 
       // Store recommended concurrency in Redis for the worker to pick up
-      await providerRateLimitService.setConcurrency(provider, recommendedConcurrency);
+      await providerRateLimitService.setConcurrency(
+        provider,
+        recommendedConcurrency,
+      );
 
       logger.debug(
         {
           provider,
           recommendedConcurrency,
         },
-        "Updated recommended concurrency in Redis"
+        "Updated recommended concurrency in Redis",
       );
     } catch (error) {
-      logger.error(
-        { error, provider },
-        "Failed to adjust worker concurrency"
-      );
+      logger.error({ error, provider }, "Failed to adjust worker concurrency");
     }
   }
 
@@ -116,11 +115,15 @@ export class DynamicQueueThrottler {
     const status: Record<string, unknown> = {};
 
     for (const provider of this.config.providers) {
-      const rateLimit = await providerRateLimitService.getRateLimitState(provider);
-      const concurrency = await providerRateLimitService.getCurrentConcurrency(provider);
+      const rateLimit =
+        await providerRateLimitService.getRateLimitState(provider);
+      const concurrency =
+        await providerRateLimitService.getCurrentConcurrency(provider);
 
       status[provider] = {
-        isRateLimited: rateLimit ? providerRateLimitService.isRateLimited(rateLimit) : false,
+        isRateLimited: rateLimit
+          ? providerRateLimitService.isRateLimited(rateLimit)
+          : false,
         rateLimit: rateLimit
           ? {
               remaining: rateLimit.remaining,
@@ -189,5 +192,5 @@ export class DynamicQueueThrottler {
 // Singleton instance
 export const dynamicQueueThrottler = new DynamicQueueThrottler({
   checkInterval: 5000,
-  providers: ['mtn', 'airtel', 'orange', 'vodacom'],
+  providers: ["mtn", "airtel", "orange", "vodacom"],
 });

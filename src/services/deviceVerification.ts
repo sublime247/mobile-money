@@ -53,47 +53,54 @@ export async function checkDeviceVerification(
     // Check if this device fingerprint has been seen before
     const deviceKey = `user:${userId}:device:${fingerprint}`;
     const knownDevice = await redisClient.get(deviceKey);
-    
+
     // Check if this IP has been seen before
     const ipKey = `user:${userId}:ip:${ipAddress}`;
     const knownIp = await redisClient.get(ipKey);
-    
+
     const isNewDevice = !knownDevice;
     const isNewIp = !knownIp;
-    
+
     // Require verification if either device or IP is new
     const requiresVerification = isNewDevice || isNewIp;
-    
+
     if (requiresVerification) {
       const verificationId = generateVerificationId();
-      
+
       // Store verification requirement
       const verificationKey = `${VERIFICATION_KEY_PREFIX}${verificationId}`;
-      await redisClient.set(verificationKey, JSON.stringify({
-        userId,
-        ipAddress,
-        fingerprint,
-        isNewDevice,
-        isNewIp,
-        createdAt: Date.now(),
-      }), {
-        EX: VERIFICATION_TTL_SECONDS,
-      });
-      
+      await redisClient.set(
+        verificationKey,
+        JSON.stringify({
+          userId,
+          ipAddress,
+          fingerprint,
+          isNewDevice,
+          isNewIp,
+          createdAt: Date.now(),
+        }),
+        {
+          EX: VERIFICATION_TTL_SECONDS,
+        },
+      );
+
       // Initialize attempts counter
       const attemptsKey = `${ATTEMPTS_KEY_PREFIX}${verificationId}`;
       await redisClient.set(attemptsKey, "0", {
         EX: VERIFICATION_TTL_SECONDS,
       });
-      
-      logger.info({
-        userId,
-        verificationId,
-        isNewDevice,
-        isNewIp,
-        ipAddress,
-      }, "Device verification required");
-      
+
+      logger.info(
+        {
+          userId,
+          verificationId,
+          isNewDevice,
+          isNewIp,
+          ipAddress,
+        },
+        "Device verification required",
+      );
+
       return {
         requiresVerification: true,
         verificationId,
@@ -102,7 +109,7 @@ export async function checkDeviceVerification(
         isNewIp,
       };
     }
-    
+
     return {
       requiresVerification: false,
     };
@@ -124,27 +131,33 @@ export async function generateVerificationOTP(
   try {
     const verificationKey = `${VERIFICATION_KEY_PREFIX}${verificationId}`;
     const verificationData = await redisClient.get(verificationKey);
-    
+
     if (!verificationData) {
       logger.warn({ verificationId }, "Verification ID not found or expired");
       return null;
     }
-    
+
     const otp = generateOTP();
     const otpKey = `${VERIFICATION_KEY_PREFIX}${verificationId}:otp`;
-    
+
     await redisClient.set(otpKey, otp, {
       EX: VERIFICATION_TTL_SECONDS,
     });
-    
-    logger.info({
-      verificationId,
-      otpLength: otp.length,
-    }, "Verification OTP generated");
-    
+
+    logger.info(
+      {
+        verificationId,
+        otpLength: otp.length,
+      },
+      "Verification OTP generated",
+    );
+
     return otp;
   } catch (error) {
-    logger.error({ error, verificationId }, "Error generating verification OTP");
+    logger.error(
+      { error, verificationId },
+      "Error generating verification OTP",
+    );
     return null;
   }
 }
@@ -160,74 +173,80 @@ export async function verifyOTP(
     const verificationKey = `${VERIFICATION_KEY_PREFIX}${verificationId}`;
     const otpKey = `${VERIFICATION_KEY_PREFIX}${verificationId}:otp`;
     const attemptsKey = `${ATTEMPTS_KEY_PREFIX}${verificationId}`;
-    
+
     // Check attempts
     const attemptsRaw = await redisClient.get(attemptsKey);
-    const attempts = attemptsRaw ? parseInt(attemptsRaw, 10) : 0;
-    
+    const attempts = attemptsRaw ? parseInt(attemptsRaw.toString(), 10) : 0;
+
     if (attempts >= MAX_ATTEMPTS) {
-      await redisClient.del(verificationKey, otpKey, attemptsKey);
+      await redisClient.del([verificationKey, otpKey, attemptsKey]);
       return {
         success: false,
         message: "Maximum verification attempts exceeded",
       };
     }
-    
+
     // Get stored OTP
     const storedOtp = await redisClient.get(otpKey);
-    
+
     if (!storedOtp) {
       return {
         success: false,
         message: "Verification code expired or invalid",
       };
     }
-    
+
     // Verify OTP
     if (storedOtp !== otp) {
       // Increment attempts
       await redisClient.incr(attemptsKey);
       const remainingAttempts = MAX_ATTEMPTS - attempts - 1;
-      
-      logger.warn({
-        verificationId,
-        attempts: attempts + 1,
-        remainingAttempts,
-      }, "Invalid OTP attempt");
-      
+
+      logger.warn(
+        {
+          verificationId,
+          attempts: attempts + 1,
+          remainingAttempts,
+        },
+        "Invalid OTP attempt",
+      );
+
       return {
         success: false,
         message: `Invalid verification code. ${remainingAttempts} attempts remaining.`,
       };
     }
-    
+
     // OTP is correct - get verification data and trust the device/IP
     const verificationDataRaw = await redisClient.get(verificationKey);
     if (verificationDataRaw) {
-      const verificationData = JSON.parse(verificationDataRaw);
-      
+      const verificationData = JSON.parse(verificationDataRaw.toString());
+
       // Trust this device
       const deviceKey = `user:${verificationData.userId}:device:${verificationData.fingerprint}`;
       await redisClient.set(deviceKey, "trusted", {
         EX: 30 * 24 * 60 * 60, // 30 days
       });
-      
+
       // Trust this IP
       const ipKey = `user:${verificationData.userId}:ip:${verificationData.ipAddress}`;
       await redisClient.set(ipKey, "trusted", {
         EX: 30 * 24 * 60 * 60, // 30 days
       });
-      
-      logger.info({
-        userId: verificationData.userId,
-        verificationId,
-        ipAddress: verificationData.ipAddress,
-      }, "Device verification successful - device and IP trusted");
+
+      logger.info(
+        {
+          userId: verificationData.userId,
+          verificationId,
+          ipAddress: verificationData.ipAddress,
+        },
+        "Device verification successful - device and IP trusted",
+      );
     }
-    
+
     // Clean up verification data
-    await redisClient.del(verificationKey, otpKey, attemptsKey);
-    
+    await redisClient.del([verificationKey, otpKey, attemptsKey]);
+
     return {
       success: true,
       message: "Verification successful",
@@ -289,7 +308,9 @@ export async function clearVerificationPending(userId: string): Promise<void> {
 /**
  * Get pending verification ID for a user
  */
-export async function getPendingVerificationId(userId: string): Promise<string | null> {
+export async function getPendingVerificationId(
+  userId: string,
+): Promise<string | null> {
   try {
     const pendingKey = `user:${userId}:pending_verification`;
     const verificationId = await redisClient.get(pendingKey);

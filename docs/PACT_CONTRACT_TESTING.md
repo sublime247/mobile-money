@@ -113,18 +113,26 @@ describe("Provider API Contract", () => {
 Pact uses matchers to define flexible contracts:
 
 - **`like(value)`**: Matches type, not exact value
+
   ```typescript
-  body: { amount: like(100) } // Accepts any number
+  body: {
+    amount: like(100);
+  } // Accepts any number
   ```
 
 - **`regex(pattern, example)`**: Matches regex pattern
+
   ```typescript
-  headers: { Authorization: regex("^Bearer .+$", "Bearer token123") }
+  headers: {
+    Authorization: regex("^Bearer .+$", "Bearer token123");
+  }
   ```
 
 - **`string(example)`**: Matches any string
   ```typescript
-  body: { currency: string("USD") }
+  body: {
+    currency: string("USD");
+  }
   ```
 
 ### Provider States
@@ -141,32 +149,32 @@ These states document assumptions about provider behavior and can be used for pr
 
 ### MTN MoMo API
 
-| Endpoint | Method | Coverage |
-|----------|--------|----------|
-| `/collection/token/` | POST | ✅ OAuth2 authentication |
-| `/collection/v1_0/requesttopay` | POST | ✅ Payment collection |
-| `/collection/v1_0/requesttopay/:id` | GET | ✅ Status check (SUCCESSFUL, FAILED, PENDING) |
-| `/disbursement/v1_0/account/balance` | GET | ✅ Balance query |
+| Endpoint                             | Method | Coverage                                      |
+| ------------------------------------ | ------ | --------------------------------------------- |
+| `/collection/token/`                 | POST   | ✅ OAuth2 authentication                      |
+| `/collection/v1_0/requesttopay`      | POST   | ✅ Payment collection                         |
+| `/collection/v1_0/requesttopay/:id`  | GET    | ✅ Status check (SUCCESSFUL, FAILED, PENDING) |
+| `/disbursement/v1_0/account/balance` | GET    | ✅ Balance query                              |
 
 ### Airtel Money API
 
-| Endpoint | Method | Coverage |
-|----------|--------|----------|
-| `/auth/oauth2/token` | POST | ✅ OAuth2 authentication |
-| `/merchant/v1/payments/` | POST | ✅ Payment collection |
-| `/standard/v1/payments/:ref` | GET | ✅ Status check (TS, TF, TP) |
-| `/standard/v1/disbursements/` | POST | ✅ Payout disbursement |
-| `/standard/v1/users/balance` | GET | ✅ Balance query |
+| Endpoint                      | Method | Coverage                     |
+| ----------------------------- | ------ | ---------------------------- |
+| `/auth/oauth2/token`          | POST   | ✅ OAuth2 authentication     |
+| `/merchant/v1/payments/`      | POST   | ✅ Payment collection        |
+| `/standard/v1/payments/:ref`  | GET    | ✅ Status check (TS, TF, TP) |
+| `/standard/v1/disbursements/` | POST   | ✅ Payout disbursement       |
+| `/standard/v1/users/balance`  | GET    | ✅ Balance query             |
 
 ### Orange Money API
 
-| Endpoint | Method | Coverage |
-|----------|--------|----------|
-| `/oauth/token` | POST | ✅ Client credentials auth |
-| `/v1/payments/collect` | POST | ✅ Payment collection |
-| `/v1/payments/disburse` | POST | ✅ Payout disbursement |
-| `/v1/payments/:ref` | GET | ✅ Status check (COMPLETED, FAILED) |
-| N/A | N/A | ✅ Error scenarios (401, 404) |
+| Endpoint                | Method | Coverage                            |
+| ----------------------- | ------ | ----------------------------------- |
+| `/oauth/token`          | POST   | ✅ Client credentials auth          |
+| `/v1/payments/collect`  | POST   | ✅ Payment collection               |
+| `/v1/payments/disburse` | POST   | ✅ Payout disbursement              |
+| `/v1/payments/:ref`     | GET    | ✅ Status check (COMPLETED, FAILED) |
+| N/A                     | N/A    | ✅ Error scenarios (401, 404)       |
 
 ## Running Tests
 
@@ -198,21 +206,21 @@ jobs:
       - uses: actions/checkout@v3
       - uses: actions/setup-node@v3
         with:
-          node-version: '18'
-      
+          node-version: "18"
+
       - name: Install dependencies
         run: npm ci
-      
+
       - name: Run Pact contract tests
         run: npm run test:pact
-      
+
       - name: Upload Pact files
         uses: actions/upload-artifact@v3
         with:
           name: pact-contracts
           path: pacts/
           retention-days: 30
-      
+
       - name: Publish Pacts to Broker (optional)
         if: github.ref == 'refs/heads/main'
         run: |
@@ -302,10 +310,14 @@ export class MockProvider implements MobileMoneyProvider {
 
 ```typescript
 // ❌ Too strict — will break on minor changes
-body: { timestamp: "2024-01-01T00:00:00Z" }
+body: {
+  timestamp: "2024-01-01T00:00:00Z";
+}
 
 // ✅ Flexible — matches any ISO timestamp
-body: { timestamp: regex("^\\d{4}-\\d{2}-\\d{2}T", "2024-01-01T00:00:00Z") }
+body: {
+  timestamp: regex("^\\d{4}-\\d{2}-\\d{2}T", "2024-01-01T00:00:00Z");
+}
 ```
 
 ### 2. Document Provider States

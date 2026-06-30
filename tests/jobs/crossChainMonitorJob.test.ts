@@ -37,8 +37,20 @@ describe("runCrossChainMonitorJob", () => {
 
   it("logs the number of snapshots captured", async () => {
     const fakeSnapshots = [
-      { chain: "stellar", asset: "XLM", address: "GABC", balance: "10", capturedAt: new Date() },
-      { chain: "mtn", asset: "XAF", address: "mtn", balance: "0", capturedAt: new Date() },
+      {
+        chain: "stellar",
+        asset: "XLM",
+        address: "GABC",
+        balance: "10",
+        capturedAt: new Date(),
+      },
+      {
+        chain: "mtn",
+        asset: "XAF",
+        address: "mtn",
+        balance: "0",
+        capturedAt: new Date(),
+      },
     ];
     mockSnapshot.mockResolvedValue(fakeSnapshots);
 
@@ -62,6 +74,8 @@ describe("runCrossChainMonitorJob", () => {
   it("propagates errors thrown by snapshot()", async () => {
     mockSnapshot.mockRejectedValue(new Error("Stellar network error"));
 
-    await expect(runCrossChainMonitorJob()).rejects.toThrow("Stellar network error");
+    await expect(runCrossChainMonitorJob()).rejects.toThrow(
+      "Stellar network error",
+    );
   });
 });

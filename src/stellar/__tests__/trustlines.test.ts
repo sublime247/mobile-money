@@ -11,7 +11,9 @@ import {
 
 jest.mock("../../config/stellar", () => ({
   getStellarServer: jest.fn(),
-  getNetworkPassphrase: jest.fn().mockReturnValue("Test SDF Network ; September 2015"),
+  getNetworkPassphrase: jest
+    .fn()
+    .mockReturnValue("Test SDF Network ; September 2015"),
 }));
 
 import { getStellarServer } from "../../config/stellar";
@@ -32,11 +34,11 @@ beforeEach(() => {
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
 const ISSUER = StellarSdk.Keypair.random().publicKey();
-const USDC    = new StellarSdk.Asset("USDC", ISSUER);
-const XAF     = new StellarSdk.Asset("XAF",  ISSUER);
-const XLM     = StellarSdk.Asset.native();
+const USDC = new StellarSdk.Asset("USDC", ISSUER);
+const XAF = new StellarSdk.Asset("XAF", ISSUER);
+const XLM = StellarSdk.Asset.native();
 
-const userKeypair    = StellarSdk.Keypair.random();
+const userKeypair = StellarSdk.Keypair.random();
 const sponsorKeypair = StellarSdk.Keypair.random();
 
 /** Minimal Horizon account with a single USDC trustline. */
@@ -45,14 +47,23 @@ function makeAccount(
   trustedAssets: StellarSdk.Asset[] = [],
 ): StellarSdk.Horizon.AccountResponse {
   const balances: StellarSdk.Horizon.HorizonApi.BalanceLine[] = [
-    { asset_type: "native", balance: "10.0000000" } as StellarSdk.Horizon.HorizonApi.BalanceLine<"native">,
-    ...trustedAssets.map((asset) => ({
-      asset_type: asset.getCode().length <= 4 ? "credit_alphanum4" : "credit_alphanum12",
-      asset_code: asset.getCode(),
-      asset_issuer: asset.getIssuer(),
-      balance: "0.0000000",
-      limit: "922337203685.4775807",
-    } as StellarSdk.Horizon.HorizonApi.BalanceLine<"credit_alphanum4">)),
+    {
+      asset_type: "native",
+      balance: "10.0000000",
+    } as StellarSdk.Horizon.HorizonApi.BalanceLine<"native">,
+    ...trustedAssets.map(
+      (asset) =>
+        ({
+          asset_type:
+            asset.getCode().length <= 4
+              ? "credit_alphanum4"
+              : "credit_alphanum12",
+          asset_code: asset.getCode(),
+          asset_issuer: asset.getIssuer(),
+          balance: "0.0000000",
+          limit: "922337203685.4775807",
+        }) as StellarSdk.Horizon.HorizonApi.BalanceLine<"credit_alphanum4">,
+    ),
   ];
 
   return {
@@ -125,7 +136,11 @@ describe("createTrustline", () => {
     mockLoadAccount.mockResolvedValue(makeAccount(userKeypair.publicKey()));
     mockSubmitTransaction.mockResolvedValue(TX_RESULT);
 
-    await createTrustline({ accountKeypair: userKeypair, asset: USDC, limit: "1000" });
+    await createTrustline({
+      accountKeypair: userKeypair,
+      asset: USDC,
+      limit: "1000",
+    });
 
     const tx = mockSubmitTransaction.mock.calls[0][0] as StellarSdk.Transaction;
     const op = tx.operations[0] as StellarSdk.Operation.ChangeTrust;
@@ -175,7 +190,9 @@ describe("createSponsoredTrustline", () => {
 
 describe("removeTrustline", () => {
   it("submits a ChangeTrust with limit '0'", async () => {
-    mockLoadAccount.mockResolvedValue(makeAccount(userKeypair.publicKey(), [USDC]));
+    mockLoadAccount.mockResolvedValue(
+      makeAccount(userKeypair.publicKey(), [USDC]),
+    );
     mockSubmitTransaction.mockResolvedValue(TX_RESULT);
 
     await removeTrustline({ accountKeypair: userKeypair, asset: USDC });
@@ -209,10 +226,10 @@ describe("ensureTrustlines", () => {
     // First call: hasTrustline check (no trustlines yet)
     // Second call: createTrustline loads account again
     mockLoadAccount
-      .mockResolvedValueOnce(makeAccount(userKeypair.publicKey()))         // hasTrustline USDC
-      .mockResolvedValueOnce(makeAccount(userKeypair.publicKey()))         // createTrustline USDC
-      .mockResolvedValueOnce(makeAccount(userKeypair.publicKey()))         // hasTrustline XAF
-      .mockResolvedValueOnce(makeAccount(userKeypair.publicKey()));        // createTrustline XAF
+      .mockResolvedValueOnce(makeAccount(userKeypair.publicKey())) // hasTrustline USDC
+      .mockResolvedValueOnce(makeAccount(userKeypair.publicKey())) // createTrustline USDC
+      .mockResolvedValueOnce(makeAccount(userKeypair.publicKey())) // hasTrustline XAF
+      .mockResolvedValueOnce(makeAccount(userKeypair.publicKey())); // createTrustline XAF
 
     mockSubmitTransaction.mockResolvedValue(TX_RESULT);
 
@@ -229,8 +246,8 @@ describe("ensureTrustlines", () => {
 
   it("uses sponsored flow when sponsored: true and sponsorKeypair provided", async () => {
     mockLoadAccount
-      .mockResolvedValueOnce(makeAccount(userKeypair.publicKey()))         // hasTrustline
-      .mockResolvedValueOnce(makeAccount(sponsorKeypair.publicKey()));     // createSponsoredTrustline
+      .mockResolvedValueOnce(makeAccount(userKeypair.publicKey())) // hasTrustline
+      .mockResolvedValueOnce(makeAccount(sponsorKeypair.publicKey())); // createSponsoredTrustline
 
     mockSubmitTransaction.mockResolvedValue(TX_RESULT);
 
@@ -249,10 +266,10 @@ describe("ensureTrustlines", () => {
 
   it("collects failed assets without throwing and continues processing", async () => {
     mockLoadAccount
-      .mockResolvedValueOnce(makeAccount(userKeypair.publicKey()))         // hasTrustline USDC
-      .mockRejectedValueOnce(new Error("Horizon error"))                   // createTrustline USDC fails
-      .mockResolvedValueOnce(makeAccount(userKeypair.publicKey()))         // hasTrustline XAF
-      .mockResolvedValueOnce(makeAccount(userKeypair.publicKey()));        // createTrustline XAF
+      .mockResolvedValueOnce(makeAccount(userKeypair.publicKey())) // hasTrustline USDC
+      .mockRejectedValueOnce(new Error("Horizon error")) // createTrustline USDC fails
+      .mockResolvedValueOnce(makeAccount(userKeypair.publicKey())) // hasTrustline XAF
+      .mockResolvedValueOnce(makeAccount(userKeypair.publicKey())); // createTrustline XAF
 
     mockSubmitTransaction.mockResolvedValue(TX_RESULT);
 

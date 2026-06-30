@@ -18,7 +18,14 @@ import { exec } from "child_process";
 import { promisify } from "util";
 import fs from "fs";
 import path from "path";
-import { S3Client, PutObjectCommand, HeadBucketCommand, ListObjectsV2Command, GetObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
+import {
+  S3Client,
+  PutObjectCommand,
+  HeadBucketCommand,
+  ListObjectsV2Command,
+  GetObjectCommand,
+  HeadObjectCommand,
+} from "@aws-sdk/client-s3";
 import { pool } from "../config/database";
 import { env } from "../config/env";
 
@@ -78,7 +85,7 @@ function deriveBackupKey(): Buffer {
       Buffer.from("backup-encryption"),
       Buffer.from("database-backup"),
       32,
-    )
+    ),
   );
 }
 
@@ -92,12 +99,9 @@ function deriveBackupKey(): Buffer {
 export function encryptBackup(dumpBuffer: Buffer): Buffer {
   const key = deriveBackupKey();
   const iv = crypto.randomBytes(IV_LENGTH);
-  
+
   const cipher = crypto.createCipheriv(ENCRYPTION_ALGORITHM, key, iv);
-  const encrypted = Buffer.concat([
-    cipher.update(dumpBuffer),
-    cipher.final(),
-  ]);
+  const encrypted = Buffer.concat([cipher.update(dumpBuffer), cipher.final()]);
   const authTag = cipher.getAuthTag();
 
   // Format: [IV][AuthTag][EncryptedData]
@@ -112,7 +116,7 @@ export function encryptBackup(dumpBuffer: Buffer): Buffer {
  */
 export function decryptBackup(encryptedBuffer: Buffer): Buffer {
   const key = deriveBackupKey();
-  
+
   // Extract IV and auth tag
   const iv = encryptedBuffer.slice(0, IV_LENGTH);
   const authTag = encryptedBuffer.slice(IV_LENGTH, IV_LENGTH + AUTH_TAG_LENGTH);
@@ -261,7 +265,9 @@ export async function createBackup(): Promise<BackupResult> {
       );
     }
 
-    console.log(`✓ Backup dump created: ${(dumpStats.size / 1024 / 1024).toFixed(2)} MB`);
+    console.log(
+      `✓ Backup dump created: ${(dumpStats.size / 1024 / 1024).toFixed(2)} MB`,
+    );
 
     // Read dump into memory
     const dumpBuffer = fs.readFileSync(tempDumpFile);
@@ -342,7 +348,9 @@ async function streamToBuffer(stream: any): Promise<Buffer> {
  *
  * @param backupId Backup identifier
  */
-export async function getBackupMetadata(backupId: string): Promise<BackupMetadata> {
+export async function getBackupMetadata(
+  backupId: string,
+): Promise<BackupMetadata> {
   const s3 = getS3Client();
   const key = `backups/${backupId}.dump.enc`;
   try {
@@ -408,7 +416,9 @@ export async function validateBackupIntegrity(
     const checksum = computeChecksum(decryptedData);
 
     if (checksum !== metadata.checksum) {
-      logger.error(`Backup ${backupId} integrity verification failed: Checksum mismatch!`);
+      logger.error(
+        `Backup ${backupId} integrity verification failed: Checksum mismatch!`,
+      );
       return false;
     }
 
@@ -455,7 +465,10 @@ export async function verifyDataSafety(): Promise<{
         details.most_recent_backup_age_hours = parseFloat(ageHours.toFixed(2));
         details.most_recent_backup_id = mostRecent.backupId;
 
-        const maxAgeHours = parseInt(process.env.BACKUP_MAX_AGE_HOURS || "25", 10);
+        const maxAgeHours = parseInt(
+          process.env.BACKUP_MAX_AGE_HOURS || "25",
+          10,
+        );
         details.fresh_backup_exists = ageHours < maxAgeHours;
       } else {
         details.fresh_backup_exists = false;
@@ -463,7 +476,10 @@ export async function verifyDataSafety(): Promise<{
     }
 
     return {
-      safe: details.bucket_accessible && details.encryption_enabled && (details.recent_backups === 0 || details.fresh_backup_exists),
+      safe:
+        details.bucket_accessible &&
+        details.encryption_enabled &&
+        (details.recent_backups === 0 || details.fresh_backup_exists),
       details,
     };
   } catch (err) {

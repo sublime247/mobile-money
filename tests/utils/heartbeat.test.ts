@@ -1,6 +1,6 @@
 /**
  * Tests for the System Heartbeat Metric
- * 
+ *
  * Verifies that:
  * - The heartbeat metric is properly registered in Prometheus
  * - The heartbeat service starts and stops correctly

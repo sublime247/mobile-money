@@ -1,8 +1,9 @@
-import { Pool } from 'pg';
-import { pool } from '../config/database';
-import { UserModel } from '../models/users';
-import { notifySlackAlert } from './loggers';
-import { createPagerDutyService } from './pagerDutyService';
+import { Pool } from "pg";
+import { pool } from "../config/database";
+import { SupportedCurrency, currencyService, BASE_CURRENCY } from "./currency";
+import { UserModel } from "../models/users";
+import { notifySlackAlert } from "./loggers";
+import { createPagerDutyService } from "./pagerDutyService";
 
 /**
  * Double-Entry Ledger Service
@@ -84,7 +85,7 @@ const LEDGER_BALANCE_TOLERANCE = 0.0000001;
 
 const validateLedgerEntries = (entries: LedgerEntry[]): void => {
   if (!entries || entries.length < 2) {
-    throw new Error('At least 2 entries required for double-entry');
+    throw new Error("At least 2 entries required for double-entry");
   }
 
   const { totalDebits, totalCredits } = entries.reduce(
@@ -96,7 +97,7 @@ const validateLedgerEntries = (entries: LedgerEntry[]): void => {
 
       if (hasDebit === hasCredit) {
         throw new Error(
-          `Ledger entry ${index + 1} must have exactly one non-zero amount`
+          `Ledger entry ${index + 1} must have exactly one non-zero amount`,
         );
       }
 
@@ -104,17 +105,17 @@ const validateLedgerEntries = (entries: LedgerEntry[]): void => {
       totals.totalCredits += creditAmount;
       return totals;
     },
-    { totalDebits: 0, totalCredits: 0 }
+    { totalDebits: 0, totalCredits: 0 },
   );
 
   if (Math.abs(totalDebits - totalCredits) > LEDGER_BALANCE_TOLERANCE) {
     throw new Error(
-      `Transaction not balanced: debits=${totalDebits} credits=${totalCredits}`
+      `Transaction not balanced: debits=${totalDebits} credits=${totalCredits}`,
     );
   }
 
   if (totalDebits <= LEDGER_BALANCE_TOLERANCE) {
-    throw new Error('Transaction amounts cannot be zero');
+    throw new Error("Transaction amounts cannot be zero");
   }
 };
 
@@ -138,7 +139,7 @@ const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export const encodeLedgerEntryCursor = (
-  entry: Pick<LedgerEntryRow, 'entry_date' | 'created_at' | 'id'>
+  entry: Pick<LedgerEntryRow, "entry_date" | "created_at" | "id">,
 ): string => {
   const payload: LedgerEntryCursor = {
     entryDate: toCursorDate(entry.entry_date),
@@ -146,20 +147,22 @@ export const encodeLedgerEntryCursor = (
     id: entry.id,
   };
 
-  return Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
+  return Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
 };
 
 export const decodeLedgerEntryCursor = (cursor: string): LedgerEntryCursor => {
   try {
-    const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
+    const parsed = JSON.parse(
+      Buffer.from(cursor, "base64url").toString("utf8"),
+    );
 
     if (
       !parsed ||
-      typeof parsed.entryDate !== 'string' ||
-      typeof parsed.createdAt !== 'string' ||
-      typeof parsed.id !== 'string'
+      typeof parsed.entryDate !== "string" ||
+      typeof parsed.createdAt !== "string" ||
+      typeof parsed.id !== "string"
     ) {
-      throw new Error('Cursor is missing required ledger entry fields');
+      throw new Error("Cursor is missing required ledger entry fields");
     }
 
     if (
@@ -167,12 +170,12 @@ export const decodeLedgerEntryCursor = (cursor: string): LedgerEntryCursor => {
       Number.isNaN(Date.parse(parsed.createdAt)) ||
       !UUID_PATTERN.test(parsed.id)
     ) {
-      throw new Error('Cursor contains invalid ledger entry values');
+      throw new Error("Cursor contains invalid ledger entry values");
     }
 
     return parsed;
   } catch (error) {
-    throw new Error('Invalid ledger entry cursor');
+    throw new Error("Invalid ledger entry cursor");
   }
 };
 
@@ -194,14 +197,27 @@ export class LedgerService {
     transactionId?: string,
     postedBy?: string,
     currency?: SupportedCurrency,
-    conversionRate?: number
+    conversionRate?: number,
   ): Promise<PostedEntry[]> {
     validateLedgerEntries(entries);
+
+    // Attach currency metadata if provided
+    const enrichedEntries =
+      currency && conversionRate
+        ? entries.map((e) => ({
+            ...e,
+            metadata: {
+              ...(e.metadata || {}),
+              currency,
+              conversionRate,
+            },
+          }))
+        : entries;
 
     const client = await this.pool.connect();
 
     try {
-      await client.query('BEGIN');
+      await client.query("BEGIN");
 
       // Call the database function to post atomically
       const result = await client.query(
@@ -211,26 +227,26 @@ export class LedgerService {
           description,
           transactionId || null,
           postedBy || null,
-          JSON.stringify(enrichedEntries)
-        ]
+          JSON.stringify(enrichedEntries),
+        ],
       );
 
-      await client.query('COMMIT');
+      await client.query("COMMIT");
 
-      return result.rows.map(row => ({
+      return result.rows.map((row) => ({
         entry_id: row.entry_id,
         account_code: row.account_code,
         debit: parseFloat(row.debit),
-        credit: parseFloat(row.credit)
+        credit: parseFloat(row.credit),
       }));
     } catch (error) {
-      await client.query('ROLLBACK');
+      await client.query("ROLLBACK");
       throw error;
     } finally {
       client.release();
     }
   }
-/* Duplicate block removed */
+  /* Duplicate block removed */
 
   /**
    * Post a deposit transaction.
@@ -241,7 +257,7 @@ export class LedgerService {
     fee: number,
     referenceNumber: string,
     transactionId: string,
-    userId: string
+    userId: string,
   ): Promise<PostedEntry[]> {
     return this.postDepositWithCurrency(
       amount,
@@ -249,7 +265,7 @@ export class LedgerService {
       BASE_CURRENCY,
       referenceNumber,
       transactionId,
-      userId
+      userId,
     );
   }
 
@@ -265,17 +281,17 @@ export class LedgerService {
     currency: SupportedCurrency,
     referenceNumber: string,
     transactionId: string,
-    userId: string
+    userId: string,
   ): Promise<PostedEntry[]> {
     // Determine settlement delay from user
     const userModel = new UserModel();
     const user = await userModel.findById(userId);
     const delayDays = user?.settlementDelayDays || 0;
-    
+
     // Calculate settlement date
     const settlementDate = new Date();
     settlementDate.setDate(settlementDate.getDate() + delayDays);
-    const settlementDateStr = settlementDate.toISOString().split('T')[0];
+    const settlementDateStr = settlementDate.toISOString().split("T")[0];
 
     // Compute conversion to base currency (USD) for amount and fee
     const amountConversion = currencyService.convertToBase(amount, currency);
@@ -283,9 +299,9 @@ export class LedgerService {
 
     const entries: LedgerEntry[] = [
       {
-        account_code: '1100', // Mobile Money Float
+        account_code: "1100", // Mobile Money Float
         debit_amount: amountConversion.convertedAmount,
-        description: 'Customer deposit received',
+        description: "Customer deposit received",
         metadata: {
           originalAmount: amount,
           originalCurrency: currency,
@@ -293,24 +309,25 @@ export class LedgerService {
         },
       },
       {
-        account_code: '2000', // Customer Balances
-        credit_amount: amountConversion.convertedAmount - feeConversion.convertedAmount,
-        description: 'Customer balance credited',
+        account_code: "2000", // Customer Balances
+        credit_amount:
+          amountConversion.convertedAmount - feeConversion.convertedAmount,
+        description: "Customer balance credited",
         settlement_date: settlementDateStr,
         metadata: {
           originalAmount: amount - fee,
           originalCurrency: currency,
           conversionRate: amountConversion.rate,
-        }
+        },
       },
     ];
 
     // Add fee revenue if applicable
     if (fee > 0) {
       entries.push({
-        account_code: '4100', // Deposit Fee Revenue
+        account_code: "4100", // Deposit Fee Revenue
         credit_amount: feeConversion.convertedAmount,
-        description: 'Deposit fee earned',
+        description: "Deposit fee earned",
         metadata: {
           originalAmount: fee,
           originalCurrency: currency,
@@ -326,7 +343,7 @@ export class LedgerService {
       transactionId,
       userId,
       currency,
-      amountConversion.rate
+      amountConversion.rate,
     );
   }
 
@@ -339,7 +356,7 @@ export class LedgerService {
     fee: number,
     referenceNumber: string,
     transactionId: string,
-    userId: string
+    userId: string,
   ): Promise<PostedEntry[]> {
     return this.postWithdrawalWithCurrency(
       amount,
@@ -347,7 +364,7 @@ export class LedgerService {
       BASE_CURRENCY,
       referenceNumber,
       transactionId,
-      userId
+      userId,
     );
   }
 
@@ -363,7 +380,7 @@ export class LedgerService {
     currency: SupportedCurrency,
     referenceNumber: string,
     transactionId: string,
-    userId: string
+    userId: string,
   ): Promise<PostedEntry[]> {
     // Compute conversion to base currency (USD) for amount and fee
     const amountConversion = currencyService.convertToBase(amount, currency);
@@ -371,9 +388,10 @@ export class LedgerService {
 
     const entries: LedgerEntry[] = [
       {
-        account_code: '2000', // Customer Balances
-        debit_amount: amountConversion.convertedAmount + feeConversion.convertedAmount,
-        description: 'Customer balance debited',
+        account_code: "2000", // Customer Balances
+        debit_amount:
+          amountConversion.convertedAmount + feeConversion.convertedAmount,
+        description: "Customer balance debited",
         metadata: {
           originalAmount: amount + fee,
           originalCurrency: currency,
@@ -381,23 +399,23 @@ export class LedgerService {
         },
       },
       {
-        account_code: '1100', // Mobile Money Float
+        account_code: "1100", // Mobile Money Float
         credit_amount: amountConversion.convertedAmount,
-        description: 'Withdrawal paid out',
+        description: "Withdrawal paid out",
         metadata: {
           originalAmount: amount,
           originalCurrency: currency,
           conversionRate: amountConversion.rate,
         },
-      }
+      },
     ];
 
     // Add fee revenue if applicable
     if (fee > 0) {
       entries.push({
-        account_code: '4200', // Withdrawal Fee Revenue
+        account_code: "4200", // Withdrawal Fee Revenue
         credit_amount: feeConversion.convertedAmount,
-        description: 'Withdrawal fee earned',
+        description: "Withdrawal fee earned",
         metadata: {
           originalAmount: fee,
           originalCurrency: currency,
@@ -413,7 +431,7 @@ export class LedgerService {
       transactionId,
       userId,
       currency,
-      amountConversion.rate
+      amountConversion.rate,
     );
   }
 
@@ -427,19 +445,19 @@ export class LedgerService {
     referenceNumber: string,
     transactionId: string,
     userId: string,
-    reason: string
+    reason: string,
   ): Promise<PostedEntry[]> {
     const entries: LedgerEntry[] = [
       {
-        account_code: '2000', // Customer Balances
+        account_code: "2000", // Customer Balances
         debit_amount: amount,
-        description: `Clawback: ${reason}`
+        description: `Clawback: ${reason}`,
       },
       {
-        account_code: '1100', // Mobile Money Float
+        account_code: "1100", // Mobile Money Float
         credit_amount: amount,
-        description: `Clawback reversal: ${referenceNumber}`
-      }
+        description: `Clawback reversal: ${referenceNumber}`,
+      },
     ];
 
     return this.postTransaction(
@@ -447,7 +465,7 @@ export class LedgerService {
       `Clawback: ${amount} - Reason: ${reason}`,
       entries,
       transactionId,
-      userId
+      userId,
     );
   }
 
@@ -459,36 +477,39 @@ export class LedgerService {
   async postProviderFee(
     amount: number,
     referenceNumber: string,
-    transactionId: string
+    transactionId: string,
   ): Promise<PostedEntry[]> {
     const entries: LedgerEntry[] = [
       {
-        account_code: '5000', // Provider Transaction Fees
+        account_code: "5000", // Provider Transaction Fees
         debit_amount: amount,
-        description: 'Provider fee expense'
+        description: "Provider fee expense",
       },
       {
-        account_code: '1100', // Mobile Money Float
+        account_code: "1100", // Mobile Money Float
         credit_amount: amount,
-        description: 'Provider fee paid'
-      }
+        description: "Provider fee paid",
+      },
     ];
 
     return this.postTransaction(
       referenceNumber,
       `Provider fee: ${amount}`,
       entries,
-      transactionId
+      transactionId,
     );
   }
 
   /**
    * Get account balance as of a specific date
    */
-  async getAccountBalance(accountCode: string, asOfDate?: Date): Promise<number> {
+  async getAccountBalance(
+    accountCode: string,
+    asOfDate?: Date,
+  ): Promise<number> {
     const result = await this.pool.query(
-      'SELECT get_account_balance($1, $2) as balance',
-      [accountCode, asOfDate || new Date()]
+      "SELECT get_account_balance($1, $2) as balance",
+      [accountCode, asOfDate || new Date()],
     );
     return parseFloat(result.rows[0].balance);
   }
@@ -498,9 +519,9 @@ export class LedgerService {
    */
   async getAllAccountBalances(): Promise<AccountBalance[]> {
     const result = await this.pool.query(
-      'SELECT * FROM account_balances ORDER BY code'
+      "SELECT * FROM account_balances ORDER BY code",
     );
-    return result.rows.map(row => ({
+    return result.rows.map((row) => ({
       account_id: row.account_id,
       code: row.code,
       name: row.name,
@@ -509,7 +530,7 @@ export class LedgerService {
       total_debits: parseFloat(row.total_debits),
       total_credits: parseFloat(row.total_credits),
       balance: parseFloat(row.balance),
-      last_entry_at: row.last_entry_at
+      last_entry_at: row.last_entry_at,
     }));
   }
 
@@ -517,7 +538,7 @@ export class LedgerService {
    * Refresh the account balances materialized view
    */
   async refreshAccountBalances(): Promise<void> {
-    await this.pool.query('SELECT refresh_account_balances()');
+    await this.pool.query("SELECT refresh_account_balances()");
   }
 
   /**
@@ -525,15 +546,15 @@ export class LedgerService {
    */
   async getTrialBalance(asOfDate?: Date): Promise<TrialBalance[]> {
     const result = await this.pool.query(
-      'SELECT * FROM get_trial_balance($1)',
-      [asOfDate || new Date()]
+      "SELECT * FROM get_trial_balance($1)",
+      [asOfDate || new Date()],
     );
-    return result.rows.map(row => ({
+    return result.rows.map((row) => ({
       account_code: row.account_code,
       account_name: row.account_name,
       account_type: row.account_type,
       debit_balance: parseFloat(row.debit_balance),
-      credit_balance: parseFloat(row.credit_balance)
+      credit_balance: parseFloat(row.credit_balance),
     }));
   }
 
@@ -541,13 +562,15 @@ export class LedgerService {
    * Check if the entire ledger is balanced
    */
   async checkLedgerBalance(): Promise<LedgerBalanceCheck> {
-    const result = await this.pool.query('SELECT * FROM check_ledger_balance()');
+    const result = await this.pool.query(
+      "SELECT * FROM check_ledger_balance()",
+    );
     const row = result.rows[0];
     return {
       total_debits: parseFloat(row.total_debits),
       total_credits: parseFloat(row.total_credits),
       difference: parseFloat(row.difference),
-      is_balanced: row.is_balanced
+      is_balanced: row.is_balanced,
     };
   }
 
@@ -570,7 +593,7 @@ export class LedgerService {
       JOIN accounts a ON le.account_id = a.id
       WHERE le.transaction_id = $1
       ORDER BY le.created_at`,
-      [transactionId]
+      [transactionId],
     );
     return result.rows;
   }
@@ -582,7 +605,7 @@ export class LedgerService {
     accountCode: string,
     startDate?: Date,
     endDate?: Date,
-    limit: number = 100
+    limit: number = 100,
   ): Promise<LedgerEntryRow[]> {
     const page = await this.getEntriesByAccountPage(accountCode, {
       startDate,
@@ -603,10 +626,14 @@ export class LedgerService {
       endDate?: Date;
       limit?: number;
       cursor?: string;
-    } = {}
+    } = {},
   ): Promise<LedgerEntryPage> {
-    const pageLimit = normalizeLimit(options.limit ?? DEFAULT_LEDGER_ENTRY_LIMIT);
-    const cursor = options.cursor ? decodeLedgerEntryCursor(options.cursor) : null;
+    const pageLimit = normalizeLimit(
+      options.limit ?? DEFAULT_LEDGER_ENTRY_LIMIT,
+    );
+    const cursor = options.cursor
+      ? decodeLedgerEntryCursor(options.cursor)
+      : null;
     const queryLimit = pageLimit + 1;
 
     const result = await this.pool.query(
@@ -639,8 +666,8 @@ export class LedgerService {
         cursor?.entryDate || null,
         cursor?.createdAt || null,
         cursor?.id || null,
-        queryLimit
-      ]
+        queryLimit,
+      ],
     );
 
     const rows = result.rows as LedgerEntryRow[];
@@ -649,7 +676,9 @@ export class LedgerService {
 
     return {
       entries,
-      nextCursor: hasMore ? encodeLedgerEntryCursor(entries[entries.length - 1]) : null,
+      nextCursor: hasMore
+        ? encodeLedgerEntryCursor(entries[entries.length - 1])
+        : null,
       hasMore,
       limit: pageLimit,
     };
@@ -670,7 +699,7 @@ export class LedgerService {
        WHERE a.code = '1100'
          AND le.entry_date >= $1
        GROUP BY le.metadata->>'provider'`,
-      [since]
+      [since],
     );
     const map = new Map<string, number>();
     for (const row of result.rows) {
@@ -685,12 +714,12 @@ export class LedgerService {
    * African mobile-money holiday cycles). Configurable via env vars.
    */
   private seasonalMultiplier(): number {
-    const peakMonths = (process.env.RESERVE_PEAK_MONTHS || '12,4')
-      .split(',')
-      .map(m => parseInt(m.trim(), 10));
+    const peakMonths = (process.env.RESERVE_PEAK_MONTHS || "12,4")
+      .split(",")
+      .map((m) => parseInt(m.trim(), 10));
     const currentMonth = new Date().getMonth() + 1; // 1-based
     if (peakMonths.includes(currentMonth)) {
-      return parseFloat(process.env.RESERVE_SEASONAL_PEAK_MULTIPLIER || '1.25');
+      return parseFloat(process.env.RESERVE_SEASONAL_PEAK_MULTIPLIER || "1.25");
     }
     return 1;
   }
@@ -702,9 +731,11 @@ export class LedgerService {
    * @param walletBalances  map of provider → current wallet balance (same currency as ledger)
    */
   async checkReserveLiquidity(
-    walletBalances: Record<string, number>
+    walletBalances: Record<string, number>,
   ): Promise<void> {
-    const RATIO_THRESHOLD = parseFloat(process.env.RESERVE_LIQUIDITY_RATIO || '1.1');
+    const RATIO_THRESHOLD = parseFloat(
+      process.env.RESERVE_LIQUIDITY_RATIO || "1.1",
+    );
     const velocity = await this.get30DayVelocityByProvider();
     const seasonal = this.seasonalMultiplier();
     const pagerDuty = createPagerDutyService();
@@ -722,25 +753,25 @@ export class LedgerService {
         // PagerDuty alert
         await pagerDuty.handleBalanceShortfall(
           provider,
-          'reserve-liquidity',
+          "reserve-liquidity",
           expectedVolume * RATIO_THRESHOLD,
-          balance
+          balance,
         );
 
         // Slack alert
         await notifySlackAlert(
           {
             statusCode: 500,
-            method: 'MONITOR',
+            method: "MONITOR",
             path: `/reserve-liquidity/${provider}`,
             timestamp: new Date().toISOString(),
             error: new Error(
               `Reserve liquidity below 110%: ${provider} balance=${balance.toFixed(2)} ` +
-              `expected=${expectedVolume.toFixed(2)} ratio=${(ratio * 100).toFixed(1)}% ` +
-              `shortfall=${shortfallAmount.toFixed(2)} seasonal_mult=${seasonal}`
+                `expected=${expectedVolume.toFixed(2)} ratio=${(ratio * 100).toFixed(1)}% ` +
+                `shortfall=${shortfallAmount.toFixed(2)} seasonal_mult=${seasonal}`,
             ),
           },
-          { appName: 'reserve-liquidity-monitor' }
+          { appName: "reserve-liquidity-monitor" },
         );
       }
     }

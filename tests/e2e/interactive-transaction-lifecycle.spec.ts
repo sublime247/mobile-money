@@ -48,7 +48,10 @@ test.describe("Interactive Transaction Lifecycle", () => {
     const loginRes = await api.post("/api/auth/login", {
       data: { phone_number: PHONE },
     });
-    expect(loginRes.ok(), `Login failed: ${await loginRes.text()}`).toBeTruthy();
+    expect(
+      loginRes.ok(),
+      `Login failed: ${await loginRes.text()}`,
+    ).toBeTruthy();
 
     const body = await loginRes.json();
     expect(body.token).toBeTruthy();

@@ -92,7 +92,10 @@ function mapLogRow(row: any): WebhookDeliveryLog {
 
 export class MerchantWebhookModel {
   async create(input: CreateWebhookInput): Promise<MerchantWebhook> {
-    const events = input.events ?? ["transaction.completed", "transaction.failed"];
+    const events = input.events ?? [
+      "transaction.completed",
+      "transaction.failed",
+    ];
     validateEvents(events);
 
     // Enforce per-user limit
@@ -101,14 +104,22 @@ export class MerchantWebhookModel {
       [input.userId],
     );
     if (parseInt(countRes.rows[0].count, 10) >= MAX_WEBHOOKS_PER_USER) {
-      throw new Error(`Maximum of ${MAX_WEBHOOKS_PER_USER} webhooks per merchant`);
+      throw new Error(
+        `Maximum of ${MAX_WEBHOOKS_PER_USER} webhooks per merchant`,
+      );
     }
 
     const res = await queryWrite(
       `INSERT INTO merchant_webhooks (user_id, url, secret, description, events)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
-      [input.userId, input.url, encrypt(input.secret), input.description ?? null, events],
+      [
+        input.userId,
+        input.url,
+        encrypt(input.secret),
+        input.description ?? null,
+        events,
+      ],
     );
     return mapRow(res.rows[0]);
   }
@@ -132,18 +143,37 @@ export class MerchantWebhookModel {
     return res.rows.map(mapRow);
   }
 
-  async update(id: string, userId: string, input: UpdateWebhookInput): Promise<MerchantWebhook | null> {
+  async update(
+    id: string,
+    userId: string,
+    input: UpdateWebhookInput,
+  ): Promise<MerchantWebhook | null> {
     if (input.events) validateEvents(input.events);
 
     const fields: string[] = [];
     const params: unknown[] = [];
     let idx = 1;
 
-    if (input.url !== undefined)         { fields.push(`url = $${idx++}`);         params.push(input.url); }
-    if (input.secret !== undefined)      { fields.push(`secret = $${idx++}`);      params.push(encrypt(input.secret)); }
-    if (input.description !== undefined) { fields.push(`description = $${idx++}`); params.push(input.description); }
-    if (input.events !== undefined)      { fields.push(`events = $${idx++}`);      params.push(input.events); }
-    if (input.isActive !== undefined)    { fields.push(`is_active = $${idx++}`);   params.push(input.isActive); }
+    if (input.url !== undefined) {
+      fields.push(`url = $${idx++}`);
+      params.push(input.url);
+    }
+    if (input.secret !== undefined) {
+      fields.push(`secret = $${idx++}`);
+      params.push(encrypt(input.secret));
+    }
+    if (input.description !== undefined) {
+      fields.push(`description = $${idx++}`);
+      params.push(input.description);
+    }
+    if (input.events !== undefined) {
+      fields.push(`events = $${idx++}`);
+      params.push(input.events);
+    }
+    if (input.isActive !== undefined) {
+      fields.push(`is_active = $${idx++}`);
+      params.push(input.isActive);
+    }
 
     if (fields.length === 0) return this.findById(id, userId);
 

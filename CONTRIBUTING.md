@@ -17,14 +17,15 @@ Thank you for your interest in contributing! This document provides guidelines a
 8. Commit: `git commit -m "Add your feature"`
 9. Push: `git push origin feature/your-feature`
 10. Open a Pull Request:
-    *   Go to your forked repository on GitHub.
-    *   Click the "Compare & pull request" button.
-    *   Ensure the base repository is `sublime247/mobile-money` (main branch) and the head repository is your fork (your feature branch).
-    *   Provide a clear and descriptive title and description for your Pull Request. Include:
-        *   A summary of the changes.
-        *   Why these changes were made (e.g., fixing a bug, adding a feature).
-        *   References to any related issues (e.g., `Fixes #123`).
-        *   Instructions on how to test your changes.
+    - Go to your forked repository on GitHub.
+    - Click the "Compare & pull request" button.
+    - Ensure the base repository is `sublime247/mobile-money` (main branch) and the head repository is your fork (your feature branch).
+    - Provide a clear and descriptive title and description for your Pull Request. Include:
+      - A summary of the changes.
+      - Why these changes were made (e.g., fixing a bug, adding a feature).
+      - References to any related issues (e.g., `Fixes #123`).
+      - Instructions on how to test your changes.
+
 - **Report bugs** via GitHub Issues
 - **Suggest features** or enhancements
 - **Improve documentation**
@@ -102,6 +103,7 @@ footer (optional)
 ```
 
 **Types:**
+
 - `feat`: New feature
 - `fix`: Bug fix
 - `docs`: Documentation changes
@@ -111,6 +113,7 @@ footer (optional)
 - `chore`: Maintenance tasks
 
 **Examples:**
+
 ```
 feat(transactions): add support for Orange Money
 fix(auth): resolve JWT expiration issue
@@ -137,11 +140,13 @@ npm run test:pact
 ```
 
 **Test Coverage Requirements:**
+
 - Minimum 70% coverage for all metrics
 - New features must have >80% coverage
 - Bug fixes must include regression tests
 
 **Contract Testing:**
+
 - Provider API changes require updating Pact contracts
 - Run `npm run test:pact` to verify contracts
 - See `tests/pact/README.md` for details
@@ -176,6 +181,7 @@ A clear description of what the bug is.
 
 **To Reproduce**
 Steps to reproduce the behavior:
+
 1. Go to '...'
 2. Click on '...'
 3. See error
@@ -187,12 +193,14 @@ What you expected to happen.
 What actually happened.
 
 **Environment:**
+
 - OS: [e.g., Ubuntu 22.04]
 - Node.js version: [e.g., 20.10.0]
 - PostgreSQL version: [e.g., 16.1]
 - Redis version: [e.g., 7.2]
 
 **Additional context**
+
 - Error messages
 - Logs
 - Screenshots
@@ -259,21 +267,26 @@ git push origin feature/your-feature-name
 
 ```markdown
 ## Description
+
 Brief description of changes.
 
 ## Type of Change
+
 - [ ] Bug fix (non-breaking change fixing an issue)
 - [ ] New feature (non-breaking change adding functionality)
 - [ ] Breaking change (fix or feature causing existing functionality to change)
 - [ ] Documentation update
 
 ## Related Issue
+
 Fixes #(issue number)
 
 ## How Has This Been Tested?
+
 Describe the tests you ran.
 
 ## Checklist
+
 - [ ] My code follows the project's style guidelines
 - [ ] I have performed a self-review
 - [ ] I have commented my code where necessary
@@ -284,6 +297,7 @@ Describe the tests you ran.
 - [ ] Any dependent changes have been merged
 
 ## Screenshots (if applicable)
+
 Add screenshots to help explain your changes.
 ```
 
@@ -297,6 +311,7 @@ Add screenshots to help explain your changes.
 ### 6. Merge
 
 Once approved:
+
 - Maintainers will merge your PR
 - Your branch will be deleted
 - Changes will be included in the next release
@@ -318,6 +333,7 @@ Once approved:
 New to the project? Look for issues labeled `good first issue`:
 
 **Examples:**
+
 - Add input validation
 - Improve error messages
 - Add unit tests
@@ -331,8 +347,8 @@ When a CI run fails on the `main` branch, an automatic Slack notification is sen
 
 ### Required secret
 
-| Secret name | Where to get it |
-|---|---|
+| Secret name         | Where to get it                                                                                                                                                                                         |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `SLACK_WEBHOOK_URL` | Create an [Incoming Webhook](https://api.slack.com/messaging/webhooks) in your Slack workspace, then add the generated URL as a repository secret under **Settings → Secrets and variables → Actions**. |
 
 Notifications fire **only** on `main` branch failures. Passing builds and pull-request runs are never notified.
@@ -344,6 +360,7 @@ Notifications fire **only** on `main` branch failures. Passing builds and pull-r
 **DO NOT** open public issues for security vulnerabilities.
 
 Instead, email security@yourdomain.com with:
+
 - Description of the vulnerability
 - Steps to reproduce
 - Potential impact
@@ -373,17 +390,17 @@ We'll respond within 48 hours.
 ### Test Structure
 
 ```typescript
-describe('Feature Name', () => {
-  describe('Method/Function Name', () => {
-    it('should do something specific', () => {
+describe("Feature Name", () => {
+  describe("Method/Function Name", () => {
+    it("should do something specific", () => {
       // Arrange
-      const input = 'test';
-      
+      const input = "test";
+
       // Act
       const result = functionUnderTest(input);
-      
+
       // Assert
-      expect(result).toBe('expected');
+      expect(result).toBe("expected");
     });
   });
 });
@@ -408,9 +425,9 @@ When adding user-facing text:
 
 ```typescript
 // Use i18n
-import { t } from '../utils/i18n';
+import { t } from "../utils/i18n";
 
-const message = t('errors.transaction.insufficient_funds');
+const message = t("errors.transaction.insufficient_funds");
 ```
 
 Add translations to `src/locales/`.
@@ -438,6 +455,7 @@ Add translations to `src/locales/`.
   4. Never reuse the same credential
 
 **Other Security Requirements:**
+
 - Validate all user input (use libraries like `zod` for schema validation)
 - Use parameterized queries (never string concatenation for SQL)
 - Implement rate limiting on all public endpoints
@@ -460,6 +478,7 @@ npm install --save-dev package-name
 ```
 
 **Guidelines:**
+
 - Justify new dependencies
 - Check for security vulnerabilities
 - Prefer well-maintained packages
@@ -509,6 +528,7 @@ Maintainers handle releases:
 ## 🙏 Recognition
 
 Contributors are recognized in:
+
 - README.md contributors section
 - Release notes
 - GitHub contributors page
@@ -522,6 +542,7 @@ We pledge to make participation in our project a harassment-free experience for 
 ### Our Standards
 
 **Positive behavior:**
+
 - Using welcoming and inclusive language
 - Being respectful of differing viewpoints
 - Gracefully accepting constructive criticism
@@ -529,6 +550,7 @@ We pledge to make participation in our project a harassment-free experience for 
 - Showing empathy towards others
 
 **Unacceptable behavior:**
+
 - Trolling, insulting/derogatory comments
 - Public or private harassment
 - Publishing others' private information
@@ -537,6 +559,7 @@ We pledge to make participation in our project a harassment-free experience for 
 ### Enforcement
 
 Violations may result in:
+
 1. Warning
 2. Temporary ban
 3. Permanent ban

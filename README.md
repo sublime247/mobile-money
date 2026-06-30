@@ -43,6 +43,7 @@ The sender and recipient interact with their familiar mobile money apps. Stellar
 ## 🚀 Key Features
 
 ### Core Platform
+
 - **Mobile Money Integration** — MTN MoMo, Airtel Money, Orange Money with circuit breaker, failover, and batch payouts
 - **Stellar Blockchain** — XLM, USDC, and custom asset support via Stellar SDK + Horizon API
 - **Dual API** — REST (40+ endpoints) and GraphQL (queries, mutations, and real-time subscriptions)
@@ -51,6 +52,7 @@ The sender and recipient interact with their familiar mobile money apps. Stellar
 - **Provider Mock Server** — Full mock for MTN + Airtel APIs for local development without real credentials
 
 ### Security & Compliance
+
 - **Multi-tier KYC** — Tiered identity verification with document upload (S3) and third-party verification (Entrust)
 - **AML Monitoring** — Auto-flagging of suspicious patterns (large transactions, rapid structuring, daily totals)
 - **Travel Rule Compliance** — FATF travel rule data collection for qualifying transactions
@@ -62,6 +64,7 @@ The sender and recipient interact with their familiar mobile money apps. Stellar
 - **PII Encryption** — AES-256-GCM encryption for sensitive data at rest
 
 ### Financial Engine
+
 - **Dynamic Fee Engine** — Configurable fee strategies with VIP tiers (25KB+ fee strategy engine)
 - **Transaction Limits** — Provider-specific and KYC-tiered daily limits
 - **Vault System** — Secure fund storage with distributed locking
@@ -71,6 +74,7 @@ The sender and recipient interact with their familiar mobile money apps. Stellar
 - **Reconciliation** — Provider reconciliation workflows
 
 ### Stellar Protocol (SEP) Support
+
 - **SEP-06** — Deposit and Withdrawal API
 - **SEP-10** — Web Authentication (challenge-response)
 - **SEP-12** — KYC API (customer CRUD with document upload)
@@ -78,10 +82,12 @@ The sender and recipient interact with their familiar mobile money apps. Stellar
 - **SEP-31** — Cross-Border Payments (send-side anchor)
 
 ### Smart Contracts
+
 - **Escrow Contract** — Soroban smart contract for escrowed payments (Rust)
 - **HTLC Contract** — Hash Time-Locked Contract for atomic cross-chain swaps (Rust)
 
 ### Notifications
+
 - **Email** — SendGrid integration
 - **SMS** — Twilio integration
 - **Push Notifications** — Firebase Cloud Messaging
@@ -89,6 +95,7 @@ The sender and recipient interact with their familiar mobile money apps. Stellar
 - **PagerDuty** — Operational alerting
 
 ### Developer Tools
+
 - **CLI** (`momo-cli`) — Admin tool for auth, status checks, and transaction retries
 - **Kotlin SDK** — Auto-generated from OpenAPI spec
 - **Postman Collections** — Pre-built API collections for testing
@@ -156,16 +163,19 @@ npm run seed  # Optional: development data
 ### 4. Run
 
 **Development (with provider mocks):**
+
 ```bash
 npm run docker:dev   # Starts app + Postgres + Redis + provider mock server
 ```
 
 **Development (standalone):**
+
 ```bash
 npm run dev
 ```
 
 **Production:**
+
 ```bash
 npm run build
 npm start
@@ -185,6 +195,7 @@ npm run test:mutation       # Mutation testing (Stryker)
 ```
 
 **Test infrastructure includes:**
+
 - Unit & integration tests across controllers, services, middleware, routes
 - Pact consumer-driven contract tests for provider APIs
 - Playwright end-to-end tests
@@ -199,6 +210,7 @@ npm run test:mutation       # Mutation testing (Stryker)
 ### Interactive Docs (Development Only)
 
 Start the dev server and visit:
+
 - **Swagger UI**: `http://localhost:3000/docs`
 - **OpenAPI JSON**: `http://localhost:3000/docs/openapi.json`
 
@@ -280,11 +292,9 @@ query {
 
 # Create a deposit
 mutation {
-  createDeposit(input: {
-    amount: "10000"
-    phoneNumber: "+237670000000"
-    provider: MTN
-  }) {
+  createDeposit(
+    input: { amount: "10000", phoneNumber: "+237670000000", provider: MTN }
+  ) {
     id
     status
   }
@@ -303,11 +313,13 @@ subscription {
 ### Authentication
 
 Most endpoints require JWT:
+
 ```bash
 Authorization: Bearer <token>
 ```
 
 Admin operations use API key:
+
 ```bash
 X-API-Key: <key>
 ```
@@ -316,30 +328,31 @@ X-API-Key: <key>
 
 ### Transaction Limits
 
-| Type | Limit | Purpose |
-|------|-------|---------|
-| Minimum | 100 XAF | Prevent spam |
+| Type    | Limit         | Purpose          |
+| ------- | ------------- | ---------------- |
+| Minimum | 100 XAF       | Prevent spam     |
 | Maximum | 1,000,000 XAF | Fraud prevention |
 
 ### KYC-Based Daily Limits
 
-| Level | Daily Limit | Requirements |
-|-------|-------------|--------------|
-| Unverified | 10,000 XAF | Email only |
-| Basic | 100,000 XAF | ID + selfie |
-| Full | 1,000,000 XAF | Proof of address + video |
+| Level      | Daily Limit   | Requirements             |
+| ---------- | ------------- | ------------------------ |
+| Unverified | 10,000 XAF    | Email only               |
+| Basic      | 100,000 XAF   | ID + selfie              |
+| Full       | 1,000,000 XAF | Proof of address + video |
 
 ### Provider Limits
 
-| Provider | Min | Max |
-|----------|-----|-----|
-| MTN | 100 XAF | 500,000 XAF |
-| Airtel | 100 XAF | 1,000,000 XAF |
-| Orange | 500 XAF | 750,000 XAF |
+| Provider | Min     | Max           |
+| -------- | ------- | ------------- |
+| MTN      | 100 XAF | 500,000 XAF   |
+| Airtel   | 100 XAF | 1,000,000 XAF |
+| Orange   | 500 XAF | 750,000 XAF   |
 
 ### AML Monitoring
 
 Auto-flagging of suspicious transactions:
+
 - Single transaction > 1,000,000 XAF
 - 24h total > 5,000,000 XAF
 - Rapid structuring (3+ mixed in 15 min)
@@ -349,19 +362,19 @@ Auto-flagging of suspicious transactions:
 
 ### Tech Stack
 
-| Layer | Technology |
-|-------|------------|
-| **API Server** | Node.js, TypeScript, Express, Apollo Server (GraphQL) |
-| **Database** | PostgreSQL 16 (primary + read replicas), Redis 7 (cache, sessions, pub/sub) |
-| **Blockchain** | Stellar SDK, Horizon API, Soroban smart contracts (Rust) |
-| **Job Processing** | BullMQ workers, node-cron scheduled jobs |
+| Layer                        | Technology                                                                       |
+| ---------------------------- | -------------------------------------------------------------------------------- |
+| **API Server**               | Node.js, TypeScript, Express, Apollo Server (GraphQL)                            |
+| **Database**                 | PostgreSQL 16 (primary + read replicas), Redis 7 (cache, sessions, pub/sub)      |
+| **Blockchain**               | Stellar SDK, Horizon API, Soroban smart contracts (Rust)                         |
+| **Job Processing**           | BullMQ workers, node-cron scheduled jobs                                         |
 | **Ingest (High-throughput)** | Go service (fasthttp) + Node.js service (Fastify), Redis Streams, NATS JetStream |
-| **Security** | Helmet, bcrypt, JWT, Speakeasy (TOTP), Casbin (RBAC), AES-256-GCM (PII) |
-| **Monitoring** | Prometheus, Datadog (dd-trace), Sentry, PagerDuty |
-| **Logging** | Structured JSON → Loki/Grafana (primary), ELK stack (secondary) |
-| **Edge** | Cloudflare Workers (`.well-known` caching) |
-| **Infrastructure** | Docker, Kubernetes (+ Helm, KEDA), Terraform (AWS) |
-| **CI/CD** | GitHub Actions (lint, test, build, deploy, rollback) |
+| **Security**                 | Helmet, bcrypt, JWT, Speakeasy (TOTP), Casbin (RBAC), AES-256-GCM (PII)          |
+| **Monitoring**               | Prometheus, Datadog (dd-trace), Sentry, PagerDuty                                |
+| **Logging**                  | Structured JSON → Loki/Grafana (primary), ELK stack (secondary)                  |
+| **Edge**                     | Cloudflare Workers (`.well-known` caching)                                       |
+| **Infrastructure**           | Docker, Kubernetes (+ Helm, KEDA), Terraform (AWS)                               |
+| **CI/CD**                    | GitHub Actions (lint, test, build, deploy, rollback)                             |
 
 ### Project Structure
 
@@ -433,6 +446,7 @@ HTTP method-based routing: `GET`/`HEAD`/`OPTIONS` → read replicas (round-robin
 ### Metrics
 
 Prometheus metrics at `/metrics`:
+
 - Transaction counts by status and provider
 - API response times (histograms)
 - Queue depths and job latencies
@@ -450,6 +464,7 @@ curl http://localhost:3000/health/lb  # Load balancer
 ### Logging
 
 Dual logging stack:
+
 - **Primary**: Structured JSON → Loki → Grafana (included in docker-compose)
 - **Secondary**: Filebeat → Logstash → Elasticsearch → Kibana (ELK stack configs in `elk/`)
 
@@ -477,6 +492,7 @@ The production Dockerfile uses a multi-stage build targeting < 200MB image size 
 ### Kubernetes
 
 Pre-built manifests in `k8s/` include:
+
 - **Deployment** — 3 replicas, rolling updates, startup/liveness/readiness probes, resource limits
 - **Worker Deployment** — Separate BullMQ worker pods
 - **KEDA Autoscaling** — Scale workers based on queue depth (threshold: 20 jobs, 1–20 replicas)
@@ -491,6 +507,7 @@ kubectl apply -f k8s/
 ### Terraform (AWS)
 
 Full AWS infrastructure in `terraform/`:
+
 - VPC with public/private subnets across multiple AZs
 - ECS Fargate for containerized deployment
 - RDS PostgreSQL with Multi-AZ (production)
@@ -508,6 +525,7 @@ terraform apply
 ### CI/CD
 
 GitHub Actions pipeline (`.github/workflows/ci.yml`):
+
 1. **Security** — npm audit, Snyk vulnerability scanning
 2. **Test** — Lint, Jest (with Postgres + Redis services), Playwright E2E, Codecov upload
 3. **Build** — TypeScript compilation
@@ -521,23 +539,27 @@ See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for detailed error codes and soluti
 ### Common Issues
 
 **Database connection fails:**
+
 ```bash
 pg_isready -h localhost -p 5432
 # Verify DATABASE_URL format
 ```
 
 **Redis connection fails:**
+
 ```bash
 redis-cli ping  # Should return PONG
 ```
 
 **Stellar transactions fail:**
+
 ```bash
 echo $STELLAR_NETWORK  # Should be 'testnet' or 'mainnet'
 curl https://horizon-testnet.stellar.org
 ```
 
 **Provider mock not working:**
+
 ```bash
 # Use docker-compose.dev.yml which includes the mock server
 docker compose -f docker-compose.dev.yml up
@@ -546,6 +568,7 @@ docker compose -f docker-compose.dev.yml up
 ## 🚨 Error Handling
 
 Standardized error codes organized by category:
+
 - **4000-4099**: Validation (HTTP 400)
 - **4010-4019**: Authentication (HTTP 401)
 - **4030-4039**: Authorization (HTTP 403)

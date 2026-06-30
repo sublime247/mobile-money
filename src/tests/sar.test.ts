@@ -18,7 +18,7 @@ describe("SAR Generation", () => {
     phone_number: "237670000000",
     kyc_level: "verified",
   };
-  
+
   const mockTransactions = [
     {
       id: "tx-1",
@@ -41,9 +41,11 @@ describe("SAR Generation", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    
+
     (userService.getUserById as jest.Mock).mockResolvedValue(mockUser);
-    (TransactionModel.prototype.findCompletedByUserSince as jest.Mock).mockResolvedValue(mockTransactions);
+    (
+      TransactionModel.prototype.findCompletedByUserSince as jest.Mock
+    ).mockResolvedValue(mockTransactions);
     (amlService.getAlerts as jest.Mock).mockReturnValue(mockAlerts);
     (s3Upload.uploadToS3 as jest.Mock).mockResolvedValue({
       success: true,
@@ -57,16 +59,20 @@ describe("SAR Generation", () => {
     expect(result).toHaveProperty("pdfUrl");
     expect(result).toHaveProperty("xmlUrl");
     expect(userService.getUserById).toHaveBeenCalledWith(mockUserId);
-    
+
     // Expect 2 calls to uploadToS3 (one for PDF, one for XML)
     expect(s3Upload.uploadToS3).toHaveBeenCalledTimes(2);
 
-    const pdfUpload = (s3Upload.uploadToS3 as jest.Mock).mock.calls.find(c => c[0].file.originalname.endsWith(".pdf.enc"));
-    const xmlUpload = (s3Upload.uploadToS3 as jest.Mock).mock.calls.find(c => c[0].file.originalname.endsWith(".xml.enc"));
+    const pdfUpload = (s3Upload.uploadToS3 as jest.Mock).mock.calls.find((c) =>
+      c[0].file.originalname.endsWith(".pdf.enc"),
+    );
+    const xmlUpload = (s3Upload.uploadToS3 as jest.Mock).mock.calls.find((c) =>
+      c[0].file.originalname.endsWith(".xml.enc"),
+    );
 
     expect(pdfUpload).toBeDefined();
     expect(xmlUpload).toBeDefined();
-    
+
     // Verify PDF encryption
     const pdfBuffer = pdfUpload[0].file.buffer;
     const decryptedPdf = decryptBuffer(pdfBuffer);
@@ -76,7 +82,9 @@ describe("SAR Generation", () => {
     const xmlBuffer = xmlUpload[0].file.buffer;
     const decryptedXml = decryptBuffer(xmlBuffer);
     expect(decryptedXml.toString("utf8")).toContain('<?xml version="1.0"');
-    expect(decryptedXml.toString("utf8")).toContain('<SuspiciousActivityReport>');
+    expect(decryptedXml.toString("utf8")).toContain(
+      "<SuspiciousActivityReport>",
+    );
   });
 
   it("should throw error if user not found", async () => {
@@ -89,7 +97,9 @@ describe("SAR Generation", () => {
       success: false,
       error: "S3 down",
     });
-    await expect(generateSAR(mockUserId)).rejects.toThrow("Failed to store SAR");
+    await expect(generateSAR(mockUserId)).rejects.toThrow(
+      "Failed to store SAR",
+    );
   });
 });
 
@@ -100,10 +110,14 @@ function decryptBuffer(encryptedBuffer: Buffer): Buffer {
   const iv = encryptedBuffer.slice(0, IV_LENGTH);
   const authTag = encryptedBuffer.slice(IV_LENGTH, IV_LENGTH + AUTH_TAG_LENGTH);
   const encryptedData = encryptedBuffer.slice(IV_LENGTH + AUTH_TAG_LENGTH);
-  
-  const secretKey = crypto.scryptSync(DB_ENCRYPTION_KEY || "test-key", "sar-salt", 32);
+
+  const secretKey = crypto.scryptSync(
+    DB_ENCRYPTION_KEY || "test-key",
+    "sar-salt",
+    32,
+  );
   const decipher = crypto.createDecipheriv("aes-256-gcm", secretKey, iv);
   decipher.setAuthTag(authTag);
-  
+
   return Buffer.concat([decipher.update(encryptedData), decipher.final()]);
 }

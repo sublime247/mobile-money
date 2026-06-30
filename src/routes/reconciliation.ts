@@ -12,7 +12,7 @@ router.post(
   "/upload",
   // authenticateAdmin,
   upload.single("file"),
-  controller.uploadAndReconcile
+  controller.uploadAndReconcile,
 );
 
 // List reports

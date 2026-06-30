@@ -5,6 +5,7 @@ This guide explains how to properly handle secrets, credentials, and sensitive i
 ## 🚫 What NOT to Do
 
 **NEVER** commit the following to the repository:
+
 - API keys or tokens
 - Database passwords
 - SSH keys or private keys
@@ -18,6 +19,7 @@ This guide explains how to properly handle secrets, credentials, and sensitive i
 - Any hardcoded credentials
 
 **NEVER**, even in a private commit:
+
 - Hardcode secrets in source files
 - Include secrets in `src/` directory
 - Add credentials to configuration files that are version-controlled
@@ -30,6 +32,7 @@ This guide explains how to properly handle secrets, credentials, and sensitive i
 **Always use environment variables for sensitive information.**
 
 #### Example - Correct Way:
+
 ```typescript
 // ❌ WRONG - Hardcoded secret
 const dbPassword = "super_secret_password_123";
@@ -46,7 +49,9 @@ const db = new Database(dbPassword);
 ### 2. Environment Variable Files
 
 #### Local Development
+
 Create a `.env` file (DO NOT commit this file):
+
 ```bash
 # .env (local development only - NOT in version control)
 DATABASE_URL=postgresql://user:pass@localhost:5432/dbname
@@ -56,11 +61,14 @@ STELLAR_ISSUER_SECRET=SBX...
 ```
 
 #### Staging/Production
+
 Use GitHub Actions Secrets or your deployment platform's secret management:
+
 - Never store in `.env.example` with real values
 - Use `.env.example` as a template only
 
 #### .env.example Template:
+
 ```bash
 # .env.example - Template ONLY, do not store real secrets
 DATABASE_URL=postgresql://user:pass@localhost:5432/dbname
@@ -72,13 +80,14 @@ STELLAR_ISSUER_SECRET=replace-with-your-key
 ### 3. Configuration Validation
 
 Validate required secrets on application startup:
+
 ```typescript
 // src/config.ts
 export function validateSecrets(): void {
   const requiredSecrets = [
-    'DATABASE_PASSWORD',
-    'JWT_SECRET',
-    'STELLAR_ISSUER_SECRET',
+    "DATABASE_PASSWORD",
+    "JWT_SECRET",
+    "STELLAR_ISSUER_SECRET",
   ];
 
   for (const secret of requiredSecrets) {
@@ -92,12 +101,14 @@ export function validateSecrets(): void {
 ### 4. GitHub Actions Secrets
 
 For CI/CD pipelines, use GitHub Actions Secrets:
+
 1. Go to repository Settings → Secrets and variables → Actions
 2. Click "New repository secret"
 3. Add secret name and value
 4. Reference in workflows: `${{ secrets.SECRET_NAME }}`
 
 Example workflow:
+
 ```yaml
 env:
   DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -113,16 +124,19 @@ This project uses **GitGuardian** via GitHub Actions to automatically scan for a
 Install and run ggshield locally before committing:
 
 #### 1. Install Pre-commit Framework:
+
 ```bash
 pip install pre-commit
 ```
 
 #### 2. Install Git Hooks:
+
 ```bash
 pre-commit install
 ```
 
 #### 3. Manually Scan:
+
 ```bash
 # Scan entire repository
 ggshield secret scan repo .
@@ -139,6 +153,7 @@ ggshield secret scan pre-commit
 GitGuardian runs automatically on all PRs via `.github/workflows/gitguardian.yml`.
 
 **What to do if a secret is detected:**
+
 1. ❌ **DO NOT** merge the PR
 2. 🔑 **Revoke** the compromised secret immediately (reset password, rotate API key, etc.)
 3. 🗑️ **Remove** the secret from the PR
@@ -170,6 +185,7 @@ git push --force-with-lease origin feature/your-feature
 ```
 
 ### Option 3: Use BFG Repo-Cleaner (for sensitive data removal)
+
 ```bash
 # Install: https://rtyley.github.io/bfg-repo-cleaner/
 # Remove a string:
@@ -202,6 +218,7 @@ git push --force-with-lease
 ## 📞 Support
 
 If you accidentally commit a secret:
+
 1. **Immediately** notify the team via private email or Slack
 2. **Revoke** the compromised secret in all systems
 3. **Report** the incident to the security team

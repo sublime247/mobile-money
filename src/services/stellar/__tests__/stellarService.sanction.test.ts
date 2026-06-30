@@ -2,7 +2,7 @@ import { StellarService } from "../stellarService";
 import { sanctionService, SanctionScreeningError } from "../../sanctionService";
 
 jest.mock("../../sanctionService", () => ({
-  sanctionService: { 
+  sanctionService: {
     checkParties: jest.fn(),
     checkPartiesByAddress: jest.fn(),
   },
@@ -14,7 +14,9 @@ jest.mock("../../sanctionService", () => ({
       public score: number,
       public source: string,
     ) {
-      super(`Sanction screening blocked: ${party} "${screenedName}" matched "${matchedEntity}"`);
+      super(
+        `Sanction screening blocked: ${party} "${screenedName}" matched "${matchedEntity}"`,
+      );
       this.name = "SanctionScreeningError";
     }
   },
@@ -49,12 +51,19 @@ describe("StellarService.sendPayment — sanction gate", () => {
   it("calls checkParties with sender and receiver names before submitting", async () => {
     (sanctionService.checkParties as jest.Mock).mockResolvedValue(undefined);
     await service.sendPayment("GDEST...", "100", "Alice Clean", "Bob Safe");
-    expect(sanctionService.checkParties).toHaveBeenCalledWith("Alice Clean", "Bob Safe");
+    expect(sanctionService.checkParties).toHaveBeenCalledWith(
+      "Alice Clean",
+      "Bob Safe",
+    );
   });
 
   it("throws SanctionScreeningError and does NOT submit when sender is sanctioned", async () => {
     const err = new (SanctionScreeningError as any)(
-      "sender", "Osama bin Laden", "Osama bin Laden", 1.0, "UN",
+      "sender",
+      "Osama bin Laden",
+      "Osama bin Laden",
+      1.0,
+      "UN",
     );
     (sanctionService.checkParties as jest.Mock).mockRejectedValue(err);
 
@@ -65,7 +74,11 @@ describe("StellarService.sendPayment — sanction gate", () => {
 
   it("throws SanctionScreeningError and does NOT submit when receiver is sanctioned", async () => {
     const err = new (SanctionScreeningError as any)(
-      "receiver", "Global Arms Ltd", "Global Arms Ltd", 0.95, "OFAC",
+      "receiver",
+      "Global Arms Ltd",
+      "Global Arms Ltd",
+      0.95,
+      "OFAC",
     );
     (sanctionService.checkParties as jest.Mock).mockRejectedValue(err);
 
@@ -82,10 +95,17 @@ describe("StellarService.sendPayment — sanction gate", () => {
   describe("Muxed Account Support (SEP-23)", () => {
     it("should resolve muxed address to base address before sending payment", async () => {
       (sanctionService.checkParties as jest.Mock).mockResolvedValue(undefined);
-      (sanctionService.checkPartiesByAddress as jest.Mock).mockResolvedValue(undefined);
+      (sanctionService.checkPartiesByAddress as jest.Mock).mockResolvedValue(
+        undefined,
+      );
 
-      await service.sendPayment("MDEST...MUXED", "100", "Alice Clean", "Bob Safe");
-      
+      await service.sendPayment(
+        "MDEST...MUXED",
+        "100",
+        "Alice Clean",
+        "Bob Safe",
+      );
+
       // Should attempt to resolve the muxed address
       expect(sanctionService.checkPartiesByAddress).toHaveBeenCalled();
     });
@@ -99,13 +119,15 @@ describe("StellarService.sendPayment — sanction gate", () => {
       });
 
       await expect(
-        service.sendPayment("INVALID_M_ADDRESS", "100", "Alice", "Bob")
+        service.sendPayment("INVALID_M_ADDRESS", "100", "Alice", "Bob"),
       ).rejects.toThrow("Invalid destination address");
     });
 
     it("should handle address-based sanctions screening for muxed accounts", async () => {
       (sanctionService.checkParties as jest.Mock).mockResolvedValue(undefined);
-      (sanctionService.checkPartiesByAddress as jest.Mock).mockResolvedValue(undefined);
+      (sanctionService.checkPartiesByAddress as jest.Mock).mockResolvedValue(
+        undefined,
+      );
 
       const muxedAddress = "MDEST...MUXEDACCOUNT123456789ABCDEFGHIJKLMNOPQRS";
       await service.sendPayment(muxedAddress, "100", "Alice Clean", "Bob Safe");
@@ -117,12 +139,18 @@ describe("StellarService.sendPayment — sanction gate", () => {
     it("should throw SanctionScreeningError if address-based screening fails", async () => {
       (sanctionService.checkParties as jest.Mock).mockResolvedValue(undefined);
       const err = new (SanctionScreeningError as any)(
-        "receiver", "GDEST...", "Global Arms Ltd", 0.95, "OFAC",
+        "receiver",
+        "GDEST...",
+        "Global Arms Ltd",
+        0.95,
+        "OFAC",
       );
-      (sanctionService.checkPartiesByAddress as jest.Mock).mockRejectedValue(err);
+      (sanctionService.checkPartiesByAddress as jest.Mock).mockRejectedValue(
+        err,
+      );
 
       await expect(
-        service.sendPayment("GDEST...", "100", "Alice Clean", "Bob Safe")
+        service.sendPayment("GDEST...", "100", "Alice Clean", "Bob Safe"),
       ).rejects.toThrow("Sanction screening blocked");
     });
   });

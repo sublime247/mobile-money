@@ -132,9 +132,7 @@ export class SmsPortalSimulator {
     });
   }
 
-  private async withPage<T>(
-    fn: (page: Page) => Promise<T>,
-  ): Promise<T> {
+  private async withPage<T>(fn: (page: Page) => Promise<T>): Promise<T> {
     let browser: Browser | null = null;
     let context: BrowserContext | null = null;
 
@@ -182,10 +180,9 @@ export class SmsPortalSimulator {
     logger.info("SmsPortalSimulator: Logging in");
 
     const session = await this.withPage(async (page) => {
-      await page.goto(
-        `${this.config.portalUrl}${this.config.loginPath}`,
-        { waitUntil: "networkidle" },
-      );
+      await page.goto(`${this.config.portalUrl}${this.config.loginPath}`, {
+        waitUntil: "networkidle",
+      });
       await this.handleCaptchaIfPresent(page);
 
       await page.fill(this.config.usernameSelector, this.config.username);
@@ -195,7 +192,10 @@ export class SmsPortalSimulator {
       await page.click(this.config.submitSelector);
 
       try {
-        await page.waitForNavigation({ waitUntil: "networkidle", timeout: this.config.navigationTimeoutMs });
+        await page.waitForNavigation({
+          waitUntil: "networkidle",
+          timeout: this.config.navigationTimeoutMs,
+        });
       } catch {
         // Navigation may not happen if the page updates in-place
         await page.waitForLoadState("networkidle");
@@ -211,12 +211,16 @@ export class SmsPortalSimulator {
         const errorEl = await page.$(this.config.errorIndicatorSelector);
         if (errorEl) {
           const errorText = await errorEl.textContent();
-          throw new Error(`SMS portal login failed: ${errorText ?? "unknown error"}`);
+          throw new Error(
+            `SMS portal login failed: ${errorText ?? "unknown error"}`,
+          );
         }
       }
 
       if (loginFailed) {
-        throw new Error("SMS portal login failed — still on login page after submit");
+        throw new Error(
+          "SMS portal login failed — still on login page after submit",
+        );
       }
 
       const cookies = await page.context().cookies();
@@ -255,7 +259,9 @@ export class SmsPortalSimulator {
         async (page) => {
           // Check if already logged in by looking for a known element
           if (this.config.successIndicatorSelector) {
-            const indicator = await page.$(this.config.successIndicatorSelector);
+            const indicator = await page.$(
+              this.config.successIndicatorSelector,
+            );
             if (indicator) {
               // Session is still valid — just update cookie timestamps
               const cookies = await page.context().cookies();
@@ -324,14 +330,20 @@ export class SmsPortalSimulator {
     if (this.destroyed) return;
     if (this.refreshTimer) clearTimeout(this.refreshTimer);
 
-    const delay = Math.max(1000, this.config.sessionTtlMs - this.config.refreshSkewMs);
+    const delay = Math.max(
+      1000,
+      this.config.sessionTtlMs - this.config.refreshSkewMs,
+    );
 
     this.refreshTimer = setTimeout(async () => {
       if (this.destroyed) return;
       try {
         await this.refreshSession();
       } catch (err: any) {
-        logger.error({ err: err.message }, "SmsPortalSimulator: Scheduled refresh failed");
+        logger.error(
+          { err: err.message },
+          "SmsPortalSimulator: Scheduled refresh failed",
+        );
       }
     }, delay);
 
@@ -344,22 +356,11 @@ export class SmsPortalSimulator {
     overrides: Partial<SmsPortalSimulatorConfig>,
   ): SmsPortalSimulatorConfig {
     return {
-      portalUrl:
-        overrides.portalUrl ??
-        process.env.SMS_PORTAL_URL ??
-        "",
+      portalUrl: overrides.portalUrl ?? process.env.SMS_PORTAL_URL ?? "",
       loginPath:
-        overrides.loginPath ??
-        process.env.SMS_PORTAL_LOGIN_PATH ??
-        "/login",
-      username:
-        overrides.username ??
-        process.env.SMS_PORTAL_USERNAME ??
-        "",
-      password:
-        overrides.password ??
-        process.env.SMS_PORTAL_PASSWORD ??
-        "",
+        overrides.loginPath ?? process.env.SMS_PORTAL_LOGIN_PATH ?? "/login",
+      username: overrides.username ?? process.env.SMS_PORTAL_USERNAME ?? "",
+      password: overrides.password ?? process.env.SMS_PORTAL_PASSWORD ?? "",
       usernameSelector:
         overrides.usernameSelector ??
         process.env.SMS_PORTAL_USERNAME_SELECTOR ??
@@ -395,8 +396,7 @@ export class SmsPortalSimulator {
           DEFAULTS.navigationTimeoutMs,
       ),
       headless:
-        overrides.headless ??
-        process.env.SMS_PORTAL_HEADLESS !== "false",
+        overrides.headless ?? process.env.SMS_PORTAL_HEADLESS !== "false",
       viewportWidth: Number(
         overrides.viewportWidth ??
           process.env.SMS_PORTAL_VIEWPORT_WIDTH ??
@@ -412,15 +412,12 @@ export class SmsPortalSimulator {
         process.env.SMS_PORTAL_USER_AGENT ??
         DEFAULTS.userAgent,
       captchaSelector:
-        overrides.captchaSelector ??
-        process.env.SMS_PORTAL_CAPTCHA_SELECTOR,
+        overrides.captchaSelector ?? process.env.SMS_PORTAL_CAPTCHA_SELECTOR,
       captchaSolver: overrides.captchaSolver,
       sessionStorePath:
-        overrides.sessionStorePath ??
-        process.env.SMS_PORTAL_SESSION_STORE_PATH,
+        overrides.sessionStorePath ?? process.env.SMS_PORTAL_SESSION_STORE_PATH,
       encryptionKey:
-        overrides.encryptionKey ??
-        process.env.SMS_PORTAL_ENCRYPTION_KEY,
+        overrides.encryptionKey ?? process.env.SMS_PORTAL_ENCRYPTION_KEY,
       successIndicatorSelector:
         overrides.successIndicatorSelector ??
         process.env.SMS_PORTAL_SUCCESS_INDICATOR_SELECTOR,

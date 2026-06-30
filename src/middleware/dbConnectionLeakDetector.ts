@@ -95,7 +95,11 @@ export interface LeakDetectorOptions {
 
 export function trackConnectionCheckout(
   client: PoolClient,
-  options?: LeakDetectorOptions & { endpoint?: string; method?: string; requestId?: string },
+  options?: LeakDetectorOptions & {
+    endpoint?: string;
+    method?: string;
+    requestId?: string;
+  },
 ): void {
   const error = new Error("Connection checkout tracker");
   const stack =
@@ -152,7 +156,8 @@ function checkForUnreturnedConnections(endpoint: string, req: Request): void {
         heldForMs: Date.now() - conn.checkedOutAt,
         checkoutStack: conn.checkoutStack,
         requestId: req.headers["x-request-id"] as string | undefined,
-        message: "Database connection still checked out after request completed",
+        message:
+          "Database connection still checked out after request completed",
       });
     });
   }
@@ -177,7 +182,8 @@ export function dbConnectionLeakDetector(
           heldForMs: Date.now() - conn.checkedOutAt,
           checkoutStack: conn.checkoutStack,
           requestId: req.headers["x-request-id"] as string | undefined,
-          message: "Database connection leak detected - connection not returned",
+          message:
+            "Database connection leak detected - connection not returned",
         });
       });
     }

@@ -2,18 +2,18 @@ import { Request, Response, NextFunction } from "express";
 
 /**
  * HTTP method-based database routing middleware.
- * 
+ *
  * Routes database queries based on HTTP method:
  * - GET/HEAD requests → Replica pool (read-only)
  * - POST/PUT/PATCH/DELETE requests → Primary pool (critical writes)
- * 
+ *
  * This middleware ensures that read-only GET requests are routed to replica
  * instances to balance load and reduce pressure on the primary database,
  * while all write operations are routed to the primary for data consistency.
- * 
+ *
  * Usage: Add this middleware early in your Express stack:
  *   app.use(readReplicaRoutingMiddleware);
- * 
+ *
  * The middleware attaches metadata to the request object that services
  * and data access layers can use to select the appropriate database pool.
  */
@@ -39,7 +39,7 @@ export function readReplicaRoutingMiddleware(
 ): void {
   // Determine if this request should use replica pool based on HTTP method
   const useReplicaPool = isReadOperation(req.method);
-  
+
   // Attach routing context to request
   req.dbRouting = {
     useReplicaPool,
@@ -48,8 +48,13 @@ export function readReplicaRoutingMiddleware(
   };
 
   // Log routing decision in development
-  if (process.env.NODE_ENV === "development" && process.env.DEBUG_DB_ROUTING === "true") {
-    console.log(`[DB Routing] ${req.method} ${req.path} → ${useReplicaPool ? "REPLICA" : "PRIMARY"}`);
+  if (
+    process.env.NODE_ENV === "development" &&
+    process.env.DEBUG_DB_ROUTING === "true"
+  ) {
+    console.log(
+      `[DB Routing] ${req.method} ${req.path} → ${useReplicaPool ? "REPLICA" : "PRIMARY"}`,
+    );
   }
 
   next();

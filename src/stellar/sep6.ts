@@ -6,8 +6,10 @@ import { Pool } from "pg";
 import { Sep12Service, Sep12CustomerStatus } from "./sep12";
 
 const getSep6Config = () => ({
-  transferServer: process.env.STELLAR_TRANSFER_SERVER || "https://api.mobilemoney.com",
-  anchorStellarAccount: process.env.STELLAR_ISSUER_ACCOUNT || "G_YOUR_ANCHOR_ACCOUNT",
+  transferServer:
+    process.env.STELLAR_TRANSFER_SERVER || "https://api.mobilemoney.com",
+  anchorStellarAccount:
+    process.env.STELLAR_ISSUER_ACCOUNT || "G_YOUR_ANCHOR_ACCOUNT",
   assets: {
     XLM: {
       asset_code: "XLM",
@@ -46,7 +48,10 @@ export const createSep6Router = (db: Pool): Router => {
           min_amount: asset.min_amount,
           max_amount: asset.max_amount,
           fields: {
-            email_address: { description: "Email address for receipt", optional: true }
+            email_address: {
+              description: "Email address for receipt",
+              optional: true,
+            },
             // TODO: Add SEP-9 fields if KYC is supported directly here
           },
         };
@@ -87,7 +92,9 @@ export const createSep6Router = (db: Pool): Router => {
       const { asset_code, account, memo, memo_type, email_address } = req.query;
 
       if (!asset_code || !account) {
-        return res.status(400).json({ error: "asset_code and account are required" });
+        return res
+          .status(400)
+          .json({ error: "asset_code and account are required" });
       }
 
       if (!StrKey.isValidEd25519PublicKey(account as string)) {
@@ -97,15 +104,21 @@ export const createSep6Router = (db: Pool): Router => {
       const customer = await sep12Service.getCustomer(
         account as string,
         memo as string,
-        memo_type as string
+        memo_type as string,
       );
 
       if (customer.status === Sep12CustomerStatus.NEEDS_INFO) {
-        return res.status(403).json({ type: "non_interactive_customer_info_needed" });
+        return res
+          .status(403)
+          .json({ type: "non_interactive_customer_info_needed" });
       } else if (customer.status === Sep12CustomerStatus.PROCESSING) {
-        return res.status(403).json({ type: "customer_info_status", status: "pending" });
+        return res
+          .status(403)
+          .json({ type: "customer_info_status", status: "pending" });
       } else if (customer.status === Sep12CustomerStatus.REJECTED) {
-        return res.status(403).json({ type: "customer_info_status", status: "denied" });
+        return res
+          .status(403)
+          .json({ type: "customer_info_status", status: "denied" });
       }
 
       const transactionId = uuidv4();
@@ -124,8 +137,8 @@ export const createSep6Router = (db: Pool): Router => {
         id: transactionId,
         fee_fixed,
         extra_info: {
-          message: "Transfers typically take 1-2 business days."
-        }
+          message: "Transfers typically take 1-2 business days.",
+        },
       });
     } catch (error: any) {
       logger.error("[SEP-6 Deposit Error]:", error);
@@ -143,7 +156,9 @@ export const createSep6Router = (db: Pool): Router => {
       const config = getSep6Config();
 
       if (!asset_code || !type || !dest) {
-        return res.status(400).json({ error: "asset_code, type, and dest are required" });
+        return res
+          .status(400)
+          .json({ error: "asset_code, type, and dest are required" });
       }
 
       if (account && !StrKey.isValidEd25519PublicKey(account as string)) {
@@ -154,18 +169,26 @@ export const createSep6Router = (db: Pool): Router => {
         const customer = await sep12Service.getCustomer(
           account as string,
           req.query.memo as string,
-          req.query.memo_type as string
+          req.query.memo_type as string,
         );
 
         if (customer.status === Sep12CustomerStatus.NEEDS_INFO) {
-          return res.status(403).json({ type: "non_interactive_customer_info_needed" });
+          return res
+            .status(403)
+            .json({ type: "non_interactive_customer_info_needed" });
         } else if (customer.status === Sep12CustomerStatus.PROCESSING) {
-          return res.status(403).json({ type: "customer_info_status", status: "pending" });
+          return res
+            .status(403)
+            .json({ type: "customer_info_status", status: "pending" });
         } else if (customer.status === Sep12CustomerStatus.REJECTED) {
-          return res.status(403).json({ type: "customer_info_status", status: "denied" });
+          return res
+            .status(403)
+            .json({ type: "customer_info_status", status: "denied" });
         }
       } else {
-        return res.status(403).json({ type: "non_interactive_customer_info_needed" });
+        return res
+          .status(403)
+          .json({ type: "non_interactive_customer_info_needed" });
       }
 
       const transactionId = uuidv4();

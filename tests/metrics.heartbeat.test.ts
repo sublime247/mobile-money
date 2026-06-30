@@ -1,6 +1,6 @@
 /**
  * Integration test for System Heartbeat Metric
- * 
+ *
  * Verifies that:
  * - The heartbeat metric is exposed via the /metrics endpoint
  * - The metric is in proper Prometheus text format
@@ -147,7 +147,9 @@ describe("GET /metrics - System Heartbeat", () => {
       const res = await request(app).get("/metrics");
       expect(res.status).toBe(200);
       expect(res.text).toContain('system_heartbeat{service="mobile-money"}');
-      expect(res.text).toMatch(/system_heartbeat\{service="mobile-money"\}\s+1/);
+      expect(res.text).toMatch(
+        /system_heartbeat\{service="mobile-money"\}\s+1/,
+      );
     }
   });
 });

@@ -24,9 +24,7 @@ describe("Datadog Tracer initialisation", () => {
   }
 
   function graphqlConfig(useMock: jest.Mock) {
-    return useMock.mock.calls.find(
-      ([name]: string) => name === "graphql",
-    )?.[1];
+    return useMock.mock.calls.find(([name]: string) => name === "graphql")?.[1];
   }
 
   it("calls tracer.init with env from NODE_ENV", () => {

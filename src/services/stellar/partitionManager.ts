@@ -24,7 +24,10 @@ export class PartitionManager {
         `[PartitionManager] Successfully ensured transactions partitions exist for next ${monthsAhead} months.`,
       );
     } catch (error) {
-      logger.error("[PartitionManager] Failed to create future partitions. Ensure the PL/pgSQL function exists.", error);
+      logger.error(
+        "[PartitionManager] Failed to create future partitions. Ensure the PL/pgSQL function exists.",
+        error,
+      );
     }
   }
 

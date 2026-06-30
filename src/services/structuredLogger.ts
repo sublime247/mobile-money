@@ -111,7 +111,9 @@ function serializeError(
 
 function serializeUnknown(value: unknown): unknown {
   if (value instanceof Error) {
-    return serializeError(value as Error & { code?: string | number; [key: string]: unknown });
+    return serializeError(
+      value as Error & { code?: string | number; [key: string]: unknown },
+    );
   }
 
   if (Array.isArray(value)) {
@@ -196,7 +198,10 @@ function buildContext(args: unknown[]): unknown {
 }
 
 function isRollingLogMirrorEnabled(): boolean {
-  return SERVICE_ENVIRONMENT !== "production" && DEFAULT_LOG_FILE_PATH !== "/dev/null";
+  return (
+    SERVICE_ENVIRONMENT !== "production" &&
+    DEFAULT_LOG_FILE_PATH !== "/dev/null"
+  );
 }
 
 function getLogDateKey(date = new Date()): string {
@@ -242,7 +247,11 @@ function pruneOldCompressedShards(): void {
 
   try {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-      if (!entry.isFile() || !entry.name.startsWith(prefix) || !entry.name.endsWith(suffix)) {
+      if (
+        !entry.isFile() ||
+        !entry.name.startsWith(prefix) ||
+        !entry.name.endsWith(suffix)
+      ) {
         continue;
       }
 
@@ -258,7 +267,9 @@ function pruneOldCompressedShards(): void {
       }
 
       const ageMs =
-        fileDate !== null ? now - fileDate : now - fs.statSync(fullPath).mtimeMs;
+        fileDate !== null
+          ? now - fileDate
+          : now - fs.statSync(fullPath).mtimeMs;
 
       if (ageMs > retentionMs) {
         fs.unlinkSync(fullPath);

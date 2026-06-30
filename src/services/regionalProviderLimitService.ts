@@ -40,7 +40,7 @@ export class RegionalProviderLimitService {
   ): Promise<RegionalProviderLimit | null> {
     const cacheKey = `regional_limit_${providerName.toLowerCase()}_${countryCode.toUpperCase()}`;
     const cached = this.cache.get<RegionalProviderLimit>(cacheKey);
-    
+
     if (cached) {
       return cached;
     }
@@ -63,7 +63,7 @@ export class RegionalProviderLimitService {
     ]);
 
     const limit = result.rows[0] || null;
-    
+
     if (limit) {
       this.cache.set(cacheKey, limit);
     }
@@ -80,7 +80,7 @@ export class RegionalProviderLimitService {
   ): Promise<RegionalProviderLimit | null> {
     const cacheKey = `regional_limit_${providerName.toLowerCase()}_region_${regionCode.toLowerCase()}`;
     const cached = this.cache.get<RegionalProviderLimit>(cacheKey);
-    
+
     if (cached) {
       return cached;
     }
@@ -103,7 +103,7 @@ export class RegionalProviderLimitService {
     ]);
 
     const limit = result.rows[0] || null;
-    
+
     if (limit) {
       this.cache.set(cacheKey, limit);
     }
@@ -120,20 +120,23 @@ export class RegionalProviderLimitService {
     regionCode?: string,
   ): Promise<RegionalLimitCheckResult> {
     // Try country-specific limit first
-    let regionalLimit = countryCode 
+    let regionalLimit = countryCode
       ? await this.getRegionalLimit(providerName, countryCode)
       : null;
 
     // Fallback to region-specific limit
     if (!regionalLimit && regionCode) {
-      regionalLimit = await this.getRegionalLimitByRegion(providerName, regionCode);
+      regionalLimit = await this.getRegionalLimitByRegion(
+        providerName,
+        regionCode,
+      );
     }
 
     if (regionalLimit) {
       return {
         hasRegionalLimit: true,
-        dailyLimit: parseFloat(regionalLimit.daily_limit_xaf),
-        perTransactionLimit: parseFloat(regionalLimit.per_transaction_limit_xaf),
+        dailyLimit: regionalLimit.daily_limit_xaf,
+        perTransactionLimit: regionalLimit.per_transaction_limit_xaf,
         regionalLimit,
       };
     }
@@ -154,7 +157,7 @@ export class RegionalProviderLimitService {
     countryCode: string,
     dailyLimitXaf: number,
     perTransactionLimitXaf: number,
-    currency: string = 'XAF',
+    currency: string = "XAF",
     effectiveDate?: Date,
     expiryDate?: Date,
   ): Promise<RegionalProviderLimit> {
@@ -229,7 +232,7 @@ export class RegionalProviderLimitService {
   ): Promise<RegionalProviderLimit[]> {
     const cacheKey = `regional_limits_provider_${providerName.toLowerCase()}`;
     const cached = this.cache.get<RegionalProviderLimit[]>(cacheKey);
-    
+
     if (cached) {
       return cached;
     }
@@ -245,7 +248,7 @@ export class RegionalProviderLimitService {
     `;
 
     const result = await pool.query(query, [providerName.toLowerCase()]);
-    
+
     this.cache.set(cacheKey, result.rows);
     return result.rows;
   }

@@ -77,11 +77,13 @@ curl -H "X-API-Key: $MOMO_API_KEY" \
 ## 6. Interpreting the Dashboard
 
 ### Health Status
+
 - 🟢 ✓ HEALTHY — System fully operational
 - 🟡 ⚠ DEGRADED — Minor issues, monitor closely
 - 🔴 ✗ UNHEALTHY — Critical issues, needs attention
 
 ### Queue Metrics
+
 - **Total Jobs** — All queued transactions
 - **Pending** — Waiting to process
 - **Active** — Currently processing
@@ -89,11 +91,13 @@ curl -H "X-API-Key: $MOMO_API_KEY" \
 - **DLQ** — Dead letter queue (manual intervention needed)
 
 ### Success Rate Colors
+
 - 🟢 Green ≥95% — Excellent
 - 🟡 Yellow 80-95% — Good, but monitor
 - 🔴 Red <80% — Urgent attention needed
 
 ### Provider Failure Rate
+
 - 🟢 <5% — Operating normally
 - 🟡 5-10% — Degraded performance
 - 🔴 >10% — Major issues
@@ -101,6 +105,7 @@ curl -H "X-API-Key: $MOMO_API_KEY" \
 ## 7. Troubleshooting
 
 **Dashboard won't load?**
+
 ```bash
 # Check API key and URL
 curl -H "X-API-Key: $MOMO_API_KEY" \
@@ -111,11 +116,13 @@ momo-cli auth check
 ```
 
 **Shows UNHEALTHY status?**
+
 - Check backend logs
 - Verify database/Redis connectivity
 - Restart services if needed
 
 **JSON export is empty?**
+
 - CLI falls back if primary endpoint fails
 - Check individual endpoints:
   ```bash
@@ -127,6 +134,7 @@ momo-cli auth check
 ## 8. Advanced Usage
 
 ### Export metrics for integration
+
 ```bash
 # Send to monitoring system
 curl -X POST https://monitoring.service \
@@ -139,6 +147,7 @@ momo-cli dashboard:export | \
 ```
 
 ### Monitor specific metrics
+
 ```bash
 # Alert if queue is too deep
 while true; do
@@ -152,6 +161,7 @@ done
 ```
 
 ### Create a dashboard service
+
 ```bash
 # Run dashboard in background
 nohup momo-cli dashboard:live > dashboard.log 2>&1 &
@@ -172,6 +182,7 @@ Restart=always
 ---
 
 **Need help?**
+
 - Check logs: `momo-cli --help`
 - See troubleshooting: `DASHBOARD.md#troubleshooting`
 - Report issues: GitHub Issues

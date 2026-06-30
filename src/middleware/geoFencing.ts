@@ -89,7 +89,9 @@ export function geoFencingMiddleware(
   if (!geo || !geo.country) {
     // Unable to determine location - fail closed in production
     if (process.env.NODE_ENV === "production") {
-      console.warn(`[GEOFENCE] Unable to determine location for IP: ${clientIp}`);
+      console.warn(
+        `[GEOFENCE] Unable to determine location for IP: ${clientIp}`,
+      );
       res.status(403).json({
         error: "Forbidden",
         message: "Unable to verify geographic location",

@@ -39,12 +39,14 @@ Upload a KYC document to S3 storage.
 **Content-Type**: `multipart/form-data`
 
 **Form Fields**:
+
 - `document` (file, required): The document file to upload
 - `applicant_id` (string, required): The KYC applicant ID
 - `document_type` (string, optional): Type of document (e.g., "passport", "driving_license", "national_identity_card", "residence_permit")
 - `document_side` (string, optional): Side of document ("front" or "back")
 
 **Example Request (cURL)**:
+
 ```bash
 curl -X POST http://localhost:3000/api/kyc/documents/upload \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
@@ -55,25 +57,27 @@ curl -X POST http://localhost:3000/api/kyc/documents/upload \
 ```
 
 **Example Request (JavaScript/Fetch)**:
+
 ```javascript
 const formData = new FormData();
-formData.append('document', fileInput.files[0]);
-formData.append('applicant_id', 'abc123');
-formData.append('document_type', 'passport');
-formData.append('document_side', 'front');
+formData.append("document", fileInput.files[0]);
+formData.append("applicant_id", "abc123");
+formData.append("document_type", "passport");
+formData.append("document_side", "front");
 
-const response = await fetch('http://localhost:3000/api/kyc/documents/upload', {
-  method: 'POST',
+const response = await fetch("http://localhost:3000/api/kyc/documents/upload", {
+  method: "POST",
   headers: {
-    'Authorization': `Bearer ${token}`
+    Authorization: `Bearer ${token}`,
   },
-  body: formData
+  body: formData,
 });
 
 const result = await response.json();
 ```
 
 **Success Response (201 Created)**:
+
 ```json
 {
   "success": true,
@@ -89,6 +93,7 @@ const result = await response.json();
 **Error Responses**:
 
 **400 Bad Request** - No file uploaded:
+
 ```json
 {
   "error": "No file uploaded"
@@ -96,6 +101,7 @@ const result = await response.json();
 ```
 
 **400 Bad Request** - Invalid file type:
+
 ```json
 {
   "error": "Invalid file type. Allowed types: application/pdf, image/jpeg, image/png"
@@ -103,6 +109,7 @@ const result = await response.json();
 ```
 
 **400 Bad Request** - File too large:
+
 ```json
 {
   "error": "File size exceeds maximum limit of 5MB"
@@ -110,6 +117,7 @@ const result = await response.json();
 ```
 
 **401 Unauthorized** - Missing or invalid token:
+
 ```json
 {
   "error": "User not authenticated"
@@ -117,6 +125,7 @@ const result = await response.json();
 ```
 
 **403 Forbidden** - User doesn't own the applicant:
+
 ```json
 {
   "error": "Access denied"
@@ -124,6 +133,7 @@ const result = await response.json();
 ```
 
 **500 Internal Server Error** - Upload failed:
+
 ```json
 {
   "error": "File upload failed",
@@ -140,12 +150,14 @@ Retrieve all documents uploaded by the authenticated user.
 **Authentication**: Required (JWT Bearer token)
 
 **Example Request**:
+
 ```bash
 curl -X GET http://localhost:3000/api/kyc/documents \
   -H "Authorization: Bearer YOUR_JWT_TOKEN"
 ```
 
 **Success Response (200 OK)**:
+
 ```json
 {
   "success": true,
@@ -236,6 +248,7 @@ kyc-documents/
 ```
 
 Example:
+
 ```
 kyc-documents/2024/03/550e8400-e29b-41d4-a716-446655440000/passport-1711449000000-abc123def456.pdf
 ```
@@ -262,6 +275,7 @@ CREATE TABLE kyc_documents (
 ```
 
 **Columns**:
+
 - `id`: Unique document identifier
 - `user_id`: Reference to the user who uploaded the document
 - `applicant_id`: KYC applicant ID from the verification provider
@@ -309,6 +323,7 @@ For production environments, consider implementing virus scanning:
 ### Option 2: Third-Party Service
 
 Integrate with services like:
+
 - **VirusTotal API**: Scan files using multiple antivirus engines
 - **MetaDefender**: Cloud-based malware scanning
 - **Cloudmersive**: Virus scanning API
@@ -316,21 +331,27 @@ Integrate with services like:
 ### Implementation Example
 
 ```typescript
-import axios from 'axios';
+import axios from "axios";
 
-export const scanFileForVirus = async (fileBuffer: Buffer): Promise<boolean> => {
+export const scanFileForVirus = async (
+  fileBuffer: Buffer,
+): Promise<boolean> => {
   try {
-    const response = await axios.post('https://virus-scan-api.com/scan', {
-      file: fileBuffer.toString('base64'),
-    }, {
-      headers: {
-        'X-API-Key': process.env.VIRUS_SCAN_API_KEY,
+    const response = await axios.post(
+      "https://virus-scan-api.com/scan",
+      {
+        file: fileBuffer.toString("base64"),
       },
-    });
-    
+      {
+        headers: {
+          "X-API-Key": process.env.VIRUS_SCAN_API_KEY,
+        },
+      },
+    );
+
     return response.data.clean === true;
   } catch (error) {
-    console.error('Virus scan error:', error);
+    console.error("Virus scan error:", error);
     // Fail closed: reject file if scan fails
     return false;
   }
@@ -342,6 +363,7 @@ export const scanFileForVirus = async (fileBuffer: Buffer): Promise<boolean> => 
 ### Manual Testing
 
 1. **Test valid upload**:
+
 ```bash
 curl -X POST http://localhost:3000/api/kyc/documents/upload \
   -H "Authorization: Bearer YOUR_TOKEN" \
@@ -351,6 +373,7 @@ curl -X POST http://localhost:3000/api/kyc/documents/upload \
 ```
 
 2. **Test invalid file type**:
+
 ```bash
 curl -X POST http://localhost:3000/api/kyc/documents/upload \
   -H "Authorization: Bearer YOUR_TOKEN" \
@@ -359,6 +382,7 @@ curl -X POST http://localhost:3000/api/kyc/documents/upload \
 ```
 
 3. **Test file too large**:
+
 ```bash
 # Create a 6MB file
 dd if=/dev/zero of=large.pdf bs=1M count=6
@@ -374,32 +398,32 @@ curl -X POST http://localhost:3000/api/kyc/documents/upload \
 Create tests in `src/routes/__tests__/kycRoutes.test.ts`:
 
 ```typescript
-import request from 'supertest';
-import app from '../../index';
+import request from "supertest";
+import app from "../../index";
 
-describe('KYC Document Upload', () => {
-  it('should upload a valid PDF document', async () => {
+describe("KYC Document Upload", () => {
+  it("should upload a valid PDF document", async () => {
     const response = await request(app)
-      .post('/api/kyc/documents/upload')
-      .set('Authorization', `Bearer ${validToken}`)
-      .attach('document', 'test/fixtures/passport.pdf')
-      .field('applicant_id', 'test123')
-      .field('document_type', 'passport');
-    
+      .post("/api/kyc/documents/upload")
+      .set("Authorization", `Bearer ${validToken}`)
+      .attach("document", "test/fixtures/passport.pdf")
+      .field("applicant_id", "test123")
+      .field("document_type", "passport");
+
     expect(response.status).toBe(201);
     expect(response.body.success).toBe(true);
     expect(response.body.data.file_url).toBeDefined();
   });
-  
-  it('should reject invalid file type', async () => {
+
+  it("should reject invalid file type", async () => {
     const response = await request(app)
-      .post('/api/kyc/documents/upload')
-      .set('Authorization', `Bearer ${validToken}`)
-      .attach('document', 'test/fixtures/test.txt')
-      .field('applicant_id', 'test123');
-    
+      .post("/api/kyc/documents/upload")
+      .set("Authorization", `Bearer ${validToken}`)
+      .attach("document", "test/fixtures/test.txt")
+      .field("applicant_id", "test123");
+
     expect(response.status).toBe(400);
-    expect(response.body.error).toContain('Invalid file type');
+    expect(response.body.error).toContain("Invalid file type");
   });
 });
 ```

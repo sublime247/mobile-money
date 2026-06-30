@@ -1,16 +1,16 @@
-import { test, expect, request } from '@playwright/test';
-import app from '../../src/index';
-import type { Server } from 'http';
+import { test, expect, request } from "@playwright/test";
+import app from "../../src/index";
+import type { Server } from "http";
 
 let server: Server;
 const port = Number(process.env.E2E_PORT || 3000);
 const baseURL = process.env.E2E_BASE_URL || `http://127.0.0.1:${port}`;
 
 test.beforeAll(async () => {
-  process.env.NODE_ENV = 'test';
+  process.env.NODE_ENV = "test";
   server = app.listen(port);
   await new Promise<void>((resolve) => {
-    server.once('listening', () => resolve());
+    server.once("listening", () => resolve());
   });
 });
 
@@ -23,11 +23,11 @@ test.afterAll(async () => {
   });
 });
 
-test('login endpoint issues JWT and refresh token, /me returns permissions', async () => {
+test("login endpoint issues JWT and refresh token, /me returns permissions", async () => {
   const api = await request.newContext({ baseURL });
 
-  const loginResponse = await api.post('/api/auth/login', {
-    data: { phone_number: '+237777777777' },
+  const loginResponse = await api.post("/api/auth/login", {
+    data: { phone_number: "+237777777777" },
   });
 
   expect(loginResponse.ok()).toBeTruthy();
@@ -37,7 +37,7 @@ test('login endpoint issues JWT and refresh token, /me returns permissions', asy
   expect(loginBody.user).toBeTruthy();
   expect(loginBody.user.role).toBeTruthy();
 
-  const meResponse = await api.get('/api/auth/me', {
+  const meResponse = await api.get("/api/auth/me", {
     headers: {
       Authorization: `Bearer ${loginBody.token}`,
     },

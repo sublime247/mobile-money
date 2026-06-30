@@ -43,6 +43,6 @@ describe("calculateFee", () => {
     const result = await calculateFee(10000);
     expect(result.fee).toBe(150);
     expect(result.total).toBe(10150);
-    expect(result.configUsed).toBe('env_fallback');
+    expect(result.configUsed).toBe("env_fallback");
   });
 });

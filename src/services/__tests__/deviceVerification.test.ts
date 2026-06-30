@@ -1,4 +1,11 @@
-import { describe, it, expect, beforeEach, afterEach, jest } from "@jest/globals";
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  jest,
+} from "@jest/globals";
 import {
   checkDeviceVerification,
   generateVerificationOTP,
@@ -22,7 +29,11 @@ jest.mock("../../config/redis", () => ({
 
 describe("Device Verification Service", () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    const { redisClient } = require("../../config/redis");
+    redisClient.get.mockReset();
+    redisClient.set.mockReset();
+    redisClient.del.mockReset();
+    redisClient.incr.mockReset();
   });
 
   describe("checkDeviceVerification", () => {
@@ -31,7 +42,11 @@ describe("Device Verification Service", () => {
       redisClient.get.mockResolvedValue(null);
       redisClient.set.mockResolvedValue("OK");
 
-      const result = await checkDeviceVerification("user-123", "192.168.1.1", "fingerprint-abc");
+      const result = await checkDeviceVerification(
+        "user-123",
+        "192.168.1.1",
+        "fingerprint-abc",
+      );
 
       expect(result.requiresVerification).toBe(true);
       expect(result.verificationId).toBeDefined();
@@ -46,7 +61,11 @@ describe("Device Verification Service", () => {
         .mockResolvedValueOnce(null); // IP is new
       redisClient.set.mockResolvedValue("OK");
 
-      const result = await checkDeviceVerification("user-123", "192.168.1.1", "fingerprint-abc");
+      const result = await checkDeviceVerification(
+        "user-123",
+        "192.168.1.1",
+        "fingerprint-abc",
+      );
 
       expect(result.requiresVerification).toBe(true);
       expect(result.reason).toBe("new_ip");
@@ -57,7 +76,11 @@ describe("Device Verification Service", () => {
       const { redisClient } = require("../../config/redis");
       redisClient.get.mockResolvedValue("trusted");
 
-      const result = await checkDeviceVerification("user-123", "192.168.1.1", "fingerprint-abc");
+      const result = await checkDeviceVerification(
+        "user-123",
+        "192.168.1.1",
+        "fingerprint-abc",
+      );
 
       expect(result.requiresVerification).toBe(false);
       expect(result.verificationId).toBeUndefined();
@@ -67,7 +90,11 @@ describe("Device Verification Service", () => {
       const { redisClient } = require("../../config/redis");
       redisClient.get.mockRejectedValue(new Error("Redis error"));
 
-      const result = await checkDeviceVerification("user-123", "192.168.1.1", "fingerprint-abc");
+      const result = await checkDeviceVerification(
+        "user-123",
+        "192.168.1.1",
+        "fingerprint-abc",
+      );
 
       expect(result.requiresVerification).toBe(false);
     });
@@ -76,11 +103,13 @@ describe("Device Verification Service", () => {
   describe("generateVerificationOTP", () => {
     it("should generate 6-digit OTP", async () => {
       const { redisClient } = require("../../config/redis");
-      redisClient.get.mockResolvedValue(JSON.stringify({
-        userId: "user-123",
-        ipAddress: "192.168.1.1",
-        fingerprint: "fingerprint-abc",
-      }));
+      redisClient.get.mockResolvedValue(
+        JSON.stringify({
+          userId: "user-123",
+          ipAddress: "192.168.1.1",
+          fingerprint: "fingerprint-abc",
+        }),
+      );
       redisClient.set.mockResolvedValue("OK");
 
       const otp = await generateVerificationOTP("verification-id-123");
@@ -113,13 +142,15 @@ describe("Device Verification Service", () => {
     it("should verify correct OTP and trust device/IP", async () => {
       const { redisClient } = require("../../config/redis");
       redisClient.get
-        .mockResolvedValueOnce(JSON.stringify({
-          userId: "user-123",
-          ipAddress: "192.168.1.1",
-          fingerprint: "fingerprint-abc",
-        })) // verification data
         .mockResolvedValueOnce("0") // attempts
-        .mockResolvedValueOnce("123456"); // stored OTP
+        .mockResolvedValueOnce("123456") // stored OTP
+        .mockResolvedValueOnce(
+          JSON.stringify({
+            userId: "user-123",
+            ipAddress: "192.168.1.1",
+            fingerprint: "fingerprint-abc",
+          }),
+        ); // verification data
       redisClient.del.mockResolvedValue(1);
       redisClient.set.mockResolvedValue("OK");
 
@@ -133,13 +164,15 @@ describe("Device Verification Service", () => {
     it("should reject incorrect OTP", async () => {
       const { redisClient } = require("../../config/redis");
       redisClient.get
-        .mockResolvedValueOnce(JSON.stringify({
-          userId: "user-123",
-          ipAddress: "192.168.1.1",
-          fingerprint: "fingerprint-abc",
-        }))
-        .mockResolvedValueOnce("0")
-        .mockResolvedValueOnce("123456");
+        .mockResolvedValueOnce("0") // attempts
+        .mockResolvedValueOnce("123456") // stored OTP
+        .mockResolvedValueOnce(
+          JSON.stringify({
+            userId: "user-123",
+            ipAddress: "192.168.1.1",
+            fingerprint: "fingerprint-abc",
+          }),
+        ); // verification data
       redisClient.incr.mockResolvedValue(1);
 
       const result = await verifyOTP("verification-id-123", "000000");
@@ -151,30 +184,21 @@ describe("Device Verification Service", () => {
 
     it("should block after max attempts", async () => {
       const { redisClient } = require("../../config/redis");
-      redisClient.get
-        .mockResolvedValueOnce(JSON.stringify({
-          userId: "user-123",
-          ipAddress: "192.168.1.1",
-          fingerprint: "fingerprint-abc",
-        }))
-        .mockResolvedValueOnce("3"); // max attempts reached
+      redisClient.get.mockResolvedValueOnce("3"); // max attempts reached
       redisClient.del.mockResolvedValue(1);
 
       const result = await verifyOTP("verification-id-123", "123456");
 
       expect(result.success).toBe(false);
-      expect(result.message).toContain("Maximum verification attempts exceeded");
+      expect(result.message).toContain(
+        "Maximum verification attempts exceeded",
+      );
     });
 
     it("should handle expired OTP", async () => {
       const { redisClient } = require("../../config/redis");
       redisClient.get
-        .mockResolvedValueOnce(JSON.stringify({
-          userId: "user-123",
-          ipAddress: "192.168.1.1",
-          fingerprint: "fingerprint-abc",
-        }))
-        .mockResolvedValueOnce("0")
+        .mockResolvedValueOnce("0") // attempts
         .mockResolvedValueOnce(null); // OTP expired
       redisClient.del.mockResolvedValue(1);
 
@@ -195,7 +219,7 @@ describe("Device Verification Service", () => {
       expect(redisClient.set).toHaveBeenCalledWith(
         "user:user-123:pending_verification",
         "verification-id-123",
-        { EX: 600 }
+        { EX: 600 },
       );
     });
 
@@ -205,7 +229,9 @@ describe("Device Verification Service", () => {
 
       await clearVerificationPending("user-123");
 
-      expect(redisClient.del).toHaveBeenCalledWith("user:user-123:pending_verification");
+      expect(redisClient.del).toHaveBeenCalledWith(
+        "user:user-123:pending_verification",
+      );
     });
 
     it("should check if verification is pending", async () => {
@@ -215,7 +241,9 @@ describe("Device Verification Service", () => {
       const isPending = await isVerificationPending("user-123");
 
       expect(isPending).toBe(true);
-      expect(redisClient.get).toHaveBeenCalledWith("user:user-123:pending_verification");
+      expect(redisClient.get).toHaveBeenCalledWith(
+        "user:user-123:pending_verification",
+      );
     });
 
     it("should return false when verification is not pending", async () => {

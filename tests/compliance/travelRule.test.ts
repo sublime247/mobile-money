@@ -1,4 +1,8 @@
-import { TravelRuleService, TRAVEL_RULE_THRESHOLD_USD, TravelRuleInput } from "../../src/compliance/travelRule";
+import {
+  TravelRuleService,
+  TRAVEL_RULE_THRESHOLD_USD,
+  TravelRuleInput,
+} from "../../src/compliance/travelRule";
 
 // Mock the database pool
 jest.mock("../../src/config/database", () => ({
@@ -74,7 +78,10 @@ describe("TravelRuleService", () => {
   // ---------------------------------------------------------------------------
   describe("capture()", () => {
     it("inserts an encrypted record and returns it", async () => {
-      const fakeRow = { id: "rec-001", created_at: new Date("2026-04-23T10:00:00Z") };
+      const fakeRow = {
+        id: "rec-001",
+        created_at: new Date("2026-04-23T10:00:00Z"),
+      };
       mockQuery.mockResolvedValueOnce({ rows: [fakeRow] });
 
       const result = await service.capture(baseInput);
@@ -84,9 +91,9 @@ describe("TravelRuleService", () => {
       expect(sql).toContain("INSERT INTO travel_rule_records");
 
       // Encrypted values should be prefixed with "enc:"
-      expect(params[3]).toBe("enc:Alice Smith");   // sender_name
+      expect(params[3]).toBe("enc:Alice Smith"); // sender_name
       expect(params[4]).toBe("enc:+237670000001"); // sender_account
-      expect(params[8]).toBe("enc:Bob Jones");     // receiver_name
+      expect(params[8]).toBe("enc:Bob Jones"); // receiver_name
 
       expect(result.id).toBe("rec-001");
       expect(result.transactionId).toBe("tx-abc-123");
@@ -190,10 +197,12 @@ describe("TravelRuleService", () => {
 
     it("returns decrypted records and marks them exported", async () => {
       mockQuery
-        .mockResolvedValueOnce({ rows: mockRows })  // SELECT
-        .mockResolvedValueOnce({ rows: [] });        // UPDATE
+        .mockResolvedValueOnce({ rows: mockRows }) // SELECT
+        .mockResolvedValueOnce({ rows: [] }); // UPDATE
 
-      const results = await service.exportForCompliance({ exportedBy: "officer-1" });
+      const results = await service.exportForCompliance({
+        exportedBy: "officer-1",
+      });
 
       expect(results).toHaveLength(1);
       expect(results[0].sender.name).toBe("Export Sender");
@@ -209,7 +218,9 @@ describe("TravelRuleService", () => {
     it("skips the UPDATE when no records are found", async () => {
       mockQuery.mockResolvedValueOnce({ rows: [] });
 
-      const results = await service.exportForCompliance({ exportedBy: "officer-2" });
+      const results = await service.exportForCompliance({
+        exportedBy: "officer-2",
+      });
 
       expect(results).toHaveLength(0);
       expect(mockQuery).toHaveBeenCalledTimes(1); // only SELECT
@@ -220,7 +231,10 @@ describe("TravelRuleService", () => {
         .mockResolvedValueOnce({ rows: [] })
         .mockResolvedValueOnce({ rows: [] });
 
-      await service.exportForCompliance({ exportedBy: "officer-3", onlyUnexported: true });
+      await service.exportForCompliance({
+        exportedBy: "officer-3",
+        onlyUnexported: true,
+      });
 
       const [sql] = mockQuery.mock.calls[0];
       expect(sql).toContain("exported_at IS NULL");

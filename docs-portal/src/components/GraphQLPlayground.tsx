@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from "react";
 
 /**
  * Embeds the Apollo Sandbox (Explorer) via the CDN embed script.
@@ -9,7 +9,7 @@ import React, { useEffect, useRef, useState } from 'react';
  * staging Mobile Money GraphQL server.
  */
 
-const DEFAULT_ENDPOINT = 'http://localhost:4000/graphql';
+const DEFAULT_ENDPOINT = "http://localhost:4000/graphql";
 
 const DEFAULT_DOCUMENT = `# Welcome to the Mobile Money GraphQL Playground!
 # Try running one of these example queries:
@@ -97,24 +97,28 @@ export default function GraphQLPlayground(): React.JSX.Element {
     if (!containerRef.current) return;
 
     // Clear previous embed
-    containerRef.current.innerHTML = '';
+    containerRef.current.innerHTML = "";
     setLoaded(false);
 
     // Load the Apollo Sandbox embed script
-    const script = document.createElement('script');
-    script.src = 'https://embeddable-sandbox.cdn.apollographql.com/_latest/embeddable-sandbox.umd.production.min.js';
+    const script = document.createElement("script");
+    script.src =
+      "https://embeddable-sandbox.cdn.apollographql.com/_latest/embeddable-sandbox.umd.production.min.js";
     script.async = true;
     script.onload = () => {
       // @ts-expect-error — loaded from CDN script, not typed
       if (window.EmbeddedSandbox) {
         // @ts-expect-error — loaded from CDN script, not typed
         new window.EmbeddedSandbox({
-          target: '#graphql-playground-container',
+          target: "#graphql-playground-container",
           initialEndpoint: endpoint,
           initialState: {
             document: DEFAULT_DOCUMENT,
             displayOptions: {
-              theme: document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light',
+              theme:
+                document.documentElement.getAttribute("data-theme") === "dark"
+                  ? "dark"
+                  : "light",
             },
           },
           includeCookies: false,
@@ -151,20 +155,23 @@ export default function GraphQLPlayground(): React.JSX.Element {
           <button
             className="graphql-config-bar__toggle"
             onClick={() => setCollapsed(!collapsed)}
-            aria-label={collapsed ? 'Expand settings' : 'Collapse settings'}
+            aria-label={collapsed ? "Expand settings" : "Collapse settings"}
           >
-            {collapsed ? '▼ Show Settings' : '▲ Hide Settings'}
+            {collapsed ? "▼ Show Settings" : "▲ Hide Settings"}
           </button>
         </div>
 
         {!collapsed && (
           <div className="graphql-config-bar__body">
             <p className="graphql-config-bar__hint">
-              Point this to your running Mobile Money GraphQL server.
-              Default: <code>{DEFAULT_ENDPOINT}</code>
+              Point this to your running Mobile Money GraphQL server. Default:{" "}
+              <code>{DEFAULT_ENDPOINT}</code>
             </p>
             <div className="graphql-config-bar__controls">
-              <label htmlFor="graphql-endpoint-input" className="graphql-config-bar__label">
+              <label
+                htmlFor="graphql-endpoint-input"
+                className="graphql-config-bar__label"
+              >
                 Endpoint URL
               </label>
               <div className="graphql-config-bar__input-group">
@@ -175,7 +182,7 @@ export default function GraphQLPlayground(): React.JSX.Element {
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleEndpointChange();
+                    if (e.key === "Enter") handleEndpointChange();
                   }}
                   placeholder="http://localhost:4000/graphql"
                 />

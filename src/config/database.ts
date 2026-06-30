@@ -9,7 +9,9 @@ const DR_DATABASE_URL = process.env.DR_DATABASE_URL;
 const isDRMode = (): boolean => !!DR_DATABASE_URL;
 
 const productionSsl =
-  process.env.NODE_ENV === "production" ? { rejectUnauthorized: true } : undefined;
+  process.env.NODE_ENV === "production"
+    ? { rejectUnauthorized: true }
+    : undefined;
 
 // Configuration for slow query logging
 const SLOW_QUERY_THRESHOLD_MS = parseInt(
@@ -141,7 +143,9 @@ class SlowQueryPool extends Pool {
  * (INSERT, UPDATE, DELETE) and read operations when no replica is available.
  */
 export const pool = new Pool({
-  connectionString: IS_SANDBOX ? (SANDBOX_DATABASE_URL || DATABASE_URL) : DATABASE_URL,
+  connectionString: IS_SANDBOX
+    ? SANDBOX_DATABASE_URL || DATABASE_URL
+    : DATABASE_URL,
   max: 50,
   idleTimeoutMillis: 15000,
   connectionTimeoutMillis: 5000,
@@ -157,14 +161,14 @@ const originalPoolQuery = pool.query.bind(pool);
   const values = args[1];
   const startTime = process.hrtime.bigint();
   const queryString =
-    typeof queryConfig === "string" ? queryConfig : queryConfig?.text ?? "";
+    typeof queryConfig === "string" ? queryConfig : (queryConfig?.text ?? "");
   const queryParams =
     typeof queryConfig === "string" ? values : queryConfig?.values;
 
   try {
-    const result = await (originalPoolQuery as (...callArgs: any[]) => Promise<any>)(
-      ...args,
-    );
+    const result = await (
+      originalPoolQuery as (...callArgs: any[]) => Promise<any>
+    )(...args);
     const endTime = process.hrtime.bigint();
     const durationMs = Number(endTime - startTime) / 1e6;
     if (durationMs > SLOW_QUERY_THRESHOLD_MS) {
@@ -172,7 +176,10 @@ const originalPoolQuery = pool.query.bind(pool);
     }
 
     // PII Audit Interceptor
-    if (queryString.toUpperCase().includes("FROM USERS") || queryString.toUpperCase().includes("UPDATE USERS")) {
+    if (
+      queryString.toUpperCase().includes("FROM USERS") ||
+      queryString.toUpperCase().includes("UPDATE USERS")
+    ) {
       const isSelect = queryString.toUpperCase().startsWith("SELECT");
       const isUpdate = queryString.toUpperCase().startsWith("UPDATE");
 
@@ -181,22 +188,26 @@ const originalPoolQuery = pool.query.bind(pool);
         let targetId = "unknown";
         if (queryParams && queryParams.length > 0) {
           // Typically the first or last param in findById or UPDATE ... WHERE id = $X
-          targetId = queryParams[queryParams.length - 1]; 
+          targetId = queryParams[queryParams.length - 1];
         }
 
         // Trigger asynchronous audit logging
         // Note: Real admin context would be passed here in a production environment via AsyncLocalStorage or similar.
         // For this task, we log the access attempt to ensure visibility.
         setImmediate(() => {
-          auditService.logPIIAccess({
-            adminId: "system-admin", // Placeholder for actual admin context extraction
-            targetId: String(targetId),
-            resource: "users",
-            metadata: {
-              query: sanitizeQuery(queryString),
-              isUpdate,
-            }
-          }).catch(err => logger.error("[PII Audit Interceptor] Failed:", err));
+          auditService
+            .logPIIAccess({
+              adminId: "system-admin", // Placeholder for actual admin context extraction
+              targetId: String(targetId),
+              resource: "users",
+              metadata: {
+                query: sanitizeQuery(queryString),
+                isUpdate,
+              },
+            })
+            .catch((err) =>
+              logger.error("[PII Audit Interceptor] Failed:", err),
+            );
         });
       }
     }
@@ -224,11 +235,16 @@ const replicaUrls: string[] = process.env.READ_REPLICA_URL
   : [];
 
 const REPLICA_SYNC_LAG_THRESHOLD_SECONDS = (() => {
-  const threshold = parseFloat(process.env.REPLICA_SYNC_LAG_THRESHOLD_SECONDS || "5");
+  const threshold = parseFloat(
+    process.env.REPLICA_SYNC_LAG_THRESHOLD_SECONDS || "5",
+  );
   return Number.isFinite(threshold) ? threshold : 5;
 })();
 const REPLICA_LAG_MONITOR_INTERVAL_MS = (() => {
-  const interval = parseInt(process.env.REPLICA_LAG_MONITOR_INTERVAL_MS || "10000", 10);
+  const interval = parseInt(
+    process.env.REPLICA_LAG_MONITOR_INTERVAL_MS || "10000",
+    10,
+  );
   return Number.isFinite(interval) && interval > 0 ? interval : 10000;
 })();
 
@@ -305,7 +321,10 @@ async function refreshReplicaStatus(idx: number): Promise<void> {
     client?.release();
   }
 
-  const enabled = healthy && lagSeconds !== null && lagSeconds <= REPLICA_SYNC_LAG_THRESHOLD_SECONDS;
+  const enabled =
+    healthy &&
+    lagSeconds !== null &&
+    lagSeconds <= REPLICA_SYNC_LAG_THRESHOLD_SECONDS;
   replicaStatuses[idx] = { url, enabled, healthy, lagSeconds };
 
   dbReplicaLagSeconds.labels(url).set(lagSeconds ?? 0);
@@ -377,7 +396,12 @@ export async function queryWrite<T extends import("pg").QueryResultRow = any>(
  * Returns an array of status objects – useful for monitoring endpoints.
  */
 export async function checkReplicaHealth(): Promise<
-  { url: string; healthy: boolean; enabled: boolean; lagSeconds: number | null }[]
+  {
+    url: string;
+    healthy: boolean;
+    enabled: boolean;
+    lagSeconds: number | null;
+  }[]
 > {
   return Promise.all(
     replicaUrls.map(async (url, idx) => {
@@ -393,7 +417,9 @@ export async function checkReplicaHealth(): Promise<
             ELSE 0
           END AS lag_seconds
         `;
-        const result = await client.query<{ lag_seconds: number | null }>(query);
+        const result = await client.query<{ lag_seconds: number | null }>(
+          query,
+        );
         lagSeconds = result.rows?.[0]?.lag_seconds ?? null;
         healthy = true;
       } catch {
@@ -402,7 +428,10 @@ export async function checkReplicaHealth(): Promise<
         client?.release();
       }
 
-      const enabled = healthy && lagSeconds !== null && lagSeconds <= REPLICA_SYNC_LAG_THRESHOLD_SECONDS;
+      const enabled =
+        healthy &&
+        lagSeconds !== null &&
+        lagSeconds <= REPLICA_SYNC_LAG_THRESHOLD_SECONDS;
       return { url, healthy, enabled, lagSeconds };
     }),
   );
@@ -441,7 +470,9 @@ export async function getPgBouncerStats(): Promise<{
   try {
     // Query PgBouncer stats database (special admin database)
     const pgbouncerPool = new Pool({
-      connectionString: process.env.PGBOUNCER_ADMIN_URL || "postgresql://user:password@localhost:6432/pgbouncer",
+      connectionString:
+        process.env.PGBOUNCER_ADMIN_URL ||
+        "postgresql://user:password@localhost:6432/pgbouncer",
     });
 
     const result = await pgbouncerPool.query(
@@ -454,8 +485,10 @@ export async function getPgBouncerStats(): Promise<{
     return {
       activeConnections: parseInt(row.sv_active || 0),
       idleConnections: parseInt(row.sv_idle || 0),
-      totalConnections: (parseInt(row.sv_active || 0) + parseInt(row.sv_idle || 0)),
-      clientConnections: (parseInt(row.cl_active || 0) + parseInt(row.cl_idle || 0)),
+      totalConnections:
+        parseInt(row.sv_active || 0) + parseInt(row.sv_idle || 0),
+      clientConnections:
+        parseInt(row.cl_active || 0) + parseInt(row.cl_idle || 0),
     };
   } catch (err) {
     console.warn("Failed to get PgBouncer stats:", err);
@@ -470,15 +503,15 @@ export async function getPgBouncerStats(): Promise<{
 
 /**
  * Context-aware query function that respects HTTP method-based routing decisions.
- * 
+ *
  * This function is designed to work with the readReplicaRoutingMiddleware.
  * It routes queries based on:
  * 1. HTTP method context (if provided) - GET requests go to replica
  * 2. SQL query type (fallback) - SELECT queries go to replica
- * 
+ *
  * Usage in route handlers:
  *   const result = await queryWithContext(req, "SELECT * FROM users", []);
- * 
+ *
  * @param req - Express Request object (with dbRouting context from middleware)
  * @param text - SQL query string
  * @param params - Query parameters
@@ -503,9 +536,9 @@ export async function queryWithContext<
 /**
  * Batch query execution with request context.
  * Executes multiple queries with proper pool routing based on HTTP method.
- * 
+ *
  * All read operations (GET) use replica, all writes use primary.
- * 
+ *
  * @param req - Express Request object
  * @param queries - Array of { text, params } query configurations
  * @returns Array of query results

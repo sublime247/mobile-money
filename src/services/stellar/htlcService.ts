@@ -50,7 +50,9 @@ export class HtlcService {
   }
 
   private bytesNToScVal(hex: string) {
-    return StellarSdk.nativeToScVal(Buffer.from(hex, "hex"), { type: "bytesN" });
+    return StellarSdk.nativeToScVal(Buffer.from(hex, "hex"), {
+      type: "bytesN",
+    });
   }
 
   private u64ToScVal(value: bigint | number) {
@@ -88,7 +90,7 @@ export class HtlcService {
           this.u64ToScVal(params.timelock),
           this.addressArrayToScVal(approvedSigners),
           this.u32ToScVal(requiredSignatures),
-        )
+        ),
       )
       .setTimeout(30)
       .build();
@@ -110,7 +112,7 @@ export class HtlcService {
           "claim",
           this.bytesNToScVal(params.preimage),
           this.addressArrayToScVal(signers),
-        )
+        ),
       )
       .setTimeout(30)
       .build();
@@ -118,17 +120,19 @@ export class HtlcService {
     return tx;
   }
 
-  async buildRefundTx(params: HtlcRefundParams): Promise<StellarSdk.Transaction> {
-    const refunderAccount = await this.server.loadAccount(params.refunderAddress);
+  async buildRefundTx(
+    params: HtlcRefundParams,
+  ): Promise<StellarSdk.Transaction> {
+    const refunderAccount = await this.server.loadAccount(
+      params.refunderAddress,
+    );
 
     const contract = new StellarSdk.Contract(params.contractId);
     const tx = new StellarSdk.TransactionBuilder(refunderAccount, {
       fee: StellarSdk.BASE_FEE,
       networkPassphrase: this.networkPassphrase,
     })
-      .addOperation(
-        contract.call("refund")
-      )
+      .addOperation(contract.call("refund"))
       .setTimeout(30)
       .build();
 
@@ -143,7 +147,7 @@ export class HtlcService {
       throw new Error("Unable to fetch HTLC state from contract");
     }
 
-    const state = response as {
+    const state = response as unknown as {
       sender: string;
       receiver: string;
       token: string;

@@ -18,8 +18,9 @@ export async function requireDeviceVerification(
   res: Response,
   next: NextFunction,
 ): Promise<void> {
-  const userId = req.userId || (req as any).user?.id || (req as any).jwtUser?.userId;
-  
+  const userId =
+    req.userId || (req as any).user?.id || (req as any).jwtUser?.userId;
+
   if (!userId) {
     // If no user ID, let the auth middleware handle it
     return next();
@@ -45,7 +46,7 @@ export async function requireDeviceVerification(
     if (error && typeof error === "object" && "statusCode" in error) {
       throw error;
     }
-    
+
     // For other errors, log and allow access to prevent blocking
     console.error("Error checking device verification status:", error);
     next();
@@ -60,8 +61,9 @@ export async function optionalDeviceVerification(
   res: Response,
   next: NextFunction,
 ): Promise<void> {
-  const userId = req.userId || (req as any).user?.id || (req as any).jwtUser?.userId;
-  
+  const userId =
+    req.userId || (req as any).user?.id || (req as any).jwtUser?.userId;
+
   if (!userId) {
     return next();
   }

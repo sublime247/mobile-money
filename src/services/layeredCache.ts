@@ -4,7 +4,7 @@ import { redisClient } from "../config/redis";
 
 /**
  * Layered Cache Implementation (L1: Memory, L2: Redis)
- * 
+ *
  * Performance Goals:
  * - Sub-millisecond response for L1 hits
  * - Automatic L2 -> L1 propagation on misses
@@ -13,10 +13,10 @@ import { redisClient } from "../config/redis";
 
 // L1 Cache configuration
 const l1 = new NodeCache({
-  stdTTL: 300,        // 5 minutes default
-  checkperiod: 60,    // cleanup every 1 min
-  useClones: false,   // performance boost (don't deep clone on get/set)
-  maxKeys: 1000,      // memory limit safety
+  stdTTL: 300, // 5 minutes default
+  checkperiod: 60, // cleanup every 1 min
+  useClones: false, // performance boost (don't deep clone on get/set)
+  maxKeys: 1000, // memory limit safety
 });
 
 const INVALIDATION_CHANNEL = "cache:invalidate:l1";
@@ -31,16 +31,16 @@ export class LayeredCache {
    */
   async init() {
     if (this.isInitialized) return;
-    
+
     if (redisClient && redisClient.isOpen) {
       try {
         this.subscriber = redisClient.duplicate();
         await this.subscriber.connect();
-        
+
         await this.subscriber.subscribe(INVALIDATION_CHANNEL, (key: string) => {
           l1.del(key);
         });
-        
+
         this.isInitialized = true;
         console.log("[LayeredCache] Initialized L1 invalidation subscriber");
       } catch (err) {
@@ -61,17 +61,17 @@ export class LayeredCache {
 
     // 2. Try L2 (Redis)
     if (!redisClient || !redisClient.isOpen) return null;
-    
+
     try {
       const raw = await redisClient.get(key);
       if (!raw) return null;
-      
+
       const parsed = JSON.parse(raw.toString());
-      
+
       // Populate L1 for future fast access
       // We use the remaining TTL from Redis or a default
       l1.set(key, parsed);
-      
+
       return parsed as T;
     } catch (err) {
       console.warn(`[LayeredCache] Get failed for key: ${key}`, err);
@@ -90,7 +90,7 @@ export class LayeredCache {
     if (redisClient && redisClient.isOpen) {
       try {
         await redisClient.setEx(key, ttlSec, JSON.stringify(value));
-        
+
         // 3. Propagate invalidation to other instances' L1
         await redisClient.publish(INVALIDATION_CHANNEL, key);
       } catch (err) {
@@ -110,7 +110,7 @@ export class LayeredCache {
     if (redisClient && redisClient.isOpen) {
       try {
         await redisClient.del(key);
-        
+
         // 3. Propagate to others
         await redisClient.publish(INVALIDATION_CHANNEL, key);
       } catch (err) {
@@ -128,7 +128,7 @@ export class LayeredCache {
         const keys = await redisClient.keys(pattern);
         if (keys.length > 0) {
           await redisClient.del(keys as string[]);
-          
+
           // Propagate invalidation for each key
           for (const key of keys) {
             const keyStr = key.toString();
@@ -137,7 +137,10 @@ export class LayeredCache {
           }
         }
       } catch (err) {
-        console.warn(`[LayeredCache] DelPattern failed for pattern: ${pattern}`, err);
+        console.warn(
+          `[LayeredCache] DelPattern failed for pattern: ${pattern}`,
+          err,
+        );
       }
     }
   }
@@ -153,7 +156,7 @@ export class LayeredCache {
   async getSwr<T>(
     key: string,
     fetcher: () => Promise<T>,
-    options: { freshTtlSec: number; staleTtlSec: number }
+    options: { freshTtlSec: number; staleTtlSec: number },
   ): Promise<T> {
     const totalTtlSec = options.freshTtlSec + options.staleTtlSec;
     const cached = await this.get<{ data: T; freshUntil: number }>(key);
@@ -163,8 +166,16 @@ export class LayeredCache {
 
       if (isStale) {
         // Background refresh for stale data (0-latency return of stale data)
-        this.revalidateSwr(key, fetcher, totalTtlSec, options.freshTtlSec).catch((err) => {
-          logger.error(`[LayeredCache] SWR background revalidation failed for key: ${key}`, err);
+        this.revalidateSwr(
+          key,
+          fetcher,
+          totalTtlSec,
+          options.freshTtlSec,
+        ).catch((err) => {
+          logger.error(
+            `[LayeredCache] SWR background revalidation failed for key: ${key}`,
+            err,
+          );
         });
       }
       return cached.data;
@@ -178,7 +189,7 @@ export class LayeredCache {
         data,
         freshUntil: Date.now() + options.freshTtlSec * 1000,
       },
-      totalTtlSec
+      totalTtlSec,
     );
 
     return data;
@@ -191,7 +202,7 @@ export class LayeredCache {
     key: string,
     fetcher: () => Promise<T>,
     totalTtlSec: number,
-    freshTtlSec: number
+    freshTtlSec: number,
   ): Promise<void> {
     // Prevent multiple concurrent revalidations for the same key (thundering herd protection)
     if (this.activeRevalidations.has(key)) {
@@ -207,7 +218,7 @@ export class LayeredCache {
             data,
             freshUntil: Date.now() + freshTtlSec * 1000,
           },
-          totalTtlSec
+          totalTtlSec,
         );
       } finally {
         this.activeRevalidations.delete(key);

@@ -30,7 +30,10 @@ jest.mock("../../src/config/redis", () => ({
 // Mock auth middleware so we can test admin routes without real JWTs
 jest.mock("../../src/middleware/auth", () => ({
   authenticateToken: (req: any, _res: any, next: any) => {
-    req.jwtUser = { userId: "00000000-0000-0000-0000-000000000001", role: "admin" };
+    req.jwtUser = {
+      userId: "00000000-0000-0000-0000-000000000001",
+      role: "admin",
+    };
     next();
   },
   requireAuth: (_req: any, _res: any, next: any) => next(),
@@ -84,7 +87,10 @@ describe("POST /api/fee-strategies/calculate", () => {
   beforeEach(() => jest.clearAllMocks());
 
   it("calculates fee using active strategy", async () => {
-    mockPool.query.mockResolvedValueOnce({ rows: [STRATEGY_ROW], rowCount: 1 } as any);
+    mockPool.query.mockResolvedValueOnce({
+      rows: [STRATEGY_ROW],
+      rowCount: 1,
+    } as any);
 
     const res = await request(app)
       .post("/api/fee-strategies/calculate")
@@ -120,15 +126,16 @@ describe("POST /api/fee-strategies/calculate", () => {
   });
 
   it("accepts optional userId and provider", async () => {
-    mockPool.query.mockResolvedValueOnce({ rows: [STRATEGY_ROW], rowCount: 1 } as any);
+    mockPool.query.mockResolvedValueOnce({
+      rows: [STRATEGY_ROW],
+      rowCount: 1,
+    } as any);
 
-    const res = await request(app)
-      .post("/api/fee-strategies/calculate")
-      .send({
-        amount: 5000,
-        userId: "00000000-0000-0000-0000-000000000002",
-        provider: "orange",
-      });
+    const res = await request(app).post("/api/fee-strategies/calculate").send({
+      amount: 5000,
+      userId: "00000000-0000-0000-0000-000000000002",
+      provider: "orange",
+    });
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
@@ -141,14 +148,15 @@ describe("POST /api/fee-strategies/calculate", () => {
       days_of_week: [5],
       override_percentage: "0",
     };
-    mockPool.query.mockResolvedValueOnce({ rows: [timeRow], rowCount: 1 } as any);
+    mockPool.query.mockResolvedValueOnce({
+      rows: [timeRow],
+      rowCount: 1,
+    } as any);
 
-    const res = await request(app)
-      .post("/api/fee-strategies/calculate")
-      .send({
-        amount: 10000,
-        evaluationTime: "2026-04-24T12:00:00Z", // Friday
-      });
+    const res = await request(app).post("/api/fee-strategies/calculate").send({
+      amount: 10000,
+      evaluationTime: "2026-04-24T12:00:00Z", // Friday
+    });
 
     expect(res.status).toBe(200);
     expect(res.body.data.fee).toBe(0);
@@ -160,7 +168,10 @@ describe("GET /api/fee-strategies", () => {
   beforeEach(() => jest.clearAllMocks());
 
   it("returns list of all strategies", async () => {
-    mockPool.query.mockResolvedValueOnce({ rows: [STRATEGY_ROW], rowCount: 1 } as any);
+    mockPool.query.mockResolvedValueOnce({
+      rows: [STRATEGY_ROW],
+      rowCount: 1,
+    } as any);
 
     const res = await request(app).get("/api/fee-strategies");
 
@@ -177,18 +188,16 @@ describe("POST /api/fee-strategies", () => {
   it("creates a percentage strategy", async () => {
     mockPool.query
       .mockResolvedValueOnce({ rows: [STRATEGY_ROW], rowCount: 1 } as any) // INSERT
-      .mockResolvedValueOnce({ rows: [], rowCount: 1 } as any);             // audit
+      .mockResolvedValueOnce({ rows: [], rowCount: 1 } as any); // audit
 
-    const res = await request(app)
-      .post("/api/fee-strategies")
-      .send({
-        name: "Global 1.5%",
-        strategyType: "percentage",
-        scope: "global",
-        feePercentage: 1.5,
-        feeMinimum: 50,
-        feeMaximum: 5000,
-      });
+    const res = await request(app).post("/api/fee-strategies").send({
+      name: "Global 1.5%",
+      strategyType: "percentage",
+      scope: "global",
+      feePercentage: 1.5,
+      feeMinimum: 50,
+      feeMaximum: 5000,
+    });
 
     expect(res.status).toBe(201);
     expect(res.body.success).toBe(true);
@@ -255,9 +264,11 @@ describe("POST /api/fee-strategies", () => {
   });
 
   it("returns 400 when required fields are missing", async () => {
-    const res = await request(app)
-      .post("/api/fee-strategies")
-      .send({ name: "Incomplete", strategyType: "percentage", scope: "global" });
+    const res = await request(app).post("/api/fee-strategies").send({
+      name: "Incomplete",
+      strategyType: "percentage",
+      scope: "global",
+    });
     // feePercentage missing
 
     expect(res.status).toBe(400);
@@ -265,30 +276,26 @@ describe("POST /api/fee-strategies", () => {
   });
 
   it("returns 400 when user scope is missing userId", async () => {
-    const res = await request(app)
-      .post("/api/fee-strategies")
-      .send({
-        name: "User Strategy",
-        strategyType: "percentage",
-        scope: "user",
-        feePercentage: 0.5,
-        // userId missing
-      });
+    const res = await request(app).post("/api/fee-strategies").send({
+      name: "User Strategy",
+      strategyType: "percentage",
+      scope: "user",
+      feePercentage: 0.5,
+      // userId missing
+    });
 
     expect(res.status).toBe(400);
   });
 
   it("returns 400 when feeMaximum < feeMinimum", async () => {
-    const res = await request(app)
-      .post("/api/fee-strategies")
-      .send({
-        name: "Bad Bounds",
-        strategyType: "percentage",
-        scope: "global",
-        feePercentage: 1.5,
-        feeMinimum: 500,
-        feeMaximum: 100, // invalid
-      });
+    const res = await request(app).post("/api/fee-strategies").send({
+      name: "Bad Bounds",
+      strategyType: "percentage",
+      scope: "global",
+      feePercentage: 1.5,
+      feeMinimum: 500,
+      feeMaximum: 100, // invalid
+    });
 
     expect(res.status).toBe(400);
   });
@@ -301,8 +308,8 @@ describe("PUT /api/fee-strategies/:id", () => {
     const updated = { ...STRATEGY_ROW, fee_percentage: "2.0" };
     mockPool.query
       .mockResolvedValueOnce({ rows: [STRATEGY_ROW], rowCount: 1 } as any) // getById
-      .mockResolvedValueOnce({ rows: [updated], rowCount: 1 } as any)       // UPDATE
-      .mockResolvedValueOnce({ rows: [], rowCount: 1 } as any);             // audit
+      .mockResolvedValueOnce({ rows: [updated], rowCount: 1 } as any) // UPDATE
+      .mockResolvedValueOnce({ rows: [], rowCount: 1 } as any); // audit
 
     const res = await request(app)
       .put(`/api/fee-strategies/${STRATEGY_ROW.id}`)
@@ -329,10 +336,12 @@ describe("DELETE /api/fee-strategies/:id", () => {
   it("deletes a strategy", async () => {
     mockPool.query
       .mockResolvedValueOnce({ rows: [STRATEGY_ROW], rowCount: 1 } as any) // getById
-      .mockResolvedValueOnce({ rows: [], rowCount: 1 } as any)              // DELETE
-      .mockResolvedValueOnce({ rows: [], rowCount: 1 } as any);             // audit
+      .mockResolvedValueOnce({ rows: [], rowCount: 1 } as any) // DELETE
+      .mockResolvedValueOnce({ rows: [], rowCount: 1 } as any); // audit
 
-    const res = await request(app).delete(`/api/fee-strategies/${STRATEGY_ROW.id}`);
+    const res = await request(app).delete(
+      `/api/fee-strategies/${STRATEGY_ROW.id}`,
+    );
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
@@ -341,7 +350,9 @@ describe("DELETE /api/fee-strategies/:id", () => {
   it("returns 404 for unknown strategy", async () => {
     mockPool.query.mockResolvedValueOnce({ rows: [], rowCount: 0 } as any);
 
-    const res = await request(app).delete("/api/fee-strategies/non-existent-id");
+    const res = await request(app).delete(
+      "/api/fee-strategies/non-existent-id",
+    );
 
     expect(res.status).toBe(404);
   });
@@ -359,7 +370,9 @@ describe("POST /api/fee-strategies/:id/activate", () => {
       .mockResolvedValueOnce({ rows: [active], rowCount: 1 } as any)
       .mockResolvedValueOnce({ rows: [], rowCount: 1 } as any);
 
-    const res = await request(app).post(`/api/fee-strategies/${STRATEGY_ROW.id}/activate`);
+    const res = await request(app).post(
+      `/api/fee-strategies/${STRATEGY_ROW.id}/activate`,
+    );
 
     expect(res.status).toBe(200);
     expect(res.body.data.isActive).toBe(true);
@@ -378,7 +391,9 @@ describe("POST /api/fee-strategies/:id/deactivate", () => {
       .mockResolvedValueOnce({ rows: [inactive], rowCount: 1 } as any)
       .mockResolvedValueOnce({ rows: [], rowCount: 1 } as any);
 
-    const res = await request(app).post(`/api/fee-strategies/${STRATEGY_ROW.id}/deactivate`);
+    const res = await request(app).post(
+      `/api/fee-strategies/${STRATEGY_ROW.id}/deactivate`,
+    );
 
     expect(res.status).toBe(200);
     expect(res.body.data.isActive).toBe(false);
@@ -399,9 +414,14 @@ describe("GET /api/fee-strategies/:id/audit", () => {
       userAgent: "test",
       changedByUser: "+237600000000",
     };
-    mockPool.query.mockResolvedValueOnce({ rows: [auditRow], rowCount: 1 } as any);
+    mockPool.query.mockResolvedValueOnce({
+      rows: [auditRow],
+      rowCount: 1,
+    } as any);
 
-    const res = await request(app).get(`/api/fee-strategies/${STRATEGY_ROW.id}/audit`);
+    const res = await request(app).get(
+      `/api/fee-strategies/${STRATEGY_ROW.id}/audit`,
+    );
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);

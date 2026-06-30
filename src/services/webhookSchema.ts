@@ -86,8 +86,6 @@ export function parseWebhookPayload(payload: unknown) {
     throw new Error(`Unsupported schema version: ${version}`);
   }
 }
-import { z } from 'zod';
-
 export const webhookPayloadSchema = z.object({
   event: z.string(),
   timestamp: z.string(),
@@ -100,13 +98,13 @@ export const flatWebhookPayloadSchema = z.object({
   timestamp: z.string(),
   transaction_id: z.string(),
   reference_number: z.string(),
-  transaction_type: z.enum(['deposit', 'withdraw']),
+  transaction_type: z.enum(["deposit", "withdraw"]),
   amount: z.string(),
   currency: z.string(),
   phone_number: z.string(),
   provider: z.string(),
   stellar_address: z.string(),
-  status: z.enum(['pending', 'completed', 'failed', 'cancelled']),
+  status: z.enum(["pending", "completed", "failed", "cancelled"]),
   user_id: z.string().optional(),
   notes: z.string().optional(),
   tags: z.string().optional(),

@@ -32,11 +32,19 @@ jest.mock("../../services/xeroOauthState", () => ({
 
 // requireAuth and authenticateToken simply inject a fake authenticated user.
 jest.mock("../../middleware/auth", () => ({
-  requireAuth: (req: express.Request, _res: express.Response, next: express.NextFunction) => {
+  requireAuth: (
+    req: express.Request,
+    _res: express.Response,
+    next: express.NextFunction,
+  ) => {
     (req as any).user = { id: "user-123", role: "user" };
     next();
   },
-  authenticateToken: (req: express.Request, _res: express.Response, next: express.NextFunction) => {
+  authenticateToken: (
+    req: express.Request,
+    _res: express.Response,
+    next: express.NextFunction,
+  ) => {
     (req as any).user = { id: "user-123", role: "user" };
     next();
   },
@@ -64,7 +72,7 @@ describe("Xero OAuth routes", () => {
   describe("GET /api/accounting/xero/auth", () => {
     it("returns an auth URL and persists state bound to the user", async () => {
       mockGetXeroAuthUrl.mockReturnValue(
-        "https://login.xero.com/identity/connect/authorize?state=abc"
+        "https://login.xero.com/identity/connect/authorize?state=abc",
       );
 
       const app = buildApp();
@@ -102,7 +110,7 @@ describe("Xero OAuth routes", () => {
       expect(mockHandleXeroCallback).toHaveBeenCalledWith(
         "auth-code",
         "user-123",
-        undefined
+        undefined,
       );
     });
 
@@ -120,13 +128,17 @@ describe("Xero OAuth routes", () => {
       const app = buildApp();
       const res = await request(app)
         .get("/api/accounting/xero/callback")
-        .query({ code: "auth-code", state: "valid-state", tenantId: "tenant-B" });
+        .query({
+          code: "auth-code",
+          state: "valid-state",
+          tenantId: "tenant-B",
+        });
 
       expect(res.status).toBe(201);
       expect(mockHandleXeroCallback).toHaveBeenCalledWith(
         "auth-code",
         "user-123",
-        "tenant-B"
+        "tenant-B",
       );
     });
 

@@ -2,7 +2,9 @@
   "name": "momo-cli",
   "version": "1.0.0",
   "description": "Admin maintenance CLI for mobile-money",
-  "bin": { "momo-cli": "./dist/index.js" },
+  "bin": {
+    "momo-cli": "./dist/index.js"
+  },
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/index.ts",

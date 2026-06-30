@@ -61,12 +61,15 @@ export class ReconciliationModel {
         data.fileName ?? null,
         data.status ?? ReconciliationStatus.Pending,
         JSON.stringify(data.summary ?? {}),
-      ]
+      ],
     );
     return this.mapReportRow(res.rows[0]);
   }
 
-  async updateReport(id: string, data: Partial<ReconciliationReport>): Promise<void> {
+  async updateReport(
+    id: string,
+    data: Partial<ReconciliationReport>,
+  ): Promise<void> {
     const fields: string[] = [];
     const params: any[] = [id];
     let i = 2;
@@ -88,7 +91,7 @@ export class ReconciliationModel {
 
     await queryWrite(
       `UPDATE reconciliation_reports SET ${fields.join(", ")}, updated_at = NOW() WHERE id = $1`,
-      params
+      params,
     );
   }
 
@@ -111,7 +114,7 @@ export class ReconciliationModel {
         data.type,
         data.expectedValue ?? null,
         data.actualValue ?? null,
-      ]
+      ],
     );
     return this.mapDiscrepancyRow(res.rows[0]);
   }
@@ -119,20 +122,25 @@ export class ReconciliationModel {
   async getReports(limit = 10, offset = 0): Promise<ReconciliationReport[]> {
     const res = await queryRead(
       `SELECT * FROM reconciliation_reports ORDER BY report_date DESC, created_at DESC LIMIT $1 OFFSET $2`,
-      [limit, offset]
+      [limit, offset],
     );
     return res.rows.map(this.mapReportRow);
   }
 
   async getReportById(id: string): Promise<ReconciliationReport | null> {
-    const res = await queryRead(`SELECT * FROM reconciliation_reports WHERE id = $1`, [id]);
+    const res = await queryRead(
+      `SELECT * FROM reconciliation_reports WHERE id = $1`,
+      [id],
+    );
     return res.rows[0] ? this.mapReportRow(res.rows[0]) : null;
   }
 
-  async getDiscrepanciesByReportId(reportId: string): Promise<ReconciliationDiscrepancy[]> {
+  async getDiscrepanciesByReportId(
+    reportId: string,
+  ): Promise<ReconciliationDiscrepancy[]> {
     const res = await queryRead(
       `SELECT * FROM reconciliation_discrepancies WHERE report_id = $1 ORDER BY created_at ASC`,
-      [reportId]
+      [reportId],
     );
     return res.rows.map(this.mapDiscrepancyRow);
   }
@@ -142,7 +150,7 @@ export class ReconciliationModel {
       `UPDATE reconciliation_discrepancies 
        SET review_status = 'resolved', resolution_notes = $2, updated_at = NOW() 
        WHERE id = $1`,
-      [id, notes]
+      [id, notes],
     );
   }
 

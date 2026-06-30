@@ -124,10 +124,14 @@ export const listAmlAlertsForAudit = async (
 
     if (before || after || filter.before || filter.after) {
       pagination.before = result.alerts.length
-        ? Buffer.from(`${result.alerts[0].createdAt}|${result.alerts[0].id}`).toString("base64")
+        ? Buffer.from(
+            `${result.alerts[0].createdAt}|${result.alerts[0].id}`,
+          ).toString("base64")
         : null;
       pagination.after = result.alerts.length
-        ? Buffer.from(`${result.alerts[result.alerts.length - 1].createdAt}|${result.alerts[result.alerts.length - 1].id}`).toString("base64")
+        ? Buffer.from(
+            `${result.alerts[result.alerts.length - 1].createdAt}|${result.alerts[result.alerts.length - 1].id}`,
+          ).toString("base64")
         : null;
       pagination.hasMore = result.hasMore ?? false;
     } else {
@@ -343,10 +347,14 @@ export const searchAmlAlertsByUser = async (
 
     if (before || after || filter.before || filter.after) {
       pagination.before = result.alerts.length
-        ? Buffer.from(`${result.alerts[0].createdAt}|${result.alerts[0].id}`).toString("base64")
+        ? Buffer.from(
+            `${result.alerts[0].createdAt}|${result.alerts[0].id}`,
+          ).toString("base64")
         : null;
       pagination.after = result.alerts.length
-        ? Buffer.from(`${result.alerts[result.alerts.length - 1].createdAt}|${result.alerts[result.alerts.length - 1].id}`).toString("base64")
+        ? Buffer.from(
+            `${result.alerts[result.alerts.length - 1].createdAt}|${result.alerts[result.alerts.length - 1].id}`,
+          ).toString("base64")
         : null;
       pagination.hasMore = result.hasMore ?? false;
     } else {
@@ -486,7 +494,9 @@ export const RejectionReasonCodes = {
 } as const;
 
 const getEncryptionKey = (): Buffer => {
-  return deriveKey(env.DB_ENCRYPTION_KEY || "dev-key-material-at-least-32-chars-long");
+  return deriveKey(
+    env.DB_ENCRYPTION_KEY || "dev-key-material-at-least-32-chars-long",
+  );
 };
 
 export const encryptPiiData = (plaintext: string): any => {
@@ -536,7 +546,7 @@ export const logTransactionRejection = async (
         JSON.stringify(diff),
         ipAddress || null,
         userAgent || null,
-      ]
+      ],
     );
   } catch (err) {
     logger.error("Failed to log transaction rejection:", err);
@@ -552,8 +562,8 @@ export const getTransactionRejections = async (
   res: Response,
 ): Promise<void> => {
   try {
-    const limit = parseInt(req.query.limit as string || "50", 10);
-    const offset = parseInt(req.query.offset as string || "0", 10);
+    const limit = parseInt((req.query.limit as string) || "50", 10);
+    const offset = parseInt((req.query.offset as string) || "0", 10);
 
     const query = `
       SELECT id, admin_id AS "adminId", action, resource, resource_id AS "resourceId", diff, ip_address AS "ipAddress", user_agent AS "userAgent", created_at AS "createdAt"
@@ -563,7 +573,7 @@ export const getTransactionRejections = async (
       LIMIT $1 OFFSET $2
     `;
     const result = await pool.query(query, [limit, offset]);
-    
+
     const rejections = result.rows.map((row) => {
       const diff = row.diff;
       const decryptedPii: Record<string, string> = {};
@@ -624,10 +634,10 @@ export const getTransactionRejectionStats = async (
       GROUP BY diff->>'rejection_reason_code'
     `;
     const result = await pool.query(query);
-    
+
     const stats: Record<string, number> = {};
     let total = 0;
-    
+
     result.rows.forEach((row) => {
       const code = row.reason_code || "UNKNOWN";
       const count = parseInt(row.count, 10);
@@ -641,6 +651,8 @@ export const getTransactionRejectionStats = async (
     });
   } catch (error) {
     logger.error("Failed to fetch transaction rejection stats:", error);
-    res.status(500).json({ error: "Failed to fetch transaction rejection stats" });
+    res
+      .status(500)
+      .json({ error: "Failed to fetch transaction rejection stats" });
   }
 };

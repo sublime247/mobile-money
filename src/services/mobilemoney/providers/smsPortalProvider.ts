@@ -1,5 +1,12 @@
-import { MobileMoneyProvider, ProviderTransactionStatus } from "../mobileMoneyService";
-import { SmsPortalSimulator, SmsPortalSimulatorConfig, CaptchaSolver } from "./smsPortalSimulator";
+import {
+  MobileMoneyProvider,
+  ProviderTransactionStatus,
+} from "../mobileMoneyService";
+import {
+  SmsPortalSimulator,
+  SmsPortalSimulatorConfig,
+  CaptchaSolver,
+} from "./smsPortalSimulator";
 import logger from "../../../utils/logger";
 import { maskPII } from "../../../utils/masking";
 
@@ -47,9 +54,7 @@ export class SmsPortalProvider implements MobileMoneyProvider {
   private readonly simulator: SmsPortalSimulator;
   private readonly clock: () => number;
 
-  constructor(
-    config: Partial<SmsPortalProviderConfig> = {},
-  ) {
+  constructor(config: Partial<SmsPortalProviderConfig> = {}) {
     this.clock = Date.now;
     this.config = this.buildConfig(config);
     this.simulator = new SmsPortalSimulator(this.config.simulatorConfig);
@@ -173,7 +178,10 @@ export class SmsPortalProvider implements MobileMoneyProvider {
     referenceId: string,
   ): Promise<{ status: ProviderTransactionStatus }> {
     try {
-      const statusUrl = this.config.statusUrl.replace(":reference", encodeURIComponent(referenceId));
+      const statusUrl = this.config.statusUrl.replace(
+        ":reference",
+        encodeURIComponent(referenceId),
+      );
 
       const result = await this.simulator.navigateAndExtract(
         statusUrl,
@@ -258,9 +266,7 @@ export class SmsPortalProvider implements MobileMoneyProvider {
           30_000,
       ),
       maxRetries: Number(
-        overrides.maxRetries ??
-          process.env.SMS_PORTAL_MAX_RETRIES ??
-          3,
+        overrides.maxRetries ?? process.env.SMS_PORTAL_MAX_RETRIES ?? 3,
       ),
     };
   }

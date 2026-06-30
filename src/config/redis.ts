@@ -13,7 +13,8 @@ type SentinelNode = {
 
 const DEFAULT_REDIS_URL = "redis://localhost:6379";
 const BASE_REDIS_URL = process.env.REDIS_URL || DEFAULT_REDIS_URL;
-const SENTINEL_MASTER_NAME = process.env.REDIS_SENTINEL_MASTER_NAME || "mymaster";
+const SENTINEL_MASTER_NAME =
+  process.env.REDIS_SENTINEL_MASTER_NAME || "mymaster";
 const SENTINEL_USERNAME = process.env.REDIS_SENTINEL_USERNAME;
 const SENTINEL_PASSWORD = process.env.REDIS_SENTINEL_PASSWORD;
 
@@ -142,7 +143,10 @@ async function refreshMasterEndpoint(
       redisClient.disconnect();
       await redisClient.connect();
     } catch (error) {
-      logger.error("Redis: reconnect after master endpoint update failed", error);
+      logger.error(
+        "Redis: reconnect after master endpoint update failed",
+        error,
+      );
     }
   }
 
@@ -158,7 +162,8 @@ function scheduleMasterRefresh(reason: string): Promise<boolean> {
 }
 
 async function verifyConnectedNodeRole(): Promise<void> {
-  if (!SENTINEL_ENABLED || !redisClient.isOpen || roleVerificationInFlight) return;
+  if (!SENTINEL_ENABLED || !redisClient.isOpen || roleVerificationInFlight)
+    return;
   roleVerificationInFlight = true;
   try {
     const roleResponse = (await redisClient.sendCommand(["ROLE"])) as unknown;
@@ -166,9 +171,12 @@ async function verifyConnectedNodeRole(): Promise<void> {
 
     const role = String(roleResponse[0] || "").toLowerCase();
     if (role !== "master") {
-      console.warn("Redis: connected node is not master; forcing failover reconnect", {
-        role,
-      });
+      console.warn(
+        "Redis: connected node is not master; forcing failover reconnect",
+        {
+          role,
+        },
+      );
       await forceFailoverReconnect(`role:${role}`);
     }
   } catch (error) {
@@ -291,7 +299,7 @@ export function createRedisStore() {
 
 export async function flushUserSessions(userId: string): Promise<void> {
   if (!redisClient.isOpen) return;
-  
+
   try {
     // 1. Set invalidation timestamp to instantly reject active stateless JWTs
     const now = Math.floor(Date.now() / 1000);
@@ -300,13 +308,20 @@ export async function flushUserSessions(userId: string): Promise<void> {
     // 2. Scan and destroy all express-sessions tied to this user
     let cursor = "0";
     do {
-      const reply = await redisClient.scan(cursor, { MATCH: "session:*", COUNT: 100 });
+      const reply = await redisClient.scan(cursor, {
+        MATCH: "session:*",
+        COUNT: 100,
+      });
       cursor = String(reply.cursor);
-      
+
       for (const key of reply.keys) {
         const sessionData = await redisClient.get(key);
         // Fast check: if the stringified session JSON contains the userId
-        if (sessionData && (sessionData.includes(`"userId":"${userId}"`) || sessionData.includes(`"user_id":"${userId}"`))) {
+        if (
+          sessionData &&
+          (sessionData.includes(`"userId":"${userId}"`) ||
+            sessionData.includes(`"user_id":"${userId}"`))
+        ) {
           await redisClient.del(key);
         }
       }

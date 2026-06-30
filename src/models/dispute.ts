@@ -129,11 +129,11 @@ export class DisputeModel {
          created_at      AS "createdAt",
          updated_at      AS "updatedAt"`,
       [
-        input.transactionId, 
-        input.reason, 
+        input.transactionId,
+        input.reason,
         input.reportedBy ?? null,
-        input.priority ?? 'medium',
-        input.category ?? null
+        input.priority ?? "medium",
+        input.category ?? null,
       ],
     );
     const row = result.rows[0];
@@ -228,7 +228,9 @@ export class DisputeModel {
   }
 
   /** Find a dispute with all details (notes, evidence, timeline). */
-  async findByIdWithDetails(disputeId: string): Promise<DisputeWithDetails | null> {
+  async findByIdWithDetails(
+    disputeId: string,
+  ): Promise<DisputeWithDetails | null> {
     const dispute = await this.findByIdWithNotes(disputeId);
     if (!dispute) return null;
 
@@ -343,12 +345,12 @@ export class DisputeModel {
     }
 
     if (setParts.length === 0) {
-      throw new Error('No fields to update');
+      throw new Error("No fields to update");
     }
 
     const result = await queryWrite<Dispute>(
       `UPDATE disputes
-       SET ${setParts.join(', ')}
+       SET ${setParts.join(", ")}
        WHERE id = $1
        RETURNING
          id,
@@ -431,7 +433,16 @@ export class DisputeModel {
          uploaded_by   AS "uploadedBy",
          description,
          created_at    AS "createdAt"`,
-      [disputeId, fileName, fileType, fileSize, s3Key, s3Url, uploadedBy, description ?? null],
+      [
+        disputeId,
+        fileName,
+        fileType,
+        fileSize,
+        s3Key,
+        s3Url,
+        uploadedBy,
+        description ?? null,
+      ],
     );
     return result.rows[0];
   }

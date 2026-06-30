@@ -10,10 +10,15 @@ export class TransactionService {
   // ============================================================================
   // WITHDRAWAL LOGIC
   // ============================================================================
-  async withdraw(payload: { userId: string; amount: number; currency: string; [key: string]: any }) {
+  async withdraw(payload: {
+    userId: string;
+    amount: number;
+    currency: string;
+    [key: string]: any;
+  }) {
     // Enforce a strict minimum of $1 to prevent micro-transaction gas/fee losses.
     if (payload.amount < 1) {
-      throw new Error('Amount too small');
+      throw new Error("Amount too small");
     }
 
     // TODO: Proceed with the rest of the withdrawal logic using this.txModel

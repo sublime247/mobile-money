@@ -1,9 +1,12 @@
-import { evaluateAdminLoginAnomaly, getCurrentRequestIp } from "../loginAnomaly";
+import {
+  evaluateAdminLoginAnomaly,
+  getCurrentRequestIp,
+} from "../loginAnomaly";
 import { redisClient } from "../../config/redis";
 
 type RedisMock = {
   get: jest.Mock<Promise<string | null>, [string]>;
-  set: jest.Mock<Promise<unknown>, [string, string, { EX: number }]>
+  set: jest.Mock<Promise<unknown>, [string, string, { EX: number }]>;
 };
 
 jest.mock("../../config/redis", () => ({

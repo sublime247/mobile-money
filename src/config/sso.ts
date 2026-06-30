@@ -132,13 +132,15 @@ export function validateSSOConfig(config: SSOEnvironmentConfig): string[] {
 
   if (config.enforceSSOForEmployees && !config.employeeEmailDomain) {
     errors.push(
-      "SSO_ENFORCE_EMPLOYEES is enabled but SSO_EMPLOYEE_EMAIL_DOMAIN is not set"
+      "SSO_ENFORCE_EMPLOYEES is enabled but SSO_EMPLOYEE_EMAIL_DOMAIN is not set",
     );
   }
 
   if (
     config.oidc.google &&
-    (config.oidc.google.clientID || config.oidc.google.clientSecret || config.oidc.google.callbackURL)
+    (config.oidc.google.clientID ||
+      config.oidc.google.clientSecret ||
+      config.oidc.google.callbackURL)
   ) {
     if (
       !config.oidc.google.clientID ||
@@ -146,14 +148,17 @@ export function validateSSOConfig(config: SSOEnvironmentConfig): string[] {
       !config.oidc.google.callbackURL
     ) {
       errors.push(
-        "SSO OIDC Google configuration is incomplete: clientID, clientSecret, and callbackURL are required"
+        "SSO OIDC Google configuration is incomplete: clientID, clientSecret, and callbackURL are required",
       );
     }
   }
 
   if (
     config.oidc.azure &&
-    (config.oidc.azure.clientID || config.oidc.azure.clientSecret || config.oidc.azure.issuer || config.oidc.azure.callbackURL)
+    (config.oidc.azure.clientID ||
+      config.oidc.azure.clientSecret ||
+      config.oidc.azure.issuer ||
+      config.oidc.azure.callbackURL)
   ) {
     if (
       !config.oidc.azure.clientID ||
@@ -162,7 +167,7 @@ export function validateSSOConfig(config: SSOEnvironmentConfig): string[] {
       !config.oidc.azure.callbackURL
     ) {
       errors.push(
-        "SSO OIDC Azure configuration is incomplete: clientID, clientSecret, issuer, and callbackURL are required"
+        "SSO OIDC Azure configuration is incomplete: clientID, clientSecret, issuer, and callbackURL are required",
       );
     }
   }
@@ -192,13 +197,11 @@ export async function initializeSSOProviders(): Promise<void> {
   for (const providerConfig of config.providers) {
     try {
       await ssoService.upsertProvider(providerConfig);
-      console.log(
-        `[SSO] Initialized provider: ${providerConfig.providerName}`
-      );
+      console.log(`[SSO] Initialized provider: ${providerConfig.providerName}`);
     } catch (error) {
       logger.error(
         `[SSO] Failed to initialize provider ${providerConfig.providerName}:`,
-        error
+        error,
       );
     }
   }

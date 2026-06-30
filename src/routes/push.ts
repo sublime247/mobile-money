@@ -1,6 +1,10 @@
 import logger from "../utils/logger";
 import { Router, Request, Response } from "express";
-import { pushNotificationService, pushTokenModel, type PushToken } from "../services/push";
+import {
+  pushNotificationService,
+  pushTokenModel,
+  type PushToken,
+} from "../services/push";
 import { GraphQLError } from "graphql";
 
 export interface RegisterPushTokenRequest {
@@ -36,13 +40,13 @@ function getUserIdFromRequest(req: Request): string {
   if (user?.id) {
     return user.id;
   }
-  
+
   // For GraphQL context or other auth patterns
   const subject = (req as any).auth?.subject;
   if (subject) {
     return subject;
   }
-  
+
   throw new GraphQLError("User not authenticated", {
     extensions: { code: "UNAUTHENTICATED" },
   });
@@ -85,7 +89,10 @@ export function createPushRouter(): Router {
         data: formatPushTokenResponse(pushToken),
       });
     } catch (error: any) {
-      if (error instanceof GraphQLError && error.extensions?.code === "UNAUTHENTICATED") {
+      if (
+        error instanceof GraphQLError &&
+        error.extensions?.code === "UNAUTHENTICATED"
+      ) {
         return res.status(401).json({
           error: "Unauthorized",
           message: "Authentication required",
@@ -140,7 +147,10 @@ export function createPushRouter(): Router {
         message: "Token unregistered successfully",
       });
     } catch (error: any) {
-      if (error instanceof GraphQLError && error.extensions?.code === "UNAUTHENTICATED") {
+      if (
+        error instanceof GraphQLError &&
+        error.extensions?.code === "UNAUTHENTICATED"
+      ) {
         return res.status(401).json({
           error: "Unauthorized",
           message: "Authentication required",
@@ -170,7 +180,10 @@ export function createPushRouter(): Router {
         message: "All tokens unregistered successfully",
       });
     } catch (error: any) {
-      if (error instanceof GraphQLError && error.extensions?.code === "UNAUTHENTICATED") {
+      if (
+        error instanceof GraphQLError &&
+        error.extensions?.code === "UNAUTHENTICATED"
+      ) {
         return res.status(401).json({
           error: "Unauthorized",
           message: "Authentication required",
@@ -203,7 +216,10 @@ export function createPushRouter(): Router {
         },
       });
     } catch (error: any) {
-      if (error instanceof GraphQLError && error.extensions?.code === "UNAUTHENTICATED") {
+      if (
+        error instanceof GraphQLError &&
+        error.extensions?.code === "UNAUTHENTICATED"
+      ) {
         return res.status(401).json({
           error: "Unauthorized",
           message: "Authentication required",
@@ -243,7 +259,10 @@ export function createPushRouter(): Router {
         },
       });
     } catch (error: any) {
-      if (error instanceof GraphQLError && error.extensions?.code === "UNAUTHENTICATED") {
+      if (
+        error instanceof GraphQLError &&
+        error.extensions?.code === "UNAUTHENTICATED"
+      ) {
         return res.status(401).json({
           error: "Unauthorized",
           message: "Authentication required",

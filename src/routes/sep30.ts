@@ -11,11 +11,11 @@
  *   GET  /sep30/keys/:keyId/recovery/sessions/:sessionId        — Get one session
  *   GET  /sep30/keys/:keyId/recovery/sessions/:sessionId/audit  — Get audit trail
  */
-import { Router, Request, Response } from 'express';
-import rateLimit from 'express-rate-limit';
-import { z } from 'zod';
-import { Sep30Service } from '../services/sep30/sep30Service';
-import { pool } from '../config/database';
+import { Router, Request, Response } from "express";
+import rateLimit from "express-rate-limit";
+import { z } from "zod";
+import { Sep30Service } from "../services/sep30/sep30Service";
+import { pool } from "../config/database";
 
 const router = Router();
 const sep30 = new Sep30Service();
@@ -23,26 +23,28 @@ const sep30 = new Sep30Service();
 // ─── Rate limiter ─────────────────────────────────────────────────────────────
 
 const sep30Limiter =
-  process.env.NODE_ENV === 'test'
+  process.env.NODE_ENV === "test"
     ? (req: any, res: any, next: any) => next()
     : rateLimit({
         windowMs: 60 * 1000,
         max: 20,
         standardHeaders: true,
         legacyHeaders: false,
-        message: { error: 'Too many requests, please try again later.' },
+        message: { error: "Too many requests, please try again later." },
       });
 
 // ─── Zod schemas ──────────────────────────────────────────────────────────────
 
 const CreateKeySchema = z.object({
-  userId: z.string().uuid('userId must be a valid UUID'),
+  userId: z.string().uuid("userId must be a valid UUID"),
   recoveryThreshold: z.number().int().min(1).optional().default(1),
 });
 
 const AddSignerSchema = z.object({
   userId: z.string().uuid(),
-  signerPublicKey: z.string().length(56, 'Must be a 56-char Stellar public key'),
+  signerPublicKey: z
+    .string()
+    .length(56, "Must be a 56-char Stellar public key"),
   signerLabel: z.string().min(1).max(100),
 });
 
@@ -52,56 +54,62 @@ const UpdateThresholdSchema = z.object({
 });
 
 const OpenSessionSchema = z.object({
-  requestedNewAddress: z
-    .string()
-    .length(56)
-    .optional(),
+  requestedNewAddress: z.string().length(56).optional(),
 });
 
 const InitiateSchema = z.object({
-  signerPublicKey: z.string().length(56, 'Must be a 56-char Stellar public key'),
+  signerPublicKey: z
+    .string()
+    .length(56, "Must be a 56-char Stellar public key"),
   sessionId: z.string().uuid().optional(),
 });
 
 const ApproveSchema = z.object({
-  sessionId: z.string().uuid('sessionId must be a valid UUID'),
+  sessionId: z.string().uuid("sessionId must be a valid UUID"),
   signerPublicKey: z.string().length(56),
   token: z.string().min(1),
   signature: z.string().min(1),
 });
 
 const CompleteSessionSchema = z.object({
-  sessionId: z.string().uuid('sessionId must be a valid UUID'),
+  sessionId: z.string().uuid("sessionId must be a valid UUID"),
 });
 
 const CancelSessionSchema = z.object({
-  sessionId: z.string().uuid('sessionId must be a valid UUID'),
-  reason: z.string().optional().default('Cancelled by user'),
+  sessionId: z.string().uuid("sessionId must be a valid UUID"),
+  reason: z.string().optional().default("Cancelled by user"),
 });
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function parseBody<T>(schema: z.ZodSchema<T>, body: unknown, res: Response): T | null {
+function parseBody<T>(
+  schema: z.ZodSchema<T>,
+  body: unknown,
+  res: Response,
+): T | null {
   const result = schema.safeParse(body);
   if (!result.success) {
-    res.status(400).json({ error: 'Validation failed', details: result.error.issues });
+    res
+      .status(400)
+      .json({ error: "Validation failed", details: result.error.issues });
     return null;
   }
   return result.data;
 }
 
 function extractClientIp(req: Request): string | undefined {
-  const forwarded = req.headers['x-forwarded-for'];
-  if (typeof forwarded === 'string') return forwarded.split(',')[0].trim();
+  const forwarded = req.headers["x-forwarded-for"];
+  if (typeof forwarded === "string") return forwarded.split(",")[0].trim();
   return req.socket?.remoteAddress;
 }
 
 function handleError(res: Response, error: unknown, defaultStatus = 400): void {
-  const message = error instanceof Error ? error.message : 'Unexpected error';
-  const status =
-    message.includes('not found') ? 404 :
-    message.includes('expired')   ? 410 :
-    defaultStatus;
+  const message = error instanceof Error ? error.message : "Unexpected error";
+  const status = message.includes("not found")
+    ? 404
+    : message.includes("expired")
+      ? 410
+      : defaultStatus;
   res.status(status).json({ error: message });
 }
 
@@ -113,12 +121,15 @@ function handleError(res: Response, error: unknown, defaultStatus = 400): void {
  * Body: { userId, recoveryThreshold? }
  * Returns: { publicKey, keyId }
  */
-router.post('/keys', sep30Limiter, async (req: Request, res: Response) => {
+router.post("/keys", sep30Limiter, async (req: Request, res: Response) => {
   try {
     const body = parseBody(CreateKeySchema, req.body, res);
     if (!body) return;
 
-    const result = await sep30.createManagedKey(body.userId, body.recoveryThreshold);
+    const result = await sep30.createManagedKey(
+      body.userId,
+      body.recoveryThreshold,
+    );
     res.status(201).json(result);
   } catch (error) {
     handleError(res, error, 500);
@@ -130,11 +141,13 @@ router.post('/keys', sep30Limiter, async (req: Request, res: Response) => {
  * List all managed keys for a user (no secrets returned).
  * Query: userId
  */
-router.get('/keys', sep30Limiter, async (req: Request, res: Response) => {
+router.get("/keys", sep30Limiter, async (req: Request, res: Response) => {
   try {
     const userId = req.query.userId as string;
     if (!userId) {
-      return res.status(400).json({ error: 'userId query parameter is required' });
+      return res
+        .status(400)
+        .json({ error: "userId query parameter is required" });
     }
 
     const keys = await sep30.listManagedKeys(userId);
@@ -149,18 +162,30 @@ router.get('/keys', sep30Limiter, async (req: Request, res: Response) => {
  * Update the recovery threshold for a managed key.
  * Body: { userId, newThreshold }
  */
-router.patch('/keys/:keyId/threshold', sep30Limiter, async (req: Request, res: Response) => {
-  try {
-    const { keyId } = req.params;
-    const body = parseBody(UpdateThresholdSchema, req.body, res);
-    if (!body) return;
+router.patch(
+  "/keys/:keyId/threshold",
+  sep30Limiter,
+  async (req: Request, res: Response) => {
+    try {
+      const { keyId } = req.params;
+      const body = parseBody(UpdateThresholdSchema, req.body, res);
+      if (!body) return;
 
-    await sep30.updateRecoveryThreshold(keyId, body.userId, body.newThreshold);
-    res.json({ message: 'Recovery threshold updated', keyId, newThreshold: body.newThreshold });
-  } catch (error) {
-    handleError(res, error);
-  }
-});
+      await sep30.updateRecoveryThreshold(
+        keyId,
+        body.userId,
+        body.newThreshold,
+      );
+      res.json({
+        message: "Recovery threshold updated",
+        keyId,
+        newThreshold: body.newThreshold,
+      });
+    } catch (error) {
+      handleError(res, error);
+    }
+  },
+);
 
 // ─── Recovery Signers ─────────────────────────────────────────────────────────
 
@@ -169,44 +194,54 @@ router.patch('/keys/:keyId/threshold', sep30Limiter, async (req: Request, res: R
  * Register a recovery signer for a managed key.
  * Body: { userId, signerPublicKey, signerLabel }
  */
-router.post('/keys/:keyId/signers', sep30Limiter, async (req: Request, res: Response) => {
-  try {
-    const { keyId } = req.params;
-    const body = parseBody(AddSignerSchema, req.body, res);
-    if (!body) return;
+router.post(
+  "/keys/:keyId/signers",
+  sep30Limiter,
+  async (req: Request, res: Response) => {
+    try {
+      const { keyId } = req.params;
+      const body = parseBody(AddSignerSchema, req.body, res);
+      if (!body) return;
 
-    const signer = await sep30.addRecoverySigner(
-      keyId,
-      body.userId,
-      body.signerPublicKey,
-      body.signerLabel
-    );
-    res.status(201).json(signer);
-  } catch (error) {
-    handleError(res, error);
-  }
-});
+      const signer = await sep30.addRecoverySigner(
+        keyId,
+        body.userId,
+        body.signerPublicKey,
+        body.signerLabel,
+      );
+      res.status(201).json(signer);
+    } catch (error) {
+      handleError(res, error);
+    }
+  },
+);
 
 /**
  * GET /sep30/keys/:keyId/signers
  * List recovery signers for a managed key.
  * Query: userId
  */
-router.get('/keys/:keyId/signers', sep30Limiter, async (req: Request, res: Response) => {
-  try {
-    const { keyId } = req.params;
-    const userId = req.query.userId as string;
+router.get(
+  "/keys/:keyId/signers",
+  sep30Limiter,
+  async (req: Request, res: Response) => {
+    try {
+      const { keyId } = req.params;
+      const userId = req.query.userId as string;
 
-    if (!userId) {
-      return res.status(400).json({ error: 'userId query parameter is required' });
+      if (!userId) {
+        return res
+          .status(400)
+          .json({ error: "userId query parameter is required" });
+      }
+
+      const signers = await sep30.listRecoverySigners(keyId, userId);
+      res.json({ signers });
+    } catch (error) {
+      handleError(res, error, 500);
     }
-
-    const signers = await sep30.listRecoverySigners(keyId, userId);
-    res.json({ signers });
-  } catch (error) {
-    handleError(res, error, 500);
-  }
-});
+  },
+);
 
 /**
  * DELETE /sep30/keys/:keyId/signers/:signerPublicKey
@@ -214,7 +249,7 @@ router.get('/keys/:keyId/signers', sep30Limiter, async (req: Request, res: Respo
  * Body: { userId }
  */
 router.delete(
-  '/keys/:keyId/signers/:signerPublicKey',
+  "/keys/:keyId/signers/:signerPublicKey",
   sep30Limiter,
   async (req: Request, res: Response) => {
     try {
@@ -222,15 +257,15 @@ router.delete(
       const userId = req.body?.userId as string;
 
       if (!userId) {
-        return res.status(400).json({ error: 'userId is required' });
+        return res.status(400).json({ error: "userId is required" });
       }
 
       await sep30.removeRecoverySigner(keyId, userId, signerPublicKey);
-      res.json({ message: 'Recovery signer removed' });
+      res.json({ message: "Recovery signer removed" });
     } catch (error) {
       handleError(res, error);
     }
-  }
+  },
 );
 
 // ─── Multi-Sig Recovery Session Flow ─────────────────────────────────────────
@@ -245,7 +280,7 @@ router.delete(
  * The returned session.id must be passed to /initiate, /approve, and /complete.
  */
 router.post(
-  '/keys/:keyId/recovery/session',
+  "/keys/:keyId/recovery/session",
   sep30Limiter,
   async (req: Request, res: Response) => {
     try {
@@ -256,20 +291,20 @@ router.post(
       const session = await sep30.openRecoverySession(
         keyId,
         body.requestedNewAddress,
-        extractClientIp(req)
+        extractClientIp(req),
       );
 
       res.status(201).json({
         session,
         instructions:
-          'Share the session ID with each recovery signer. ' +
-          'Each signer must call POST /initiate, sign the token, then call POST /approve. ' +
-          'Once the required number of approvals are collected, call POST /complete.',
+          "Share the session ID with each recovery signer. " +
+          "Each signer must call POST /initiate, sign the token, then call POST /approve. " +
+          "Once the required number of approvals are collected, call POST /complete.",
       });
     } catch (error) {
       handleError(res, error);
     }
-  }
+  },
 );
 
 /**
@@ -283,7 +318,7 @@ router.post(
  * and submit the base64 signature to POST /approve.
  */
 router.post(
-  '/keys/:keyId/recovery/initiate',
+  "/keys/:keyId/recovery/initiate",
   sep30Limiter,
   async (req: Request, res: Response) => {
     try {
@@ -294,19 +329,19 @@ router.post(
       const result = await sep30.initiateRecovery(
         keyId,
         body.signerPublicKey,
-        body.sessionId
+        body.sessionId,
       );
 
       res.json({
         ...result,
         instructions:
-          'Sign the raw `token` string bytes with your Stellar private key. ' +
-          'Submit the base64-encoded signature to POST /approve.',
+          "Sign the raw `token` string bytes with your Stellar private key. " +
+          "Submit the base64-encoded signature to POST /approve.",
       });
     } catch (error) {
       handleError(res, error);
     }
-  }
+  },
 );
 
 /**
@@ -320,7 +355,7 @@ router.post(
  * to 'awaiting_completion' — POST /complete becomes available.
  */
 router.post(
-  '/keys/:keyId/recovery/approve',
+  "/keys/:keyId/recovery/approve",
   sep30Limiter,
   async (req: Request, res: Response) => {
     try {
@@ -334,19 +369,19 @@ router.post(
         body.token,
         body.signature,
         body.signerPublicKey,
-        extractClientIp(req)
+        extractClientIp(req),
       );
 
       const nextStep =
-        result.session.state === 'awaiting_completion'
-          ? 'Threshold reached — call POST /complete to finalise key rotation.'
+        result.session.state === "awaiting_completion"
+          ? "Threshold reached — call POST /complete to finalise key rotation."
           : `${result.session.approvedBy.length}/${result.session.requiredApprovals} approvals collected. Waiting for more signers.`;
 
       res.json({ ...result, nextStep });
     } catch (error) {
       handleError(res, error);
     }
-  }
+  },
 );
 
 /**
@@ -359,7 +394,7 @@ router.post(
  * Only callable when session.state === 'awaiting_completion'.
  */
 router.post(
-  '/keys/:keyId/recovery/complete',
+  "/keys/:keyId/recovery/complete",
   sep30Limiter,
   async (req: Request, res: Response) => {
     try {
@@ -370,14 +405,14 @@ router.post(
       const result = await sep30.completeRecovery(
         keyId,
         body.sessionId,
-        extractClientIp(req)
+        extractClientIp(req),
       );
 
       res.json(result);
     } catch (error) {
       handleError(res, error);
     }
-  }
+  },
 );
 
 /**
@@ -387,7 +422,7 @@ router.post(
  * Body: { sessionId, reason? }
  */
 router.post(
-  '/keys/:keyId/recovery/cancel',
+  "/keys/:keyId/recovery/cancel",
   sep30Limiter,
   async (req: Request, res: Response) => {
     try {
@@ -399,14 +434,17 @@ router.post(
         keyId,
         body.sessionId,
         body.reason,
-        extractClientIp(req)
+        extractClientIp(req),
       );
 
-      res.json({ message: 'Recovery session cancelled', sessionId: body.sessionId });
+      res.json({
+        message: "Recovery session cancelled",
+        sessionId: body.sessionId,
+      });
     } catch (error) {
       handleError(res, error);
     }
-  }
+  },
 );
 
 // ─── Session Queries ──────────────────────────────────────────────────────────
@@ -417,7 +455,7 @@ router.post(
  * Query: userId (required), state? (filter by FSM state)
  */
 router.get(
-  '/keys/:keyId/recovery/sessions',
+  "/keys/:keyId/recovery/sessions",
   sep30Limiter,
   async (req: Request, res: Response) => {
     try {
@@ -426,15 +464,21 @@ router.get(
       const stateFilter = req.query.state as any;
 
       if (!userId) {
-        return res.status(400).json({ error: 'userId query parameter is required' });
+        return res
+          .status(400)
+          .json({ error: "userId query parameter is required" });
       }
 
-      const sessions = await sep30.listRecoverySessions(keyId, userId, stateFilter);
+      const sessions = await sep30.listRecoverySessions(
+        keyId,
+        userId,
+        stateFilter,
+      );
       res.json({ sessions });
     } catch (error) {
       handleError(res, error, 500);
     }
-  }
+  },
 );
 
 /**
@@ -442,7 +486,7 @@ router.get(
  * Get a specific recovery session.
  */
 router.get(
-  '/keys/:keyId/recovery/sessions/:sessionId',
+  "/keys/:keyId/recovery/sessions/:sessionId",
   sep30Limiter,
   async (req: Request, res: Response) => {
     try {
@@ -452,7 +496,7 @@ router.get(
     } catch (error) {
       handleError(res, error, 500);
     }
-  }
+  },
 );
 
 /**
@@ -460,7 +504,7 @@ router.get(
  * Get the full audit log for a recovery session.
  */
 router.get(
-  '/keys/:keyId/recovery/sessions/:sessionId/audit',
+  "/keys/:keyId/recovery/sessions/:sessionId/audit",
   sep30Limiter,
   async (req: Request, res: Response) => {
     try {
@@ -470,7 +514,7 @@ router.get(
     } catch (error) {
       handleError(res, error, 500);
     }
-  }
+  },
 );
 
 // ─── Key Rotation (planned, not recovery) ────────────────────────────────────
@@ -481,21 +525,25 @@ router.get(
  * Body: { userId }
  * Returns: { newPublicKey, oldPublicKey, rotatedAt }
  */
-router.post('/keys/:keyId/rotate', sep30Limiter, async (req: Request, res: Response) => {
-  try {
-    const { keyId } = req.params;
-    const userId = req.body?.userId as string;
+router.post(
+  "/keys/:keyId/rotate",
+  sep30Limiter,
+  async (req: Request, res: Response) => {
+    try {
+      const { keyId } = req.params;
+      const userId = req.body?.userId as string;
 
-    if (!userId) {
-      return res.status(400).json({ error: 'userId is required' });
+      if (!userId) {
+        return res.status(400).json({ error: "userId is required" });
+      }
+
+      const result = await sep30.rotateKey(keyId, userId);
+      res.json(result);
+    } catch (error) {
+      handleError(res, error);
     }
-
-    const result = await sep30.rotateKey(keyId, userId);
-    res.json(result);
-  } catch (error) {
-    handleError(res, error);
-  }
-});
+  },
+);
 
 // ─── SEP-30 Spec-Compliant /accounts Endpoints ───────────────────────────────
 //
@@ -507,27 +555,45 @@ router.post('/keys/:keyId/rotate', sep30Limiter, async (req: Request, res: Respo
 //   POST /sep30/accounts/:id/sign → sign a transaction (2FA required)
 
 const AccountCreateSchema = z.object({
-  identities: z.array(z.object({
-    role: z.string().min(1),
-    auth_methods: z.array(z.object({
-      type: z.enum(['stellar_address', 'phone_number', 'email']),
-      value: z.string().min(1),
-    })).min(1),
-  })).min(1),
+  identities: z
+    .array(
+      z.object({
+        role: z.string().min(1),
+        auth_methods: z
+          .array(
+            z.object({
+              type: z.enum(["stellar_address", "phone_number", "email"]),
+              value: z.string().min(1),
+            }),
+          )
+          .min(1),
+      }),
+    )
+    .min(1),
 });
 
 const AccountUpdateSchema = z.object({
-  identities: z.array(z.object({
-    role: z.string().min(1),
-    auth_methods: z.array(z.object({
-      type: z.enum(['stellar_address', 'phone_number', 'email']),
-      value: z.string().min(1),
-    })).min(1),
-  })).min(1),
+  identities: z
+    .array(
+      z.object({
+        role: z.string().min(1),
+        auth_methods: z
+          .array(
+            z.object({
+              type: z.enum(["stellar_address", "phone_number", "email"]),
+              value: z.string().min(1),
+            }),
+          )
+          .min(1),
+      }),
+    )
+    .min(1),
 });
 
 const AccountSignSchema = z.object({
-  transaction: z.string().min(1, 'Base64-encoded XDR transaction envelope required'),
+  transaction: z
+    .string()
+    .min(1, "Base64-encoded XDR transaction envelope required"),
   /** TOTP or OTP code – required for 2FA verification */
   mfa_code: z.string().min(4).max(10),
   userId: z.string().uuid(),
@@ -544,17 +610,19 @@ const AccountSignSchema = z.object({
  * be preferred; this inline version avoids the dependency on res.locals.user
  * which requires the attachUserObject middleware chain.
  */
-function verifyMfaCode(secret: string | null | undefined, code: string): boolean {
+function verifyMfaCode(
+  secret: string | null | undefined,
+  code: string,
+): boolean {
   if (!secret) return false;
   // Re-use the existing TOTP verifier from auth/2fa via dynamic import alternative:
   // For minimal surface, validate a 6-digit TOTP window using the same algorithm
   // the rest of the codebase uses (speakeasy-compatible 30s window).
   try {
-     
-    const speakeasy = require('speakeasy');
+    const speakeasy = require("speakeasy");
     return speakeasy.totp.verify({
       secret,
-      encoding: 'base32',
+      encoding: "base32",
       token: code,
       window: 1,
     });
@@ -570,7 +638,7 @@ function verifyMfaCode(secret: string | null | undefined, code: string): boolean
  * Body: { identities: [{ role, auth_methods: [{ type, value }] }] }
  * Returns: { address, signer, identities }
  */
-router.post('/accounts', sep30Limiter, async (req: Request, res: Response) => {
+router.post("/accounts", sep30Limiter, async (req: Request, res: Response) => {
   try {
     const body = parseBody(AccountCreateSchema, req.body, res);
     if (!body) return;
@@ -578,15 +646,17 @@ router.post('/accounts', sep30Limiter, async (req: Request, res: Response) => {
     // Derive userId from the stellar_address identity if present, else require explicit field
     const stellarIdentity = body.identities
       .flatMap((i) => i.auth_methods)
-      .find((m) => m.type === 'stellar_address');
+      .find((m) => m.type === "stellar_address");
 
     // We create a managed key; the userId is taken from an optional explicit field
     // or derived from the stellar public key (address used as pseudo-id for simplicity)
-    const userId: string = (req.body.userId as string) || stellarIdentity?.value || '';
+    const userId: string =
+      (req.body.userId as string) || stellarIdentity?.value || "";
 
     if (!userId) {
       return res.status(400).json({
-        error: 'Could not determine userId. Provide userId or a stellar_address identity.',
+        error:
+          "Could not determine userId. Provide userId or a stellar_address identity.",
       });
     }
 
@@ -610,46 +680,55 @@ router.post('/accounts', sep30Limiter, async (req: Request, res: Response) => {
  * Body: { identities: [{ role, auth_methods }] }
  * Returns: { address, signer, identities }
  */
-router.put('/accounts/:id', sep30Limiter, async (req: Request, res: Response) => {
-  try {
-    const { id: keyId } = req.params;
-    const body = parseBody(AccountUpdateSchema, req.body, res);
-    if (!body) return;
+router.put(
+  "/accounts/:id",
+  sep30Limiter,
+  async (req: Request, res: Response) => {
+    try {
+      const { id: keyId } = req.params;
+      const body = parseBody(AccountUpdateSchema, req.body, res);
+      if (!body) return;
 
-    const userId: string = req.body.userId as string;
-    if (!userId) {
-      return res.status(400).json({ error: 'userId is required' });
-    }
-
-    // Remove all existing signers and replace with the new set from auth_methods
-    const stellarSigners = body.identities
-      .flatMap((i) => i.auth_methods)
-      .filter((m) => m.type === 'stellar_address');
-
-    const existing = await sep30.listRecoverySigners(keyId, userId);
-    for (const s of existing) {
-      try {
-        await sep30.removeRecoverySigner(keyId, userId, s.signerPublicKey);
-      } catch {
-        // ignore threshold errors during replacement — will be re-checked after add
+      const userId: string = req.body.userId as string;
+      if (!userId) {
+        return res.status(400).json({ error: "userId is required" });
       }
-    }
 
-    const added = [];
-    for (const m of stellarSigners) {
-      const signer = await sep30.addRecoverySigner(keyId, userId, m.value, m.type);
-      added.push(signer);
-    }
+      // Remove all existing signers and replace with the new set from auth_methods
+      const stellarSigners = body.identities
+        .flatMap((i) => i.auth_methods)
+        .filter((m) => m.type === "stellar_address");
 
-    res.json({
-      id: keyId,
-      identities: body.identities,
-      signers: added,
-    });
-  } catch (error) {
-    handleError(res, error);
-  }
-});
+      const existing = await sep30.listRecoverySigners(keyId, userId);
+      for (const s of existing) {
+        try {
+          await sep30.removeRecoverySigner(keyId, userId, s.signerPublicKey);
+        } catch {
+          // ignore threshold errors during replacement — will be re-checked after add
+        }
+      }
+
+      const added = [];
+      for (const m of stellarSigners) {
+        const signer = await sep30.addRecoverySigner(
+          keyId,
+          userId,
+          m.value,
+          m.type,
+        );
+        added.push(signer);
+      }
+
+      res.json({
+        id: keyId,
+        identities: body.identities,
+        signers: added,
+      });
+    } catch (error) {
+      handleError(res, error);
+    }
+  },
+);
 
 /**
  * POST /sep30/accounts/:id/sign
@@ -660,59 +739,73 @@ router.put('/accounts/:id', sep30Limiter, async (req: Request, res: Response) =>
  * Body: { transaction (base64 XDR), mfa_code, userId }
  * Returns: { signature }
  */
-router.post('/accounts/:id/sign', sep30Limiter, async (req: Request, res: Response) => {
-  try {
-    const { id: keyId } = req.params;
-    const body = parseBody(AccountSignSchema, req.body, res);
-    if (!body) return;
-
-    // ── 2FA verification ────────────────────────────────────────────────────
-    // Look up the user's TOTP secret from the DB to verify the submitted code.
-    const { pool: dbPool } = await import('../config/database.js');
-    const userRow = await dbPool.query(
-      'SELECT two_factor_secret FROM users WHERE id = $1',
-      [body.userId],
-    );
-
-    if (userRow.rows.length === 0) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    const twoFactorSecret = userRow.rows[0].two_factor_secret;
-
-    if (!twoFactorSecret) {
-      return res.status(403).json({
-        error: 'MFA not configured',
-        message: 'User must enrol in two-factor authentication before signing recovery transactions.',
-      });
-    }
-
-    const codeValid = verifyMfaCode(twoFactorSecret, body.mfa_code);
-    if (!codeValid) {
-      return res.status(403).json({
-        error: 'Invalid MFA code',
-        message: 'The provided mfa_code is incorrect or has expired.',
-      });
-    }
-    // ────────────────────────────────────────────────────────────────────────
-
-    // Decode the XDR envelope and sign it with the managed key
-    const { TransactionBuilder } = await import('stellar-sdk');
-    const { getNetworkPassphrase } = await import('../config/stellar.js');
-    let tx: any;
+router.post(
+  "/accounts/:id/sign",
+  sep30Limiter,
+  async (req: Request, res: Response) => {
     try {
-      tx = TransactionBuilder.fromXDR(body.transaction, getNetworkPassphrase());
-    } catch {
-      return res.status(400).json({ error: 'Invalid XDR transaction envelope' });
+      const { id: keyId } = req.params;
+      const body = parseBody(AccountSignSchema, req.body, res);
+      if (!body) return;
+
+      // ── 2FA verification ────────────────────────────────────────────────────
+      // Look up the user's TOTP secret from the DB to verify the submitted code.
+      const { pool: dbPool } = await import("../config/database.js");
+      const userRow = await dbPool.query(
+        "SELECT two_factor_secret FROM users WHERE id = $1",
+        [body.userId],
+      );
+
+      if (userRow.rows.length === 0) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const twoFactorSecret = userRow.rows[0].two_factor_secret;
+
+      if (!twoFactorSecret) {
+        return res.status(403).json({
+          error: "MFA not configured",
+          message:
+            "User must enrol in two-factor authentication before signing recovery transactions.",
+        });
+      }
+
+      const codeValid = verifyMfaCode(twoFactorSecret, body.mfa_code);
+      if (!codeValid) {
+        return res.status(403).json({
+          error: "Invalid MFA code",
+          message: "The provided mfa_code is incorrect or has expired.",
+        });
+      }
+      // ────────────────────────────────────────────────────────────────────────
+
+      // Decode the XDR envelope and sign it with the managed key
+      const { TransactionBuilder } = await import("stellar-sdk");
+      const { getNetworkPassphrase } = await import("../config/stellar.js");
+      let tx: any;
+      try {
+        tx = TransactionBuilder.fromXDR(
+          body.transaction,
+          getNetworkPassphrase(),
+        );
+      } catch {
+        return res
+          .status(400)
+          .json({ error: "Invalid XDR transaction envelope" });
+      }
+
+      // signAndSubmit handles decrypting the secret key and signing
+      const txHash = await sep30.signAndSubmit(
+        keyId,
+        body.userId,
+        () => tx as any,
+      );
+
+      res.json({ signature: txHash });
+    } catch (error) {
+      handleError(res, error);
     }
-
-    // signAndSubmit handles decrypting the secret key and signing
-    const txHash = await sep30.signAndSubmit(keyId, body.userId, () => tx as any);
-
-    res.json({ signature: txHash });
-  } catch (error) {
-    handleError(res, error);
-  }
-});
+  },
+);
 
 export { router as sep30Routes };

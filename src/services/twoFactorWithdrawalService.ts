@@ -359,12 +359,10 @@ export async function validate2FAForWithdrawal(
   });
 
   if (!result.success) {
-    res
-      .status(401)
-      .json({
-        error: "Unauthorized",
-        message: result.error ?? "2FA verification failed",
-      });
+    res.status(401).json({
+      error: "Unauthorized",
+      message: result.error ?? "2FA verification failed",
+    });
     return;
   }
 

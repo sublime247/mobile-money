@@ -112,8 +112,10 @@ export const getNetworkPassphrase = () => {
 
 // SEP-24 Configuration
 export const getSep24Config = () => ({
-  webAuthDomain: process.env.STELLAR_WEB_AUTH_DOMAIN || "https://api.mobilemoney.com",
-  interactiveUrlBase: process.env.SEP24_INTERACTIVE_URL || "https://wallet.mobilemoney.com",
+  webAuthDomain:
+    process.env.STELLAR_WEB_AUTH_DOMAIN || "https://api.mobilemoney.com",
+  interactiveUrlBase:
+    process.env.SEP24_INTERACTIVE_URL || "https://wallet.mobilemoney.com",
   feeServer: process.env.SEP24_FEE_SERVER,
   issuerAccount: process.env.STELLAR_ISSUER_ACCOUNT,
   signingKey: process.env.STELLAR_SIGNING_KEY,
@@ -125,11 +127,17 @@ export const getFeeBumpConfig = () => ({
   feePayerPublicKey: process.env.STELLAR_FEE_PAYER_PUBLIC_KEY || "",
   feePayerPrivateKey: process.env.STELLAR_FEE_PAYER_SECRET || "",
   // Maximum fee willing to pay (in stroops)
-  maxFeePerTransaction: parseInt(process.env.STELLAR_MAX_FEE_STROOPS || "100000", 10),
+  maxFeePerTransaction: parseInt(
+    process.env.STELLAR_MAX_FEE_STROOPS || "100000",
+    10,
+  ),
   // Base fee for transactions (in stroops)
   baseFeeStroops: parseInt(process.env.STELLAR_BASE_FEE_STROOPS || "100", 10),
   // Maximum number of operations per transaction
-  maxOperationsPerTransaction: parseInt(process.env.STELLAR_MAX_OPS || "100", 10),
+  maxOperationsPerTransaction: parseInt(
+    process.env.STELLAR_MAX_OPS || "100",
+    10,
+  ),
 });
 
 // Channel Accounts Pool Configuration
@@ -165,15 +173,27 @@ export const getChannelAccountsConfig = (): {
     accounts,
     poolConfig: {
       // Maximum time (ms) an account can be locked before auto-release
-      lockTimeoutMs: parseInt(process.env.CHANNEL_POOL_LOCK_TIMEOUT_MS || "30000", 10),
+      lockTimeoutMs: parseInt(
+        process.env.CHANNEL_POOL_LOCK_TIMEOUT_MS || "30000",
+        10,
+      ),
       // Maximum consecutive errors before disabling an account
-      maxConsecutiveErrors: parseInt(process.env.CHANNEL_POOL_MAX_ERRORS || "5", 10),
+      maxConsecutiveErrors: parseInt(
+        process.env.CHANNEL_POOL_MAX_ERRORS || "5",
+        10,
+      ),
       // Time (ms) to wait before re-enabling a disabled account
-      disableRecoveryMs: parseInt(process.env.CHANNEL_POOL_RECOVERY_MS || "60000", 10),
+      disableRecoveryMs: parseInt(
+        process.env.CHANNEL_POOL_RECOVERY_MS || "60000",
+        10,
+      ),
       // Maximum queue size for waiting requests
       maxQueueSize: parseInt(process.env.CHANNEL_POOL_MAX_QUEUE || "100", 10),
       // Time (ms) to wait in queue before timing out
-      queueTimeoutMs: parseInt(process.env.CHANNEL_POOL_QUEUE_TIMEOUT_MS || "10000", 10),
+      queueTimeoutMs: parseInt(
+        process.env.CHANNEL_POOL_QUEUE_TIMEOUT_MS || "10000",
+        10,
+      ),
     },
   };
 };

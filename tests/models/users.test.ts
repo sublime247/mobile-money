@@ -61,11 +61,14 @@ describe("UserModel - Mocked Unit Tests", () => {
     });
 
     it("should decrypt sensitive fields for authorized admin role", async () => {
-      const result = await userModel.findById(mockUserId, { id: "admin-id", role: "admin" });
-      
+      const result = await userModel.findById(mockUserId, {
+        id: "admin-id",
+        role: "admin",
+      });
+
       expect(queryRead).toHaveBeenCalledWith(
         "SELECT * FROM users WHERE id = $1",
-        [mockUserId]
+        [mockUserId],
       );
 
       expect(decryptField).toHaveBeenCalledTimes(5);
@@ -74,7 +77,10 @@ describe("UserModel - Mocked Unit Tests", () => {
     });
 
     it("should decrypt sensitive fields for the user themselves", async () => {
-      const result = await userModel.findById(mockUserId, { id: mockUserId, role: "user" });
+      const result = await userModel.findById(mockUserId, {
+        id: mockUserId,
+        role: "user",
+      });
 
       expect(decryptField).toHaveBeenCalledTimes(5);
       expect(result).toBeDefined();
@@ -82,7 +88,10 @@ describe("UserModel - Mocked Unit Tests", () => {
     });
 
     it("should NOT decrypt sensitive fields and return raw strings for unauthorized users", async () => {
-      const result = await userModel.findById(mockUserId, { id: "unauthorized-user-id", role: "user" });
+      const result = await userModel.findById(mockUserId, {
+        id: "unauthorized-user-id",
+        role: "user",
+      });
 
       expect(decryptField).not.toHaveBeenCalled();
       expect(result).toBeDefined();
@@ -113,7 +122,9 @@ describe("UserModel - Mocked Unit Tests", () => {
       expect(queryWrite).toHaveBeenCalledTimes(1);
 
       const [query, params] = (queryWrite as jest.Mock).mock.calls[0];
-      expect(query).toContain("UPDATE users SET first_name = $1, last_name = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3");
+      expect(query).toContain(
+        "UPDATE users SET first_name = $1, last_name = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3",
+      );
       expect(params[2]).toBe(mockUserId);
     });
   });

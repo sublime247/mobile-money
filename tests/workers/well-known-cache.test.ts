@@ -132,9 +132,12 @@ describe("well-known-cache worker DR failover", () => {
   });
 
   it("should return 405 Method Not Allowed for unsupported methods", async () => {
-    const request = new MockRequest("https://example.com/.well-known/stellar.toml", {
-      method: "POST",
-    }) as any;
+    const request = new MockRequest(
+      "https://example.com/.well-known/stellar.toml",
+      {
+        method: "POST",
+      },
+    ) as any;
 
     const response = await worker.fetch(request, mockEnv);
 
@@ -144,9 +147,12 @@ describe("well-known-cache worker DR failover", () => {
   });
 
   it("should serve response from cache on HIT", async () => {
-    const request = new MockRequest("https://example.com/.well-known/stellar.toml", {
-      method: "GET",
-    }) as any;
+    const request = new MockRequest(
+      "https://example.com/.well-known/stellar.toml",
+      {
+        method: "GET",
+      },
+    ) as any;
 
     const cachedRes = new MockResponse("stellar content", {
       status: 200,
@@ -165,9 +171,12 @@ describe("well-known-cache worker DR failover", () => {
   });
 
   it("should fetch from primary origin on cache MISS and cache the response", async () => {
-    const request = new MockRequest("https://example.com/.well-known/stellar.toml", {
-      method: "GET",
-    }) as any;
+    const request = new MockRequest(
+      "https://example.com/.well-known/stellar.toml",
+      {
+        method: "GET",
+      },
+    ) as any;
 
     const originRes = new MockResponse("stellar content from origin", {
       status: 200,
@@ -188,12 +197,20 @@ describe("well-known-cache worker DR failover", () => {
   });
 
   it("should trigger DR failover proxy mode on backend drop (503 Service Unavailable)", async () => {
-    const request = new MockRequest("https://example.com/.well-known/stellar.toml", {
-      method: "GET",
-    }) as any;
+    const request = new MockRequest(
+      "https://example.com/.well-known/stellar.toml",
+      {
+        method: "GET",
+      },
+    ) as any;
 
-    const primaryErrorRes = new MockResponse("Service Unavailable", { status: 503 });
-    const drRes = new MockResponse("dr content", { status: 200, headers: { "Content-Type": "text/plain" } });
+    const primaryErrorRes = new MockResponse("Service Unavailable", {
+      status: 503,
+    });
+    const drRes = new MockResponse("dr content", {
+      status: 200,
+      headers: { "Content-Type": "text/plain" },
+    });
 
     mockCache.match.mockResolvedValue(null);
     // First fetch fails, second fetch to DR succeeds
@@ -211,46 +228,60 @@ describe("well-known-cache worker DR failover", () => {
 
     // First fetch: primary URL
     expect((global.fetch as jest.Mock).mock.calls[0][0].url).toBe(
-      "https://example.com/.well-known/stellar.toml"
+      "https://example.com/.well-known/stellar.toml",
     );
     // Second fetch: DR URL
     expect((global.fetch as jest.Mock).mock.calls[1][0].url).toBe(
-      "https://dr.example.com/.well-known/stellar.toml"
+      "https://dr.example.com/.well-known/stellar.toml",
     );
 
     expect(console.warn).toHaveBeenCalledWith(
-      expect.stringContaining("DR Failover active: routing to https://dr.example.com/.well-known/stellar.toml using mode PROXY")
+      expect.stringContaining(
+        "DR Failover active: routing to https://dr.example.com/.well-known/stellar.toml using mode PROXY",
+      ),
     );
   });
 
   it("should trigger DR failover redirect mode on backend drop (network error exception)", async () => {
-    const request = new MockRequest("https://example.com/.well-known/stellar.toml", {
-      method: "GET",
-    }) as any;
+    const request = new MockRequest(
+      "https://example.com/.well-known/stellar.toml",
+      {
+        method: "GET",
+      },
+    ) as any;
 
     mockCache.match.mockResolvedValue(null);
     // Primary fetch throws a connection error
-    (global.fetch as jest.Mock).mockRejectedValue(new Error("Connection timeout"));
+    (global.fetch as jest.Mock).mockRejectedValue(
+      new Error("Connection timeout"),
+    );
 
     const env = { ...mockEnv, DR_FAILOVER_MODE: "REDIRECT" as const };
     const response = await worker.fetch(request, env);
 
     expect(response.status).toBe(307);
     expect(response.headers.get("Location")).toBe(
-      "https://dr.example.com/.well-known/stellar.toml"
+      "https://dr.example.com/.well-known/stellar.toml",
     );
     expect(global.fetch).toHaveBeenCalledTimes(1); // Only primary fetch was executed before redirecting
     expect(console.warn).toHaveBeenCalledWith(
-      expect.stringContaining("DR Failover active: routing to https://dr.example.com/.well-known/stellar.toml using mode REDIRECT")
+      expect.stringContaining(
+        "DR Failover active: routing to https://dr.example.com/.well-known/stellar.toml using mode REDIRECT",
+      ),
     );
   });
 
   it("should return primary error if DR failover is not configured", async () => {
-    const request = new MockRequest("https://example.com/.well-known/stellar.toml", {
-      method: "GET",
-    }) as any;
+    const request = new MockRequest(
+      "https://example.com/.well-known/stellar.toml",
+      {
+        method: "GET",
+      },
+    ) as any;
 
-    const primaryErrorRes = new MockResponse("Internal Server Error", { status: 500 });
+    const primaryErrorRes = new MockResponse("Internal Server Error", {
+      status: 500,
+    });
 
     mockCache.match.mockResolvedValue(null);
     (global.fetch as jest.Mock).mockResolvedValue(primaryErrorRes);
@@ -264,11 +295,16 @@ describe("well-known-cache worker DR failover", () => {
   });
 
   it("should return DR failure error if DR backend also returns error (>= 500)", async () => {
-    const request = new MockRequest("https://example.com/.well-known/stellar.toml", {
-      method: "GET",
-    }) as any;
+    const request = new MockRequest(
+      "https://example.com/.well-known/stellar.toml",
+      {
+        method: "GET",
+      },
+    ) as any;
 
-    const primaryErrorRes = new MockResponse("Service Unavailable", { status: 503 });
+    const primaryErrorRes = new MockResponse("Service Unavailable", {
+      status: 503,
+    });
     const drErrorRes = new MockResponse("Bad Gateway", { status: 502 });
 
     mockCache.match.mockResolvedValue(null);
@@ -284,9 +320,12 @@ describe("well-known-cache worker DR failover", () => {
   });
 
   it("should return 404 from primary without trigger DR failover", async () => {
-    const request = new MockRequest("https://example.com/.well-known/notfound.toml", {
-      method: "GET",
-    }) as any;
+    const request = new MockRequest(
+      "https://example.com/.well-known/notfound.toml",
+      {
+        method: "GET",
+      },
+    ) as any;
 
     const primary404Res = new MockResponse("Not Found", { status: 404 });
 

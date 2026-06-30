@@ -46,6 +46,7 @@ Slow queries are logged in structured JSON format:
 To protect sensitive information, the logging system automatically sanitizes:
 
 ### Query Text Sanitization
+
 - Email addresses: `user@example.com` → `***@***.***`
 - Phone numbers: `1234567890` → `***`
 - API keys/tokens: `abc123def456...` → `***`
@@ -54,6 +55,7 @@ To protect sensitive information, the logging system automatically sanitizes:
 - String values in INSERT/UPDATE: `VALUES('secret')` → `VALUES(***)`
 
 ### Parameter Sanitization
+
 - Email patterns in parameters
 - Phone number patterns (10+ digits)
 - Long alphanumeric strings (20+ chars)
@@ -68,15 +70,18 @@ The feature extends the standard PostgreSQL pool with query timing:
 
 ```typescript
 class SlowQueryPool extends Pool {
-  async query<T = any>(queryConfig: QueryConfig | string, values?: any[]): Promise<QueryResult<T>> {
+  async query<T = any>(
+    queryConfig: QueryConfig | string,
+    values?: any[],
+  ): Promise<QueryResult<T>> {
     const startTime = process.hrtime.bigint();
     // ... execute query with timing
     const durationMs = Number(endTime - startTime) / 1e6;
-    
+
     if (durationMs > SLOW_QUERY_THRESHOLD_MS) {
       logSlowQuery(queryString, durationMs, queryParams);
     }
-    
+
     return result;
   }
 }
@@ -91,10 +96,10 @@ Uses `process.hrtime.bigint()` for nanosecond precision timing, converted to mil
 ### Basic Usage
 
 ```typescript
-import { pool } from './src/config/database';
+import { pool } from "./src/config/database";
 
 // Any query using the pool will be automatically tracked
-const result = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
+const result = await pool.query("SELECT * FROM users WHERE id = $1", [userId]);
 ```
 
 ### Monitoring Logs

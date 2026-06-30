@@ -294,7 +294,10 @@ export async function rebalanceReserves(): Promise<RebalanceResult[]> {
         warning,
       });
     } catch (err) {
-      logger.error(`[lp-rebalance] Path payment failed for ${cfg.assetCode}:`, err);
+      logger.error(
+        `[lp-rebalance] Path payment failed for ${cfg.assetCode}:`,
+        err,
+      );
       results.push({
         assetCode: cfg.assetCode,
         currentBalance: balance,
@@ -303,7 +306,7 @@ export async function rebalanceReserves(): Promise<RebalanceResult[]> {
         txHash: null,
         skipped: true,
         warning,
-        reason,
+        reason: err instanceof Error ? err.message : String(err),
       });
     }
   }

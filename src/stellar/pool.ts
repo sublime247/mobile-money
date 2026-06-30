@@ -552,10 +552,7 @@ export class ChannelAccountsPool {
 
       return newSequence;
     } catch (error) {
-      logger.error(
-        `[Pool] Failed to resync sequence for ${publicKey}:`,
-        error,
-      );
+      logger.error(`[Pool] Failed to resync sequence for ${publicKey}:`, error);
       throw error;
     }
   }

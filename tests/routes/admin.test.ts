@@ -13,11 +13,14 @@ jest.mock("../../src/controllers/transactionController", () => ({
     }
     if (id === "not-failed") {
       return res.status(400).json({
-        error: "Cannot refund transaction with status 'pending'. Only failed transactions are eligible.",
+        error:
+          "Cannot refund transaction with status 'pending'. Only failed transactions are eligible.",
       });
     }
     if (id === "not-withdraw") {
-      return res.status(400).json({ error: "Only withdrawal transactions can be refunded" });
+      return res
+        .status(400)
+        .json({ error: "Only withdrawal transactions can be refunded" });
     }
     return res.json({
       message: "Refund processed successfully",
@@ -173,7 +176,9 @@ describe("Admin Routes - Refund Transaction", () => {
         .query({ mockAdmin: "true" });
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toMatch(/Only failed transactions are eligible/);
+      expect(response.body.error).toMatch(
+        /Only failed transactions are eligible/,
+      );
     });
 
     it("should return 400 when transaction is not a withdrawal", async () => {
@@ -182,7 +187,9 @@ describe("Admin Routes - Refund Transaction", () => {
         .query({ mockAdmin: "true" });
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe("Only withdrawal transactions can be refunded");
+      expect(response.body.error).toBe(
+        "Only withdrawal transactions can be refunded",
+      );
     });
 
     it("should process refund and return refund details for a valid failed withdrawal", async () => {
@@ -196,7 +203,9 @@ describe("Admin Routes - Refund Transaction", () => {
       expect(response.body).toHaveProperty("originalAmount");
       expect(response.body).toHaveProperty("feeDeducted");
       expect(response.body).toHaveProperty("refundAmount");
-      expect(response.body.refundAmount).toBeLessThan(response.body.originalAmount);
+      expect(response.body.refundAmount).toBeLessThan(
+        response.body.originalAmount,
+      );
     });
   });
 });

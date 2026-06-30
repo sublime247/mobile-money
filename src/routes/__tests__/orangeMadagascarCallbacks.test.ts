@@ -2,8 +2,10 @@ import { jest } from "@jest/globals";
 
 jest.mock("../../config/appConfig", () => ({
   getConfigValue: jest.fn((key: string) => {
-    if (key === "providers.orangeMadagascar.callbackSecret") return "test-oma-secret";
-    if (key === "providers.orangeMadagascar.callbackSignatureHeader") return "x-callback-signature";
+    if (key === "providers.orangeMadagascar.callbackSecret")
+      return "test-oma-secret";
+    if (key === "providers.orangeMadagascar.callbackSignatureHeader")
+      return "x-callback-signature";
     return undefined;
   }),
 }));

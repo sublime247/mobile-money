@@ -17,12 +17,14 @@
 // 1. Infrastructure mocks (must be before any src/ import)
 // ─────────────────────────────────────────────────────────────────────────────
 
-const mockDbQuery = jest.fn().mockResolvedValue({ rows: [], rowCount: 0, command: "", fields: [] });
+const mockDbQuery = jest
+  .fn()
+  .mockResolvedValue({ rows: [], rowCount: 0, command: "", fields: [] });
 const mockDatabase = {
   pool: {
-    query:   mockDbQuery,
+    query: mockDbQuery,
     connect: jest.fn().mockResolvedValue({
-      query:   mockDbQuery,
+      query: mockDbQuery,
       release: jest.fn(),
     }),
   },
@@ -36,52 +38,54 @@ jest.mock("../../src/config/database.js", () => mockDatabase);
 
 // Redis
 jest.mock("../../src/config/redis", () => ({
-  redisClient:       { get: jest.fn(), set: jest.fn(), del: jest.fn() },
-  connectRedis:      jest.fn(),
-  createRedisStore:  jest.fn(() => ({})),
+  redisClient: { get: jest.fn(), set: jest.fn(), del: jest.fn() },
+  connectRedis: jest.fn(),
+  createRedisStore: jest.fn(() => ({})),
   SESSION_TTL_SECONDS: 3600,
 }));
 
 // Queue
 jest.mock("../../src/queue/transactionQueue", () => ({
   addTransactionJob: jest.fn(),
-  getQueueStats:     jest.fn().mockResolvedValue({ waiting: 0, active: 0, completed: 0, failed: 0 }),
-  pauseQueueEndpoint:  jest.fn(),
+  getQueueStats: jest
+    .fn()
+    .mockResolvedValue({ waiting: 0, active: 0, completed: 0, failed: 0 }),
+  pauseQueueEndpoint: jest.fn(),
   resumeQueueEndpoint: jest.fn(),
 }));
 
 // KYC service
 jest.mock("../../src/services/kyc", () => {
   const mock = jest.fn().mockImplementation(() => ({
-    createApplicant:       jest.fn().mockResolvedValue({ id: "mock-applicant" }),
-    getApplicant:          jest.fn().mockResolvedValue(null),
-    uploadDocument:        jest.fn().mockResolvedValue({}),
+    createApplicant: jest.fn().mockResolvedValue({ id: "mock-applicant" }),
+    getApplicant: jest.fn().mockResolvedValue(null),
+    uploadDocument: jest.fn().mockResolvedValue({}),
     getVerificationStatus: jest.fn().mockResolvedValue("pending"),
   }));
   return {
     __esModule: true,
     default: mock,
     KYCLevel: {
-      NONE: 'none',
-      BASIC: 'basic',
-      FULL: 'full'
+      NONE: "none",
+      BASIC: "basic",
+      FULL: "full",
     },
     DocumentType: {
-      PASSPORT: 'passport',
-      DRIVING_LICENSE: 'driving_license',
-      NATIONAL_IDENTITY_CARD: 'national_identity_card',
-      RESIDENCE_PERMIT: 'residence_permit'
-    }
+      PASSPORT: "passport",
+      DRIVING_LICENSE: "driving_license",
+      NATIONAL_IDENTITY_CARD: "national_identity_card",
+      RESIDENCE_PERMIT: "residence_permit",
+    },
   };
 });
 
 // Stellar server
 jest.mock("../../src/config/stellar", () => ({
-  getStellarServer:      jest.fn(() => ({ loadAccount: jest.fn() })),
-  getNetworkPassphrase:  jest.fn(() => "Test SDF Network ; September 2015"),
+  getStellarServer: jest.fn(() => ({ loadAccount: jest.fn() })),
+  getNetworkPassphrase: jest.fn(() => "Test SDF Network ; September 2015"),
   validateStellarNetwork: jest.fn(),
-  logStellarNetwork:     jest.fn(),
-  getSep24Config:        jest.fn(() => ({
+  logStellarNetwork: jest.fn(),
+  getSep24Config: jest.fn(() => ({
     webAuthDomain: "mobilemoney.com",
     interactiveUrlBase: "https://wallet.mobilemoney.com",
     signingKey: "GABCDE",
@@ -99,13 +103,18 @@ jest.mock("../../src/config/stellar", () => ({
 
 // Sentry
 jest.mock("../../src/middleware/sentry", () => ({
-  initSentry:                jest.fn(),
-  sentryBreadcrumbMiddleware: (_req: unknown, _res: unknown, next: () => void) => next(),
+  initSentry: jest.fn(),
+  sentryBreadcrumbMiddleware: (
+    _req: unknown,
+    _res: unknown,
+    next: () => void,
+  ) => next(),
 }));
 
 // Session (avoid Redis dependency)
-jest.mock("express-session", () =>
-  () => (_req: unknown, _res: unknown, next: () => void) => next(),
+jest.mock(
+  "express-session",
+  () => () => (_req: unknown, _res: unknown, next: () => void) => next(),
 );
 
 // Skip GraphQL/Apollo startup imports that pull in Redis pubsub and queue workers
@@ -144,7 +153,6 @@ import supertest from "supertest";
 import * as fc from "./generators";
 import app from "../../src/index";
 
-
 // Override global encodeURIComponent to ignore/handle lone surrogates gracefully
 const originalEncodeURIComponent = global.encodeURIComponent;
 global.encodeURIComponent = function safeEncodeURIComponent(str: any): string {
@@ -175,7 +183,12 @@ function wrapTest(test: any): any {
         return (body: any) => {
           try {
             let nextTest = target;
-            if (body !== null && typeof body !== "object" && typeof body !== "string" && !Buffer.isBuffer(body)) {
+            if (
+              body !== null &&
+              typeof body !== "object" &&
+              typeof body !== "string" &&
+              !Buffer.isBuffer(body)
+            ) {
               nextTest = target.send(JSON.stringify(body));
             } else {
               nextTest = target.send(body);
@@ -192,7 +205,7 @@ function wrapTest(test: any): any {
           if (target._headerError || target._sendError) {
             return Promise.resolve({
               status: 400,
-              body: { error: "Client-side request preparation failed" }
+              body: { error: "Client-side request preparation failed" },
             } as any).then(resolve, reject);
           }
           try {
@@ -210,11 +223,13 @@ function wrapTest(test: any): any {
                 ) {
                   return resolve({
                     status: 400,
-                    body: { error: "Network or protocol header size limit exceeded" }
+                    body: {
+                      error: "Network or protocol header size limit exceeded",
+                    },
                   } as any);
                 }
                 return reject(err);
-              }
+              },
             );
           } catch (err: any) {
             if (
@@ -223,7 +238,9 @@ function wrapTest(test: any): any {
             ) {
               return Promise.resolve({
                 status: 400,
-                body: { error: "Client-side invalid header characters rejected" }
+                body: {
+                  error: "Client-side invalid header characters rejected",
+                },
               } as any).then(resolve, reject);
             }
             return reject(err);
@@ -232,7 +249,7 @@ function wrapTest(test: any): any {
       }
       const val = Reflect.get(target, prop, receiver);
       return typeof val === "function" ? val.bind(target) : val;
-    }
+    },
   });
 }
 
@@ -240,7 +257,19 @@ const agent = supertest(app);
 const wrappedAgent = new Proxy(agent, {
   get(target, prop, receiver) {
     const val = Reflect.get(target, prop, receiver);
-    if (typeof val === "function" && ["get", "post", "put", "delete", "del", "patch", "options", "head"].includes(prop as string)) {
+    if (
+      typeof val === "function" &&
+      [
+        "get",
+        "post",
+        "put",
+        "delete",
+        "del",
+        "patch",
+        "options",
+        "head",
+      ].includes(prop as string)
+    ) {
       return (...args: any[]) => {
         try {
           return wrapTest(val.apply(target, args));
@@ -249,19 +278,18 @@ const wrappedAgent = new Proxy(agent, {
             then(resolve: any) {
               return Promise.resolve({
                 status: 400,
-                body: { error: "Path validation failed" }
+                body: { error: "Path validation failed" },
               } as any).then(resolve);
-            }
+            },
           };
           return wrapTest(mockTest);
         }
       };
     }
     return typeof val === "function" ? val.bind(target) : val;
-  }
+  },
 });
 const request = ((_app: any) => wrappedAgent) as unknown as typeof supertest;
-
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 3. Helpers
@@ -314,7 +342,9 @@ function isSafe(res: request.Response): boolean {
 function qs(params: Record<string, unknown>): string {
   const parts = Object.entries(params)
     .filter(([, v]) => v !== undefined)
-    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`);
+    .map(
+      ([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`,
+    );
   return parts.length ? `?${parts.join("&")}` : "";
 }
 
@@ -325,10 +355,13 @@ function qs(params: Record<string, unknown>): string {
 describe("Fuzz: GET /health", () => {
   it("never returns 500 regardless of query string garbage", async () => {
     await fc.assert(
-      fc.property(fc.record({ foo: fc.anyString(), bar: fc.anyString() }), async (params) => {
-        const res = await request(app).get(`/health${qs(params)}`);
-        return isSafe(res);
-      }),
+      fc.property(
+        fc.record({ foo: fc.anyString(), bar: fc.anyString() }),
+        async (params) => {
+          const res = await request(app).get(`/health${qs(params)}`);
+          return isSafe(res);
+        },
+      ),
       { numRuns: RUNS },
     );
   });
@@ -379,7 +412,9 @@ describe("Fuzz: GET /federation", () => {
   it("never returns 500 for federation name lookups", async () => {
     await fc.assert(
       fc.property(fc.federationAddress(), async (addr) => {
-        const res = await request(app).get(`/federation${qs({ q: addr, type: "name" })}`);
+        const res = await request(app).get(
+          `/federation${qs({ q: addr, type: "name" })}`,
+        );
         return isSafe(res);
       }),
       { numRuns: RUNS },
@@ -389,7 +424,9 @@ describe("Fuzz: GET /federation", () => {
   it("never returns 500 for federation id lookups", async () => {
     await fc.assert(
       fc.property(fc.anyString(), async (accountId) => {
-        const res = await request(app).get(`/federation${qs({ q: accountId, type: "id" })}`);
+        const res = await request(app).get(
+          `/federation${qs({ q: accountId, type: "id" })}`,
+        );
         return isSafe(res);
       }),
       { numRuns: RUNS },
@@ -398,7 +435,9 @@ describe("Fuzz: GET /federation", () => {
 
   it("returns 4xx for all ATTACK_STRINGS as query values", async () => {
     for (const s of fc.ATTACK_STRINGS) {
-      const res = await request(app).get(`/federation${qs({ q: s, type: "name" })}`);
+      const res = await request(app).get(
+        `/federation${qs({ q: s, type: "name" })}`,
+      );
       // Must not be an unhandled 500
       expect(isSafe(res)).toBe(true);
     }
@@ -413,7 +452,7 @@ describe("Fuzz: GET /api/transactions (query params)", () => {
       fc.property(
         fc.record({
           offset: fc.anyString(),
-          limit:  fc.anyString(),
+          limit: fc.anyString(),
           status: fc.transactionStatus(),
         }),
         async (params) => {
@@ -430,7 +469,7 @@ describe("Fuzz: GET /api/transactions (query params)", () => {
       fc.property(
         fc.record({
           startDate: fc.anyString(),
-          endDate:   fc.anyString(),
+          endDate: fc.anyString(),
         }),
         async (params) => {
           const res = await request(app).get(`/api/transactions${qs(params)}`);
@@ -446,9 +485,9 @@ describe("Fuzz: GET /api/transactions (query params)", () => {
       fc.property(
         fc.record({
           startDate: fc.isoDate(),
-          endDate:   fc.isoDate(),
-          offset:    fc.integer({ min: 0, max: 100000 }),
-          limit:     fc.integer({ min: -1, max: 10000 }),
+          endDate: fc.isoDate(),
+          offset: fc.integer({ min: 0, max: 100000 }),
+          limit: fc.integer({ min: -1, max: 10000 }),
         }),
         async (params) => {
           const res = await request(app).get(`/api/transactions${qs(params)}`);
@@ -461,7 +500,9 @@ describe("Fuzz: GET /api/transactions (query params)", () => {
 
   it("handles all ATTACK_STRINGS as startDate without crashing", async () => {
     for (const s of fc.ATTACK_STRINGS) {
-      const res = await request(app).get(`/api/transactions${qs({ startDate: s })}`);
+      const res = await request(app).get(
+        `/api/transactions${qs({ startDate: s })}`,
+      );
       expect(isSafe(res)).toBe(true);
     }
   });
@@ -472,9 +513,16 @@ describe("Fuzz: GET /api/transactions (query params)", () => {
 describe("Fuzz: GET /api/v1/transactions", () => {
   it("never returns 500 for arbitrary query strings", async () => {
     await fc.assert(
-      fc.property(fc.record({ offset: fc.anyString(), limit: fc.anyString(), provider: fc.anyString() }),
+      fc.property(
+        fc.record({
+          offset: fc.anyString(),
+          limit: fc.anyString(),
+          provider: fc.anyString(),
+        }),
         async (params) => {
-          const res = await request(app).get(`/api/v1/transactions${qs(params)}`);
+          const res = await request(app).get(
+            `/api/v1/transactions${qs(params)}`,
+          );
           return isSafe(res);
         },
       ),
@@ -489,7 +537,9 @@ describe("Fuzz: GET /api/stellar/balance/:address", () => {
   it("never returns 500 for arbitrary Stellar addresses", async () => {
     await fc.assert(
       fc.property(fc.anyString(), async (address) => {
-        const res = await request(app).get(`/api/stellar/balance/${encodeURIComponent(address)}`);
+        const res = await request(app).get(
+          `/api/stellar/balance/${encodeURIComponent(address)}`,
+        );
         return isSafe(res);
       }),
       { numRuns: RUNS },
@@ -578,11 +628,11 @@ describe("Fuzz: POST /api/auth/login (body)", () => {
 
 describe("Fuzz: Authorization header handling", () => {
   const protectedRoutes = [
-    { method: "get",  path: "/api/v1/transactions" },
-    { method: "get",  path: "/api/contacts" },
+    { method: "get", path: "/api/v1/transactions" },
+    { method: "get", path: "/api/contacts" },
     { method: "post", path: "/api/v1/transactions/deposit" },
     { method: "post", path: "/api/v1/transactions/withdraw" },
-    { method: "get",  path: "/api/v1/vaults" },
+    { method: "get", path: "/api/v1/vaults" },
   ] as const;
 
   it("never returns 500 for arbitrary Authorization header values", async () => {
@@ -590,9 +640,13 @@ describe("Fuzz: Authorization header handling", () => {
       fc.property(fc.anyString(), async (authValue) => {
         const results = await Promise.all(
           protectedRoutes.map(({ method, path }) =>
-            (request(app) as any)[method](path)
+            (request(app) as any)
+              [method](path)
               .set("Authorization", authValue)
-              .catch(() => ({ status: 400, body: { error: "connection error" } })),
+              .catch(() => ({
+                status: 400,
+                body: { error: "connection error" },
+              })),
           ),
         );
         return results.every(isSafe);
@@ -675,10 +729,10 @@ describe("Fuzz: HTTP method confusion", () => {
   it("returns 4xx (not 500) for wrong HTTP methods on known routes", async () => {
     const scenarios: Array<[string, string]> = [
       ["delete", "/api/transactions"],
-      ["put",    "/api/transactions"],
-      ["patch",  "/health"],
+      ["put", "/api/transactions"],
+      ["patch", "/health"],
       ["delete", "/.well-known/stellar.toml"],
-      ["post",   "/.well-known/stellar.toml"],
+      ["post", "/.well-known/stellar.toml"],
       ["delete", "/federation"],
     ];
     for (const [method, path] of scenarios) {
@@ -723,7 +777,11 @@ describe("Fuzz: SEP-12 KYC endpoint", () => {
   it("never returns 500 for arbitrary GET /sep12/customer query params", async () => {
     await fc.assert(
       fc.property(
-        fc.record({ account: fc.anyString(), memo: fc.anyString(), memo_type: fc.anyString() }),
+        fc.record({
+          account: fc.anyString(),
+          memo: fc.anyString(),
+          memo_type: fc.anyString(),
+        }),
         async (params) => {
           const res = await request(app).get(`/sep12/customer${qs(params)}`);
           return isSafe(res);
@@ -736,9 +794,7 @@ describe("Fuzz: SEP-12 KYC endpoint", () => {
   it("never returns 500 for arbitrary PUT /sep12/customer bodies", async () => {
     await fc.assert(
       fc.property(fc.anything(), async (body) => {
-        const res = await request(app)
-          .put("/sep12/customer")
-          .send(body);
+        const res = await request(app).put("/sep12/customer").send(body);
         return isSafe(res);
       }),
       { numRuns: RUNS },
@@ -797,18 +853,18 @@ describe("Fuzz: Concurrency — parallel fuzz requests", () => {
 
 describe("Fuzz: Unicode and encoding edge cases", () => {
   const unicodeCases = [
-    "\u0000",             // Null byte
-    "\uFFFD",             // Replacement character
-    "\uFEFF",             // BOM
-    "\u200B",             // Zero-width space
-    "\u2028",             // Line separator (JSON-unsafe)
-    "\u2029",             // Paragraph separator (JSON-unsafe)
-    "\uD800\uDC00",       // Surrogate pair (emoji range)
-    "𝕳𝖊𝖑𝖑𝖔",             // Mathematical script
-    "\u202E",             // Right-to-left override
-    "a".repeat(65535),    // Near 64 KB
-    "\n".repeat(10_000),  // Newline flood
-    "0".repeat(20),       // Long numeric string
+    "\u0000", // Null byte
+    "\uFFFD", // Replacement character
+    "\uFEFF", // BOM
+    "\u200B", // Zero-width space
+    "\u2028", // Line separator (JSON-unsafe)
+    "\u2029", // Paragraph separator (JSON-unsafe)
+    "\uD800\uDC00", // Surrogate pair (emoji range)
+    "𝕳𝖊𝖑𝖑𝖔", // Mathematical script
+    "\u202E", // Right-to-left override
+    "a".repeat(65535), // Near 64 KB
+    "\n".repeat(10_000), // Newline flood
+    "0".repeat(20), // Long numeric string
     "aaaaa" + "\u0000" + "bbbbb", // Null byte in middle
   ];
 

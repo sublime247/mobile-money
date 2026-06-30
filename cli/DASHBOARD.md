@@ -22,8 +22,9 @@ npm install
 ```
 
 Key packages:
+
 - **chalk** — Terminal styling and colors
-- **cli-table3** — Beautiful table formatting  
+- **cli-table3** — Beautiful table formatting
 - **figlet** — ASCII art banners
 
 ## Usage
@@ -138,12 +139,12 @@ Mobile Money ↔ Stellar Bridge | Admin Dashboard
 
 ## Color Coding
 
-| Component | Healthy | Degraded | Unhealthy |
-|-----------|---------|----------|-----------|
-| Health Status | 🟢 Green | 🟡 Yellow | 🔴 Red |
-| Queue | Cyan | Yellow | Red |
-| Success Rate | Green (≥95%) | Yellow (80-95%) | Red (<80%) |
-| Provider Failure | Green (<5%) | Yellow (5-10%) | Red (>10%) |
+| Component        | Healthy      | Degraded        | Unhealthy  |
+| ---------------- | ------------ | --------------- | ---------- |
+| Health Status    | 🟢 Green     | 🟡 Yellow       | 🔴 Red     |
+| Queue            | Cyan         | Yellow          | Red        |
+| Success Rate     | Green (≥95%) | Yellow (80-95%) | Red (<80%) |
+| Provider Failure | Green (<5%)  | Yellow (5-10%)  | Red (>10%) |
 
 ## API Endpoints
 
@@ -152,27 +153,32 @@ The CLI uses these backend endpoints (all require admin authentication):
 ### Dashboard Endpoints
 
 **GET /api/admin/dashboard/stats**
+
 - Comprehensive dashboard data (health, queue, transactions, providers)
 - Returns all metrics at once for efficiency
 - Response time typically <500ms
 
 **GET /api/admin/health**
+
 - Quick health check for all components
 - No authentication required (useful for load balancers)
 - Returns: database, redis, stellar status + response time
 
 **GET /api/admin/queue/stats**
+
 - Detailed queue metrics only
 - Returns job counts and DLQ size
 - Response time typically <100ms
 
 **GET /api/admin/providers/health**
+
 - Existing provider health endpoint
 - Returns failover stats, queue status, Redis status, DB replicas
 
 ### Fallback Mechanism
 
 If the primary dashboard endpoint fails, the CLI automatically falls back to fetching individual metrics:
+
 1. System health (database + Redis)
 2. Queue statistics
 3. Transaction stats (from existing `/api/stats` endpoint)
@@ -180,11 +186,13 @@ If the primary dashboard endpoint fails, the CLI automatically falls back to fet
 ## Metrics Explained
 
 ### System Health
+
 - **Database**: Primary PostgreSQL connection health
 - **Redis**: Cache and session store availability
 - **Stellar**: Blockchain network connectivity (inferred from transaction ability)
 
 ### Queue Statistics
+
 - **Total Jobs**: All jobs in the system
 - **Pending**: Jobs waiting to be processed
 - **Active**: Currently being processed
@@ -193,12 +201,14 @@ If the primary dashboard endpoint fails, the CLI automatically falls back to fet
 - **Dead Letter Queue (DLQ)**: Failed jobs awaiting manual intervention
 
 ### Transaction Statistics (24h window)
+
 - **Total Count**: Transactions processed in the last 24 hours
 - **Success Rate**: Percentage of successful transactions
 - **Total Volume**: Sum of all transaction amounts
 - **Active Users**: Users with at least one transaction
 
 ### Provider Status
+
 - **Status**: Online/Offline/Degraded (based on circuit breaker state)
 - **Failure Rate**: Percentage of failed requests to this provider
 - **Last Checked**: When this status was last updated
@@ -221,17 +231,19 @@ DASHBOARD_ENABLED=true                  # Enable/disable dashboard feature
 
 ### Dashboard shows "UNHEALTHY" status
 
-1. **Check backend connectivity**: 
+1. **Check backend connectivity**:
+
    ```bash
    curl -H "X-API-Key: $API_KEY" http://localhost:3000/health
    ```
 
-2. **Verify admin API key**: 
+2. **Verify admin API key**:
+
    ```bash
    momo-cli auth:verify
    ```
 
-3. **Check backend logs**: 
+3. **Check backend logs**:
    ```bash
    docker compose logs app | grep -i dashboard
    ```
@@ -245,6 +257,7 @@ DASHBOARD_ENABLED=true                  # Enable/disable dashboard feature
 ### JSON export empty or incomplete
 
 The CLI falls back to individual endpoints if the primary fails. Check:
+
 ```bash
 momo-cli dashboard:export 2>&1
 ```
@@ -282,13 +295,13 @@ Create a simple exporter using the JSON output:
 PORT=9999
 while true; do
   METRICS=$(momo-cli dashboard:export)
-  
+
   echo "# HELP momo_queue_total Total jobs in queue"
   echo "momo_queue_total $(echo $METRICS | jq '.queue.totalJobs')"
-  
+
   echo "# HELP momo_queue_failed Failed jobs"
   echo "momo_queue_failed $(echo $METRICS | jq '.queue.failedJobs')"
-  
+
   echo "# HELP momo_transaction_success Success rate"
   echo "momo_transaction_success $(echo $METRICS | jq '.transactions.successRate')"
 done | nc -l localhost $PORT

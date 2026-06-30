@@ -11,7 +11,11 @@ import { PagerDutyService, createPagerDutyService } from "../pagerDutyService";
  * the call site's responsibility, so the one-shot matrix log guard isn't
  * consumed by every test setup.
  */
-function setShortfallThresholds(minor: number, moderate: number, critical: number): void {
+function setShortfallThresholds(
+  minor: number,
+  moderate: number,
+  critical: number,
+): void {
   PagerDutyService.__resetShortfallStateForTests();
   PagerDutyService.BALANCE_SHORTFALL_THRESHOLDS = {
     criticalPct: critical,
@@ -386,7 +390,9 @@ describe("PagerDutyService – balance shortfall tier evaluation (#1018)", () =>
       expect(PagerDutyService.classifyShortfall(0)).toBeNull();
       expect(PagerDutyService.classifyShortfall(-5)).toBeNull();
       expect(PagerDutyService.classifyShortfall(Number.NaN)).toBeNull();
-      expect(PagerDutyService.classifyShortfall(Number.POSITIVE_INFINITY)).toBeNull();
+      expect(
+        PagerDutyService.classifyShortfall(Number.POSITIVE_INFINITY),
+      ).toBeNull();
     });
 
     it("returns null strictly below the minor tier (9.99% → no alert)", () => {
@@ -438,7 +444,9 @@ describe("PagerDutyService – balance shortfall tier evaluation (#1018)", () =>
 
     it("repairs to defaults when tiers are equal (no spread)", () => {
       setShortfallThresholds(50, 50, 50);
-      captured = jest.spyOn(console, "warn").mockImplementation(() => undefined);
+      captured = jest
+        .spyOn(console, "warn")
+        .mockImplementation(() => undefined);
       const input = { ...PagerDutyService.BALANCE_SHORTFALL_THRESHOLDS };
       const t = PagerDutyService.validateAndRepairThresholds();
       expect(t).toEqual({ criticalPct: 50, moderatePct: 25, minorPct: 10 });
@@ -449,7 +457,9 @@ describe("PagerDutyService – balance shortfall tier evaluation (#1018)", () =>
 
     it("repairs to defaults when minor > moderate (reversed)", () => {
       setShortfallThresholds(60, 30, 10);
-      captured = jest.spyOn(console, "warn").mockImplementation(() => undefined);
+      captured = jest
+        .spyOn(console, "warn")
+        .mockImplementation(() => undefined);
       const input = { ...PagerDutyService.BALANCE_SHORTFALL_THRESHOLDS };
       const t = PagerDutyService.validateAndRepairThresholds();
       expect(t).toEqual({ criticalPct: 50, moderatePct: 25, minorPct: 10 });
@@ -463,7 +473,9 @@ describe("PagerDutyService – balance shortfall tier evaluation (#1018)", () =>
         moderatePct: 25,
         minorPct: 10,
       };
-      captured = jest.spyOn(console, "warn").mockImplementation(() => undefined);
+      captured = jest
+        .spyOn(console, "warn")
+        .mockImplementation(() => undefined);
       const input = { ...PagerDutyService.BALANCE_SHORTFALL_THRESHOLDS };
       const t = PagerDutyService.validateAndRepairThresholds();
       expect(t).toEqual({ criticalPct: 50, moderatePct: 25, minorPct: 10 });
@@ -472,7 +484,9 @@ describe("PagerDutyService – balance shortfall tier evaluation (#1018)", () =>
 
     it("repairs when minor is zero or negative", () => {
       setShortfallThresholds(0, 25, 50);
-      captured = jest.spyOn(console, "warn").mockImplementation(() => undefined);
+      captured = jest
+        .spyOn(console, "warn")
+        .mockImplementation(() => undefined);
       const input = { ...PagerDutyService.BALANCE_SHORTFALL_THRESHOLDS };
       const t = PagerDutyService.validateAndRepairThresholds();
       expect(t).toEqual({ criticalPct: 50, moderatePct: 25, minorPct: 10 });
@@ -485,7 +499,9 @@ describe("PagerDutyService – balance shortfall tier evaluation (#1018)", () =>
       PagerDutyService.validateAndRepairThresholds();
       PagerDutyService.validateAndRepairThresholds();
       const matrixCalls = captured.mock.calls.filter((args) =>
-        String(args[0] ?? "").includes("Balance shortfall escalation matrix active"),
+        String(args[0] ?? "").includes(
+          "Balance shortfall escalation matrix active",
+        ),
       );
       expect(matrixCalls).toHaveLength(1);
     });
@@ -505,20 +521,28 @@ describe("PagerDutyService – balance shortfall tier evaluation (#1018)", () =>
 
   describe("escalation label mapping (issue #1018: routing correctness)", () => {
     it("maps warning → team-notification", () => {
-      expect(PagerDutyService.getEscalationLabel("warning")).toBe("team-notification");
+      expect(PagerDutyService.getEscalationLabel("warning")).toBe(
+        "team-notification",
+      );
     });
     it("maps error → operational-escalation", () => {
-      expect(PagerDutyService.getEscalationLabel("error")).toBe("operational-escalation");
+      expect(PagerDutyService.getEscalationLabel("error")).toBe(
+        "operational-escalation",
+      );
     });
     it("maps critical → immediate-escalation", () => {
-      expect(PagerDutyService.getEscalationLabel("critical")).toBe("immediate-escalation");
+      expect(PagerDutyService.getEscalationLabel("critical")).toBe(
+        "immediate-escalation",
+      );
     });
   });
 
   describe("evaluateBalanceShortfall", () => {
     it("returns null when current balance >= threshold (no shortfall)", () => {
       const svc = new PagerDutyService({
-        integrationKey: "k", dedupKey: "d", enabled: false,
+        integrationKey: "k",
+        dedupKey: "d",
+        enabled: false,
       });
       expect(svc.evaluateBalanceShortfall("mtn", "XAF", 1000, 1000)).toBeNull();
       expect(svc.evaluateBalanceShortfall("mtn", "XAF", 1000, 1500)).toBeNull();
@@ -526,9 +550,13 @@ describe("PagerDutyService – balance shortfall tier evaluation (#1018)", () =>
 
     it("returns null when threshold <= 0", () => {
       const svc = new PagerDutyService({
-        integrationKey: "k", dedupKey: "d", enabled: false,
+        integrationKey: "k",
+        dedupKey: "d",
+        enabled: false,
       });
-      captured = jest.spyOn(console, "warn").mockImplementation(() => undefined);
+      captured = jest
+        .spyOn(console, "warn")
+        .mockImplementation(() => undefined);
       expect(svc.evaluateBalanceShortfall("mtn", "XAF", 0, 100)).toBeNull();
       expect(svc.evaluateBalanceShortfall("mtn", "XAF", -50, 100)).toBeNull();
       expect(captured).toHaveBeenCalled();
@@ -536,7 +564,9 @@ describe("PagerDutyService – balance shortfall tier evaluation (#1018)", () =>
 
     it("returns null when shortfall is below the noise floor (sub-MINOR_PCT)", () => {
       const svc = new PagerDutyService({
-        integrationKey: "k", dedupKey: "d", enabled: false,
+        integrationKey: "k",
+        dedupKey: "d",
+        enabled: false,
       });
       // threshold=1000, balance=910 → 9% shortfall (just below 10% MINOR)
       expect(svc.evaluateBalanceShortfall("mtn", "XAF", 1000, 910)).toBeNull();
@@ -546,7 +576,9 @@ describe("PagerDutyService – balance shortfall tier evaluation (#1018)", () =>
 
     it("returns a warning context for minor shortfalls (10% inclusive)", () => {
       const svc = new PagerDutyService({
-        integrationKey: "k", dedupKey: "d", enabled: false,
+        integrationKey: "k",
+        dedupKey: "d",
+        enabled: false,
       });
       const ctx = svc.evaluateBalanceShortfall("mtn", "XAF", 1000, 880);
       expect(ctx).not.toBeNull();
@@ -558,7 +590,9 @@ describe("PagerDutyService – balance shortfall tier evaluation (#1018)", () =>
 
     it("returns an error context for moderate shortfalls (25% inclusive)", () => {
       const svc = new PagerDutyService({
-        integrationKey: "k", dedupKey: "d", enabled: false,
+        integrationKey: "k",
+        dedupKey: "d",
+        enabled: false,
       });
       const ctx = svc.evaluateBalanceShortfall("mtn", "XAF", 1000, 700);
       expect(ctx).not.toBeNull();
@@ -570,7 +604,9 @@ describe("PagerDutyService – balance shortfall tier evaluation (#1018)", () =>
 
     it("returns a critical context for critical shortfalls (50% inclusive)", () => {
       const svc = new PagerDutyService({
-        integrationKey: "k", dedupKey: "d", enabled: false,
+        integrationKey: "k",
+        dedupKey: "d",
+        enabled: false,
       });
       const ctx = svc.evaluateBalanceShortfall("mtn", "XAF", 1000, 400);
       expect(ctx).not.toBeNull();
@@ -582,16 +618,33 @@ describe("PagerDutyService – balance shortfall tier evaluation (#1018)", () =>
 
     it("places exact-boundary shortfalls into the UPPER tier (deterministic)", () => {
       const svc = new PagerDutyService({
-        integrationKey: "k", dedupKey: "d", enabled: false,
+        integrationKey: "k",
+        dedupKey: "d",
+        enabled: false,
       });
       // Exactly 10% → warning (boundary belongs to upper tier)
-      const minorBoundary = svc.evaluateBalanceShortfall("p", "XAF", 1000, 900)!;
+      const minorBoundary = svc.evaluateBalanceShortfall(
+        "p",
+        "XAF",
+        1000,
+        900,
+      )!;
       expect(minorBoundary.severity).toBe("warning");
       // Exactly 25% → error
-      const moderateBoundary = svc.evaluateBalanceShortfall("p", "XAF", 1000, 750)!;
+      const moderateBoundary = svc.evaluateBalanceShortfall(
+        "p",
+        "XAF",
+        1000,
+        750,
+      )!;
       expect(moderateBoundary.severity).toBe("error");
       // Exactly 50% → critical
-      const criticalBoundary = svc.evaluateBalanceShortfall("p", "XAF", 1000, 500)!;
+      const criticalBoundary = svc.evaluateBalanceShortfall(
+        "p",
+        "XAF",
+        1000,
+        500,
+      )!;
       expect(criticalBoundary.severity).toBe("critical");
     });
   });

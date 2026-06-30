@@ -28,7 +28,13 @@ const mockRecord = {
   transactionId: "tx-001",
   amount: 1500,
   currency: "USD",
-  sender: { name: "Alice", account: "+237670000001", address: "123 St", dob: "1990-01-01", idNumber: "ID-1" },
+  sender: {
+    name: "Alice",
+    account: "+237670000001",
+    address: "123 St",
+    dob: "1990-01-01",
+    idNumber: "ID-1",
+  },
   receiver: { name: "Bob", account: "GBXXX123", address: undefined },
   originatingVasp: "MTN",
   beneficiaryVasp: undefined,
@@ -45,7 +51,9 @@ describe("Travel Rule Routes", () => {
   // ---------------------------------------------------------------------------
   describe("GET /api/v1/compliance/travel-rule", () => {
     it("returns 401 without auth", async () => {
-      const res = await request(buildApp()).get("/api/v1/compliance/travel-rule");
+      const res = await request(buildApp()).get(
+        "/api/v1/compliance/travel-rule",
+      );
       expect(res.status).toBe(401);
     });
 
@@ -61,7 +69,9 @@ describe("Travel Rule Routes", () => {
     });
 
     it("returns records as JSON for admin", async () => {
-      (travelRuleService.exportForCompliance as jest.Mock).mockResolvedValue([mockRecord]);
+      (travelRuleService.exportForCompliance as jest.Mock).mockResolvedValue([
+        mockRecord,
+      ]);
 
       const res = await request(buildApp())
         .get("/api/v1/compliance/travel-rule")
@@ -74,7 +84,9 @@ describe("Travel Rule Routes", () => {
     });
 
     it("passes onlyUnexported filter", async () => {
-      (travelRuleService.exportForCompliance as jest.Mock).mockResolvedValue([]);
+      (travelRuleService.exportForCompliance as jest.Mock).mockResolvedValue(
+        [],
+      );
 
       await request(buildApp())
         .get("/api/v1/compliance/travel-rule?onlyUnexported=true")
@@ -86,7 +98,9 @@ describe("Travel Rule Routes", () => {
     });
 
     it("returns 500 on service error", async () => {
-      (travelRuleService.exportForCompliance as jest.Mock).mockRejectedValue(new Error("db down"));
+      (travelRuleService.exportForCompliance as jest.Mock).mockRejectedValue(
+        new Error("db down"),
+      );
 
       const res = await request(buildApp())
         .get("/api/v1/compliance/travel-rule")
@@ -101,12 +115,16 @@ describe("Travel Rule Routes", () => {
   // ---------------------------------------------------------------------------
   describe("GET /api/v1/compliance/travel-rule/export.csv", () => {
     it("returns 401 without auth", async () => {
-      const res = await request(buildApp()).get("/api/v1/compliance/travel-rule/export.csv");
+      const res = await request(buildApp()).get(
+        "/api/v1/compliance/travel-rule/export.csv",
+      );
       expect(res.status).toBe(401);
     });
 
     it("streams a CSV file with correct headers", async () => {
-      (travelRuleService.exportForCompliance as jest.Mock).mockResolvedValue([mockRecord]);
+      (travelRuleService.exportForCompliance as jest.Mock).mockResolvedValue([
+        mockRecord,
+      ]);
 
       const res = await request(buildApp())
         .get("/api/v1/compliance/travel-rule/export.csv")
@@ -121,7 +139,9 @@ describe("Travel Rule Routes", () => {
     });
 
     it("returns empty CSV (headers only) when no records", async () => {
-      (travelRuleService.exportForCompliance as jest.Mock).mockResolvedValue([]);
+      (travelRuleService.exportForCompliance as jest.Mock).mockResolvedValue(
+        [],
+      );
 
       const res = await request(buildApp())
         .get("/api/v1/compliance/travel-rule/export.csv")
@@ -138,12 +158,16 @@ describe("Travel Rule Routes", () => {
   // ---------------------------------------------------------------------------
   describe("GET /api/v1/compliance/travel-rule/:transactionId", () => {
     it("returns 401 without auth", async () => {
-      const res = await request(buildApp()).get("/api/v1/compliance/travel-rule/tx-001");
+      const res = await request(buildApp()).get(
+        "/api/v1/compliance/travel-rule/tx-001",
+      );
       expect(res.status).toBe(401);
     });
 
     it("returns 404 when record not found", async () => {
-      (travelRuleService.findByTransactionId as jest.Mock).mockResolvedValue(null);
+      (travelRuleService.findByTransactionId as jest.Mock).mockResolvedValue(
+        null,
+      );
 
       const res = await request(buildApp())
         .get("/api/v1/compliance/travel-rule/tx-missing")
@@ -153,7 +177,9 @@ describe("Travel Rule Routes", () => {
     });
 
     it("returns the record when found", async () => {
-      (travelRuleService.findByTransactionId as jest.Mock).mockResolvedValue(mockRecord);
+      (travelRuleService.findByTransactionId as jest.Mock).mockResolvedValue(
+        mockRecord,
+      );
 
       const res = await request(buildApp())
         .get("/api/v1/compliance/travel-rule/tx-001")
@@ -165,7 +191,9 @@ describe("Travel Rule Routes", () => {
     });
 
     it("returns 500 on service error", async () => {
-      (travelRuleService.findByTransactionId as jest.Mock).mockRejectedValue(new Error("db error"));
+      (travelRuleService.findByTransactionId as jest.Mock).mockRejectedValue(
+        new Error("db error"),
+      );
 
       const res = await request(buildApp())
         .get("/api/v1/compliance/travel-rule/tx-err")

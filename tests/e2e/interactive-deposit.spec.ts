@@ -124,7 +124,10 @@ test.describe("Interactive Deposit – SEP-24 Hosted Flow", () => {
         lang: "en",
       },
     });
-    expect(res.ok(), `Deposit initiation failed: ${await res.text()}`).toBeTruthy();
+    expect(
+      res.ok(),
+      `Deposit initiation failed: ${await res.text()}`,
+    ).toBeTruthy();
 
     const body = await res.json();
     expect(body.url).toBeTruthy();

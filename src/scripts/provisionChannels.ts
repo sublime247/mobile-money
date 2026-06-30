@@ -123,10 +123,7 @@ async function main() {
         storedRows.push({ publicKey: pair.publicKey, id: row.id });
       }
     } catch (error) {
-      printError(
-        `  ✗ Failed to process batch starting at index ${i}:`,
-        error,
-      );
+      printError(`  ✗ Failed to process batch starting at index ${i}:`, error);
       break;
     }
   }

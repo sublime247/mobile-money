@@ -19,7 +19,7 @@ import { AnchoredAssetModel, AnchoredAsset } from "../models/anchoredAsset";
 
 interface AssetEntry {
   code: string;
-  issuer?: string;       // absent means native XLM
+  issuer?: string; // absent means native XLM
   status: "live" | "test" | "private" | "dead";
   desc?: string;
   displayDecimals?: number;
@@ -39,7 +39,10 @@ interface AssetEntry {
 const assetModel = new AnchoredAssetModel();
 export { assetModel };
 
-function mapAnchoredAssetStatus(dbStatus: AnchoredAsset["status"], network: string): AssetEntry["status"] {
+function mapAnchoredAssetStatus(
+  dbStatus: AnchoredAsset["status"],
+  network: string,
+): AssetEntry["status"] {
   switch (dbStatus) {
     case "draft":
       return "private";
@@ -65,20 +68,33 @@ function parseBoolean(value: unknown): boolean | undefined {
   return undefined;
 }
 
-function buildAssetEntryFromAnchoredAsset(asset: AnchoredAsset, network: string): AssetEntry {
+function buildAssetEntryFromAnchoredAsset(
+  asset: AnchoredAsset,
+  network: string,
+): AssetEntry {
   const metadata = asset.metadata || {};
-  const desc = metadata.desc || metadata.description || `${asset.assetCode} issued by this anchor`;
+  const desc =
+    metadata.desc ||
+    metadata.description ||
+    `${asset.assetCode} issued by this anchor`;
   const displayDecimals = metadata.display_decimals ?? metadata.displayDecimals;
-  const isAssetAnchored = parseBoolean(metadata.is_asset_anchored ?? metadata.isAssetAnchored);
-  const anchorAssetType = metadata.anchor_asset_type || metadata.anchorAssetType || "fiat";
-  const anchorAsset = metadata.anchor_asset || metadata.anchorAsset || asset.assetCode.replace(/[^A-Z]/g, "");
+  const isAssetAnchored = parseBoolean(
+    metadata.is_asset_anchored ?? metadata.isAssetAnchored,
+  );
+  const anchorAssetType =
+    metadata.anchor_asset_type || metadata.anchorAssetType || "fiat";
+  const anchorAsset =
+    metadata.anchor_asset ||
+    metadata.anchorAsset ||
+    asset.assetCode.replace(/[^A-Z]/g, "");
 
   return {
     code: asset.assetCode,
     issuer: asset.issuerPublicKey,
     status: mapAnchoredAssetStatus(asset.status, network),
     desc,
-    displayDecimals: displayDecimals !== undefined ? Number(displayDecimals) : 7,
+    displayDecimals:
+      displayDecimals !== undefined ? Number(displayDecimals) : 7,
     isAssetAnchored: isAssetAnchored !== undefined ? isAssetAnchored : true,
     anchorAssetType,
     anchorAsset,
@@ -95,7 +111,9 @@ function parseExtraAssetsFromEnv(): AssetEntry[] {
     const extra: AssetEntry[] = JSON.parse(extraRaw);
     return Array.isArray(extra) ? extra : [];
   } catch {
-    console.warn("[stellar.toml] STELLAR_EXTRA_ASSETS is not valid JSON — skipping");
+    console.warn(
+      "[stellar.toml] STELLAR_EXTRA_ASSETS is not valid JSON — skipping",
+    );
     return [];
   }
 }
@@ -112,11 +130,14 @@ function getPrimaryEnvAsset(network: string): AssetEntry | null {
     code: assetCode,
     issuer: assetIssuer,
     status: network === "mainnet" ? "live" : "test",
-    desc: process.env.STELLAR_ASSET_DESC || `${assetCode} issued by this anchor`,
+    desc:
+      process.env.STELLAR_ASSET_DESC || `${assetCode} issued by this anchor`,
     displayDecimals: parseInt(process.env.STELLAR_ASSET_DECIMALS || "7", 10),
     isAssetAnchored: process.env.STELLAR_ASSET_ANCHORED !== "false",
     anchorAssetType: process.env.STELLAR_ASSET_ANCHOR_TYPE || "fiat",
-    anchorAsset: process.env.STELLAR_ASSET_ANCHOR_ASSET || assetCode.replace(/[^A-Z]/g, ""),
+    anchorAsset:
+      process.env.STELLAR_ASSET_ANCHOR_ASSET ||
+      assetCode.replace(/[^A-Z]/g, ""),
   };
 }
 
@@ -135,9 +156,14 @@ async function getAssets(): Promise<AssetEntry[]> {
   let anchoredAssets: AssetEntry[] = [];
   try {
     const rows = await assetModel.findAll();
-    anchoredAssets = rows.map((row) => buildAssetEntryFromAnchoredAsset(row, network));
+    anchoredAssets = rows.map((row) =>
+      buildAssetEntryFromAnchoredAsset(row, network),
+    );
   } catch (error) {
-    console.warn("[stellar.toml] failed to load anchored assets from DB", error);
+    console.warn(
+      "[stellar.toml] failed to load anchored assets from DB",
+      error,
+    );
   }
 
   if (anchoredAssets.length > 0) {
@@ -179,15 +205,19 @@ function buildGeneralSection(): string {
     ? "Public Global Stellar Network ; September 2015"
     : "Test SDF Network ; September 2015";
 
-  const baseUrl = (process.env.STELLAR_FEDERATION_SERVER_URL || `https://${process.env.STELLAR_WEB_AUTH_DOMAIN || "mobilemoney.com"}`).replace(/\/$/, "");
+  const baseUrl = (
+    process.env.STELLAR_FEDERATION_SERVER_URL ||
+    `https://${process.env.STELLAR_WEB_AUTH_DOMAIN || "mobilemoney.com"}`
+  ).replace(/\/$/, "");
 
-  const lines: string[] = [
-    `NETWORK_PASSPHRASE=${tomlStr(passphrase)}`,
-  ];
+  const lines: string[] = [`NETWORK_PASSPHRASE=${tomlStr(passphrase)}`];
 
   // FEDERATION_SERVER (SEP-02)
-  const federationServer = process.env.STELLAR_FEDERATION_SERVER
-    || (process.env.STELLAR_FEDERATION_DOMAIN ? `https://${process.env.STELLAR_FEDERATION_DOMAIN}/federation` : `${baseUrl}/federation`);
+  const federationServer =
+    process.env.STELLAR_FEDERATION_SERVER ||
+    (process.env.STELLAR_FEDERATION_DOMAIN
+      ? `https://${process.env.STELLAR_FEDERATION_DOMAIN}/federation`
+      : `${baseUrl}/federation`);
   lines.push(`FEDERATION_SERVER=${tomlStr(federationServer)}`);
 
   // AUTH_SERVER (SEP-10)
@@ -208,7 +238,8 @@ function buildGeneralSection(): string {
   lines.push(`DIRECT_PAYMENT_SERVER=${tomlStr(sep31Url)}`);
 
   // SIGNING_KEY
-  const signingKey = process.env.STELLAR_SIGNING_KEY || process.env.STELLAR_ISSUER_ACCOUNT || "";
+  const signingKey =
+    process.env.STELLAR_SIGNING_KEY || process.env.STELLAR_ISSUER_ACCOUNT || "";
   if (signingKey) {
     lines.push(`SIGNING_KEY=${tomlStr(signingKey)}`);
   }
@@ -221,7 +252,8 @@ function buildDocumentationSection(): string {
   const orgDba = process.env.ORG_DBA || "";
   const orgUrl = process.env.ORG_URL || "";
   const orgLogo = process.env.ORG_LOGO || "";
-  const orgDescription = process.env.ORG_DESCRIPTION || "Mobile money to Stellar asset anchor";
+  const orgDescription =
+    process.env.ORG_DESCRIPTION || "Mobile money to Stellar asset anchor";
   const orgSupportEmail = process.env.ORG_SUPPORT_EMAIL || "";
 
   const lines = ["[DOCUMENTATION]", `ORG_NAME=${tomlStr(orgName)}`];
@@ -230,7 +262,8 @@ function buildDocumentationSection(): string {
   if (orgUrl) lines.push(`ORG_URL=${tomlStr(orgUrl)}`);
   if (orgLogo) lines.push(`ORG_LOGO=${tomlStr(orgLogo)}`);
   lines.push(`ORG_DESCRIPTION=${tomlStr(orgDescription)}`);
-  if (orgSupportEmail) lines.push(`ORG_OFFICIAL_EMAIL=${tomlStr(orgSupportEmail)}`);
+  if (orgSupportEmail)
+    lines.push(`ORG_OFFICIAL_EMAIL=${tomlStr(orgSupportEmail)}`);
 
   return lines.join("\n");
 }
@@ -238,10 +271,7 @@ function buildDocumentationSection(): string {
 function buildCurrenciesSection(assets: AssetEntry[]): string {
   return assets
     .map((asset) => {
-      const lines = [
-        "[[CURRENCIES]]",
-        `code=${tomlStr(asset.code)}`,
-      ];
+      const lines = ["[[CURRENCIES]]", `code=${tomlStr(asset.code)}`];
 
       if (asset.issuer) {
         lines.push(`issuer=${tomlStr(asset.issuer)}`);
@@ -255,10 +285,14 @@ function buildCurrenciesSection(assets: AssetEntry[]): string {
       lines.push(`status=${tomlStr(asset.status)}`);
 
       if (asset.desc) lines.push(`desc=${tomlStr(asset.desc)}`);
-      if (asset.displayDecimals !== undefined) lines.push(`display_decimals=${asset.displayDecimals}`);
-      if (asset.isAssetAnchored !== undefined) lines.push(`is_asset_anchored=${asset.isAssetAnchored}`);
-      if (asset.anchorAssetType) lines.push(`anchor_asset_type=${tomlStr(asset.anchorAssetType)}`);
-      if (asset.anchorAsset) lines.push(`anchor_asset=${tomlStr(asset.anchorAsset)}`);
+      if (asset.displayDecimals !== undefined)
+        lines.push(`display_decimals=${asset.displayDecimals}`);
+      if (asset.isAssetAnchored !== undefined)
+        lines.push(`is_asset_anchored=${asset.isAssetAnchored}`);
+      if (asset.anchorAssetType)
+        lines.push(`anchor_asset_type=${tomlStr(asset.anchorAssetType)}`);
+      if (asset.anchorAsset)
+        lines.push(`anchor_asset=${tomlStr(asset.anchorAsset)}`);
 
       return lines.join("\n");
     })
@@ -289,7 +323,11 @@ export async function generateToml(): Promise<string> {
 
 /** SHA-256 ETag for the given content (double-quoted per RFC 7232 §2.3). */
 function computeETag(content: string): string {
-  const hash = crypto.createHash("sha256").update(content, "utf8").digest("hex").slice(0, 32);
+  const hash = crypto
+    .createHash("sha256")
+    .update(content, "utf8")
+    .digest("hex")
+    .slice(0, 32);
   return `"${hash}"`;
 }
 

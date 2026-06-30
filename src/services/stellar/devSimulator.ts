@@ -161,7 +161,9 @@ const SIMULATOR_HTML = `<!DOCTYPE html>
 
 devSimulatorRouter.get("/simulator", (req: Request, res: Response) => {
   if (process.env.NODE_ENV === "production") {
-    res.status(403).json({ error: "Simulator is explicitly disabled in the production environment." });
+    res.status(403).json({
+      error: "Simulator is explicitly disabled in the production environment.",
+    });
     return;
   }
   res.setHeader("Content-Type", "text/html");

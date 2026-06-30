@@ -38,12 +38,16 @@ export async function hasTrustline(
       (b) =>
         b.asset_type !== "native" &&
         b.asset_type !== "liquidity_pool_shares" &&
-        (b as StellarSdk.Horizon.HorizonApi.BalanceLine<"credit_alphanum4"> |
-          StellarSdk.Horizon.HorizonApi.BalanceLine<"credit_alphanum12">)
-          .asset_code === asset.getCode() &&
-        (b as StellarSdk.Horizon.HorizonApi.BalanceLine<"credit_alphanum4"> |
-          StellarSdk.Horizon.HorizonApi.BalanceLine<"credit_alphanum12">)
-          .asset_issuer === asset.getIssuer(),
+        (
+          b as
+            | StellarSdk.Horizon.HorizonApi.BalanceLine<"credit_alphanum4">
+            | StellarSdk.Horizon.HorizonApi.BalanceLine<"credit_alphanum12">
+        ).asset_code === asset.getCode() &&
+        (
+          b as
+            | StellarSdk.Horizon.HorizonApi.BalanceLine<"credit_alphanum4">
+            | StellarSdk.Horizon.HorizonApi.BalanceLine<"credit_alphanum12">
+        ).asset_issuer === asset.getIssuer(),
     );
   } catch (err: unknown) {
     // If the account does not exist on-chain it cannot have a trustline
@@ -158,17 +162,10 @@ export interface EnsureTrustlinesResult {
 export async function ensureTrustlines(
   options: EnsureTrustlinesOptions,
 ): Promise<EnsureTrustlinesResult> {
-  const {
-    accountKeypair,
-    assets,
-    sponsored = false,
-    sponsorKeypair,
-  } = options;
+  const { accountKeypair, assets, sponsored = false, sponsorKeypair } = options;
 
   if (sponsored && !sponsorKeypair) {
-    throw new Error(
-      "sponsorKeypair must be provided when sponsored is true",
-    );
+    throw new Error("sponsorKeypair must be provided when sponsored is true");
   }
 
   const result: EnsureTrustlinesResult = {
@@ -227,7 +224,10 @@ function isAccountNotFoundError(err: unknown): boolean {
 
 /** Thrown when a trustline operation is rejected by the Stellar network. */
 export class TrustlineError extends Error {
-  constructor(message: string, public readonly asset: StellarSdk.Asset) {
+  constructor(
+    message: string,
+    public readonly asset: StellarSdk.Asset,
+  ) {
     super(message);
     this.name = "TrustlineError";
   }

@@ -179,11 +179,11 @@ export class AMLAlertModel {
     if (cursorTime && cursorId) {
       if (isReversed) {
         alertsConditions.push(
-          `(created_at > $${alertsParamIndex} OR (created_at = $${alertsParamIndex} AND id > $${alertsParamIndex + 1}))`
+          `(created_at > $${alertsParamIndex} OR (created_at = $${alertsParamIndex} AND id > $${alertsParamIndex + 1}))`,
         );
       } else {
         alertsConditions.push(
-          `(created_at < $${alertsParamIndex} OR (created_at = $${alertsParamIndex} AND id < $${alertsParamIndex + 1}))`
+          `(created_at < $${alertsParamIndex} OR (created_at = $${alertsParamIndex} AND id < $${alertsParamIndex + 1}))`,
         );
       }
       alertsParams.push(cursorTime);
@@ -192,7 +192,9 @@ export class AMLAlertModel {
     }
 
     const alertsWhereClause =
-      alertsConditions.length > 0 ? `WHERE ${alertsConditions.join(" AND ")}` : "";
+      alertsConditions.length > 0
+        ? `WHERE ${alertsConditions.join(" AND ")}`
+        : "";
 
     const limit = filter.limit ?? 50;
     const isCursorPagination = !!(filter.before || filter.after);
@@ -221,7 +223,10 @@ export class AMLAlertModel {
         ORDER BY created_at ${sortOrder}, id ${sortOrder}
         LIMIT $${alertsParamIndex++}
       `;
-      alertsResult = await pool.query(alertsQuery, [...alertsParams, limit + 1]);
+      alertsResult = await pool.query(alertsQuery, [
+        ...alertsParams,
+        limit + 1,
+      ]);
     } else {
       const offset = filter.offset ?? 0;
       alertsQuery = `
@@ -243,7 +248,11 @@ export class AMLAlertModel {
         ORDER BY created_at DESC, id DESC
         LIMIT $${alertsParamIndex++} OFFSET $${alertsParamIndex++}
       `;
-      alertsResult = await pool.query(alertsQuery, [...alertsParams, limit, offset]);
+      alertsResult = await pool.query(alertsQuery, [
+        ...alertsParams,
+        limit,
+        offset,
+      ]);
     }
 
     let alerts = alertsResult.rows.map((row) => this.mapRow(row));
@@ -374,9 +383,7 @@ export class AMLAlertModel {
     }));
   }
 
-  async getAlertsByTransaction(
-    transactionId: string,
-  ): Promise<AMLAlert[]> {
+  async getAlertsByTransaction(transactionId: string): Promise<AMLAlert[]> {
     const query = `
       SELECT
         id,

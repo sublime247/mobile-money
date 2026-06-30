@@ -1,7 +1,12 @@
 import request from "supertest";
 import express, { Express } from "express";
 import { Router } from "express";
-import { rateProvider, setRateProvider, IRateProvider, RateResult } from "../../src/services/sep38/rateProvider";
+import {
+  rateProvider,
+  setRateProvider,
+  IRateProvider,
+  RateResult,
+} from "../../src/services/sep38/rateProvider";
 
 jest.mock("../../src/config/redis", () => ({
   __esModule: true,
@@ -24,7 +29,9 @@ jest.mock("../../src/services/currency", () => {
     ...actual,
     currencyService: {
       convert: jest.fn().mockReturnValue({ rate: 600, convertedAmount: 600 }),
-      convertToBase: jest.fn().mockReturnValue({ rate: 1 / 600, convertedAmount: 1 / 600 }),
+      convertToBase: jest
+        .fn()
+        .mockReturnValue({ rate: 1 / 600, convertedAmount: 1 / 600 }),
       isSupportedCurrency: jest.fn().mockReturnValue(true),
       getRates: jest.fn().mockReturnValue({ USD: 1, XAF: 600 }),
     },
@@ -44,11 +51,13 @@ jest.mock("../../src/services/exchangeRateBufferService", () => ({
 }));
 
 jest.mock("stellar-sdk", () => {
-  const mockAsset = jest.fn().mockImplementation((code: string, issuer: string) => ({
-    getCode: () => code,
-    getIssuer: () => issuer,
-    isNative: () => false,
-  }));
+  const mockAsset = jest
+    .fn()
+    .mockImplementation((code: string, issuer: string) => ({
+      getCode: () => code,
+      getIssuer: () => issuer,
+      isNative: () => false,
+    }));
   mockAsset.native = jest.fn(() => ({
     getCode: () => "XLM",
     getIssuer: () => "",
@@ -61,8 +70,14 @@ jest.mock("stellar-sdk", () => {
       fromPublicKey: jest.fn(),
       fromSecret: jest.fn(),
     },
-    Networks: { TESTNET: "Test SDF Network ; September 2015", PUBLIC: "Public Global Stellar Network ; September 2015" },
-    Operation: { pathPaymentStrictReceive: jest.fn(), pathPaymentStrictSend: jest.fn() },
+    Networks: {
+      TESTNET: "Test SDF Network ; September 2015",
+      PUBLIC: "Public Global Stellar Network ; September 2015",
+    },
+    Operation: {
+      pathPaymentStrictReceive: jest.fn(),
+      pathPaymentStrictSend: jest.fn(),
+    },
     TransactionBuilder: jest.fn(),
     BASE_FEE: "100",
     Horizon: { Server: jest.fn() },
@@ -78,12 +93,17 @@ jest.mock("../../src/config/stellar", () => ({
       call: jest.fn().mockResolvedValue({ records: [] }),
     }),
   }),
-  getNetworkPassphrase: jest.fn().mockReturnValue("Test SDF Network ; September 2015"),
+  getNetworkPassphrase: jest
+    .fn()
+    .mockReturnValue("Test SDF Network ; September 2015"),
   STELLAR_NETWORKS: { TESTNET: "testnet", MAINNET: "mainnet" },
 }));
 
 class MockRateProvider implements IRateProvider {
-  async getIndicativePrice(sellAsset: string, buyAsset: string): Promise<RateResult | null> {
+  async getIndicativePrice(
+    sellAsset: string,
+    buyAsset: string,
+  ): Promise<RateResult | null> {
     if (sellAsset === "stellar:INVALID") return null;
     return {
       price: "0.1200000",
@@ -92,7 +112,10 @@ class MockRateProvider implements IRateProvider {
     };
   }
 
-  async getFirmPrice(sellAsset: string, buyAsset: string): Promise<RateResult | null> {
+  async getFirmPrice(
+    sellAsset: string,
+    buyAsset: string,
+  ): Promise<RateResult | null> {
     if (sellAsset === "stellar:INVALID") return null;
     return {
       price: "0.1200000",
@@ -147,12 +170,10 @@ describe("SEP-38 Exchange Endpoints", () => {
     });
 
     it("should return 400 for unsupported asset pair", async () => {
-      const res = await request(app)
-        .get("/sep38/prices")
-        .query({
-          sell_asset: "stellar:INVALID",
-          buy_asset: "iso4217:USD",
-        });
+      const res = await request(app).get("/sep38/prices").query({
+        sell_asset: "stellar:INVALID",
+        buy_asset: "iso4217:USD",
+      });
 
       expect(res.status).toBe(400);
       expect(res.body).toHaveProperty("error");
@@ -160,12 +181,10 @@ describe("SEP-38 Exchange Endpoints", () => {
     });
 
     it("should return price for supported asset pair", async () => {
-      const res = await request(app)
-        .get("/sep38/prices")
-        .query({
-          sell_asset: "stellar:XLM",
-          buy_asset: "iso4217:USD",
-        });
+      const res = await request(app).get("/sep38/prices").query({
+        sell_asset: "stellar:XLM",
+        buy_asset: "iso4217:USD",
+      });
 
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty("sell_asset");
@@ -178,12 +197,10 @@ describe("SEP-38 Exchange Endpoints", () => {
     });
 
     it("should return price for reverse asset pair", async () => {
-      const res = await request(app)
-        .get("/sep38/prices")
-        .query({
-          sell_asset: "iso4217:USD",
-          buy_asset: "stellar:XLM",
-        });
+      const res = await request(app).get("/sep38/prices").query({
+        sell_asset: "iso4217:USD",
+        buy_asset: "stellar:XLM",
+      });
 
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty("sell_asset");
@@ -197,16 +214,18 @@ describe("SEP-38 Exchange Endpoints", () => {
 
     it("should return 503 when liquidity is insufficient", async () => {
       setRateProvider({
-        async getIndicativePrice() { return null; },
-        async getFirmPrice() { return null; },
+        async getIndicativePrice() {
+          return null;
+        },
+        async getFirmPrice() {
+          return null;
+        },
       });
 
-      const res = await request(app)
-        .get("/sep38/prices")
-        .query({
-          sell_asset: "stellar:XLM",
-          buy_asset: "iso4217:USD",
-        });
+      const res = await request(app).get("/sep38/prices").query({
+        sell_asset: "stellar:XLM",
+        buy_asset: "iso4217:USD",
+      });
 
       expect(res.status).toBe(503);
       expect(res.body).toHaveProperty("error");
@@ -218,12 +237,10 @@ describe("SEP-38 Exchange Endpoints", () => {
 
   describe("GET /sep38/price", () => {
     it("should return price for supported asset pair", async () => {
-      const res = await request(app)
-        .get("/sep38/price")
-        .query({
-          sell_asset: "stellar:XLM",
-          buy_asset: "iso4217:USD",
-        });
+      const res = await request(app).get("/sep38/price").query({
+        sell_asset: "stellar:XLM",
+        buy_asset: "iso4217:USD",
+      });
 
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty("sell_asset");
@@ -234,9 +251,7 @@ describe("SEP-38 Exchange Endpoints", () => {
 
   describe("POST /sep38/quote", () => {
     it("should return 400 for missing required parameters", async () => {
-      const res = await request(app)
-        .post("/sep38/quote")
-        .send({});
+      const res = await request(app).post("/sep38/quote").send({});
 
       expect(res.status).toBe(400);
       expect(res.body).toHaveProperty("error");
@@ -244,13 +259,11 @@ describe("SEP-38 Exchange Endpoints", () => {
     });
 
     it("should return 400 for unsupported asset pair", async () => {
-      const res = await request(app)
-        .post("/sep38/quote")
-        .send({
-          sell_asset: "stellar:INVALID",
-          buy_asset: "iso4217:USD",
-          sell_amount: "10",
-        });
+      const res = await request(app).post("/sep38/quote").send({
+        sell_asset: "stellar:INVALID",
+        buy_asset: "iso4217:USD",
+        sell_amount: "10",
+      });
 
       expect(res.status).toBe(400);
       expect(res.body).toHaveProperty("error");
@@ -258,13 +271,11 @@ describe("SEP-38 Exchange Endpoints", () => {
     });
 
     it("should return 400 for invalid sell_amount", async () => {
-      const res = await request(app)
-        .post("/sep38/quote")
-        .send({
-          sell_asset: "stellar:XLM",
-          buy_asset: "iso4217:USD",
-          sell_amount: "-10",
-        });
+      const res = await request(app).post("/sep38/quote").send({
+        sell_asset: "stellar:XLM",
+        buy_asset: "iso4217:USD",
+        sell_amount: "-10",
+      });
 
       expect(res.status).toBe(400);
       expect(res.body).toHaveProperty("error");
@@ -272,13 +283,11 @@ describe("SEP-38 Exchange Endpoints", () => {
     });
 
     it("should return 400 for invalid buy_amount", async () => {
-      const res = await request(app)
-        .post("/sep38/quote")
-        .send({
-          sell_asset: "stellar:XLM",
-          buy_asset: "iso4217:USD",
-          buy_amount: "0",
-        });
+      const res = await request(app).post("/sep38/quote").send({
+        sell_asset: "stellar:XLM",
+        buy_asset: "iso4217:USD",
+        buy_amount: "0",
+      });
 
       expect(res.status).toBe(400);
       expect(res.body).toHaveProperty("error");
@@ -286,13 +295,11 @@ describe("SEP-38 Exchange Endpoints", () => {
     });
 
     it("should create quote with sell_amount", async () => {
-      const res = await request(app)
-        .post("/sep38/quote")
-        .send({
-          sell_asset: "stellar:XLM",
-          buy_asset: "iso4217:USD",
-          sell_amount: "100",
-        });
+      const res = await request(app).post("/sep38/quote").send({
+        sell_asset: "stellar:XLM",
+        buy_asset: "iso4217:USD",
+        sell_amount: "100",
+      });
 
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty("id");
@@ -315,13 +322,11 @@ describe("SEP-38 Exchange Endpoints", () => {
     });
 
     it("should create quote with buy_amount", async () => {
-      const res = await request(app)
-        .post("/sep38/quote")
-        .send({
-          sell_asset: "stellar:XLM",
-          buy_asset: "iso4217:USD",
-          buy_amount: "10",
-        });
+      const res = await request(app).post("/sep38/quote").send({
+        sell_asset: "stellar:XLM",
+        buy_asset: "iso4217:USD",
+        buy_amount: "10",
+      });
 
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty("id");
@@ -346,20 +351,20 @@ describe("SEP-38 Exchange Endpoints", () => {
     it("should create quote with custom TTL", async () => {
       const customTTL = 120;
 
-      const res = await request(app)
-        .post("/sep38/quote")
-        .send({
-          sell_asset: "stellar:XLM",
-          buy_asset: "iso4217:USD",
-          sell_amount: "50",
-          ttl: customTTL,
-        });
+      const res = await request(app).post("/sep38/quote").send({
+        sell_asset: "stellar:XLM",
+        buy_asset: "iso4217:USD",
+        sell_amount: "50",
+        ttl: customTTL,
+      });
 
       expect(res.status).toBe(200);
 
       const expiresAt = new Date(res.body.expires_at);
       const createdAt = new Date(res.body.created_at);
-      const actualTTL = Math.round((expiresAt.getTime() - createdAt.getTime()) / 1000);
+      const actualTTL = Math.round(
+        (expiresAt.getTime() - createdAt.getTime()) / 1000,
+      );
 
       expect(actualTTL).toBe(customTTL);
     });
@@ -367,19 +372,19 @@ describe("SEP-38 Exchange Endpoints", () => {
     it("should use default TTL when not specified", async () => {
       const defaultTTL = 60;
 
-      const res = await request(app)
-        .post("/sep38/quote")
-        .send({
-          sell_asset: "stellar:XLM",
-          buy_asset: "iso4217:USD",
-          sell_amount: "50",
-        });
+      const res = await request(app).post("/sep38/quote").send({
+        sell_asset: "stellar:XLM",
+        buy_asset: "iso4217:USD",
+        sell_amount: "50",
+      });
 
       expect(res.status).toBe(200);
 
       const expiresAt = new Date(res.body.expires_at);
       const createdAt = new Date(res.body.created_at);
-      const actualTTL = Math.round((expiresAt.getTime() - createdAt.getTime()) / 1000);
+      const actualTTL = Math.round(
+        (expiresAt.getTime() - createdAt.getTime()) / 1000,
+      );
 
       expect(actualTTL).toBe(defaultTTL);
     });
@@ -387,37 +392,39 @@ describe("SEP-38 Exchange Endpoints", () => {
     it("should limit TTL to maximum of 300 seconds", async () => {
       const maxTTL = 300;
 
-      const res = await request(app)
-        .post("/sep38/quote")
-        .send({
-          sell_asset: "stellar:XLM",
-          buy_asset: "iso4217:USD",
-          sell_amount: "50",
-          ttl: 600,
-        });
+      const res = await request(app).post("/sep38/quote").send({
+        sell_asset: "stellar:XLM",
+        buy_asset: "iso4217:USD",
+        sell_amount: "50",
+        ttl: 600,
+      });
 
       expect(res.status).toBe(200);
 
       const expiresAt = new Date(res.body.expires_at);
       const createdAt = new Date(res.body.created_at);
-      const actualTTL = Math.round((expiresAt.getTime() - createdAt.getTime()) / 1000);
+      const actualTTL = Math.round(
+        (expiresAt.getTime() - createdAt.getTime()) / 1000,
+      );
 
       expect(actualTTL).toBe(maxTTL);
     });
 
     it("should return 503 when liquidity is insufficient", async () => {
       setRateProvider({
-        async getIndicativePrice() { return null; },
-        async getFirmPrice() { return null; },
+        async getIndicativePrice() {
+          return null;
+        },
+        async getFirmPrice() {
+          return null;
+        },
       });
 
-      const res = await request(app)
-        .post("/sep38/quote")
-        .send({
-          sell_asset: "stellar:XLM",
-          buy_asset: "iso4217:USD",
-          sell_amount: "50",
-        });
+      const res = await request(app).post("/sep38/quote").send({
+        sell_asset: "stellar:XLM",
+        buy_asset: "iso4217:USD",
+        sell_amount: "50",
+      });
 
       expect(res.status).toBe(503);
       expect(res.body).toHaveProperty("error");
@@ -431,13 +438,11 @@ describe("SEP-38 Exchange Endpoints", () => {
     let quoteId: string;
 
     beforeEach(async () => {
-      const res = await request(app)
-        .post("/sep38/quote")
-        .send({
-          sell_asset: "stellar:XLM",
-          buy_asset: "iso4217:USD",
-          sell_amount: "100",
-        });
+      const res = await request(app).post("/sep38/quote").send({
+        sell_asset: "stellar:XLM",
+        buy_asset: "iso4217:USD",
+        sell_amount: "100",
+      });
 
       expect(res.status).toBe(200);
       quoteId = res.body.id;
@@ -473,34 +478,34 @@ describe("SEP-38 Exchange Endpoints", () => {
 
   describe("SEP-38 TTL Requirements", () => {
     it("should enforce TTL limits correctly", async () => {
-      const res1 = await request(app)
-        .post("/sep38/quote")
-        .send({
-          sell_asset: "stellar:XLM",
-          buy_asset: "iso4217:USD",
-          sell_amount: "10",
-          ttl: 0,
-        });
+      const res1 = await request(app).post("/sep38/quote").send({
+        sell_asset: "stellar:XLM",
+        buy_asset: "iso4217:USD",
+        sell_amount: "10",
+        ttl: 0,
+      });
 
       expect(res1.status).toBe(200);
       const expiresAt1 = new Date(res1.body.expires_at);
       const createdAt1 = new Date(res1.body.created_at);
-      const actualTTL1 = Math.round((expiresAt1.getTime() - createdAt1.getTime()) / 1000);
+      const actualTTL1 = Math.round(
+        (expiresAt1.getTime() - createdAt1.getTime()) / 1000,
+      );
       expect(actualTTL1).toBe(60);
 
-      const res2 = await request(app)
-        .post("/sep38/quote")
-        .send({
-          sell_asset: "stellar:XLM",
-          buy_asset: "iso4217:USD",
-          sell_amount: "10",
-          ttl: 600,
-        });
+      const res2 = await request(app).post("/sep38/quote").send({
+        sell_asset: "stellar:XLM",
+        buy_asset: "iso4217:USD",
+        sell_amount: "10",
+        ttl: 600,
+      });
 
       expect(res2.status).toBe(200);
       const expiresAt2 = new Date(res2.body.expires_at);
       const createdAt2 = new Date(res2.body.created_at);
-      const actualTTL2 = Math.round((expiresAt2.getTime() - createdAt2.getTime()) / 1000);
+      const actualTTL2 = Math.round(
+        (expiresAt2.getTime() - createdAt2.getTime()) / 1000,
+      );
       expect(actualTTL2).toBe(300);
     });
   });

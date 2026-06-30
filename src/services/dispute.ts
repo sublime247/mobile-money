@@ -76,7 +76,7 @@ interface NotificationPayload {
 async function sendNotification(payload: NotificationPayload): Promise<void> {
   // Import notification router service for proper multi-channel delivery
   const { notificationRouter } = await import("./notificationRouter.js");
-  
+
   try {
     // Use notification router to send via email, SMS, webhook as configured
     await notificationRouter.sendDisputeNotification({
@@ -87,7 +87,7 @@ async function sendNotification(payload: NotificationPayload): Promise<void> {
       message: payload.message,
       metadata: payload.metadata,
     });
-    
+
     logger.info(
       {
         event: payload.event,
@@ -95,7 +95,7 @@ async function sendNotification(payload: NotificationPayload): Promise<void> {
         transactionId: payload.transactionId,
         status: payload.status,
       },
-      'Dispute notification sent'
+      "Dispute notification sent",
     );
   } catch (error) {
     logger.error(
@@ -104,7 +104,7 @@ async function sendNotification(payload: NotificationPayload): Promise<void> {
         disputeId: payload.disputeId,
         event: payload.event,
       },
-      'Failed to send dispute notification'
+      "Failed to send dispute notification",
     );
   }
 }
@@ -444,7 +444,10 @@ export class DisputeService {
         await this.disputeModel.markSlaWarningSent(dispute.id);
         warningsSent++;
       } catch (error) {
-        logger.error(`Failed to send SLA warning for dispute ${dispute.id}:`, error);
+        logger.error(
+          `Failed to send SLA warning for dispute ${dispute.id}:`,
+          error,
+        );
       }
     }
 

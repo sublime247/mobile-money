@@ -184,8 +184,8 @@ export async function reconcileTransactions(
         matched.push(reconciliationMatch);
       } else {
         reconciliationMatch.matched = false;
-        reconciliationMatch.discrepancy_type = !amountMatch 
-          ? DiscrepancyType.AmountMismatch 
+        reconciliationMatch.discrepancy_type = !amountMatch
+          ? DiscrepancyType.AmountMismatch
           : DiscrepancyType.StatusMismatch;
         discrepancies.push(reconciliationMatch);
       }

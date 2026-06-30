@@ -7,6 +7,7 @@ This guide helps you set up local secret scanning and code quality checks to pre
 ### 1. Install Pre-commit Framework
 
 **macOS/Linux:**
+
 ```bash
 brew install pre-commit
 # or
@@ -14,6 +15,7 @@ pip install pre-commit
 ```
 
 **Windows (PowerShell):**
+
 ```powershell
 pip install pre-commit
 ```
@@ -21,6 +23,7 @@ pip install pre-commit
 ### 2. Install Git Hooks
 
 From the project root:
+
 ```bash
 pre-commit install
 ```
@@ -45,11 +48,13 @@ pre-commit run
 The pre-commit hooks check for:
 
 ### Secret Scanning
+
 - **ggshield** - Detects secrets using GitGuardian rules
 - **detect-private-key** - Detects SSH keys, PGP keys, etc.
 - **detect-aws-credentials** - Detects AWS access keys
 
 ### Code Quality
+
 - **Trailing whitespace** - Removes extra spaces
 - **End-of-file-fixer** - Ensures files end with newline
 - **YAML validator** - Checks YAML syntax
@@ -57,6 +62,7 @@ The pre-commit hooks check for:
 - **Large files** - Prevents commits of files > 1MB
 
 ### Linting
+
 - **ESLint** - TypeScript/JavaScript linting
 
 ## ⚙️ Configuration
@@ -66,6 +72,7 @@ Pre-commit configuration is in `.pre-commit-config.yaml`.
 ### Update Hooks
 
 Keep hooks up to date:
+
 ```bash
 # Show outdated hooks
 pre-commit autoupdate
@@ -87,6 +94,7 @@ pre-commit install-hooks
 ### Bypass Hooks (Not Recommended)
 
 Only in emergencies:
+
 ```bash
 git commit --no-verify
 ```
@@ -102,6 +110,7 @@ pre-commit clean
 ### Specific Hook Issues
 
 **ggshield Issues:**
+
 ```bash
 # Install ggshield
 pip install ggshield
@@ -114,6 +123,7 @@ ggshield auth status
 ```
 
 **ESLint Issues:**
+
 ```bash
 # Reinstall dependencies
 rm -rf node_modules
@@ -158,11 +168,13 @@ ggshield needs access to GitGuardian's API for advanced scanning:
 ### 2. Configure ggshield
 
 **Option A: Environment Variable**
+
 ```bash
 export GITGUARDIAN_API_KEY="your-api-key-here"
 ```
 
 **Option B: Config File**
+
 ```bash
 # macOS/Linux
 mkdir -p ~/.config/ggshield
@@ -177,6 +189,7 @@ mkdir %USERPROFILE%\.ggshield
 ```
 
 **Option C: Prompt on First Use**
+
 ```bash
 ggshield auth configure
 ```
@@ -209,6 +222,7 @@ pnpm install
 ### Setting Up CI/CD Secrets
 
 In GitHub:
+
 1. Settings → Secrets and variables → Actions
 2. Add `GITGUARDIAN_API_KEY` secret
 
