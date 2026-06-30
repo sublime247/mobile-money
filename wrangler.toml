@@ -9,6 +9,11 @@ routes = [
 
 [build]
 command = "npx esbuild workers/well-known-cache/src/index.ts --bundle --format=esm --platform=neutral --target=es2022 --minify --tree-shaking=true --outfile=workers/well-known-cache/dist/index.js"
+watch_dir = "workers/well-known-cache/src"
+
+[dev]
+port = 8787
+ip = "127.0.0.1"
 
 [vars]
 # Cache TTL for stellar.toml (seconds)
