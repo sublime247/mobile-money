@@ -1,38 +1,20 @@
-/**
- * SEP-38 Exchange Rate Provider
- *
- * Abstracts the rate source behind an interface so the concrete implementation
- * can be swapped for testing or for a different upstream provider.
- */
-
 import { currencyService, SupportedCurrency } from "../currency";
 import { exchangeRateBufferService } from "../exchangeRateBufferService";
-
+import * as StellarSdk from "stellar-sdk";
+import { getStellarServer } from "../../config/stellar";
 
 // ---------------------------------------------------------------------------
 // Interface
 // ---------------------------------------------------------------------------
 
 export interface RateResult {
-  /** Units of buy_asset per 1 unit of sell_asset */
   price: string;
-  /** Percentage fee applied to this quote (e.g. "0.5" = 0.5%) */
   fee_percent: string;
-  /** Fixed fee in sell_asset units */
   fee_fixed: string;
 }
 
 export interface IRateProvider {
-  /**
-   * Returns an indicative price for the given asset pair.
-   * Returns null if the pair is not supported or rates are unavailable.
-   */
   getIndicativePrice(sellAsset: string, buyAsset: string): Promise<RateResult | null>;
-
-  /**
-   * Returns a firm price for the given asset pair.
-   * Firm prices are locked in for the quote window — no market variation applied.
-   */
   getFirmPrice(sellAsset: string, buyAsset: string): Promise<RateResult | null>;
 }
 
@@ -42,11 +24,9 @@ export interface IRateProvider {
 
 const PRICE_PRECISION = 7;
 
-/** Maps a SEP-38 asset identifier to a currency code the CurrencyService understands. */
 function assetToCurrencyCode(asset: string): string | null {
   if (asset === "stellar:native" || asset === "stellar:XLM") return "XLM";
   if (asset.startsWith("iso4217:")) return asset.split(":")[1];
-  // stellar:CODE:ISSUER — treat USDC as USD for rate purposes
   if (asset.startsWith("stellar:USDC:")) return "USD";
   if (asset.startsWith("stellar:")) {
     const code = asset.split(":")[1];
@@ -55,81 +35,125 @@ function assetToCurrencyCode(asset: string): string | null {
   return null;
 }
 
-// Static XLM/USD rate — replaced by live data when available
-const XLM_USD_FALLBACK = 0.12;
+function parseStellarAsset(asset: string): StellarSdk.Asset | null {
+  if (asset === "stellar:native") return StellarSdk.Asset.native();
+  if (asset.startsWith("stellar:")) {
+    const parts = asset.split(":");
+    if (parts.length === 2 && parts[1] === "XLM") return StellarSdk.Asset.native();
+    if (parts.length === 3 && parts[1] && parts[2]) {
+      return new StellarSdk.Asset(parts[1], parts[2]);
+    }
+  }
+  return null;
+}
 
-function resolveRate(sellCode: string, buyCode: string): number {
-  // XLM is not in the CurrencyService — handle it manually
-  if (sellCode === "XLM" && buyCode === "USD") return XLM_USD_FALLBACK;
-  if (sellCode === "USD" && buyCode === "XLM") return 1 / XLM_USD_FALLBACK;
-  if (sellCode === "XLM") {
-    const usdToBuy = currencyService.convert(1, "USD", buyCode as SupportedCurrency).rate;
-    return XLM_USD_FALLBACK * usdToBuy;
+function isFiatAsset(asset: string): boolean {
+  return asset.startsWith("iso4217:");
+}
+
+function isStellarAsset(asset: string): boolean {
+  return asset.startsWith("stellar:");
+}
+
+function getConfiguredUsdcAsset(): StellarSdk.Asset {
+  const code = (process.env.STELLAR_ASSET_CODE || "").trim();
+  const issuer = (process.env.STELLAR_ASSET_ISSUER || "").trim();
+  if (code === "USDC" && issuer) {
+    return new StellarSdk.Asset("USDC", issuer);
   }
-  if (buyCode === "XLM") {
-    const sellToUsd = currencyService.convertToBase(1, sellCode as SupportedCurrency).rate;
-    return sellToUsd / XLM_USD_FALLBACK;
-  }
-  return currencyService.convert(1, sellCode as SupportedCurrency, buyCode as SupportedCurrency).rate;
+  const usdcIssuer = process.env.SEP38_USDC_ISSUER || "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN";
+  return new StellarSdk.Asset("USDC", usdcIssuer);
 }
 
 // ---------------------------------------------------------------------------
-// Concrete implementation — backed by CurrencyService
+// Path Payment Rate Lookup
 // ---------------------------------------------------------------------------
 
-export class CurrencyServiceRateProvider implements IRateProvider {
-  /** Fee config — can be overridden per environment */
+interface PathRateResult {
+  price: string;
+}
+
+async function queryStrictSendPath(
+  sendAsset: StellarSdk.Asset,
+  destAsset: StellarSdk.Asset,
+): Promise<PathRateResult | null> {
+  try {
+    const server = getStellarServer();
+    const sendAmount = "1.0000000";
+    const response = await server
+      .strictSendPaths(sendAsset, sendAmount, [destAsset])
+      .call();
+
+    const records = response.records || [];
+    if (records.length === 0) return null;
+
+    const best = records.sort(
+      (a: any, b: any) => parseFloat(b.destination_amount) - parseFloat(a.destination_amount),
+    )[0];
+
+    return { price: best.destination_amount };
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Stellar Path Payment Rate Provider
+// ---------------------------------------------------------------------------
+
+export class StellarPathPaymentRateProvider implements IRateProvider {
   private readonly feePercent: number;
   private readonly feeFixed: number;
+  private readonly spreadBps: number;
 
   constructor(
     feePercent = parseFloat(process.env.SEP38_FEE_PERCENT || "0.5"),
     feeFixed = parseFloat(process.env.SEP38_FEE_FIXED || "0"),
+    spreadBps = parseFloat(process.env.SEP38_SPREAD_BPS || "20"),
   ) {
     this.feePercent = feePercent;
     this.feeFixed = feeFixed;
+    this.spreadBps = spreadBps;
   }
 
   async getIndicativePrice(sellAsset: string, buyAsset: string): Promise<RateResult | null> {
-    const sellCode = assetToCurrencyCode(sellAsset);
-    const buyCode = assetToCurrencyCode(buyAsset);
-    if (!sellCode || !buyCode) return null;
-
-    try {
-      const baseRate = resolveRate(sellCode, buyCode);
-
-      // Apply exchange rate buffer for volatility protection
-      const buffered = await exchangeRateBufferService.applyBuffer(
-        baseRate,
-        "*",        // SEP-38 uses global wildcard provider
-        sellCode,
-        buyCode,
-        "sell",
-      );
-
-      // Indicative prices include a small market spread on top of the buffer
-      const spread = 1 + (Math.random() - 0.5) * 0.002;
-      const price = (buffered.bufferedRate * spread).toFixed(PRICE_PRECISION);
-      return {
-        price,
-        fee_percent: this.feePercent.toFixed(2),
-        fee_fixed: this.feeFixed.toFixed(PRICE_PRECISION),
-      };
-    } catch {
-      return null;
-    }
+    return this.resolvePrice(sellAsset, buyAsset, true);
   }
 
-
   async getFirmPrice(sellAsset: string, buyAsset: string): Promise<RateResult | null> {
+    return this.resolvePrice(sellAsset, buyAsset, false);
+  }
+
+  private async resolvePrice(
+    sellAsset: string,
+    buyAsset: string,
+    indicative: boolean,
+  ): Promise<RateResult | null> {
     const sellCode = assetToCurrencyCode(sellAsset);
     const buyCode = assetToCurrencyCode(buyAsset);
     if (!sellCode || !buyCode) return null;
 
     try {
-      const baseRate = resolveRate(sellCode, buyCode);
+      let baseRate: number;
 
-      // Apply exchange rate buffer — firm prices are locked with the buffer
+      if (isFiatAsset(sellAsset) && isFiatAsset(buyAsset)) {
+        baseRate = this.resolveFiatRate(sellCode, buyCode);
+      } else if (isStellarAsset(sellAsset) && isStellarAsset(buyAsset)) {
+        const pathRate = await this.resolveStellarToStellar(sellAsset, buyAsset);
+        if (pathRate === null) return null;
+        baseRate = pathRate;
+      } else if (isStellarAsset(sellAsset) && isFiatAsset(buyAsset)) {
+        const pathRate = await this.resolveStellarToFiat(sellAsset, buyCode);
+        if (pathRate === null) return null;
+        baseRate = pathRate;
+      } else if (isFiatAsset(sellAsset) && isStellarAsset(buyAsset)) {
+        const pathRate = await this.resolveFiatToStellar(sellCode, buyAsset);
+        if (pathRate === null) return null;
+        baseRate = pathRate;
+      } else {
+        return null;
+      }
+
       const buffered = await exchangeRateBufferService.applyBuffer(
         baseRate,
         "*",
@@ -138,9 +162,16 @@ export class CurrencyServiceRateProvider implements IRateProvider {
         "sell",
       );
 
-      const price = buffered.bufferedRate.toFixed(PRICE_PRECISION);
+      let price: number;
+      if (indicative) {
+        const spread = (this.spreadBps / 10000) * (Math.random() < 0.5 ? -1 : 1);
+        price = buffered.bufferedRate * (1 + spread);
+      } else {
+        price = buffered.bufferedRate;
+      }
+
       return {
-        price,
+        price: price.toFixed(PRICE_PRECISION),
         fee_percent: this.feePercent.toFixed(2),
         fee_fixed: this.feeFixed.toFixed(PRICE_PRECISION),
       };
@@ -149,12 +180,65 @@ export class CurrencyServiceRateProvider implements IRateProvider {
     }
   }
 
+  // ── Rate resolvers ──────────────────────────────────────────────────────────
+
+  private resolveFiatRate(sellCode: string, buyCode: string): number {
+    return currencyService.convert(1, sellCode as SupportedCurrency, buyCode as SupportedCurrency).rate;
+  }
+
+  private async resolveStellarToStellar(
+    sellAsset: string,
+    buyAsset: string,
+  ): Promise<number | null> {
+    const sellSdk = parseStellarAsset(sellAsset);
+    const buySdk = parseStellarAsset(buyAsset);
+    if (!sellSdk || !buySdk) return null;
+
+    const result = await queryStrictSendPath(sellSdk, buySdk);
+    if (!result) return null;
+
+    return parseFloat(result.price);
+  }
+
+  private async resolveStellarToFiat(
+    sellAsset: string,
+    buyCode: string,
+  ): Promise<number | null> {
+    const sellSdk = parseStellarAsset(sellAsset);
+    if (!sellSdk) return null;
+
+    const usdc = getConfiguredUsdcAsset();
+    const pathToUsdc = await queryStrictSendPath(sellSdk, usdc);
+    if (!pathToUsdc) return null;
+
+    const sellToUsdc = parseFloat(pathToUsdc.price);
+    const usdcToFiat = currencyService.convert(1, "USD", buyCode as SupportedCurrency).rate;
+    return sellToUsdc * usdcToFiat;
+  }
+
+  private async resolveFiatToStellar(
+    sellCode: string,
+    buyAsset: string,
+  ): Promise<number | null> {
+    const buySdk = parseStellarAsset(buyAsset);
+    if (!buySdk) return null;
+
+    const fiatToUsdc = currencyService.convert(1, sellCode as SupportedCurrency, "USD").rate;
+    const usdc = getConfiguredUsdcAsset();
+    const pathFromUsdc = await queryStrictSendPath(usdc, buySdk);
+    if (!pathFromUsdc) return null;
+
+    const usdcToBuy = parseFloat(pathFromUsdc.price);
+    return fiatToUsdc * usdcToBuy;
+  }
 }
 
-// Singleton used by the router — can be replaced in tests
-export let rateProvider: IRateProvider = new CurrencyServiceRateProvider();
+// ---------------------------------------------------------------------------
+// Singleton
+// ---------------------------------------------------------------------------
 
-/** Swap the rate provider (useful in tests). */
+export let rateProvider: IRateProvider = new StellarPathPaymentRateProvider();
+
 export function setRateProvider(provider: IRateProvider): void {
   rateProvider = provider;
 }
