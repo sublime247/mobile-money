@@ -116,11 +116,14 @@ export const updateMandatory2FAWithdrawals = async (
       enabled,
     );
 
-    logger.info({
-      userId,
-      enabled,
-      verified: enabled,
-    }, `[2FA] Updated mandatory 2FA withdrawals`);
+    logger.info(
+      {
+        userId,
+        enabled,
+        verified: enabled,
+      },
+      `[2FA] Updated mandatory 2FA withdrawals`,
+    );
 
     return res.json({
       success: true,
@@ -187,6 +190,72 @@ export const verifyWithdrawal2FA = async (req: Request, res: Response) => {
     });
   } catch (error) {
     logger.error(error, "[2FA] Error verifying withdrawal 2FA");
+    throw createError(ERROR_CODES.INTERNAL_ERROR, "Internal server error", {
+      error: "Internal server error",
+    });
+  }
+};
+
+/**
+ * Generate (or regenerate) backup codes for a user who has TOTP 2FA configured.
+ * Returns the plaintext codes exactly once — they cannot be retrieved again.
+ */
+export const generateBackupCodesForUser = async (
+  req: Request,
+  res: Response,
+) => {
+  try {
+    const userId = (req as any).user?.id;
+    if (!userId) {
+      throw createError(ERROR_CODES.UNAUTHORIZED, "Unauthorized", {
+        error: "Unauthorized",
+      });
+    }
+
+    const codes =
+      await twoFactorWithdrawalService.generateAndStoreBackupCodes(userId);
+
+    return res.status(201).json({
+      message:
+        "Backup codes generated. Store these somewhere safe — they will not be shown again.",
+      codes,
+      count: codes.length,
+    });
+  } catch (error: any) {
+    logger.error(error, "[2FA] Error generating backup codes");
+
+    if (error.message?.includes("2FA setup not initiated")) {
+      throw createError(
+        ERROR_CODES.MISSING_FIELD,
+        "You must first configure TOTP 2FA before generating backup codes",
+        { error: "2FA not configured", code: "TOTP_NOT_CONFIGURED" },
+      );
+    }
+
+    throw createError(ERROR_CODES.INTERNAL_ERROR, "Internal server error", {
+      error: "Internal server error",
+    });
+  }
+};
+
+/**
+ * Return the count of remaining (unused) backup codes for the authenticated user.
+ */
+export const getBackupCodeStatus = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.id;
+    if (!userId) {
+      throw createError(ERROR_CODES.UNAUTHORIZED, "Unauthorized", {
+        error: "Unauthorized",
+      });
+    }
+
+    const remaining =
+      await twoFactorWithdrawalService.getRemainingBackupCodeCount(userId);
+
+    return res.json({ remainingCodes: remaining });
+  } catch (error) {
+    logger.error(error, "[2FA] Error fetching backup code status");
     throw createError(ERROR_CODES.INTERNAL_ERROR, "Internal server error", {
       error: "Internal server error",
     });

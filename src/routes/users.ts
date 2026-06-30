@@ -10,6 +10,8 @@ import {
   getWithdrawal2FASettings,
   updateMandatory2FAWithdrawals,
   verifyWithdrawal2FA,
+  generateBackupCodesForUser,
+  getBackupCodeStatus,
 } from "../controllers/twoFactorWithdrawalController";
 import { ERROR_CODES } from "../constants/errorCodes";
 import { createError } from "../middleware/errorHandler";
@@ -36,8 +38,8 @@ router.post(
       const userId = req.user?.id ?? "";
 
       if (!file) {
-         throw createError(ERROR_CODES.INVALID_INPUT, "No image provided" , {
-          error: "No image provided" ,
+        throw createError(ERROR_CODES.INVALID_INPUT, "No image provided", {
+          error: "No image provided",
         });
       }
 
@@ -87,9 +89,13 @@ router.put(
     try {
       const user = req.user;
       if (!user || user.role !== "merchant") {
-        throw createError(ERROR_CODES.FORBIDDEN, "Only merchants can set a display name", {
-          error: "Only merchants can set a display name",
-        });
+        throw createError(
+          ERROR_CODES.FORBIDDEN,
+          "Only merchants can set a display name",
+          {
+            error: "Only merchants can set a display name",
+          },
+        );
       }
 
       const parsed = updateDisplayNameSchema.safeParse(req.body);
@@ -118,5 +124,9 @@ router.put(
 router.get("/2fa/withdrawals", requireAuth, getWithdrawal2FASettings);
 router.put("/2fa/withdrawals", requireAuth, updateMandatory2FAWithdrawals);
 router.post("/2fa/withdrawals/verify", requireAuth, verifyWithdrawal2FA);
+
+// Backup code generation routes
+router.post("/2fa/backup-codes", requireAuth, generateBackupCodesForUser);
+router.get("/2fa/backup-codes/status", requireAuth, getBackupCodeStatus);
 
 export { router as userRoutes };
