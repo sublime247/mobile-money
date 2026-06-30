@@ -1,6 +1,7 @@
 import logger from "../utils/logger";
 import axios from "axios";
 import { redisClient } from "../config/redis";
+import { Request, Response, NextFunction } from "express";
 
 /**
  * GeolocationService
@@ -165,3 +166,33 @@ export class GeolocationService {
 }
 
 export const geolocationService = new GeolocationService();
+
+// Allowed country codes for admin routes
+const ALLOWED_ADMIN_COUNTRIES = (process.env.ALLOWED_ADMIN_COUNTRIES || "US,GB,CA").split(",");
+
+export const geofenceAdminMiddleware = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  const ip = (req.headers["x-forwarded-for"] as string) || req.socket.remoteAddress || "";
+  const firstIp = ip.split(",")[0].trim();
+
+  // Localhost is generally allowed in dev
+  if (firstIp === "127.0.0.1" || firstIp === "::1" || !isRoutableIp(firstIp)) {
+    return next();
+  }
+
+  const location = await geolocationService.lookup(firstIp);
+
+  if (location.status === "resolved" && ALLOWED_ADMIN_COUNTRIES.includes(location.countryCode)) {
+    return next();
+  }
+
+  logger.warn("[geofenceAdminMiddleware] Blocked unauthorized access attempt", {
+    ip: anonymizeIp(firstIp),
+    countryCode: location.countryCode,
+  });
+
+  res.status(403).json({ error: "Access denied from your location" });
+};

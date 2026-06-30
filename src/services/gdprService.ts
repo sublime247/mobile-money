@@ -131,7 +131,7 @@ export class GDPRService {
       for (const tx of transactions) {
         const anonymizedTx = this.anonymizeTransaction(tx);
         await pool.query(
-          `UPDATE transactions SET phone_number = $1, idempotency_key = $2, stellar_address = $3 WHERE id = $4`,
+          `UPDATE transactions SET phone_number = $1, idempotency_key = $2, stellar_address = $3, metadata = '{}', location_metadata = NULL WHERE id = $4`,
           [
             anonymizedTx.phoneNumber,
             anonymizedTx.idempotencyKey,
@@ -224,7 +224,7 @@ export class GDPRService {
         const hashedStellar = this.hashString("purged_stellar_address");
 
         await pool.query(
-          `UPDATE transactions SET phone_number = $1, stellar_address = $2, idempotency_key = $3 WHERE id = $4`,
+          `UPDATE transactions SET phone_number = $1, stellar_address = $2, idempotency_key = $3, metadata = '{}', location_metadata = NULL WHERE id = $4`,
           [hashedPhone, hashedStellar, hashedIdempotency, row.id],
         );
         transactionsAnonymized++;
