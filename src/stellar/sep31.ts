@@ -378,6 +378,9 @@ router.post(
         amount_fee_asset: getAssetString(),
       });
     } catch (error: any) {
+      if (error && error.statusCode) {
+        throw error;
+      }
       logger.error("SEP-31 POST /transactions error:", error);
       throw createError(ERROR_CODES.INTERNAL_ERROR, "Internal server error");
     }
@@ -459,6 +462,9 @@ router.get(
         },
       });
     } catch (error: any) {
+      if (error && error.statusCode) {
+        throw error;
+      }
       logger.error("SEP-31 GET /transactions/:id error:", error);
       throw createError(ERROR_CODES.INTERNAL_ERROR, "Internal server error");
     }
@@ -556,6 +562,9 @@ router.patch(
 
       return res.json({ status: "updated" });
     } catch (error: any) {
+      if (error && error.statusCode) {
+        throw error;
+      }
       logger.error("SEP-31 PATCH /transactions/:id error:", error);
       throw createError(ERROR_CODES.INTERNAL_ERROR, "Internal server error");
     }

@@ -33,8 +33,12 @@ jest.mock("ioredis", () => {
     Cluster: jest.fn(() => mockRedis),
   };
 });
-process.env.STELLAR_ISSUER_SECRET ??=
-  "SDUHELR2QJTQH24GZKNCT5NBWJ2FCGMPRGKED5Y4REUZK4XCM73JMM4V";
+if (!process.env.STELLAR_ISSUER_SECRET || process.env.STELLAR_ISSUER_SECRET.length < 56) {
+  process.env.STELLAR_ISSUER_SECRET = "SDUHELR2QJTQH24GZKNCT5NBWJ2FCGMPRGKED5Y4REUZK4XCM73JMM4V";
+}
+if (process.env.STELLAR_SIGNING_KEY && process.env.STELLAR_SIGNING_KEY.length < 56) {
+  delete process.env.STELLAR_SIGNING_KEY;
+}
 process.env.JWT_SECRET ??= "test-jwt-secret";
 process.env.ADMIN_API_KEY ??= "test-admin-key";
 process.env.DB_ENCRYPTION_KEY ??= "development-encryption-key-32-chars-long";

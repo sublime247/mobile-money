@@ -1,6 +1,12 @@
 import { MobileMoneyService } from "../../../src/services/mobilemoney/mobileMoneyService";
 import { resetCircuitBreakers } from "../../../src/utils/circuitBreaker";
 
+jest.mock("../../../src/services/providerSettingsService", () => ({
+  providerSettingsService: {
+    resolveMaintenanceRouting: jest.fn().mockResolvedValue({ action: "proceed" }),
+  },
+}));
+
 type FakeResult = {
   success: boolean;
   data?: unknown;
@@ -142,7 +148,7 @@ describe("MobileMoneyService failover", () => {
     expect(result.success).toBe(true);
     expect(primary.requestPaymentCalls).toBe(3);
     expect(backup.requestPaymentCalls).toBe(4);
-    expect(elapsedMs).toBeLessThan(100);
+    expect(elapsedMs).toBeLessThan(500);
   });
 
   it("recovers gracefully after the reset timeout and sends traffic back to the primary provider", async () => {

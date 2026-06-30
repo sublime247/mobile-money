@@ -205,7 +205,7 @@ export class AirtelService {
         validateStatus: () => true,
       });
 
-    if (this.config.proxyBaseUrl) {
+    if (this.config.proxyBaseUrl || opts.proxyHttpClient) {
       this.proxyClient =
         opts.proxyHttpClient ??
         axios.create({
@@ -328,7 +328,7 @@ export class AirtelService {
   }
 
   private resolveMode(): AirtelMode {
-    if (this.config.proxyBaseUrl) {
+    if (this.config.mode === "proxy" || this.config.proxyBaseUrl) {
       return "proxy";
     }
 

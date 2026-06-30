@@ -227,6 +227,7 @@ describe("Stellar Webhooks", () => {
 
       expect(mockPatchMetadata).toHaveBeenCalledWith("tx-uuid-123", {
         stellar_ledger: 12345678,
+        stellar_hash: "abc123def456",
         webhook_processed_at: expect.any(String),
       });
 
@@ -492,7 +493,7 @@ describe("Stellar Webhooks", () => {
 
       // No match by hash, match by reference number
       mockFindByMetadata.mockResolvedValueOnce([]).mockResolvedValue([]);
-      mockFindByReferenceNumber.mockResolvedValue([mockTransaction]);
+      mockFindByReferenceNumber.mockResolvedValue(mockTransaction);
       mockUpdateStatus.mockResolvedValue(undefined);
       mockPatchMetadata.mockResolvedValue(undefined);
       mockNotifyTransactionWebhook.mockResolvedValue(null);
@@ -537,7 +538,7 @@ describe("Stellar Webhooks", () => {
       mockFindByMetadata
         .mockResolvedValueOnce([]) // stellar_hash lookup
         .mockResolvedValueOnce([mockTransaction]); // memo metadata lookup
-      mockFindByReferenceNumber.mockResolvedValue([]);
+      mockFindByReferenceNumber.mockResolvedValue(null);
       mockUpdateStatus.mockResolvedValue(undefined);
       mockPatchMetadata.mockResolvedValue(undefined);
       mockNotifyTransactionWebhook.mockResolvedValue(null);
@@ -581,7 +582,7 @@ describe("Stellar Webhooks", () => {
       mockFindByMetadata
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([mockTransaction]);
-      mockFindByReferenceNumber.mockResolvedValue([]);
+      mockFindByReferenceNumber.mockResolvedValue(null);
       mockUpdateStatus.mockResolvedValue(undefined);
       mockPatchMetadata.mockResolvedValue(undefined);
       mockNotifyTransactionWebhook.mockResolvedValue(null);
@@ -609,7 +610,7 @@ describe("Stellar Webhooks", () => {
       };
 
       mockFindByMetadata.mockResolvedValue([]);
-      mockFindByReferenceNumber.mockResolvedValue([]);
+      mockFindByReferenceNumber.mockResolvedValue(null);
 
       const rawPayload = JSON.stringify(payloadWithMemo);
       const signature = generateSignature(rawPayload, "test-secret");

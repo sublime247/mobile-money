@@ -31,6 +31,10 @@ import KYCService from "../../services/kyc";
 import { errorHandler } from "../../middleware/errorHandler";
 import * as hsmService from "../../services/stellar/hsmService";
 
+jest.mock("../../services/stellar/hsmService", () => ({
+  createFileSignerFromEnv: jest.fn(),
+}));
+
 // Mock sharp before any module imports it
 jest.mock("sharp", () => {
   return jest.fn().mockImplementation(() => ({

@@ -469,7 +469,7 @@ describe("GitHub Actions Workflow Validation", () => {
 
       // Verify test step exists
       const testStep = testJob.steps.find(
-        (step: any) => step.run && step.run.includes("test"),
+        (step: any) => step.run && step.run.includes("npm run test"),
       );
 
       expect(testStep).toBeDefined();

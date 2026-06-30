@@ -83,7 +83,23 @@ jest.mock("../../src/middleware/timeout", () => ({
 }));
 
 jest.mock("../../src/middleware/auth", () => ({
-  authenticateToken: (_req: unknown, _res: unknown, next: () => void) => next(),
+  authenticateToken: (req: any, _res: any, next: () => void) => {
+    req.jwtUser = { userId: "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11", role: "user" };
+    req.user = { id: "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11", role: "user" };
+    next();
+  },
+}));
+
+jest.mock("../../src/middleware/checkAccountStatus", () => ({
+  checkAccountStatusStrict: (_req: unknown, _res: unknown, next: () => void) => next(),
+}));
+
+jest.mock("../../src/middleware/geoFencing", () => ({
+  geoFencingMiddleware: (_req: unknown, _res: unknown, next: () => void) => next(),
+}));
+
+jest.mock("../../src/middleware/geolocate", () => ({
+  geolocateMiddleware: (_req: unknown, _res: unknown, next: () => void) => next(),
 }));
 
 import { transactionRoutes } from "../../src/routes/transactions";
@@ -94,26 +110,26 @@ function buildPayload() {
     amount: 2500,
     phoneNumber: "+237670000000",
     provider: "mtn",
-    stellarAddress: `G${"A".repeat(55)}`,
-    userId: "user-123",
+    stellarAddress: "GBNGNTEDRBGZN2N7HQ3TUKA76U2YKRMTXPFPDPPJOSVDLQX5S4PXX7E3",
+    userId: "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
     notes: "retry-safe transaction",
   };
 }
 
 function buildTransaction(overrides: Record<string, unknown> = {}) {
   return {
-    id: "txn-1",
+    id: "e4318c5e-85e6-42b7-a3cf-e87fcd8814eb",
     referenceNumber: "TXN-20260325-0001",
     type: "deposit",
     amount: "2500",
     phoneNumber: "+237670000000",
     provider: "mtn",
-    stellarAddress: `G${"A".repeat(55)}`,
+    stellarAddress: "GBNGNTEDRBGZN2N7HQ3TUKA76U2YKRMTXPFPDPPJOSVDLQX5S4PXX7E3",
     status: TransactionStatus.Pending,
     tags: [],
     notes: "retry-safe transaction",
     adminNotes: null,
-    userId: "user-123",
+    userId: "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
     idempotencyKey: "idem-123",
     idempotencyExpiresAt: new Date("2026-03-26T00:00:00.000Z"),
     createdAt: new Date("2026-03-25T00:00:00.000Z"),
@@ -179,10 +195,10 @@ describe("transaction idempotency routes", () => {
     expect(firstResponse.status).toBe(200);
     expect(secondResponse.status).toBe(200);
     expect(firstResponse.body).toEqual({
-      transactionId: "txn-1",
+      transactionId: "e4318c5e-85e6-42b7-a3cf-e87fcd8814eb",
       referenceNumber: "TXN-20260325-0001",
       status: TransactionStatus.Pending,
-      jobId: "txn-1",
+      jobId: "e4318c5e-85e6-42b7-a3cf-e87fcd8814eb",
     });
     expect(secondResponse.body).toEqual(firstResponse.body);
     expect(mockTransactionModel.create).toHaveBeenCalledTimes(1);
@@ -191,7 +207,7 @@ describe("transaction idempotency routes", () => {
 
   it("allows a new transaction after the previous idempotency key has expired", async () => {
     const newTransaction = buildTransaction({
-      id: "txn-2",
+      id: "c3a10cfc-5353-47a3-89b4-f584e038848b",
       referenceNumber: "TXN-20260325-0002",
       idempotencyKey: "expired-key",
     });
@@ -202,16 +218,16 @@ describe("transaction idempotency routes", () => {
     mockTransactionModel.create.mockResolvedValue(newTransaction);
 
     const response = await request(createApp())
-      .post("/api/transactions/withdraw")
+      .post("/api/transactions/deposit")
       .set("Idempotency-Key", "expired-key")
       .send(buildPayload());
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({
-      transactionId: "txn-2",
+      transactionId: "c3a10cfc-5353-47a3-89b4-f584e038848b",
       referenceNumber: "TXN-20260325-0002",
       status: TransactionStatus.Pending,
-      jobId: "txn-2",
+      jobId: "c3a10cfc-5353-47a3-89b4-f584e038848b",
     });
     expect(
       mockTransactionModel.releaseExpiredIdempotencyKey,
@@ -221,7 +237,7 @@ describe("transaction idempotency routes", () => {
 
   it("reuses the stored transaction when the unique constraint detects a race", async () => {
     const existingTransaction = buildTransaction({
-      id: "txn-race",
+      id: "f2f9c313-09eb-4a2a-bc9e-db26df3241b1",
       referenceNumber: "TXN-20260325-0099",
       idempotencyKey: "idem-race",
     });
@@ -244,10 +260,10 @@ describe("transaction idempotency routes", () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({
-      transactionId: "txn-race",
+      transactionId: "f2f9c313-09eb-4a2a-bc9e-db26df3241b1",
       referenceNumber: "TXN-20260325-0099",
       status: TransactionStatus.Pending,
-      jobId: "txn-race",
+      jobId: "f2f9c313-09eb-4a2a-bc9e-db26df3241b1",
     });
     expect(mockTransactionModel.create).toHaveBeenCalledTimes(1);
     expect(mockAddTransactionJob).not.toHaveBeenCalled();

@@ -113,11 +113,11 @@ describe("PagerDutyService", () => {
 
   describe("threshold detection", () => {
     it("should identify when error rate exceeds 15% threshold", () => {
-      // Create 15% error rate (15 errors out of 100 requests)
-      for (let i = 0; i < 85; i++) {
+      // Create 16% error rate (16 errors out of 100 requests)
+      for (let i = 0; i < 84; i++) {
         service.recordProviderSuccess("flutterwave");
       }
-      for (let i = 0; i < 15; i++) {
+      for (let i = 0; i < 16; i++) {
         service.recordProviderError("flutterwave", 0);
       }
 
@@ -494,16 +494,26 @@ describe("PagerDutyService – balance shortfall tier evaluation (#1018)", () =>
     });
 
     it("emits the startup matrix log exactly once per process", () => {
-      captured = jest.spyOn(console, "log").mockImplementation(() => undefined);
-      PagerDutyService.validateAndRepairThresholds();
-      PagerDutyService.validateAndRepairThresholds();
-      PagerDutyService.validateAndRepairThresholds();
-      const matrixCalls = captured.mock.calls.filter((args) =>
-        String(args[0] ?? "").includes(
-          "Balance shortfall escalation matrix active",
-        ),
-      );
-      expect(matrixCalls).toHaveLength(1);
+      const originalKey = process.env.PAGERDUTY_INTEGRATION_KEY;
+      process.env.PAGERDUTY_INTEGRATION_KEY = "test-key";
+      try {
+        captured = jest.spyOn(console, "log").mockImplementation(() => undefined);
+        PagerDutyService.validateAndRepairThresholds();
+        PagerDutyService.validateAndRepairThresholds();
+        PagerDutyService.validateAndRepairThresholds();
+        const matrixCalls = captured.mock.calls.filter((args) =>
+          String(args[0] ?? "").includes(
+            "Balance shortfall escalation matrix active",
+          ),
+        );
+        expect(matrixCalls).toHaveLength(1);
+      } finally {
+        if (originalKey) {
+          process.env.PAGERDUTY_INTEGRATION_KEY = originalKey;
+        } else {
+          delete process.env.PAGERDUTY_INTEGRATION_KEY;
+        }
+      }
     });
   });
 

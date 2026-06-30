@@ -247,6 +247,19 @@ export class PagerDutyService {
     const incident = this.activeIncidents.get(errorKey)!;
     incident.errorCount++;
 
+    if (!this.activeIncidents.has(requestKey)) {
+      this.activeIncidents.set(requestKey, {
+        provider,
+        errorRate: 0,
+        errorCount: 0,
+        totalRequests: 0,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    const requestIncident = this.activeIncidents.get(requestKey)!;
+    requestIncident.totalRequests++;
+
     // Clean old errors outside the sliding window
     this.cleanupOldMetrics(provider);
   }
@@ -553,18 +566,19 @@ export class PagerDutyService {
       // Skip the matrix log when PagerDuty is unconfigured (no integration
       // key) - avoids cluttering dev/test logs with routing info that will
       // never be used.
-      if (!process.env.PAGERDUTY_INTEGRATION_KEY) return;
-      const a = PagerDutyService.BALANCE_SHORTFALL_THRESHOLDS;
-      const dto = isOrdered
-        ? `(minor=${a.minorPct}%, moderate=${a.moderatePct}%, critical=${a.criticalPct}%)`
-        : `(defaults active: minor=${a.minorPct}%, moderate=${a.moderatePct}%, critical=${a.criticalPct}%)`;
-      const pad = (s: string) => s.padEnd(22, " ");
-      console.log(
-        `[pagerduty] Balance shortfall escalation matrix active ${dto}\n` +
-          `  - ${pad(ESCALATION_PATHS.warning.label)}: shortfallPct >= ${a.minorPct}%   (warning → team notification)\n` +
-          `  - ${pad(ESCALATION_PATHS.error.label)}: shortfallPct >= ${a.moderatePct}%   (error → operational escalation)\n` +
-          `  - ${pad(ESCALATION_PATHS.critical.label)}: shortfallPct >= ${a.criticalPct}%   (critical → immediate escalation)`,
-      );
+      if (process.env.PAGERDUTY_INTEGRATION_KEY) {
+        const a = PagerDutyService.BALANCE_SHORTFALL_THRESHOLDS;
+        const dto = isOrdered
+          ? `(minor=${a.minorPct}%, moderate=${a.moderatePct}%, critical=${a.criticalPct}%)`
+          : `(defaults active: minor=${a.minorPct}%, moderate=${a.moderatePct}%, critical=${a.criticalPct}%)`;
+        const pad = (s: string) => s.padEnd(22, " ");
+        console.log(
+          `[pagerduty] Balance shortfall escalation matrix active ${dto}\n` +
+            `  - ${pad(ESCALATION_PATHS.warning.label)}: shortfallPct >= ${a.minorPct}%   (warning → team notification)\n` +
+            `  - ${pad(ESCALATION_PATHS.error.label)}: shortfallPct >= ${a.moderatePct}%   (error → operational escalation)\n` +
+            `  - ${pad(ESCALATION_PATHS.critical.label)}: shortfallPct >= ${a.criticalPct}%   (critical → immediate escalation)`,
+        );
+      }
     }
 
     return PagerDutyService.BALANCE_SHORTFALL_THRESHOLDS;
@@ -595,6 +609,14 @@ export class PagerDutyService {
     if (shortfallPct >= t.moderatePct) return "error";
     if (shortfallPct >= t.minorPct) return "warning";
     return null;
+  }
+
+  /**
+   * Resolve severity string to the configured escalation label.
+   */
+  static getEscalationLabel(severity: string): string {
+    const path = ESCALATION_PATHS[severity as ShortfallSeverity];
+    return path ? path.label : "team-notification";
   }
 
   /**

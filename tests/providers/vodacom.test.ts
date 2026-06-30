@@ -3,6 +3,12 @@ import crypto from "crypto";
 import { VodacomProvider } from "../../src/services/mobilemoney/providers/vodacom";
 import { MobileMoneyService } from "../../src/services/mobilemoney/mobileMoneyService";
 
+jest.mock("../../src/services/providerSettingsService", () => ({
+  providerSettingsService: {
+    resolveMaintenanceRouting: jest.fn().mockResolvedValue({ action: "proceed" }),
+  },
+}));
+
 // Mock axios
 jest.mock("axios");
 const mockedAxios = axios as jest.Mocked<typeof axios>;

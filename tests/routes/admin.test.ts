@@ -1,5 +1,6 @@
 import express, { Request, Response, NextFunction } from "express";
 import request from "supertest";
+import { errorHandler } from "../../src/middleware/errorHandler";
 
 // Mock the dependencies before importing adminRoutes
 jest.mock("../../src/controllers/transactionController", () => ({
@@ -72,6 +73,7 @@ describe("Admin Routes - Provider Health", () => {
     });
 
     app.use("/api/admin", adminRoutes);
+    app.use(errorHandler);
   });
 
   describe("GET /api/admin/providers/health", () => {
@@ -141,6 +143,7 @@ describe("Admin Routes - Refund Transaction", () => {
     });
 
     app.use("/api/admin", adminRoutes);
+    app.use(errorHandler);
   });
 
   describe("POST /api/admin/transactions/:id/refund", () => {

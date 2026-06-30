@@ -141,7 +141,7 @@ jest.mock("../../services/mobilemoney/mobileMoneyService", () => ({
 
 // ── Import after mocks ────────────────────────────────────────────────────────
 
-import { withdrawHandler } from "../transactionController";
+import { withdrawHandler, depositHandler } from "../transactionController";
 import {
   checkDestinationTrustline,
   TrustlineError,
@@ -271,7 +271,6 @@ describe("withdrawHandler — trustline check", () => {
   });
 
   it("does NOT call checkDestinationTrustline for deposit requests", async () => {
-    const { depositHandler } = await import("../transactionController");
 
     const req = makeReq();
     const { res, status } = makeRes();

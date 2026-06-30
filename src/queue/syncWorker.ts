@@ -12,12 +12,22 @@ import { pool } from "../config/database";
 import { addAccountingRetryJob } from "./accountingRetryQueue";
 import { natsManager, NATS_QUEUE_ENABLED, type JsMsg } from "./nats";
 
-const SYNC_CONCURRENCY = 5;
-const NATS_SYNC_SUBJECT = process.env.NATS_SYNC_SUBJECT || "accounting.sync";
-const NATS_SYNC_DURABLE_CONSUMER =
+const getSyncConcurrency = (): number => {
+  const envVal = process.env.SYNC_WORKER_CONCURRENCY;
+  if (envVal === undefined || envVal === "") return 3;
+  const parsed = parseInt(envVal, 10);
+  if (isNaN(parsed)) return 3;
+  return parsed < 1 ? 1 : parsed;
+};
+
+export const SYNC_CONCURRENCY = getSyncConcurrency();
+export const NATS_SYNC_SUBJECT = process.env.NATS_SYNC_SUBJECT || "accounting.sync";
+export const NATS_SYNC_DURABLE_CONSUMER =
   process.env.NATS_SYNC_DURABLE_CONSUMER || "accounting-sync-consumer";
-const NATS_SYNC_CONSUMER_GROUP =
-  process.env.NATS_SYNC_CONSUMER_GROUP || "accounting-sync-group";
+export const NATS_SYNC_CONSUMER_GROUP =
+  process.env.NATS_SYNC_CONSUMER_GROUP ||
+  process.env.NATS_CONSUMER_GROUP ||
+  "accounting-sync-group";
 
 // Create instance of our Accounting Service
 export const accountingService = new AccountingService();

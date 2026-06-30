@@ -7,6 +7,8 @@ import { CurrencyConfig } from "../CurrencyConfig";
 import { CurrencyConfiguration, CurrencyRule } from "../types";
 import { DEFAULT_CONFIG } from "../constants";
 
+import logger from "../../logger";
+
 // Mock console methods to capture warnings and errors
 const mockConsoleWarn = jest.fn();
 const mockConsoleError = jest.fn();
@@ -22,6 +24,13 @@ beforeEach(() => {
   // Mock console methods
   jest.spyOn(console, "warn").mockImplementation(mockConsoleWarn);
   jest.spyOn(console, "error").mockImplementation(mockConsoleError);
+  jest.spyOn(logger, "error").mockImplementation((arg1: any, arg2?: any) => {
+    if (arg1 instanceof Error && typeof arg2 === "string") {
+      mockConsoleError(arg2, arg1);
+    } else {
+      mockConsoleError(arg1, arg2);
+    }
+  });
 });
 
 afterEach(() => {

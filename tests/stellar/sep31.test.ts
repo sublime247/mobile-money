@@ -23,12 +23,14 @@ jest.mock("../../src/models/transaction", () => {
   };
 });
 
-import sep31Router from "../../src/stellar/sep31";
+import sep31Router, { Sep31Status, isValidTransition, VALID_TRANSITIONS, calculateFee } from "../../src/stellar/sep31";
+import { errorHandler } from "../../src/middleware/errorHandler";
 
 // Create a minimal Express app mounting the SEP-31 router
 const app = express();
 app.use(express.json());
 app.use("/sep31", sep31Router);
+app.use(errorHandler);
 
 describe("SEP-31 Cross-Border Payments API", () => {
   beforeEach(() => {
@@ -511,10 +513,7 @@ describe("SEP-31 Cross-Border Payments API", () => {
   // ─── Status State Machine ──────────────────────────────────────
 
   describe("SEP-31 Status State Machine", () => {
-    it("should correctly export status enum and helpers", async () => {
-      const { Sep31Status, isValidTransition, VALID_TRANSITIONS } =
-        await import("../../src/stellar/sep31");
-
+    it("should correctly export status enum and helpers", () => {
       expect(Sep31Status.PendingSender).toBe("pending_sender");
       expect(Sep31Status.PendingStellar).toBe("pending_stellar");
       expect(Sep31Status.PendingReceiver).toBe("pending_receiver");
@@ -523,10 +522,7 @@ describe("SEP-31 Cross-Border Payments API", () => {
       expect(Sep31Status.Error).toBe("error");
     });
 
-    it("should validate allowed transitions", async () => {
-      const { isValidTransition, Sep31Status } =
-        await import("../../src/stellar/sep31");
-
+    it("should validate allowed transitions", () => {
       // pending_sender -> pending_stellar: OK
       expect(
         isValidTransition(
@@ -552,9 +548,7 @@ describe("SEP-31 Cross-Border Payments API", () => {
       ).toBe(true);
     });
 
-    it("should calculate fees correctly", async () => {
-      const { calculateFee } = await import("../../src/stellar/sep31");
-
+    it("should calculate fees correctly", () => {
       const result = calculateFee(100);
       expect(result.fee).toBeGreaterThan(0);
       expect(result.total).toBe(100 + result.fee);

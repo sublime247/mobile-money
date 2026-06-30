@@ -31,6 +31,10 @@ function registerMocks(opts: {
   }));
 
   jest.mock("bullmq", () => ({
+    Queue: jest.fn().mockImplementation(() => ({
+      add: jest.fn(),
+      close: jest.fn(),
+    })),
     Worker: jest.fn().mockImplementation(() => ({
       close: mockWorkerClose,
     })),
@@ -318,6 +322,10 @@ describe("syncWorker — processNatsSyncMessage handler", () => {
     }));
 
     jest.mock("bullmq", () => ({
+      Queue: jest.fn().mockImplementation(() => ({
+        add: jest.fn(),
+        close: jest.fn(),
+      })),
       Worker: jest.fn().mockImplementation(() => ({ close: mockWorkerClose })),
     }));
 
@@ -559,6 +567,10 @@ describe("syncWorker — NATS consume rejection is caught and logged", () => {
       natsManager: { consume: failingConsume, close: natsCloseMock },
     }));
     jest.mock("bullmq", () => ({
+      Queue: jest.fn().mockImplementation(() => ({
+        add: jest.fn(),
+        close: jest.fn(),
+      })),
       Worker: jest.fn().mockImplementation(() => ({
         close: jest.fn().mockResolvedValue(undefined),
       })),
@@ -621,6 +633,10 @@ describe("syncWorker — closeSyncWorker", () => {
       natsManager: { consume, close: natsClose },
     }));
     jest.mock("bullmq", () => ({
+      Queue: jest.fn().mockImplementation(() => ({
+        add: jest.fn(),
+        close: jest.fn(),
+      })),
       Worker: jest.fn().mockImplementation(() => ({ close: workerClose })),
     }));
     jest.mock("../../src/queue/config", () => ({ queueOptions: {} }));
@@ -654,6 +670,10 @@ describe("syncWorker — closeSyncWorker", () => {
       natsManager: { consume: jest.fn(), close: natsClose },
     }));
     jest.mock("bullmq", () => ({
+      Queue: jest.fn().mockImplementation(() => ({
+        add: jest.fn(),
+        close: jest.fn(),
+      })),
       Worker: jest.fn().mockImplementation(() => ({ close: workerClose })),
     }));
     jest.mock("../../src/queue/config", () => ({ queueOptions: {} }));
@@ -704,6 +724,10 @@ describe("syncWorker — NATS disabled branch", () => {
       natsManager: { consume, close: jest.fn() },
     }));
     jest.mock("bullmq", () => ({
+      Queue: jest.fn().mockImplementation(() => ({
+        add: jest.fn(),
+        close: jest.fn(),
+      })),
       Worker: jest.fn().mockImplementation(() => ({
         close: jest.fn().mockResolvedValue(undefined),
       })),

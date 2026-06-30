@@ -28,6 +28,7 @@
 
 import { pool } from "../config/database";
 import { redisClient } from "../config/redis";
+import { getThirtyDayVolume, mapVolumeToTier } from "../utils/fees";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types & Interfaces
@@ -490,8 +491,6 @@ export class FeeStrategyEngine {
 
         // Apply VIP discount if userId is present
         if (ctx.userId) {
-          const { getThirtyDayVolume, mapVolumeToTier } =
-            await import("../utils/fees.js");
           const volume = await getThirtyDayVolume(ctx.userId);
           const tier = mapVolumeToTier(volume);
           const discount = tier.discountPercent;
