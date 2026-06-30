@@ -133,7 +133,7 @@ impl EscrowContract {
         assert!(balance >= amount, "insufficient token balance");
 
         // Transfer only after validation succeeds.
-        token_client.transfer(&depositor, &env.current_contract_address(), &amount);
+        token_client.transfer(&depositor, env.current_contract_address(), &amount);
 
         env.storage().instance().set(
             &ESCROW,

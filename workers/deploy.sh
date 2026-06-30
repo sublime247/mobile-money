@@ -87,6 +87,11 @@ if [[ $FOUND -eq 0 ]]; then
   exit 1
 fi
 
+if [[ -z "${CLOUDFLARE_API_TOKEN:-}" ]]; then
+  echo "Warning: CLOUDFLARE_API_TOKEN is not set. Skipping deployment."
+  exit 0
+fi
+
 echo "==> Deploying '$WORKER_NAME' to '$ENVIRONMENT'"
 
 # ---------------------------------------------------------------------------
