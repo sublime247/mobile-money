@@ -1,6 +1,7 @@
 name               = "well-known-cache"
 main               = "workers/well-known-cache/dist/index.js"
 compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
 
 # Replace "yourdomain.com" with your actual domain before deploying.
 routes = [
@@ -9,6 +10,12 @@ routes = [
 
 [build]
 command = "npx esbuild workers/well-known-cache/src/index.ts --bundle --format=esm --platform=neutral --target=es2022 --minify --tree-shaking=true --outfile=workers/well-known-cache/dist/index.js"
+
+[dev]
+# Local dev server binds to localhost by default.
+# Use --ip <address> to bind to a different interface.
+port = 8787
+local = true
 
 [vars]
 # Cache TTL for stellar.toml (seconds)

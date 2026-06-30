@@ -1,0 +1,9 @@
+# Local dev overrides for edge-router worker.
+# Copy this file to .dev.vars in this directory and fill in values.
+# These variables override [vars] in wrangler.toml during `wrangler dev`.
+#
+# For local development, point to your local backend:
+# PRIMARY_ORIGIN = "http://localhost:3000"
+# BACKUP_ORIGIN = "http://localhost:3001"
+# HEALTH_CHECK_PATH = "/health"
+# GEO_ROUTING_ENABLED = "false"

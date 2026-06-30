@@ -1,0 +1,7 @@
+# Local dev overrides for well-known-cache worker.
+# Copy this file to .dev.vars in this directory and fill in values.
+# These variables override [vars] in wrangler.toml during `wrangler dev`.
+#
+# DR_FAILOVER_URL: Uncomment and set to a failover origin to test disaster recovery locally.
+# DR_FAILOVER_URL = "https://dr-backup.example.com"
+# DR_FAILOVER_MODE = "PROXY"

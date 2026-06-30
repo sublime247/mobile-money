@@ -16,6 +16,7 @@ gradle-temp/
 .env
 .env.local
 .env.*.local
+.dev.vars
 certs/
 .orange-session/
 

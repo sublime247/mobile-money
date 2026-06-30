@@ -1,9 +1,14 @@
 name = "edge-router"
 main = "dist/index.js"
 compatibility_date = "2024-05-12"
+compatibility_flags = ["nodejs_compat"]
 
 [build]
 command = "npx esbuild src/index.ts --bundle --format=esm --platform=neutral --target=es2022 --minify --tree-shaking=true --outfile=dist/index.js"
+
+[dev]
+port = 8788
+local = true
 
 [vars]
 PRIMARY_ORIGIN = "https://api.primary.example.com"
@@ -22,3 +27,10 @@ REGION_EU_ORIGIN = "https://api-eu.example.com"
 REGION_APAC_ORIGIN = "https://api-apac.example.com"
 REGION_AF_ORIGIN = "https://api-af.example.com"
 REGION_SA_ORIGIN = "https://api-sa.example.com"
+
+[env.development]
+name = "edge-router-dev"
+PRIMARY_ORIGIN = "http://localhost:3000"
+BACKUP_ORIGIN = "http://localhost:3001"
+HEALTH_CHECK_PATH = "/health"
+GEO_ROUTING_ENABLED = "false"
