@@ -5,6 +5,11 @@ compatibility_date = "2024-05-12"
 [build]
 command = "npx esbuild src/index.ts --bundle --format=esm --platform=neutral --target=es2022 --minify --tree-shaking=true --outfile=dist/index.js"
 
+# ---------------------------------------------------------------------------
+# Non-sensitive parameter binds
+# Origin URLs contain internal service endpoints and are injected as secrets
+# via wrangler secret put by workers/deploy.sh for staging & production.
+# ---------------------------------------------------------------------------
 [vars]
 # Comma-separated list of exact origins permitted to make cross-origin requests.
 # No wildcards. Example: "https://app.example.com,https://admin.example.com"
@@ -13,16 +18,48 @@ ALLOWED_ORIGINS = ""
 PRIMARY_ORIGIN = "https://api.primary.example.com"
 BACKUP_ORIGIN = "https://api.backup.example.com"
 HEALTH_CHECK_PATH = "/health"
-
-# Geo-routing: route requests to the nearest regional hosting node.
-# Set to "false" to disable and fall back to PRIMARY_ORIGIN only.
 GEO_ROUTING_ENABLED = "true"
-
-# Regional origin nodes. Each request is routed to the nearest region
-# based on Cloudflare edge geolocation data (request.cf.country).
-# If a regional origin is unhealthy, the worker falls back to PRIMARY_ORIGIN.
 REGION_NA_ORIGIN = "https://api-na.example.com"
 REGION_EU_ORIGIN = "https://api-eu.example.com"
 REGION_APAC_ORIGIN = "https://api-apac.example.com"
 REGION_AF_ORIGIN = "https://api-af.example.com"
 REGION_SA_ORIGIN = "https://api-sa.example.com"
+
+# ---------------------------------------------------------------------------
+# Environment: development (local / preview)
+# ---------------------------------------------------------------------------
+[env.development]
+name = "edge-router-dev"
+
+[env.development.vars]
+PRIMARY_ORIGIN = "http://localhost:3000"
+BACKUP_ORIGIN = "http://localhost:3001"
+HEALTH_CHECK_PATH = "/health"
+GEO_ROUTING_ENABLED = "false"
+
+# ---------------------------------------------------------------------------
+# Environment: staging
+# Deploy with: ./workers/deploy.sh edge-router staging
+# Secrets injected from CI/CD environment:
+#   EDGE_PRIMARY_ORIGIN, EDGE_BACKUP_ORIGIN
+#   EDGE_REGION_NA_ORIGIN, EDGE_REGION_EU_ORIGIN
+#   EDGE_REGION_APAC_ORIGIN, EDGE_REGION_AF_ORIGIN
+#   EDGE_REGION_SA_ORIGIN
+# ---------------------------------------------------------------------------
+[env.staging]
+name = "edge-router-staging"
+
+[env.staging.vars]
+HEALTH_CHECK_PATH = "/health"
+GEO_ROUTING_ENABLED = "true"
+
+# ---------------------------------------------------------------------------
+# Environment: production
+# Deploy with: ./workers/deploy.sh edge-router production
+# ---------------------------------------------------------------------------
+[env.production]
+name = "edge-router"
+
+[env.production.vars]
+HEALTH_CHECK_PATH = "/health"
+GEO_ROUTING_ENABLED = "true"
