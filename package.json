@@ -58,6 +58,8 @@
     "sdk:build:ts": "cd sdk-ts && npm install && npm run build",
     "docs:dev": "npm --prefix docs-portal run start",
     "docs:build": "npm --prefix docs-portal run build",
+    "dev:worker:well-known-cache": "wrangler dev --config wrangler.toml --ip 127.0.0.1 --port 8787",
+    "dev:worker:edge-router": "wrangler dev --config workers/edge-router/wrangler.toml --ip 127.0.0.1 --port 8788",
     "test:load:ingestion-10k": "k6 run --vus-max 12000 -e SCENARIO=ingestion_10k tests/load/api.js",
     "test:load:spike-10k": "k6 run --vus-max 12000 -e SCENARIO=spike_10k tests/load/api.js",
     "test:load:traffic-spike": "k6 run --vus-max 6000 -e SCENARIO=traffic_spike tests/load/api.js",
@@ -228,6 +230,7 @@
     "supertest": "^7.2.2",
     "ts-jest": "^29.4.11",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "wrangler": "^3.114.17"
   }
 }
