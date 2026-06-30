@@ -1,0 +1,87 @@
+name: Deploy Workers
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "workers/**"
+      - "wrangler.toml"
+  workflow_dispatch:
+    inputs:
+      worker:
+        description: "Worker to deploy (well-known-cache, edge-router, or all)"
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - well-known-cache
+          - edge-router
+      environment:
+        description: "Target environment"
+        required: true
+        default: staging
+        type: choice
+        options:
+          - staging
+          - production
+
+env:
+  NODE_VERSION: "24"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'staging' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Determine target workers and environment
+        id: targets
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            WORKER_INPUT="${{ github.event.inputs.worker }}"
+            ENV="${{ github.event.inputs.environment }}"
+          else
+            WORKER_INPUT="all"
+            ENV="staging"
+          fi
+          echo "worker_input=$WORKER_INPUT" >> $GITHUB_OUTPUT
+          echo "environment=$ENV" >> $GITHUB_OUTPUT
+
+      - name: Deploy well-known-cache
+        if: steps.targets.outputs.worker_input == 'all' || steps.targets.outputs.worker_input == 'well-known-cache'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          DR_FAILOVER_URL: ${{ secrets[format('DR_FAILOVER_URL_{0}', steps.targets.outputs.environment)] || secrets.DR_FAILOVER_URL }}
+        run: |
+          chmod +x workers/deploy.sh
+          ./workers/deploy.sh well-known-cache "${{ steps.targets.outputs.environment }}"
+
+      - name: Deploy edge-router
+        if: steps.targets.outputs.worker_input == 'all' || steps.targets.outputs.worker_input == 'edge-router'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          EDGE_PRIMARY_ORIGIN: ${{ secrets[format('EDGE_PRIMARY_ORIGIN_{0}', steps.targets.outputs.environment)] || secrets.EDGE_PRIMARY_ORIGIN }}
+          EDGE_BACKUP_ORIGIN: ${{ secrets[format('EDGE_BACKUP_ORIGIN_{0}', steps.targets.outputs.environment)] || secrets.EDGE_BACKUP_ORIGIN }}
+          EDGE_REGION_NA_ORIGIN: ${{ secrets[format('EDGE_REGION_NA_ORIGIN_{0}', steps.targets.outputs.environment)] || secrets.EDGE_REGION_NA_ORIGIN }}
+          EDGE_REGION_EU_ORIGIN: ${{ secrets[format('EDGE_REGION_EU_ORIGIN_{0}', steps.targets.outputs.environment)] || secrets.EDGE_REGION_EU_ORIGIN }}
+          EDGE_REGION_APAC_ORIGIN: ${{ secrets[format('EDGE_REGION_APAC_ORIGIN_{0}', steps.targets.outputs.environment)] || secrets.EDGE_REGION_APAC_ORIGIN }}
+          EDGE_REGION_AF_ORIGIN: ${{ secrets[format('EDGE_REGION_AF_ORIGIN_{0}', steps.targets.outputs.environment)] || secrets.EDGE_REGION_AF_ORIGIN }}
+          EDGE_REGION_SA_ORIGIN: ${{ secrets[format('EDGE_REGION_SA_ORIGIN_{0}', steps.targets.outputs.environment)] || secrets.EDGE_REGION_SA_ORIGIN }}
+        run: |
+          chmod +x workers/deploy.sh
+          ./workers/deploy.sh edge-router "${{ steps.targets.outputs.environment }}"

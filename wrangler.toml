@@ -10,19 +10,68 @@ routes = [
 [build]
 command = "npx esbuild workers/well-known-cache/src/index.ts --bundle --format=esm --platform=neutral --target=es2022 --minify --tree-shaking=true --outfile=workers/well-known-cache/dist/index.js"
 
+# ---------------------------------------------------------------------------
+# Non-sensitive parameter binds (plaintext vars)
+# Sensitive values (DR_FAILOVER_URL) are injected via wrangler secret put
+# by workers/deploy.sh using CLOUDFLARE_API_TOKEN authentication.
+# ---------------------------------------------------------------------------
 [vars]
-# Cache TTL for stellar.toml (seconds)
 STELLAR_TOML_MAX_AGE = "3600"
 STELLAR_TOML_STALE_WHILE_REVALIDATE = "86400"
-# Cache TTL for other .well-known paths (seconds)
 DEFAULT_MAX_AGE = "300"
 DEFAULT_STALE_WHILE_REVALIDATE = "3600"
 
+# ---------------------------------------------------------------------------
+# Environment: development (local / preview)
+# ---------------------------------------------------------------------------
 [env.development]
 name = "well-known-cache-dev"
 routes = [
   { pattern = "*localhost:.well-known/*" }
 ]
-# Disaster Recovery (DR) Failover Configuration
+
+[env.development.vars]
+STELLAR_TOML_MAX_AGE = "3600"
+STELLAR_TOML_STALE_WHILE_REVALIDATE = "86400"
+DEFAULT_MAX_AGE = "300"
+DEFAULT_STALE_WHILE_REVALIDATE = "3600"
 DR_FAILOVER_URL = ""
+DR_FAILOVER_MODE = "PROXY"
+
+# ---------------------------------------------------------------------------
+# Environment: staging
+# Deploy with: ./workers/deploy.sh well-known-cache staging
+# Secrets injected from CI/CD environment:
+#   DR_FAILOVER_URL
+# ---------------------------------------------------------------------------
+[env.staging]
+name = "well-known-cache-staging"
+routes = [
+  { pattern = "*staging.example.com/.well-known/*", zone_name = "staging.example.com" }
+]
+
+[env.staging.vars]
+STELLAR_TOML_MAX_AGE = "3600"
+STELLAR_TOML_STALE_WHILE_REVALIDATE = "86400"
+DEFAULT_MAX_AGE = "300"
+DEFAULT_STALE_WHILE_REVALIDATE = "3600"
+DR_FAILOVER_MODE = "PROXY"
+
+# ---------------------------------------------------------------------------
+# Environment: production
+# Deploy with: ./workers/deploy.sh well-known-cache production
+# Secrets injected from CI/CD environment:
+#   DR_FAILOVER_URL
+# ---------------------------------------------------------------------------
+[env.production]
+name = "well-known-cache"
+routes = [
+  { pattern = "*.example.com/.well-known/*", zone_name = "example.com" }
+]
+
+[env.production.vars]
+STELLAR_TOML_MAX_AGE = "3600"
+STELLAR_TOML_STALE_WHILE_REVALIDATE = "86400"
+DEFAULT_MAX_AGE = "300"
+DEFAULT_STALE_WHILE_REVALIDATE = "3600"
 DR_FAILOVER_MODE = "PROXY"
