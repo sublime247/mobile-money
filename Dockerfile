@@ -69,4 +69,4 @@ USER nodejs
 EXPOSE 3000
 
 # Direct node execution (no npm start wrapper)
-CMD ["node", "dist/index.js"]
+CMD ["node", "dist/src/index.js"]
