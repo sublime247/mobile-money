@@ -83,6 +83,7 @@
     "@apollo/client": "^4.2.1",
     "@asteasolutions/zod-to-openapi": "8.5.0",
     "@aws-sdk/client-s3": "^3.1017.0",
+    "@aws-sdk/client-kms": "^3.1036.0",
     "@aws-sdk/lib-storage": "^3.1017.0",
     "@bull-board/api": "^6.20.6",
     "@bull-board/express": "^6.20.6",
@@ -171,7 +172,6 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@aws-sdk/client-kms": "^3.1036.0",
     "@cloudflare/workers-types": "^4.20250422.0",
     "@commitlint/cli": "^19.8.1",
     "@commitlint/config-conventional": "^19.8.1",
