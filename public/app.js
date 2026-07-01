@@ -132,12 +132,20 @@ const CODE_SNIPPETS = {
     "currency": "XAF",
     "merchantId": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
     "description": "Invoice #88493"
-  }'`
+  }'`,
+  toml: `curl -X GET http://localhost:3000/.well-known/stellar.toml`,
+  kyc: `curl -X POST http://localhost:3000/api/kyc/upload \\
+  -H "X-API-Key: dev-admin-key" \\
+  -F "file=@/path/to/passport.jpg" \\
+  -F "type=id_card" \\
+  -F "userId=a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"`,
+  stats: `curl -X GET http://localhost:3000/api/v1/stats \\
+  -H "X-API-Key: dev-admin-key"`
 };
 
 function selectTab(tabName) {
   // Update active classes on buttons
-  const tabs = ["deposit", "withdraw", "paylink"];
+  const tabs = ["deposit", "withdraw", "paylink", "toml", "kyc", "stats"];
   tabs.forEach(t => {
     const btn = document.getElementById(`tab-btn-${t}`);
     if (t === tabName) {
@@ -175,4 +183,7 @@ function copyCode() {
 document.getElementById("tab-btn-deposit").addEventListener("click", () => selectTab("deposit"));
 document.getElementById("tab-btn-withdraw").addEventListener("click", () => selectTab("withdraw"));
 document.getElementById("tab-btn-paylink").addEventListener("click", () => selectTab("paylink"));
+document.getElementById("tab-btn-toml").addEventListener("click", () => selectTab("toml"));
+document.getElementById("tab-btn-kyc").addEventListener("click", () => selectTab("kyc"));
+document.getElementById("tab-btn-stats").addEventListener("click", () => selectTab("stats"));
 document.getElementById("btn-copy-code").addEventListener("click", copyCode);
