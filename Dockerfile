@@ -54,6 +54,7 @@ WORKDIR /app
 COPY --from=deps --chown=nodejs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
 COPY --from=builder --chown=nodejs:nodejs /app/package.json ./
+COPY --chown=nodejs:nodejs public ./public
 
 # Manually remove npm and yarn binaries
 RUN rm -rf /usr/local/lib/node_modules/npm \
