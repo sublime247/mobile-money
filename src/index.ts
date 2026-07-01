@@ -9,6 +9,7 @@ import { IncomingMessage, Server } from "http";
 import compression from "compression";
 import dotenv from "dotenv";
 import helmet from "helmet";
+import axios from "axios";
 import * as Sentry from "@sentry/node";
 import { register } from "prom-client";
 import http2 from "http2";
@@ -245,6 +246,38 @@ app.get("/health", (_req: Request, res: Response) => {
   res.json(body);
 });
 
+app.get("/api/live-rates", async (_req: Request, res: Response) => {
+  try {
+    const response = await axios.get("https://open.er-api.com/v6/latest/USD", { timeout: 5000 });
+    if (response.data && response.data.result === "success") {
+      res.json({
+        success: true,
+        rates: response.data.rates,
+        provider: "live"
+      });
+      return;
+    }
+  } catch (error) {
+    logger.warn("[API] Live rates fetch failed, using fallback:", (error as Error).message);
+  }
+
+  // Fallback to our hardcoded rates
+  res.json({
+    success: true,
+    rates: {
+      USD: 1,
+      XAF: 600,
+      NGN: 1550,
+      KES: 130,
+      GHS: 15,
+      TZS: 2600,
+      ZMW: 27,
+      RWF: 1320
+    },
+    provider: "fallback"
+  });
+});
+
 app.get("/ready", async (_req: Request, res: Response) => {
   const checks: Record<string, string> = {
     database: "down",
@@ -346,6 +379,7 @@ app.get("/health/lb", async (req: Request, res: Response) => {
   res.status(healthy ? 200 : 503).json(responseData);
 });
 
+app.use(express.static(path.join(__dirname, "../public")));
 app.use(globalTimeout);
 app.use(haltOnTimedout);
 

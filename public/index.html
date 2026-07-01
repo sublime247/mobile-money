@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mobile Money ↔ Stellar Bridge | Low-Cost Cross-Border Payments</title>
+  <meta name="description" content="Connect African mobile money providers MTN MoMo, Airtel Money, and Orange Money with the Stellar blockchain network for instant, low-cost cross-border payments.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+  <!-- Navigation -->
+  <header class="app-header">
+    <div class="container header-container">
+      <div class="logo">
+        <span class="logo-icon">✨</span>
+        <span class="logo-text">Stellar<span class="logo-highlight">Bridge</span></span>
+      </div>
+      <nav class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#calculator">Calculator</a>
+        <a href="#api">API Integration</a>
+      </nav>
+      <div class="system-status-badge">
+        <span class="status-dot pulsing" id="status-dot"></span>
+        <span class="status-text" id="status-text">Checking system status...</span>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- Hero Section -->
+    <section class="hero-section">
+      <div class="container hero-container">
+        <div class="hero-content">
+          <div class="badge">TESTNET PLAYGROUND ACTIVE</div>
+          <h1>African Mobile Money meets the <span class="text-glow">Stellar Blockchain</span></h1>
+          <p>Bridge the border. Instantly convert cash from MTN, Airtel, or Orange Money into Stellar digital assets (USDC, XLM) for low-cost, instant global remittances and payouts.</p>
+          <div class="hero-actions">
+            <a href="#calculator" class="btn btn-primary" id="btn-hero-get-started">Try Calculator</a>
+            <a href="#api" class="btn btn-secondary" id="btn-hero-view-api">Read API Docs</a>
+          </div>
+        </div>
+        <div class="hero-visual">
+          <div class="visual-card glass">
+            <div class="visual-header">
+              <span class="window-dot red"></span>
+              <span class="window-dot yellow"></span>
+              <span class="window-dot green"></span>
+              <span class="window-title">Live Transaction Monitor</span>
+            </div>
+            <div class="visual-body">
+              <div class="flow-step">
+                <div class="step-icon mobile-wallet">📱</div>
+                <div class="step-details">
+                  <span class="step-label">Sender (MTN MoMo Cameroon)</span>
+                  <span class="step-val">+237 670 123 456</span>
+                </div>
+                <div class="step-badge deposit">Deposit</div>
+              </div>
+              <div class="flow-arrow">
+                <div class="line"></div>
+                <div class="pulse"></div>
+              </div>
+              <div class="flow-step bridge">
+                <div class="step-icon bridge-gear">⚙️</div>
+                <div class="step-details">
+                  <span class="step-label">Mobile Money ↔ Stellar Bridge</span>
+                  <span class="step-val">Applying exchange rate: 1 XAF = 0.0016 USDC</span>
+                </div>
+              </div>
+              <div class="flow-arrow">
+                <div class="line"></div>
+                <div class="pulse"></div>
+              </div>
+              <div class="flow-step blockchain">
+                <div class="step-icon stellar-logo">🚀</div>
+                <div class="step-details">
+                  <span class="step-label">Recipient (Stellar Address)</span>
+                  <span class="step-val">GBNG...7E3 (USDC Transferred)</span>
+                </div>
+                <div class="step-badge success">Settled (5s)</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Features Section -->
+    <section id="features" class="features-section">
+      <div class="container">
+        <div class="section-header">
+          <h2>Engineered for modern financial integrations</h2>
+          <p>The bridge acts as an automated custodian and gateway complying with global Stellar specs and local telecom standards.</p>
+        </div>
+        <div class="features-grid">
+          <div class="feature-card">
+            <div class="feature-icon">⚡</div>
+            <h3>Instant Payouts</h3>
+            <p>Settle cross-border transfers in 5 seconds. Connects directly to Airtel Money, MTN MoMo, Orange, and Vodacom.</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">🛡️</div>
+            <h3>Compliance First</h3>
+            <p>Automatic IVMS101 compliance formatting, local KYC level validation, and integrated Travel Rule verification.</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">📉</div>
+            <h3>Micro Fees</h3>
+            <p>Bypass expensive 7-10% remittance agent fees. Stellar routing drops total transaction costs to below 1.5%.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Calculator Section -->
+    <section id="calculator" class="calculator-section">
+      <div class="container calculator-container">
+        <div class="calculator-content">
+          <h2>Exchange Rate & Fee Calculator</h2>
+          <p>Simulate transfers on the bridge. See the local operator fee, network fee, exchange rate, and the exact amount your recipient gets.</p>
+          
+          <div class="calc-widget glass">
+            <div class="calc-form">
+              <div class="input-group">
+                <label for="calc-send-amount">You Send</label>
+                <div class="input-wrapper">
+                  <input type="number" id="calc-send-amount" value="5000" min="500" max="100000">
+                  <select id="calc-send-currency">
+                    <option value="NGN">Nigeria (NGN)</option>
+                    <option value="XAF">Cameroon (XAF)</option>
+                    <option value="KES">Kenya (KES)</option>
+                    <option value="GHS">Ghana (GHS)</option>
+                    <option value="TZS">Tanzania (TZS)</option>
+                    <option value="ZMW">Zambia (ZMW)</option>
+                    <option value="RWF">Rwanda (RWF)</option>
+                  </select>
+                </div>
+              </div>
+              <div class="calc-divider">🔄</div>
+              <div class="input-group">
+                <label for="calc-receive-asset">Recipient Gets</label>
+                <div class="input-wrapper">
+                  <input type="text" id="calc-receive-amount" readonly value="8.00">
+                  <select id="calc-receive-asset">
+                    <option value="USDC">Stellar USDC</option>
+                    <option value="XLM">Stellar XLM</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div class="calc-details">
+              <div class="detail-row">
+                <span>Exchange Rate:</span>
+                <span id="rate-display">1 XAF = 0.0016 USDC</span>
+              </div>
+              <div class="detail-row">
+                <span>Operator Payout Fee (1.5%):</span>
+                <span id="fee-display">75 XAF</span>
+              </div>
+              <div class="detail-row">
+                <span>Stellar Network Fee:</span>
+                <span class="text-free">FREE (Anchor Covered)</span>
+              </div>
+              <hr class="calc-hr">
+              <div class="detail-row total-row">
+                <span>Final Value:</span>
+                <span id="final-display" class="text-highlight">7.88 USDC</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- API Section -->
+    <section id="api" class="api-section">
+      <div class="container">
+        <div class="section-header">
+          <h2>Developer API Integration</h2>
+          <p>Get integrated in minutes using our RESTful JSON endpoints and standardized Stellar Anchor protocol (SEP) support.</p>
+        </div>
+
+        <div class="api-widget glass">
+          <div class="api-tabs">
+            <button class="api-tab active" id="tab-btn-deposit">Initiate Deposit</button>
+            <button class="api-tab" id="tab-btn-withdraw">Initiate Withdrawal</button>
+            <button class="api-tab" id="tab-btn-paylink">Create Payment Link</button>
+          </div>
+          <div class="api-code-container">
+            <div class="code-header">
+              <span class="code-lang">cURL Request</span>
+              <button class="btn-copy" id="btn-copy-code">Copy Code</button>
+            </div>
+            <pre class="code-block"><code id="code-snippet">curl -X POST http://localhost:3000/api/transactions/deposit \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: dev-admin-key" \
+  -d '{
+    "amount": 2500,
+    "phoneNumber": "+237670000000",
+    "provider": "mtn",
+    "stellarAddress": "GBNGNTEDRBGZN2N7HQ3TUKA76U2YKRMTXPFPDPPJOSVDLQX5S4PXX7E3",
+    "userId": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
+    "notes": "Savings Deposit"
+  }'</code></pre>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    <div class="container footer-container">
+      <p>&copy; 2026 Mobile Money ↔ Stellar Bridge Project. All rights reserved.</p>
+      <div class="footer-links">
+        <a href="/.well-known/stellar.toml" target="_blank">stellar.toml</a>
+        <a href="/health" target="_blank">Health Status</a>
+        <a href="/ready" target="_blank">Ready Probe</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="/app.js?v=2"></script>
+</body>
+</html>
