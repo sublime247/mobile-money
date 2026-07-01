@@ -676,6 +676,67 @@ body {
   color: hsl(var(--primary));
 }
 
+/* Integration Steps */
+.integration-section {
+  padding: 100px 0;
+  border-top: 1px solid hsl(var(--border));
+  background: radial-gradient(circle at 50% 50%, rgba(0, 173, 181, 0.03) 0%, transparent 80%);
+}
+
+.steps-timeline {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 24px;
+}
+
+.step-item {
+  border-radius: 12px;
+  padding: 28px;
+  position: relative;
+  transition: all 0.25s ease;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.step-item:hover {
+  border-color: rgba(0, 173, 181, 0.2);
+  transform: translateY(-4px);
+  background: rgba(28, 28, 31, 0.8);
+}
+
+.step-number {
+  font-family: var(--font-display);
+  font-size: 2.5rem;
+  font-weight: 800;
+  color: hsl(var(--primary));
+  opacity: 0.8;
+  margin-bottom: 16px;
+  line-height: 1;
+  text-shadow: 0 0 10px rgba(0, 173, 181, 0.2);
+}
+
+.step-item h3 {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: hsl(var(--text-primary));
+}
+
+.step-item p {
+  color: hsl(var(--text-secondary));
+  font-size: 0.85rem;
+  line-height: 1.6;
+}
+
+.step-item p a {
+  color: hsl(var(--primary));
+  text-decoration: none;
+}
+
+.step-item p a:hover {
+  text-decoration: underline;
+}
+
 /* Responsive Rules */
 @media (max-width: 992px) {
   .hero-container {
@@ -694,6 +755,10 @@ body {
   }
   
   .features-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .steps-timeline {
     grid-template-columns: 1fr;
   }
   
