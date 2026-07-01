@@ -1,0 +1,942 @@
+    Blocking waiting for file lock on package cache
+   0.159250042s  INFO prepare_target{force=false package_id=soroban-gas-benchmark v0.1.0 (/Users/bashir/Documents/mobile-money/benchmarks) target="soroban-gas-benchmark"}: cargo::core::compiler::fingerprint: fingerprint error for soroban-gas-benchmark v0.1.0 (/Users/bashir/Documents/mobile-money/benchmarks)/Check { test: false }/TargetInner { name: "soroban-gas-benchmark", doc: true, ..: with_path("/Users/bashir/Documents/mobile-money/benchmarks/src/main.rs", Edition2021) }
+   0.159271042s  INFO prepare_target{force=false package_id=soroban-gas-benchmark v0.1.0 (/Users/bashir/Documents/mobile-money/benchmarks) target="soroban-gas-benchmark"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/bashir/Documents/mobile-money/benchmarks/target/debug/.fingerprint/soroban-gas-benchmark-1f551a8c58839a00/bin-soroban-gas-benchmark`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: <cargo::core::compiler::build_runner::BuildRunner>::compile
+   7: cargo::ops::cargo_compile::compile_ws
+   8: cargo::ops::cargo_compile::compile_with_exec
+   9: cargo::ops::cargo_compile::compile
+  10: cargo::commands::check::exec
+  11: <cargo::cli::Exec>::exec
+  12: cargo::main
+  13: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  14: std::rt::lang_start::<()>::{closure#0}
+  15: std::rt::lang_start_internal
+  16: _main
+   0.162310708s  INFO prepare_target{force=false package_id=escrow v0.2.0 (/Users/bashir/Documents/mobile-money/contracts/escrow) target="escrow"}: cargo::core::compiler::fingerprint: fingerprint error for escrow v0.2.0 (/Users/bashir/Documents/mobile-money/contracts/escrow)/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("escrow", ["cdylib"], "/Users/bashir/Documents/mobile-money/contracts/escrow/src/lib.rs", Edition2021) }
+   0.162322083s  INFO prepare_target{force=false package_id=escrow v0.2.0 (/Users/bashir/Documents/mobile-money/contracts/escrow) target="escrow"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/bashir/Documents/mobile-money/benchmarks/target/debug/.fingerprint/escrow-e1ce66fc55f72861/lib-escrow`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: cargo::core::compiler::compile
+   7: <cargo::core::compiler::build_runner::BuildRunner>::compile
+   8: cargo::ops::cargo_compile::compile_ws
+   9: cargo::ops::cargo_compile::compile_with_exec
+  10: cargo::ops::cargo_compile::compile
+  11: cargo::commands::check::exec
+  12: <cargo::cli::Exec>::exec
+  13: cargo::main
+  14: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  15: std::rt::lang_start::<()>::{closure#0}
+  16: std::rt::lang_start_internal
+  17: _main
+   0.162647500s  INFO prepare_target{force=false package_id=soroban-sdk v26.1.0 target="soroban_sdk"}: cargo::core::compiler::fingerprint: fingerprint error for soroban-sdk v26.1.0/Check { test: false }/TargetInner { doctest: false, ..: lib_target("soroban_sdk", ["lib"], "/Users/bashir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-26.1.0/src/lib.rs", Edition2021) }
+   0.162652333s  INFO prepare_target{force=false package_id=soroban-sdk v26.1.0 target="soroban_sdk"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/bashir/Documents/mobile-money/benchmarks/target/debug/.fingerprint/soroban-sdk-33e6b020ab25314c/lib-soroban_sdk`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: cargo::core::compiler::compile
+   7: cargo::core::compiler::compile
+   8: <cargo::core::compiler::build_runner::BuildRunner>::compile
+   9: cargo::ops::cargo_compile::compile_ws
+  10: cargo::ops::cargo_compile::compile_with_exec
+  11: cargo::ops::cargo_compile::compile
+  12: cargo::commands::check::exec
+  13: <cargo::cli::Exec>::exec
+  14: cargo::main
+  15: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  16: std::rt::lang_start::<()>::{closure#0}
+  17: std::rt::lang_start_internal
+  18: _main
+   0.168960542s  INFO prepare_target{force=false package_id=rand v0.8.6 target="rand"}: cargo::core::compiler::fingerprint: fingerprint error for rand v0.8.6/Check { test: false }/TargetInner { ..: lib_target("rand", ["lib"], "/Users/bashir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rand-0.8.6/src/lib.rs", Edition2018) }
+   0.168967375s  INFO prepare_target{force=false package_id=rand v0.8.6 target="rand"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/bashir/Documents/mobile-money/benchmarks/target/debug/.fingerprint/rand-39366b85897c87c1/lib-rand`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: cargo::core::compiler::compile
+   7: cargo::core::compiler::compile
+   8: cargo::core::compiler::compile
+   9: <cargo::core::compiler::build_runner::BuildRunner>::compile
+  10: cargo::ops::cargo_compile::compile_ws
+  11: cargo::ops::cargo_compile::compile_with_exec
+  12: cargo::ops::cargo_compile::compile
+  13: cargo::commands::check::exec
+  14: <cargo::cli::Exec>::exec
+  15: cargo::main
+  16: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  17: std::rt::lang_start::<()>::{closure#0}
+  18: std::rt::lang_start_internal
+  19: _main
+   0.175314042s  INFO prepare_target{force=false package_id=soroban-env-host v26.1.3 target="soroban_env_host"}: cargo::core::compiler::fingerprint: fingerprint error for soroban-env-host v26.1.3/Check { test: false }/TargetInner { ..: lib_target("soroban_env_host", ["lib"], "/Users/bashir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-26.1.3/src/lib.rs", Edition2021) }
+   0.175320375s  INFO prepare_target{force=false package_id=soroban-env-host v26.1.3 target="soroban_env_host"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/bashir/Documents/mobile-money/benchmarks/target/debug/.fingerprint/soroban-env-host-5c417723f71f38ac/lib-soroban_env_host`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: cargo::core::compiler::compile
+   7: cargo::core::compiler::compile
+   8: cargo::core::compiler::compile
+   9: <cargo::core::compiler::build_runner::BuildRunner>::compile
+  10: cargo::ops::cargo_compile::compile_ws
+  11: cargo::ops::cargo_compile::compile_with_exec
+  12: cargo::ops::cargo_compile::compile
+  13: cargo::commands::check::exec
+  14: <cargo::cli::Exec>::exec
+  15: cargo::main
+  16: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  17: std::rt::lang_start::<()>::{closure#0}
+  18: std::rt::lang_start_internal
+  19: _main
+   0.176213833s  INFO prepare_target{force=false package_id=ark-bls12-381 v0.5.0 target="ark_bls12_381"}: cargo::core::compiler::fingerprint: fingerprint error for ark-bls12-381 v0.5.0/Check { test: false }/TargetInner { ..: lib_target("ark_bls12_381", ["lib"], "/Users/bashir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ark-bls12-381-0.5.0/src/lib.rs", Edition2021) }
+   0.176218917s  INFO prepare_target{force=false package_id=ark-bls12-381 v0.5.0 target="ark_bls12_381"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/bashir/Documents/mobile-money/benchmarks/target/debug/.fingerprint/ark-bls12-381-9e5534d2bc5b9724/lib-ark_bls12_381`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: cargo::core::compiler::compile
+   7: cargo::core::compiler::compile
+   8: cargo::core::compiler::compile
+   9: cargo::core::compiler::compile
+  10: <cargo::core::compiler::build_runner::BuildRunner>::compile
+  11: cargo::ops::cargo_compile::compile_ws
+  12: cargo::ops::cargo_compile::compile_with_exec
+  13: cargo::ops::cargo_compile::compile
+  14: cargo::commands::check::exec
+  15: <cargo::cli::Exec>::exec
+  16: cargo::main
+  17: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  18: std::rt::lang_start::<()>::{closure#0}
+  19: std::rt::lang_start_internal
+  20: _main
+   0.176464708s  INFO prepare_target{force=false package_id=ark-ec v0.5.0 target="ark_ec"}: cargo::core::compiler::fingerprint: fingerprint error for ark-ec v0.5.0/Check { test: false }/TargetInner { ..: lib_target("ark_ec", ["lib"], "/Users/bashir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ark-ec-0.5.0/src/lib.rs", Edition2021) }
+   0.176469042s  INFO prepare_target{force=false package_id=ark-ec v0.5.0 target="ark_ec"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/bashir/Documents/mobile-money/benchmarks/target/debug/.fingerprint/ark-ec-e043083bfec06eac/lib-ark_ec`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: cargo::core::compiler::compile
+   7: cargo::core::compiler::compile
+   8: cargo::core::compiler::compile
+   9: cargo::core::compiler::compile
+  10: cargo::core::compiler::compile
+  11: <cargo::core::compiler::build_runner::BuildRunner>::compile
+  12: cargo::ops::cargo_compile::compile_ws
+  13: cargo::ops::cargo_compile::compile_with_exec
+  14: cargo::ops::cargo_compile::compile
+  15: cargo::commands::check::exec
+  16: <cargo::cli::Exec>::exec
+  17: cargo::main
+  18: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  19: std::rt::lang_start::<()>::{closure#0}
+  20: std::rt::lang_start_internal
+  21: _main
+   0.178129208s  INFO prepare_target{force=false package_id=ark-ff v0.5.0 target="ark_ff"}: cargo::core::compiler::fingerprint: fingerprint error for ark-ff v0.5.0/Check { test: false }/TargetInner { ..: lib_target("ark_ff", ["lib"], "/Users/bashir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ark-ff-0.5.0/src/lib.rs", Edition2021) }
+   0.178133667s  INFO prepare_target{force=false package_id=ark-ff v0.5.0 target="ark_ff"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/bashir/Documents/mobile-money/benchmarks/target/debug/.fingerprint/ark-ff-39758bd25a55a866/lib-ark_ff`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: cargo::core::compiler::compile
+   7: cargo::core::compiler::compile
+   8: cargo::core::compiler::compile
+   9: cargo::core::compiler::compile
+  10: cargo::core::compiler::compile
+  11: cargo::core::compiler::compile
+  12: <cargo::core::compiler::build_runner::BuildRunner>::compile
+  13: cargo::ops::cargo_compile::compile_ws
+  14: cargo::ops::cargo_compile::compile_with_exec
+  15: cargo::ops::cargo_compile::compile
+  16: cargo::commands::check::exec
+  17: <cargo::cli::Exec>::exec
+  18: cargo::main
+  19: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  20: std::rt::lang_start::<()>::{closure#0}
+  21: std::rt::lang_start_internal
+  22: _main
+   0.179169833s  INFO prepare_target{force=false package_id=ark-serialize v0.5.0 target="ark_serialize"}: cargo::core::compiler::fingerprint: fingerprint error for ark-serialize v0.5.0/Check { test: false }/TargetInner { ..: lib_target("ark_serialize", ["lib"], "/Users/bashir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ark-serialize-0.5.0/src/lib.rs", Edition2021) }
+   0.179175083s  INFO prepare_target{force=false package_id=ark-serialize v0.5.0 target="ark_serialize"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/bashir/Documents/mobile-money/benchmarks/target/debug/.fingerprint/ark-serialize-73eb191d4fe664c9/lib-ark_serialize`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: cargo::core::compiler::compile
+   7: cargo::core::compiler::compile
+   8: cargo::core::compiler::compile
+   9: cargo::core::compiler::compile
+  10: cargo::core::compiler::compile
+  11: cargo::core::compiler::compile
+  12: cargo::core::compiler::compile
+  13: <cargo::core::compiler::build_runner::BuildRunner>::compile
+  14: cargo::ops::cargo_compile::compile_ws
+  15: cargo::ops::cargo_compile::compile_with_exec
+  16: cargo::ops::cargo_compile::compile
+  17: cargo::commands::check::exec
+  18: <cargo::cli::Exec>::exec
+  19: cargo::main
+  20: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  21: std::rt::lang_start::<()>::{closure#0}
+  22: std::rt::lang_start_internal
+  23: _main
+   0.179656000s  INFO prepare_target{force=false package_id=ark-std v0.5.0 target="ark_std"}: cargo::core::compiler::fingerprint: fingerprint error for ark-std v0.5.0/Check { test: false }/TargetInner { ..: lib_target("ark_std", ["lib"], "/Users/bashir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ark-std-0.5.0/src/lib.rs", Edition2021) }
+   0.179660708s  INFO prepare_target{force=false package_id=ark-std v0.5.0 target="ark_std"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/bashir/Documents/mobile-money/benchmarks/target/debug/.fingerprint/ark-std-76afaf964a956446/lib-ark_std`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: cargo::core::compiler::compile
+   7: cargo::core::compiler::compile
+   8: cargo::core::compiler::compile
+   9: cargo::core::compiler::compile
+  10: cargo::core::compiler::compile
+  11: cargo::core::compiler::compile
+  12: cargo::core::compiler::compile
+  13: cargo::core::compiler::compile
+  14: <cargo::core::compiler::build_runner::BuildRunner>::compile
+  15: cargo::ops::cargo_compile::compile_ws
+  16: cargo::ops::cargo_compile::compile_with_exec
+  17: cargo::ops::cargo_compile::compile
+  18: cargo::commands::check::exec
+  19: <cargo::cli::Exec>::exec
+  20: cargo::main
+  21: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  22: std::rt::lang_start::<()>::{closure#0}
+  23: std::rt::lang_start_internal
+  24: _main
+   0.182956292s  INFO prepare_target{force=false package_id=ark-poly v0.5.0 target="ark_poly"}: cargo::core::compiler::fingerprint: fingerprint error for ark-poly v0.5.0/Check { test: false }/TargetInner { ..: lib_target("ark_poly", ["lib"], "/Users/bashir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ark-poly-0.5.0/src/lib.rs", Edition2021) }
+   0.182961792s  INFO prepare_target{force=false package_id=ark-poly v0.5.0 target="ark_poly"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/bashir/Documents/mobile-money/benchmarks/target/debug/.fingerprint/ark-poly-a494dff5b0482207/lib-ark_poly`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: cargo::core::compiler::compile
+   7: cargo::core::compiler::compile
+   8: cargo::core::compiler::compile
+   9: cargo::core::compiler::compile
+  10: cargo::core::compiler::compile
+  11: cargo::core::compiler::compile
+  12: <cargo::core::compiler::build_runner::BuildRunner>::compile
+  13: cargo::ops::cargo_compile::compile_ws
+  14: cargo::ops::cargo_compile::compile_with_exec
+  15: cargo::ops::cargo_compile::compile
+  16: cargo::commands::check::exec
+  17: <cargo::cli::Exec>::exec
+  18: cargo::main
+  19: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  20: std::rt::lang_start::<()>::{closure#0}
+  21: std::rt::lang_start_internal
+  22: _main
+   0.183370542s  INFO prepare_target{force=false package_id=ark-bn254 v0.5.0 target="ark_bn254"}: cargo::core::compiler::fingerprint: fingerprint error for ark-bn254 v0.5.0/Check { test: false }/TargetInner { ..: lib_target("ark_bn254", ["lib"], "/Users/bashir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ark-bn254-0.5.0/src/lib.rs", Edition2021) }
+   0.183376667s  INFO prepare_target{force=false package_id=ark-bn254 v0.5.0 target="ark_bn254"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/bashir/Documents/mobile-money/benchmarks/target/debug/.fingerprint/ark-bn254-4691371cdd152816/lib-ark_bn254`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: cargo::core::compiler::compile
+   7: cargo::core::compiler::compile
+   8: cargo::core::compiler::compile
+   9: cargo::core::compiler::compile
+  10: <cargo::core::compiler::build_runner::BuildRunner>::compile
+  11: cargo::ops::cargo_compile::compile_ws
+  12: cargo::ops::cargo_compile::compile_with_exec
+  13: cargo::ops::cargo_compile::compile
+  14: cargo::commands::check::exec
+  15: <cargo::cli::Exec>::exec
+  16: cargo::main
+  17: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  18: std::rt::lang_start::<()>::{closure#0}
+  19: std::rt::lang_start_internal
+  20: _main
+   0.186929542s  INFO prepare_target{force=false package_id=soroban-env-common v26.1.3 target="soroban_env_common"}: cargo::core::compiler::fingerprint: fingerprint error for soroban-env-common v26.1.3/Check { test: false }/TargetInner { ..: lib_target("soroban_env_common", ["lib"], "/Users/bashir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-common-26.1.3/src/lib.rs", Edition2021) }
+   0.186939042s  INFO prepare_target{force=false package_id=soroban-env-common v26.1.3 target="soroban_env_common"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/bashir/Documents/mobile-money/benchmarks/target/debug/.fingerprint/soroban-env-common-47d10a38f49c0221/lib-soroban_env_common`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: cargo::core::compiler::compile
+   7: cargo::core::compiler::compile
+   8: cargo::core::compiler::compile
+   9: cargo::core::compiler::compile
+  10: <cargo::core::compiler::build_runner::BuildRunner>::compile
+  11: cargo::ops::cargo_compile::compile_ws
+  12: cargo::ops::cargo_compile::compile_with_exec
+  13: cargo::ops::cargo_compile::compile
+  14: cargo::commands::check::exec
+  15: <cargo::cli::Exec>::exec
+  16: cargo::main
+  17: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  18: std::rt::lang_start::<()>::{closure#0}
+  19: std::rt::lang_start_internal
+  20: _main
+   0.194603125s  INFO prepare_target{force=false package_id=soroban-wasmi v0.31.1-soroban.20.0.1 target="soroban_wasmi"}: cargo::core::compiler::fingerprint: fingerprint error for soroban-wasmi v0.31.1-soroban.20.0.1/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("soroban_wasmi", ["lib"], "/Users/bashir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-wasmi-0.31.1-soroban.20.0.1/src/lib.rs", Edition2021) }
+   0.194610042s  INFO prepare_target{force=false package_id=soroban-wasmi v0.31.1-soroban.20.0.1 target="soroban_wasmi"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/bashir/Documents/mobile-money/benchmarks/target/debug/.fingerprint/soroban-wasmi-fd5f8c554a7267ea/lib-soroban_wasmi`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: cargo::core::compiler::compile
+   7: cargo::core::compiler::compile
+   8: cargo::core::compiler::compile
+   9: cargo::core::compiler::compile
+  10: cargo::core::compiler::compile
+  11: <cargo::core::compiler::build_runner::BuildRunner>::compile
+  12: cargo::ops::cargo_compile::compile_ws
+  13: cargo::ops::cargo_compile::compile_with_exec
+  14: cargo::ops::cargo_compile::compile
+  15: cargo::commands::check::exec
+  16: <cargo::cli::Exec>::exec
+  17: cargo::main
+  18: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  19: std::rt::lang_start::<()>::{closure#0}
+  20: std::rt::lang_start_internal
+  21: _main
+   0.195536875s  INFO prepare_target{force=false package_id=stellar-xdr v26.0.1 target="stellar_xdr"}: cargo::core::compiler::fingerprint: fingerprint error for stellar-xdr v26.0.1/Check { test: false }/TargetInner { ..: lib_target("stellar_xdr", ["lib"], "/Users/bashir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/stellar-xdr-26.0.1/src/lib.rs", Edition2021) }
+   0.195541750s  INFO prepare_target{force=false package_id=stellar-xdr v26.0.1 target="stellar_xdr"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/bashir/Documents/mobile-money/benchmarks/target/debug/.fingerprint/stellar-xdr-5c63efd250db3dd2/lib-stellar_xdr`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: cargo::core::compiler::compile
+   7: cargo::core::compiler::compile
+   8: cargo::core::compiler::compile
+   9: cargo::core::compiler::compile
+  10: cargo::core::compiler::compile
+  11: <cargo::core::compiler::build_runner::BuildRunner>::compile
+  12: cargo::ops::cargo_compile::compile_ws
+  13: cargo::ops::cargo_compile::compile_with_exec
+  14: cargo::ops::cargo_compile::compile
+  15: cargo::commands::check::exec
+  16: <cargo::cli::Exec>::exec
+  17: cargo::main
+  18: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  19: std::rt::lang_start::<()>::{closure#0}
+  20: std::rt::lang_start_internal
+  21: _main
+   0.196964542s  INFO prepare_target{force=false package_id=wasmparser v0.116.1 target="wasmparser"}: cargo::core::compiler::fingerprint: fingerprint error for wasmparser v0.116.1/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("wasmparser", ["lib"], "/Users/bashir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wasmparser-0.116.1/src/lib.rs", Edition2021) }
+   0.196970000s  INFO prepare_target{force=false package_id=wasmparser v0.116.1 target="wasmparser"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/bashir/Documents/mobile-money/benchmarks/target/debug/.fingerprint/wasmparser-b2d04e6b0c581c04/lib-wasmparser`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: cargo::core::compiler::compile
+   7: cargo::core::compiler::compile
+   8: cargo::core::compiler::compile
+   9: cargo::core::compiler::compile
+  10: cargo::core::compiler::compile
+  11: <cargo::core::compiler::build_runner::BuildRunner>::compile
+  12: cargo::ops::cargo_compile::compile_ws
+  13: cargo::ops::cargo_compile::compile_with_exec
+  14: cargo::ops::cargo_compile::compile
+  15: cargo::commands::check::exec
+  16: <cargo::cli::Exec>::exec
+  17: cargo::main
+  18: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  19: std::rt::lang_start::<()>::{closure#0}
+  20: std::rt::lang_start_internal
+  21: _main
+   0.203804542s  INFO prepare_target{force=false package_id=htlc v0.1.0 (/Users/bashir/Documents/mobile-money/contracts/htlc) target="htlc"}: cargo::core::compiler::fingerprint: fingerprint error for htlc v0.1.0 (/Users/bashir/Documents/mobile-money/contracts/htlc)/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("htlc", ["cdylib"], "/Users/bashir/Documents/mobile-money/contracts/htlc/src/lib.rs", Edition2021) }
+   0.203810458s  INFO prepare_target{force=false package_id=htlc v0.1.0 (/Users/bashir/Documents/mobile-money/contracts/htlc) target="htlc"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/bashir/Documents/mobile-money/benchmarks/target/debug/.fingerprint/htlc-63479917143db495/lib-htlc`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: cargo::core::compiler::compile
+   7: <cargo::core::compiler::build_runner::BuildRunner>::compile
+   8: cargo::ops::cargo_compile::compile_ws
+   9: cargo::ops::cargo_compile::compile_with_exec
+  10: cargo::ops::cargo_compile::compile
+  11: cargo::commands::check::exec
+  12: <cargo::cli::Exec>::exec
+  13: cargo::main
+  14: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  15: std::rt::lang_start::<()>::{closure#0}
+  16: std::rt::lang_start_internal
+  17: _main
+   0.204201417s  INFO prepare_target{force=false package_id=soroban-sdk v25.3.1 target="soroban_sdk"}: cargo::core::compiler::fingerprint: fingerprint error for soroban-sdk v25.3.1/Check { test: false }/TargetInner { doctest: false, ..: lib_target("soroban_sdk", ["lib"], "/Users/bashir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.3.1/src/lib.rs", Edition2021) }
+   0.204206042s  INFO prepare_target{force=false package_id=soroban-sdk v25.3.1 target="soroban_sdk"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/bashir/Documents/mobile-money/benchmarks/target/debug/.fingerprint/soroban-sdk-10610a2d241efa86/lib-soroban_sdk`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: cargo::core::compiler::compile
+   7: cargo::core::compiler::compile
+   8: <cargo::core::compiler::build_runner::BuildRunner>::compile
+   9: cargo::ops::cargo_compile::compile_ws
+  10: cargo::ops::cargo_compile::compile_with_exec
+  11: cargo::ops::cargo_compile::compile
+  12: cargo::commands::check::exec
+  13: <cargo::cli::Exec>::exec
+  14: cargo::main
+  15: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  16: std::rt::lang_start::<()>::{closure#0}
+  17: std::rt::lang_start_internal
+  18: _main
+   0.205708542s  INFO prepare_target{force=false package_id=soroban-env-host v25.0.1 target="soroban_env_host"}: cargo::core::compiler::fingerprint: fingerprint error for soroban-env-host v25.0.1/Check { test: false }/TargetInner { ..: lib_target("soroban_env_host", ["lib"], "/Users/bashir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/lib.rs", Edition2021) }
+   0.205713333s  INFO prepare_target{force=false package_id=soroban-env-host v25.0.1 target="soroban_env_host"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/bashir/Documents/mobile-money/benchmarks/target/debug/.fingerprint/soroban-env-host-796205485adabef9/lib-soroban_env_host`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: cargo::core::compiler::compile
+   7: cargo::core::compiler::compile
+   8: cargo::core::compiler::compile
+   9: <cargo::core::compiler::build_runner::BuildRunner>::compile
+  10: cargo::ops::cargo_compile::compile_ws
+  11: cargo::ops::cargo_compile::compile_with_exec
+  12: cargo::ops::cargo_compile::compile
+  13: cargo::commands::check::exec
+  14: <cargo::cli::Exec>::exec
+  15: cargo::main
+  16: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  17: std::rt::lang_start::<()>::{closure#0}
+  18: std::rt::lang_start_internal
+  19: _main
+   0.206579833s  INFO prepare_target{force=false package_id=ark-bls12-381 v0.4.0 target="ark_bls12_381"}: cargo::core::compiler::fingerprint: fingerprint error for ark-bls12-381 v0.4.0/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("ark_bls12_381", ["lib"], "/Users/bashir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ark-bls12-381-0.4.0/src/lib.rs", Edition2021) }
+   0.206584583s  INFO prepare_target{force=false package_id=ark-bls12-381 v0.4.0 target="ark_bls12_381"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/bashir/Documents/mobile-money/benchmarks/target/debug/.fingerprint/ark-bls12-381-fc84b61610ee88df/lib-ark_bls12_381`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: cargo::core::compiler::compile
+   7: cargo::core::compiler::compile
+   8: cargo::core::compiler::compile
+   9: cargo::core::compiler::compile
+  10: <cargo::core::compiler::build_runner::BuildRunner>::compile
+  11: cargo::ops::cargo_compile::compile_ws
+  12: cargo::ops::cargo_compile::compile_with_exec
+  13: cargo::ops::cargo_compile::compile
+  14: cargo::commands::check::exec
+  15: <cargo::cli::Exec>::exec
+  16: cargo::main
+  17: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  18: std::rt::lang_start::<()>::{closure#0}
+  19: std::rt::lang_start_internal
+  20: _main
+   0.206816917s  INFO prepare_target{force=false package_id=ark-ec v0.4.2 target="ark_ec"}: cargo::core::compiler::fingerprint: fingerprint error for ark-ec v0.4.2/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("ark_ec", ["lib"], "/Users/bashir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ark-ec-0.4.2/src/lib.rs", Edition2021) }
+   0.206821042s  INFO prepare_target{force=false package_id=ark-ec v0.4.2 target="ark_ec"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/bashir/Documents/mobile-money/benchmarks/target/debug/.fingerprint/ark-ec-32e80b415d45ea4b/lib-ark_ec`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: cargo::core::compiler::compile
+   7: cargo::core::compiler::compile
+   8: cargo::core::compiler::compile
+   9: cargo::core::compiler::compile
+  10: cargo::core::compiler::compile
+  11: <cargo::core::compiler::build_runner::BuildRunner>::compile
+  12: cargo::ops::cargo_compile::compile_ws
+  13: cargo::ops::cargo_compile::compile_with_exec
+  14: cargo::ops::cargo_compile::compile
+  15: cargo::commands::check::exec
+  16: <cargo::cli::Exec>::exec
+  17: cargo::main
+  18: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  19: std::rt::lang_start::<()>::{closure#0}
+  20: std::rt::lang_start_internal
+  21: _main
+   0.207176792s  INFO prepare_target{force=false package_id=ark-ff v0.4.2 target="ark_ff"}: cargo::core::compiler::fingerprint: fingerprint error for ark-ff v0.4.2/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("ark_ff", ["lib"], "/Users/bashir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ark-ff-0.4.2/src/lib.rs", Edition2021) }
+   0.207180833s  INFO prepare_target{force=false package_id=ark-ff v0.4.2 target="ark_ff"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/bashir/Documents/mobile-money/benchmarks/target/debug/.fingerprint/ark-ff-ba16c707f019bda0/lib-ark_ff`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: cargo::core::compiler::compile
+   7: cargo::core::compiler::compile
+   8: cargo::core::compiler::compile
+   9: cargo::core::compiler::compile
+  10: cargo::core::compiler::compile
+  11: cargo::core::compiler::compile
+  12: <cargo::core::compiler::build_runner::BuildRunner>::compile
+  13: cargo::ops::cargo_compile::compile_ws
+  14: cargo::ops::cargo_compile::compile_with_exec
+  15: cargo::ops::cargo_compile::compile
+  16: cargo::commands::check::exec
+  17: <cargo::cli::Exec>::exec
+  18: cargo::main
+  19: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  20: std::rt::lang_start::<()>::{closure#0}
+  21: std::rt::lang_start_internal
+  22: _main
+   0.208690000s  INFO prepare_target{force=false package_id=ark-serialize v0.4.2 target="ark_serialize"}: cargo::core::compiler::fingerprint: fingerprint error for ark-serialize v0.4.2/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("ark_serialize", ["lib"], "/Users/bashir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ark-serialize-0.4.2/src/lib.rs", Edition2021) }
+   0.208695458s  INFO prepare_target{force=false package_id=ark-serialize v0.4.2 target="ark_serialize"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/bashir/Documents/mobile-money/benchmarks/target/debug/.fingerprint/ark-serialize-8d836fd8fc58e5e7/lib-ark_serialize`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: cargo::core::compiler::compile
+   7: cargo::core::compiler::compile
+   8: cargo::core::compiler::compile
+   9: cargo::core::compiler::compile
+  10: cargo::core::compiler::compile
+  11: cargo::core::compiler::compile
+  12: cargo::core::compiler::compile
+  13: <cargo::core::compiler::build_runner::BuildRunner>::compile
+  14: cargo::ops::cargo_compile::compile_ws
+  15: cargo::ops::cargo_compile::compile_with_exec
+  16: cargo::ops::cargo_compile::compile
+  17: cargo::commands::check::exec
+  18: <cargo::cli::Exec>::exec
+  19: cargo::main
+  20: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  21: std::rt::lang_start::<()>::{closure#0}
+  22: std::rt::lang_start_internal
+  23: _main
+   0.209270417s  INFO prepare_target{force=false package_id=ark-std v0.4.0 target="ark_std"}: cargo::core::compiler::fingerprint: fingerprint error for ark-std v0.4.0/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("ark_std", ["lib"], "/Users/bashir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ark-std-0.4.0/src/lib.rs", Edition2021) }
+   0.209277542s  INFO prepare_target{force=false package_id=ark-std v0.4.0 target="ark_std"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/bashir/Documents/mobile-money/benchmarks/target/debug/.fingerprint/ark-std-8ddd3d506a5c3ced/lib-ark_std`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: cargo::core::compiler::compile
+   7: cargo::core::compiler::compile
+   8: cargo::core::compiler::compile
+   9: cargo::core::compiler::compile
+  10: cargo::core::compiler::compile
+  11: cargo::core::compiler::compile
+  12: cargo::core::compiler::compile
+  13: cargo::core::compiler::compile
+  14: <cargo::core::compiler::build_runner::BuildRunner>::compile
+  15: cargo::ops::cargo_compile::compile_ws
+  16: cargo::ops::cargo_compile::compile_with_exec
+  17: cargo::ops::cargo_compile::compile
+  18: cargo::commands::check::exec
+  19: <cargo::cli::Exec>::exec
+  20: cargo::main
+  21: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  22: std::rt::lang_start::<()>::{closure#0}
+  23: std::rt::lang_start_internal
+  24: _main
+   0.209661958s  INFO prepare_target{force=false package_id=ark-poly v0.4.2 target="ark_poly"}: cargo::core::compiler::fingerprint: fingerprint error for ark-poly v0.4.2/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("ark_poly", ["lib"], "/Users/bashir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ark-poly-0.4.2/src/lib.rs", Edition2021) }
+   0.209666458s  INFO prepare_target{force=false package_id=ark-poly v0.4.2 target="ark_poly"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/bashir/Documents/mobile-money/benchmarks/target/debug/.fingerprint/ark-poly-b448edfac7fd3a71/lib-ark_poly`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: cargo::core::compiler::compile
+   7: cargo::core::compiler::compile
+   8: cargo::core::compiler::compile
+   9: cargo::core::compiler::compile
+  10: cargo::core::compiler::compile
+  11: cargo::core::compiler::compile
+  12: <cargo::core::compiler::build_runner::BuildRunner>::compile
+  13: cargo::ops::cargo_compile::compile_ws
+  14: cargo::ops::cargo_compile::compile_with_exec
+  15: cargo::ops::cargo_compile::compile
+  16: cargo::commands::check::exec
+  17: <cargo::cli::Exec>::exec
+  18: cargo::main
+  19: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  20: std::rt::lang_start::<()>::{closure#0}
+  21: std::rt::lang_start_internal
+  22: _main
+   0.209955667s  INFO prepare_target{force=false package_id=hashbrown v0.13.2 target="hashbrown"}: cargo::core::compiler::fingerprint: fingerprint error for hashbrown v0.13.2/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("hashbrown", ["lib"], "/Users/bashir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/hashbrown-0.13.2/src/lib.rs", Edition2021) }
+   0.209960250s  INFO prepare_target{force=false package_id=hashbrown v0.13.2 target="hashbrown"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/bashir/Documents/mobile-money/benchmarks/target/debug/.fingerprint/hashbrown-992ffe0a78528857/lib-hashbrown`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: cargo::core::compiler::compile
+   7: cargo::core::compiler::compile
+   8: cargo::core::compiler::compile
+   9: cargo::core::compiler::compile
+  10: cargo::core::compiler::compile
+  11: cargo::core::compiler::compile
+  12: cargo::core::compiler::compile
+  13: <cargo::core::compiler::build_runner::BuildRunner>::compile
+  14: cargo::ops::cargo_compile::compile_ws
+  15: cargo::ops::cargo_compile::compile_with_exec
+  16: cargo::ops::cargo_compile::compile
+  17: cargo::commands::check::exec
+  18: <cargo::cli::Exec>::exec
+  19: cargo::main
+  20: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  21: std::rt::lang_start::<()>::{closure#0}
+  22: std::rt::lang_start_internal
+  23: _main
+   0.210109417s  INFO prepare_target{force=false package_id=ark-bn254 v0.4.0 target="ark_bn254"}: cargo::core::compiler::fingerprint: fingerprint error for ark-bn254 v0.4.0/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("ark_bn254", ["lib"], "/Users/bashir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ark-bn254-0.4.0/src/lib.rs", Edition2021) }
+   0.210113792s  INFO prepare_target{force=false package_id=ark-bn254 v0.4.0 target="ark_bn254"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/bashir/Documents/mobile-money/benchmarks/target/debug/.fingerprint/ark-bn254-3aef008d249b69b0/lib-ark_bn254`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: cargo::core::compiler::compile
+   7: cargo::core::compiler::compile
+   8: cargo::core::compiler::compile
+   9: cargo::core::compiler::compile
+  10: <cargo::core::compiler::build_runner::BuildRunner>::compile
+  11: cargo::ops::cargo_compile::compile_ws
+  12: cargo::ops::cargo_compile::compile_with_exec
+  13: cargo::ops::cargo_compile::compile
+  14: cargo::commands::check::exec
+  15: <cargo::cli::Exec>::exec
+  16: cargo::main
+  17: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  18: std::rt::lang_start::<()>::{closure#0}
+  19: std::rt::lang_start_internal
+  20: _main
+   0.210766625s  INFO prepare_target{force=false package_id=soroban-env-common v25.0.1 target="soroban_env_common"}: cargo::core::compiler::fingerprint: fingerprint error for soroban-env-common v25.0.1/Check { test: false }/TargetInner { ..: lib_target("soroban_env_common", ["lib"], "/Users/bashir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-common-25.0.1/src/lib.rs", Edition2021) }
+   0.210771542s  INFO prepare_target{force=false package_id=soroban-env-common v25.0.1 target="soroban_env_common"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/bashir/Documents/mobile-money/benchmarks/target/debug/.fingerprint/soroban-env-common-b7de89c4bb7ebad6/lib-soroban_env_common`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: cargo::core::compiler::compile
+   7: cargo::core::compiler::compile
+   8: cargo::core::compiler::compile
+   9: cargo::core::compiler::compile
+  10: <cargo::core::compiler::build_runner::BuildRunner>::compile
+  11: cargo::ops::cargo_compile::compile_ws
+  12: cargo::ops::cargo_compile::compile_with_exec
+  13: cargo::ops::cargo_compile::compile
+  14: cargo::commands::check::exec
+  15: <cargo::cli::Exec>::exec
+  16: cargo::main
+  17: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  18: std::rt::lang_start::<()>::{closure#0}
+  19: std::rt::lang_start_internal
+  20: _main
+   0.212333542s  INFO prepare_target{force=false package_id=stellar-xdr v25.0.0 target="stellar_xdr"}: cargo::core::compiler::fingerprint: fingerprint error for stellar-xdr v25.0.0/Check { test: false }/TargetInner { ..: lib_target("stellar_xdr", ["lib"], "/Users/bashir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/stellar-xdr-25.0.0/src/lib.rs", Edition2021) }
+   0.212337875s  INFO prepare_target{force=false package_id=stellar-xdr v25.0.0 target="stellar_xdr"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/bashir/Documents/mobile-money/benchmarks/target/debug/.fingerprint/stellar-xdr-761495890eabf513/lib-stellar_xdr`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: cargo::core::compiler::compile
+   7: cargo::core::compiler::compile
+   8: cargo::core::compiler::compile
+   9: cargo::core::compiler::compile
+  10: cargo::core::compiler::compile
+  11: <cargo::core::compiler::build_runner::BuildRunner>::compile
+  12: cargo::ops::cargo_compile::compile_ws
+  13: cargo::ops::cargo_compile::compile_with_exec
+  14: cargo::ops::cargo_compile::compile
+  15: cargo::commands::check::exec
+  16: <cargo::cli::Exec>::exec
+  17: cargo::main
+  18: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  19: std::rt::lang_start::<()>::{closure#0}
+  20: std::rt::lang_start_internal
+  21: _main
+   0.212731958s  INFO prepare_target{force=false package_id=serde_with v3.21.0 target="serde_with"}: cargo::core::compiler::fingerprint: fingerprint error for serde_with v3.21.0/Check { test: false }/TargetInner { ..: lib_target("serde_with", ["lib"], "/Users/bashir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_with-3.21.0/src/lib.rs", Edition2021) }
+   0.212736083s  INFO prepare_target{force=false package_id=serde_with v3.21.0 target="serde_with"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/bashir/Documents/mobile-money/benchmarks/target/debug/.fingerprint/serde_with-0d468dc8e05e216a/lib-serde_with`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: cargo::core::compiler::compile
+   7: cargo::core::compiler::compile
+   8: cargo::core::compiler::compile
+   9: cargo::core::compiler::compile
+  10: cargo::core::compiler::compile
+  11: cargo::core::compiler::compile
+  12: <cargo::core::compiler::build_runner::BuildRunner>::compile
+  13: cargo::ops::cargo_compile::compile_ws
+  14: cargo::ops::cargo_compile::compile_with_exec
+  15: cargo::ops::cargo_compile::compile
+  16: cargo::commands::check::exec
+  17: <cargo::cli::Exec>::exec
+  18: cargo::main
+  19: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  20: std::rt::lang_start::<()>::{closure#0}
+  21: std::rt::lang_start_internal
+  22: _main
+   0.214128792s  INFO prepare_target{force=false package_id=soroban-ledger-snapshot v25.3.1 target="soroban_ledger_snapshot"}: cargo::core::compiler::fingerprint: fingerprint error for soroban-ledger-snapshot v25.3.1/Check { test: false }/TargetInner { ..: lib_target("soroban_ledger_snapshot", ["lib"], "/Users/bashir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-ledger-snapshot-25.3.1/src/lib.rs", Edition2021) }
+   0.214133875s  INFO prepare_target{force=false package_id=soroban-ledger-snapshot v25.3.1 target="soroban_ledger_snapshot"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/bashir/Documents/mobile-money/benchmarks/target/debug/.fingerprint/soroban-ledger-snapshot-89a5224543606fb5/lib-soroban_ledger_snapshot`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: cargo::core::compiler::compile
+   7: cargo::core::compiler::compile
+   8: cargo::core::compiler::compile
+   9: <cargo::core::compiler::build_runner::BuildRunner>::compile
+  10: cargo::ops::cargo_compile::compile_ws
+  11: cargo::ops::cargo_compile::compile_with_exec
+  12: cargo::ops::cargo_compile::compile
+  13: cargo::commands::check::exec
+  14: <cargo::cli::Exec>::exec
+  15: cargo::main
+  16: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  17: std::rt::lang_start::<()>::{closure#0}
+  18: std::rt::lang_start_internal
+  19: _main
+   0.217587708s  INFO prepare_target{force=false package_id=soroban-gas-benchmark v0.1.0 (/Users/bashir/Documents/mobile-money/benchmarks) target="soroban-gas-benchmark"}: cargo::core::compiler::fingerprint: fingerprint error for soroban-gas-benchmark v0.1.0 (/Users/bashir/Documents/mobile-money/benchmarks)/Check { test: true }/TargetInner { name: "soroban-gas-benchmark", doc: true, ..: with_path("/Users/bashir/Documents/mobile-money/benchmarks/src/main.rs", Edition2021) }
+   0.217593875s  INFO prepare_target{force=false package_id=soroban-gas-benchmark v0.1.0 (/Users/bashir/Documents/mobile-money/benchmarks) target="soroban-gas-benchmark"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/bashir/Documents/mobile-money/benchmarks/target/debug/.fingerprint/soroban-gas-benchmark-ccc8ba4de26983f6/test-bin-soroban-gas-benchmark`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: <cargo::core::compiler::build_runner::BuildRunner>::compile
+   7: cargo::ops::cargo_compile::compile_ws
+   8: cargo::ops::cargo_compile::compile_with_exec
+   9: cargo::ops::cargo_compile::compile
+  10: cargo::commands::check::exec
+  11: <cargo::cli::Exec>::exec
+  12: cargo::main
+  13: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  14: std::rt::lang_start::<()>::{closure#0}
+  15: std::rt::lang_start_internal
+  16: _main
+    Checking rand v0.8.6
+    Checking wasmparser v0.116.1
+    Checking soroban-wasmi v0.31.1-soroban.20.0.1
+    Checking hashbrown v0.13.2
+    Checking serde_with v3.21.0
+    Checking stellar-xdr v26.0.1
+    Checking ark-std v0.4.0
+    Checking ark-std v0.5.0
+    Checking ark-serialize v0.5.0
+    Checking ark-serialize v0.4.2
+    Checking ark-ff v0.4.2
+    Checking ark-ff v0.5.0
+    Checking stellar-xdr v25.0.0
+    Checking ark-poly v0.4.2
+    Checking ark-poly v0.5.0
+    Checking ark-ec v0.4.2
+    Checking ark-ec v0.5.0
+    Checking ark-bls12-381 v0.4.0
+    Checking ark-bn254 v0.4.0
+    Checking ark-bn254 v0.5.0
+    Checking ark-bls12-381 v0.5.0
+    Checking soroban-env-common v26.1.3
+    Checking soroban-env-host v26.1.3
+    Checking soroban-sdk v26.1.0
+    Checking escrow v0.2.0 (/Users/bashir/Documents/mobile-money/contracts/escrow)
+    Checking soroban-env-common v25.0.1
+    Checking soroban-env-host v25.0.1
+    Checking soroban-ledger-snapshot v25.3.1
+    Checking soroban-sdk v25.3.1
+    Checking htlc v0.1.0 (/Users/bashir/Documents/mobile-money/contracts/htlc)
+    Checking soroban-gas-benchmark v0.1.0 (/Users/bashir/Documents/mobile-money/benchmarks)
+error: could not compile `soroban-gas-benchmark` (bin "soroban-gas-benchmark" test) due to 23 previous errors; 40 warnings emitted
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `soroban-gas-benchmark` (bin "soroban-gas-benchmark") due to 23 previous errors; 40 warnings emitted

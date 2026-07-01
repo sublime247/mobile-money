@@ -1,0 +1,10 @@
+/Users/bashir/Documents/mobile-money/benchmarks/target/debug/deps/soroban_spec_rust-4cff328b78443264.d: /Users/bashir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-spec-rust-26.1.0/src/lib.rs /Users/bashir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-spec-rust-26.1.0/src/syn_ext.rs /Users/bashir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-spec-rust-26.1.0/src/trait.rs /Users/bashir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-spec-rust-26.1.0/src/types.rs
+
+/Users/bashir/Documents/mobile-money/benchmarks/target/debug/deps/libsoroban_spec_rust-4cff328b78443264.rlib: /Users/bashir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-spec-rust-26.1.0/src/lib.rs /Users/bashir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-spec-rust-26.1.0/src/syn_ext.rs /Users/bashir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-spec-rust-26.1.0/src/trait.rs /Users/bashir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-spec-rust-26.1.0/src/types.rs
+
+/Users/bashir/Documents/mobile-money/benchmarks/target/debug/deps/libsoroban_spec_rust-4cff328b78443264.rmeta: /Users/bashir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-spec-rust-26.1.0/src/lib.rs /Users/bashir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-spec-rust-26.1.0/src/syn_ext.rs /Users/bashir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-spec-rust-26.1.0/src/trait.rs /Users/bashir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-spec-rust-26.1.0/src/types.rs
+
+/Users/bashir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-spec-rust-26.1.0/src/lib.rs:
+/Users/bashir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-spec-rust-26.1.0/src/syn_ext.rs:
+/Users/bashir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-spec-rust-26.1.0/src/trait.rs:
+/Users/bashir/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-spec-rust-26.1.0/src/types.rs:
