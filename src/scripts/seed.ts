@@ -16,7 +16,7 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 async function upsertUser(phone: string, kyc: string) {
   const res = await pool.query(
-    `INSERT INTO users (phone_number, kyc_level) VALUES ($1, $2)
+    `INSERT INTO users (phone_number, kyc_level, role_id) VALUES ($1, $2, 'de8e8649-68ee-4e66-a4e5-2005fd2bfc71')
      ON CONFLICT (phone_number) DO UPDATE SET kyc_level = EXCLUDED.kyc_level
      RETURNING id`,
     [phone, kyc],
@@ -34,10 +34,22 @@ async function insertTransaction(
   status: string,
   userId: string | null,
 ) {
+  const check = await pool.query(
+    "SELECT id FROM transactions WHERE reference_number = $1 LIMIT 1",
+    [ref]
+  );
+  if (check.rows.length > 0) {
+    const existingId = check.rows[0].id;
+    await pool.query(
+      "UPDATE transactions SET status = $1 WHERE id = $2",
+      [status, existingId]
+    );
+    return existingId;
+  }
+
   const res = await pool.query(
     `INSERT INTO transactions (reference_number, type, amount, phone_number, provider, stellar_address, status, user_id)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-     ON CONFLICT (reference_number) DO UPDATE SET status = EXCLUDED.status
      RETURNING id`,
     [ref, type, amount, phone, provider, stellar, status, userId],
   );

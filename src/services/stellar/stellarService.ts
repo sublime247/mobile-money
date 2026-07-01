@@ -99,7 +99,7 @@ export class StellarService {
     }
 
     try {
-      const callPromise = (this.server as any).root();
+      const callPromise = this.server.fetchBaseFee();
       const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new Error("Horizon ping timeout")), timeoutMs),
       );
