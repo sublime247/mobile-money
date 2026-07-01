@@ -63,6 +63,9 @@ RUN rm -rf /usr/local/lib/node_modules/npm \
     && rm -rf /usr/local/bin/yarn \
     && rm -rf /usr/local/bin/yarnpkg
 
+# Create logs directory and grant ownership
+RUN mkdir -p /app/logs && chown -R nodejs:nodejs /app/logs
+
 # Switch to non-root user
 USER nodejs
 
