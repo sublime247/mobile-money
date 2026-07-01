@@ -20,8 +20,8 @@ COPY package*.json ./
 
 ENV NODE_ENV=production
 
-# --omit=optional drops heavy multi-OS native bindings
-RUN npm ci --omit=dev --omit=optional --ignore-scripts && \
+# Allow optional dependencies so platform-specific binaries like sharp's musl are installed
+RUN npm ci --omit=dev --ignore-scripts && \
     npm cache clean --force && \
     # Strip text bloat
     find ./node_modules -type f -name "*.md" -delete && \
