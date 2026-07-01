@@ -10,7 +10,7 @@ const isDRMode = (): boolean => !!DR_DATABASE_URL;
 
 const productionSsl =
   process.env.NODE_ENV === "production"
-    ? { rejectUnauthorized: true }
+    ? { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED === "true" }
     : undefined;
 
 // Configuration for slow query logging
