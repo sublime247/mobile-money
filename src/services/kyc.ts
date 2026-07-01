@@ -194,10 +194,10 @@ export class KYCService {
     this.baseURL = process.env.KYC_API_URL || "https://api.eu.onfido.com/v3.6";
     this.apiKey =
       process.env.KYC_API_KEY ||
-      (process.env.NODE_ENV === "test" ? "test_key" : "");
+      (process.env.NODE_ENV === "test" ? "test_key" : "mock_key");
 
-    if (!this.apiKey) {
-      throw new Error("KYC_API_KEY environment variable is required");
+    if (this.apiKey === "mock_key") {
+      console.warn("[KYCService] WARNING: KYC_API_KEY is not configured. Real KYC verification requests will fail.");
     }
 
     this.api = axios.create({
