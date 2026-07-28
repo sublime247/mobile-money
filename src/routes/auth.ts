@@ -16,6 +16,7 @@ import { redisClient } from '../config/redis';
 import { TransactionModel } from '../models/transaction';
 import { EmailService } from '../services/email';
 import { authRateLimiter } from '../middleware/authRateLimit';
+import { authController } from '../controllers/authController';
 
 const emailService = new EmailService();
 
@@ -364,3 +365,53 @@ authRoutes.get('/me', authenticateToken, async (req: Request, res: Response) => 
     });
   }
 });
+
+// ─── WebAuthn / Hardware-Key Routes ──────────────────────────────────────────
+//
+// Registration flow  (requires JWT — user already authenticated)
+//   GET  /api/auth/webauthn/register/challenge
+//   POST /api/auth/webauthn/register
+//   GET  /api/auth/webauthn/credentials
+//   DELETE /api/auth/webauthn/credentials/:credentialId
+//
+// Authentication flow  (no JWT — user is logging in)
+//   GET  /api/auth/webauthn/authenticate/challenge?userId=<uuid>
+//   POST /api/auth/webauthn/authenticate
+
+// Registration — JWT required
+authRoutes.get(
+  '/webauthn/register/challenge',
+  authenticateToken,
+  authController.getRegistrationChallenge,
+);
+
+authRoutes.post(
+  '/webauthn/register',
+  authenticateToken,
+  authController.completeRegistration,
+);
+
+authRoutes.get(
+  '/webauthn/credentials',
+  authenticateToken,
+  authController.listCredentials,
+);
+
+authRoutes.delete(
+  '/webauthn/credentials/:credentialId',
+  authenticateToken,
+  authController.deleteCredential,
+);
+
+// Authentication — unauthenticated (user is in the process of logging in)
+authRoutes.get(
+  '/webauthn/authenticate/challenge',
+  authRateLimiter,
+  authController.getAuthenticationChallenge,
+);
+
+authRoutes.post(
+  '/webauthn/authenticate',
+  authRateLimiter,
+  authController.verifyAuthentication,
+);
