@@ -1,33 +1,176 @@
-// Theme Management
+// Theme Management & Custom Brand Dynamic Styling (SEP-24)
 function setTheme(theme) {
+  if (!document.documentElement) return;
   document.documentElement.dataset.theme = theme;
   document.querySelectorAll(".theme-switcher button").forEach(btn => {
     const active = btn.dataset.theme === theme;
     btn.classList.toggle("active", active);
-    btn.setAttribute("aria-pressed", active);
+    btn.setAttribute("aria-pressed", active ? "true" : "false");
   });
 }
 
 function saveTheme(theme) {
-  localStorage.setItem("theme", theme);
+  if (typeof localStorage !== "undefined") {
+    localStorage.setItem("theme", theme);
+  }
   setTheme(theme);
 }
 
-function loadTheme() {
-  const saved = localStorage.getItem("theme") || "carbon";
-  setTheme(saved);
+function hexToHsl(hex) {
+  if (!hex || typeof hex !== "string") return null;
+  let c = hex.replace("#", "").trim();
+  if (c.length === 3) {
+    c = c.split("").map(ch => ch + ch).join("");
+  }
+  if (c.length !== 6) return null;
+  const num = parseInt(c, 16);
+  if (isNaN(num)) return null;
+
+  const r = ((num >> 16) & 255) / 255;
+  const g = ((num >> 8) & 255) / 255;
+  const b = (num & 255) / 255;
+
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  let h = 0;
+  let s = 0;
+  const l = (max + min) / 2;
+
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
+      case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+      case g: h = (b - r) / d + 2; break;
+      case b: h = (r - g) / d + 4; break;
+    }
+    h /= 6;
+  }
+
+  const hDeg = Math.round(h * 360);
+  const sPct = Math.round(s * 100);
+  const lPct = Math.round(l * 100);
+
+  return {
+    h: hDeg,
+    s: sPct,
+    l: lPct,
+    hslString: `${hDeg} ${sPct}% ${lPct}%`
+  };
 }
 
-loadTheme();
+function parseThemeParams(queryString) {
+  const search = queryString !== undefined ? queryString : (typeof window !== "undefined" && window.location ? window.location.search : "");
+  const params = new URLSearchParams(search);
+  const result = {};
 
-document.querySelectorAll(".theme-switcher button").forEach(btn => {
-  btn.addEventListener("click", () => saveTheme(btn.dataset.theme));
-});
+  const theme = params.get("theme");
+  if (theme) result.theme = theme.toLowerCase();
+
+  const color = params.get("color") || params.get("primary_color") || params.get("primary");
+  if (color) result.primaryColor = color.startsWith("#") ? color : `#${color}`;
+
+  const secondary = params.get("secondary_color") || params.get("secondary");
+  if (secondary) result.secondaryColor = secondary.startsWith("#") ? secondary : `#${secondary}`;
+
+  const bg = params.get("bg_color") || params.get("background") || params.get("bg");
+  if (bg) result.backgroundColor = bg.startsWith("#") ? bg : `#${bg}`;
+
+  const text = params.get("text_color") || params.get("text");
+  if (text) result.textColor = text.startsWith("#") ? text : `#${text}`;
+
+  const card = params.get("card_bg") || params.get("card");
+  if (card) result.cardColor = card.startsWith("#") ? card : `#${card}`;
+
+  const border = params.get("border_color") || params.get("border");
+  if (border) result.borderColor = border.startsWith("#") ? border : `#${border}`;
+
+  return result;
+}
+
+function applyDynamicStyles(overrides, targetElement) {
+  const root = targetElement || (typeof document !== "undefined" ? document.documentElement : null);
+  if (!overrides || !root || !root.style) return;
+
+  if (overrides.theme) {
+    setTheme(overrides.theme);
+  }
+
+  if (overrides.primaryColor) {
+    const hsl = hexToHsl(overrides.primaryColor);
+    if (hsl) {
+      root.style.setProperty("--primary", hsl.hslString);
+      root.style.setProperty("--primary-glow", `${hsl.h} ${hsl.s}% ${Math.min(100, hsl.l + 15)}%`);
+    } else {
+      root.style.setProperty("--primary-custom", overrides.primaryColor);
+    }
+  }
+
+  if (overrides.secondaryColor) {
+    const hsl = hexToHsl(overrides.secondaryColor);
+    if (hsl) {
+      root.style.setProperty("--secondary", hsl.hslString);
+      root.style.setProperty("--secondary-glow", `${hsl.h} ${hsl.s}% ${Math.min(100, hsl.l + 15)}%`);
+    }
+  }
+
+  if (overrides.backgroundColor) {
+    const hsl = hexToHsl(overrides.backgroundColor);
+    if (hsl) {
+      root.style.setProperty("--bg-dark", hsl.hslString);
+    }
+  }
+
+  if (overrides.cardColor) {
+    const hsl = hexToHsl(overrides.cardColor);
+    if (hsl) {
+      root.style.setProperty("--bg-card", hsl.hslString);
+      root.style.setProperty("--bg-card-hover", `${hsl.h} ${hsl.s}% ${Math.min(100, hsl.l + 4)}%`);
+    }
+  }
+
+  if (overrides.textColor) {
+    const hsl = hexToHsl(overrides.textColor);
+    if (hsl) {
+      root.style.setProperty("--text-primary", hsl.hslString);
+    }
+  }
+
+  if (overrides.borderColor) {
+    const hsl = hexToHsl(overrides.borderColor);
+    if (hsl) {
+      root.style.setProperty("--border", hsl.hslString);
+    }
+  }
+}
+
+function loadTheme() {
+  const urlOverrides = parseThemeParams();
+  if (urlOverrides.theme) {
+    setTheme(urlOverrides.theme);
+  } else {
+    const saved = (typeof localStorage !== "undefined" && localStorage.getItem("theme")) || "carbon";
+    setTheme(saved);
+  }
+
+  // Apply any custom color overrides passed in URL
+  applyDynamicStyles(urlOverrides);
+}
+
+if (typeof document !== "undefined") {
+  loadTheme();
+
+  document.querySelectorAll(".theme-switcher button").forEach(btn => {
+    btn.addEventListener("click", () => saveTheme(btn.dataset.theme));
+  });
+}
 
 // Live API Status Polling
 async function updateSystemStatus() {
+  if (typeof document === "undefined") return;
   const dot = document.getElementById("status-dot");
   const text = document.getElementById("status-text");
+  if (!dot || !text) return;
 
   try {
     const res = await fetch("/health");
@@ -52,12 +195,14 @@ async function updateSystemStatus() {
 
 // Live Horizon Health Polling
 async function updateHorizonHealth() {
+  if (typeof document === "undefined") return;
   let horizonDot = document.getElementById("horizon-status-dot");
   let horizonText = document.getElementById("horizon-status-text");
   let horizonLatency = document.getElementById("horizon-latency");
 
   if (!horizonDot) {
     const statusContainer = document.querySelector(".status-container") || document.body;
+    if (!statusContainer) return;
     const div = document.createElement("div");
     div.id = "horizon-health-widget";
     div.style.marginTop = "8px";
@@ -91,9 +236,11 @@ async function updateHorizonHealth() {
       }
     }
   } catch (error) {
-    horizonDot.className = "status-dot offline";
-    horizonText.className = "status-text";
-    horizonText.textContent = "Horizon: Offline";
+    if (horizonDot) horizonDot.className = "status-dot offline";
+    if (horizonText) {
+      horizonText.className = "status-text";
+      horizonText.textContent = "Horizon: Offline";
+    }
     if (horizonLatency) {
       horizonLatency.textContent = "";
     }
@@ -101,10 +248,12 @@ async function updateHorizonHealth() {
 }
 
 // Initial status check and periodic updates
-updateSystemStatus();
-updateHorizonHealth();
-setInterval(updateSystemStatus, 15000);
-setInterval(updateHorizonHealth, 15000);
+if (typeof window !== "undefined") {
+  updateSystemStatus();
+  updateHorizonHealth();
+  setInterval(updateSystemStatus, 15000);
+  setInterval(updateHorizonHealth, 15000);
+}
 
 // Interactive Exchange Rate Calculator
 const RATES = {
@@ -117,16 +266,14 @@ const RATES = {
   RWF: { USDC: 0.000758, XLM: 0.007576, label: "RWF", rateStr: "1 RWF = 0.00076 USDC" }
 };
 
-const sendAmountInput = document.getElementById("calc-send-amount");
-const sendCurrencySelect = document.getElementById("calc-send-currency");
-const receiveAmountInput = document.getElementById("calc-receive-amount");
-const receiveAssetSelect = document.getElementById("calc-receive-asset");
+const sendAmountInput = typeof document !== "undefined" ? document.getElementById("calc-send-amount") : null;
+const sendCurrencySelect = typeof document !== "undefined" ? document.getElementById("calc-send-currency") : null;
+const receiveAmountInput = typeof document !== "undefined" ? document.getElementById("calc-receive-amount") : null;
+const receiveAssetSelect = typeof document !== "undefined" ? document.getElementById("calc-receive-asset") : null;
 
-const rateDisplay = document.getElementById("rate-display");
-const feeDisplay = document.getElementById("fee-display");
-const finalDisplay = document.getElementById(
-  "final-display"
-);
+const rateDisplay = typeof document !== "undefined" ? document.getElementById("rate-display") : null;
+const feeDisplay = typeof document !== "undefined" ? document.getElementById("fee-display") : null;
+const finalDisplay = typeof document !== "undefined" ? document.getElementById("final-display") : null;
 
 function calculateConversion() {
   if (!sendAmountInput || !sendCurrencySelect || !receiveAssetSelect) return;
@@ -173,4 +320,19 @@ if (receiveAssetSelect) {
   receiveAssetSelect.addEventListener("change", calculateConversion);
 }
 
-calculateConversion();
+if (typeof document !== "undefined") {
+  calculateConversion();
+}
+
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = {
+    setTheme,
+    saveTheme,
+    loadTheme,
+    hexToHsl,
+    parseThemeParams,
+    applyDynamicStyles,
+    calculateConversion,
+    RATES,
+  };
+}
