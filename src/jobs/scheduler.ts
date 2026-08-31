@@ -10,6 +10,7 @@ import { runBalanceMonitorJob } from "./balanceMonitorJob";
 import { runSep31MonitorJob } from "./sep31MonitorJob";
 import { runFeeBumpJob } from "./feeBumpJob";
 import { runSep31FeeBumpJob } from "./sep31FeeBumpJob";
+import { runSponsorWalletMonitorJob } from "../services/stellar/feeBump";
 import { MonitoringService } from "../services/monitoringService";
 import { createPagerDutyService } from "../services/pagerDutyService";
 import { runProviderBalanceAlertJob } from "./balances";
@@ -93,6 +94,12 @@ const JOBS: JobConfig[] = [
     // Every 30 seconds - bumps fees for stuck SEP-31 transactions
     schedule: process.env.SEP31_FEE_BUMP_CRON || "*/30 * * * * *",
     handler: runSep31FeeBumpJob,
+  },
+  {
+    name: "sponsor-wallet-monitor",
+    // Hourly - monitors dedicated Stellar fee-bump sponsor wallet balance
+    schedule: process.env.SPONSOR_WALLET_MONITOR_CRON || "0 * * * *",
+    handler: runSponsorWalletMonitorJob,
   },
   {
     name: "provider-balance-alert",
