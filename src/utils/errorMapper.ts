@@ -26,7 +26,7 @@ const MTN_ERROR_MAP: Record<string, string> = {
   "PAYER_NOT_FOUND": "Payer Account Not Found",
   "PAYEE_NOT_FOUND": "Recipient Account Not Found",
   "NOT_ALLOWED": "Transaction Type Not Allowed",
-  "NOT_ENOUGH_FUNDS": "Insufficient Funds",
+  "NOT_ENOUGH_FUNDS": "Insufficient Balance",
   "LIMIT_EXCEEDED": "Transaction Limit Exceeded",
   "DUPLICATE_REFERENCE": "Duplicate Transaction Reference",
   "INVALID_CALLBACK_URL": "Invalid Callback URL Configuration",
@@ -53,6 +53,37 @@ const AIRTEL_ERROR_MAP: Record<string, string> = {
   "DS_SUCCESS": "Disbursement Successful",
   "DS_REQUEST_FAILED": "Disbursement Failed - Please Retry",
   "DS_PENDING": "Disbursement Pending",
+};
+
+const SEP31_STANDARD_ERROR_MAP: Record<string, { error: string; action: string }> = {
+  "Insufficient Balance": {
+    error: "insufficient_balance",
+    action: "Please ensure the mobile money account has sufficient funds before retrying."
+  },
+  "Invalid Phone Number": {
+    error: "invalid_phone_number",
+    action: "Please provide a valid, registered mobile money phone number."
+  },
+  "Invalid Amount": {
+    error: "invalid_amount",
+    action: "Please verify the transaction amount meets provider and system limits."
+  },
+  "Daily Limit Exceeded": {
+    error: "limit_exceeded",
+    action: "Transaction exceeds daily mobile money limits. Please try a smaller amount or try again tomorrow."
+  },
+  "Transaction Timed Out": {
+    error: "transaction_timed_out",
+    action: "The provider request timed out. Please check transaction status or retry."
+  },
+  "Service Unavailable": {
+    error: "service_unavailable",
+    action: "The regional mobile money provider is currently unavailable. Please try again later."
+  },
+  "Authentication Failed": {
+    error: "authentication_failed",
+    action: "Provider authentication failed. Please contact support."
+  }
 };
 
 const UNMAPPED_ERRORS: unknown[] = [];
@@ -85,6 +116,20 @@ export function mapProviderError(
   }
 
   return `Error: ${code}`;
+}
+
+export function mapToSep31StandardError(rawError: string | number | undefined | null, provider?: ProviderType) {
+  const message = mapProviderError(rawError, provider);
+  const standard = SEP31_STANDARD_ERROR_MAP[message] || {
+    error: "transaction_failed",
+    action: "Please check transaction details or contact support for assistance."
+  };
+
+  return {
+    error: standard.error,
+    message,
+    action: standard.action
+  };
 }
 
 export function getUnmappedErrors(): unknown[] {
