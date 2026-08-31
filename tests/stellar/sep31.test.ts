@@ -6,6 +6,25 @@ const mockCreate = jest.fn();
 const mockFindById = jest.fn();
 const mockUpdateMetadata = jest.fn();
 
+const mockPoolQuery = jest.fn().mockResolvedValue({ rows: [] });
+const mockSearchSanctions = jest.fn().mockResolvedValue([]);
+
+// Mock database pool
+jest.mock("../../src/config/database", () => ({
+  pool: {
+    query: (...args: any[]) => mockPoolQuery(...args),
+  },
+  queryRead: jest.fn(),
+  queryWrite: jest.fn(),
+}));
+
+// Mock sanctionService
+jest.mock("../../src/services/sanctionService", () => ({
+  sanctionService: {
+    searchSanctionsWithLevenshtein: (...args: any[]) => mockSearchSanctions(...args),
+  },
+}));
+
 // Mock TransactionModel
 jest.mock("../../src/models/transaction", () => {
   return {
@@ -14,6 +33,7 @@ jest.mock("../../src/models/transaction", () => {
       Completed: "completed",
       Failed: "failed",
       Cancelled: "cancelled",
+      Review: "review",
     },
     TransactionModel: jest.fn().mockImplementation(() => ({
       create: mockCreate,
@@ -165,6 +185,57 @@ describe("SEP-31 Cross-Border Payments API", () => {
       );
       expect(createArg.metadata.sep31).toHaveProperty("payout_type", "SWIFT");
       expect(createArg.provider).toBe("stellar-sep31");
+    });
+
+    it("should flag transaction as PENDING_COMPLIANCE when receiver matches sanctions list and write audit log", async () => {
+      mockSearchSanctions.mockResolvedValueOnce([
+        {
+          entity: {
+            name: "John Doe",
+            country: "Country A",
+            source: "UN",
+            category: "Individual",
+            external_id: "UN-123",
+          },
+          score: 0.95,
+        },
+      ]);
+
+      mockCreate.mockResolvedValue({
+        id: "550e8400-e29b-41d4-a716-446655440000",
+        amount: "100.00",
+        status: "review",
+        createdAt: new Date(),
+      });
+
+      const res = await request(app)
+        .post("/sep31/transactions")
+        .send({
+          ...validPayload,
+          fields: {
+            transaction: {
+              ...validPayload.fields.transaction,
+              receiver_name: "John Doe",
+            },
+          },
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.status).toBe("pending_receiver");
+      expect(res.body.status_eta).toBeNull();
+      expect(res.body).toHaveProperty("required_info_message");
+
+      const createArg = mockCreate.mock.calls[0][0];
+      expect(createArg.status).toBe("review");
+      expect(createArg.metadata.sep31.compliance_status).toBe("PENDING_COMPLIANCE");
+      expect(createArg.metadata.sep31.compliance_match).toBeDefined();
+      expect(createArg.metadata.sep31.compliance_match.matched_entity).toBe("John Doe");
+
+      // Verify audit log write
+      expect(mockPoolQuery).toHaveBeenCalledWith(
+        expect.stringContaining("INSERT INTO audit_logs"),
+        expect.arrayContaining(["receiver-456", "AML_SANCTION_MATCH_RECEIVER"]),
+      );
     });
 
     it("should accept sender_id/receiver_id from top-level fields", async () => {

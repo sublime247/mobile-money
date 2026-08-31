@@ -21,7 +21,7 @@ module.exports = {
         "^.+\\.[jt]sx?$": ["ts-jest", { diagnostics: false }],
       },
       transformIgnorePatterns: [
-        "/node_modules/(?!(uint8array-extras)/)",
+        "node_modules/(?!(@stellar|@noble|@exodus|uint8array-extras)/)",
       ],
       moduleFileExtensions: ["ts", "tsx", "js", "jsx", "json", "node"],
       // Mirrors the (otherwise-dead, since `projects` doesn't inherit

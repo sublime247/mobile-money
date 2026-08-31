@@ -8,6 +8,9 @@ import rateLimit from "express-rate-limit";
 import { ERROR_CODES } from "../constants/errorCodes";
 import { createError } from "../middleware/errorHandler";
 
+import { pool } from "../config/database";
+import { sanctionService } from "../services/sanctionService";
+
 const router = Router();
 const transactionModel = new TransactionModel();
 
@@ -335,12 +338,43 @@ router.post(
       const { fee, total } = calculateFee(parsedAmount);
       const amountOut = parsedAmount; // Amount delivered to receiver (before payout fees)
 
+      // --- Receiver-side AML Sanctions Screening ---
+      const receiverScreeningIdentifier =
+        txFields.receiver_name ||
+        (txFields.receiver_first_name
+          ? `${txFields.receiver_first_name} ${txFields.receiver_last_name || ""}`.trim()
+          : finalReceiverId);
+
+      let isComplianceFlagged = false;
+      let topMatch: any = null;
+
+      try {
+        const matches = await sanctionService.searchSanctionsWithLevenshtein(
+          receiverScreeningIdentifier,
+          0.85,
+        );
+        if (matches && matches.length > 0) {
+          isComplianceFlagged = true;
+          topMatch = matches[0];
+        }
+      } catch (screenErr) {
+        logger.warn(
+          { error: screenErr },
+          "[SEP-31] Receiver sanctions screening error",
+        );
+      }
+
+      const initialStatus = isComplianceFlagged
+        ? Sep31Status.PendingReceiver
+        : Sep31Status.PendingSender;
+
       // Build sender/receiver payload mapping
       const metadata = {
         sep31: {
-          status: Sep31Status.PendingSender,
+          status: initialStatus,
           sender_id: finalSenderId,
           receiver_id: finalReceiverId,
+          receiver_name: receiverScreeningIdentifier,
           receiver_routing_number: txFields.receiver_routing_number || null,
           receiver_account_number: txFields.receiver_account_number || null,
           payout_type: txFields.type || "mobile_money",
@@ -355,6 +389,18 @@ router.post(
             ? null
             : configuredAsset.getIssuer(),
           lang: lang || "en",
+          compliance_status: isComplianceFlagged ? "PENDING_COMPLIANCE" : "PASSED",
+          ...(isComplianceFlagged && topMatch
+            ? {
+                compliance_match: {
+                  matched_entity: topMatch.entity.name,
+                  score: topMatch.score,
+                  source: topMatch.entity.source,
+                  category: topMatch.entity.category,
+                  reason: `Receiver matched sanction entry ${topMatch.entity.name}`,
+                },
+              }
+            : {}),
         },
       };
 
@@ -364,15 +410,58 @@ router.post(
         phoneNumber: "SEP-31",
         provider: "stellar-sep31",
         stellarAddress: SEP31_CONFIG.receivingAccount,
-        status: TransactionStatus.Pending,
+        status: isComplianceFlagged
+          ? TransactionStatus.Review
+          : TransactionStatus.Pending,
         metadata,
-        notes: `SEP-31 cross-border payment from ${finalSenderId} to ${finalReceiverId}`,
+        notes: isComplianceFlagged
+          ? `SEP-31 cross-border payment from ${finalSenderId} to ${finalReceiverId} flagged for compliance review: matched ${topMatch?.entity?.name}`
+          : `SEP-31 cross-border payment from ${finalSenderId} to ${finalReceiverId}`,
       });
+
+      // Write incident entry into audit logs if flagged
+      if (isComplianceFlagged && topMatch) {
+        try {
+          await pool.query(
+            `INSERT INTO audit_logs (user_id, action, metadata) VALUES ($1, $2, $3)`,
+            [
+              finalReceiverId,
+              "AML_SANCTION_MATCH_RECEIVER",
+              JSON.stringify({
+                transactionId: newTransaction.id,
+                party: "receiver",
+                receiverId: finalReceiverId,
+                screenedName: receiverScreeningIdentifier,
+                matchedEntity: topMatch.entity.name,
+                score: topMatch.score,
+                source: topMatch.entity.source,
+                status: "PENDING_COMPLIANCE",
+                createdAt: new Date().toISOString(),
+              }),
+            ],
+          );
+        } catch (auditErr) {
+          logger.error(
+            { error: auditErr },
+            "[SEP-31] Failed to record AML sanction audit log entry",
+          );
+        }
+
+        logger.warn(
+          {
+            transactionId: newTransaction.id,
+            receiverId: finalReceiverId,
+            matchedEntity: topMatch.entity.name,
+            score: topMatch.score,
+          },
+          "[SEP-31] Recipient flagged in AML sanctions check - transaction flagged as PENDING_COMPLIANCE",
+        );
+      }
 
       return res.status(201).json({
         id: newTransaction.id,
-        status: Sep31Status.PendingSender,
-        status_eta: SEP31_CONFIG.statusEta,
+        status: initialStatus,
+        status_eta: isComplianceFlagged ? null : SEP31_CONFIG.statusEta,
         stellar_account_id: SEP31_CONFIG.receivingAccount,
         stellar_memo_type: "text",
         stellar_memo: memo,
@@ -382,6 +471,10 @@ router.post(
         amount_out_asset: getAssetString(),
         amount_fee: fee.toString(),
         amount_fee_asset: getAssetString(),
+        ...(isComplianceFlagged && {
+          required_info_message:
+            "Recipient profile requires AML compliance verification before proceeding.",
+        }),
       });
     } catch (error: any) {
       if (error && error.statusCode) {
