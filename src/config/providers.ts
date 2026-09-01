@@ -30,35 +30,67 @@ export interface ProviderLimitsConfig {
  * This replaces hardcoded defaults with values from appConfig.
  */
 export function getProviderLimitsConfig(): ProviderLimitsConfig {
-  const providers = getConfigValue("providers") as any;
+  const providers = (getConfigValue("providers") || {}) as any;
   return {
     [MobileMoneyProvider.MTN]: {
-      minAmount: providers.mtn.minAmount,
-      maxAmount: providers.mtn.maxAmount,
+      minAmount:
+        providers.mtn?.minAmount ??
+        DEFAULT_PROVIDER_LIMITS[MobileMoneyProvider.MTN].minAmount,
+      maxAmount:
+        providers.mtn?.maxAmount ??
+        DEFAULT_PROVIDER_LIMITS[MobileMoneyProvider.MTN].maxAmount,
     },
     [MobileMoneyProvider.AIRTEL]: {
-      minAmount: providers.airtel.minAmount,
-      maxAmount: providers.airtel.maxAmount,
+      minAmount:
+        providers.airtel?.minAmount ??
+        providers.airtelTanzania?.minAmount ??
+        DEFAULT_PROVIDER_LIMITS[MobileMoneyProvider.AIRTEL].minAmount,
+      maxAmount:
+        providers.airtel?.maxAmount ??
+        providers.airtelTanzania?.maxAmount ??
+        DEFAULT_PROVIDER_LIMITS[MobileMoneyProvider.AIRTEL].maxAmount,
     },
     [MobileMoneyProvider.ORANGE]: {
-      minAmount: providers.orange.minAmount,
-      maxAmount: providers.orange.maxAmount,
+      minAmount:
+        providers.orange?.minAmount ??
+        providers.orangeCameroon?.minAmount ??
+        DEFAULT_PROVIDER_LIMITS[MobileMoneyProvider.ORANGE].minAmount,
+      maxAmount:
+        providers.orange?.maxAmount ??
+        providers.orangeCameroon?.maxAmount ??
+        DEFAULT_PROVIDER_LIMITS[MobileMoneyProvider.ORANGE].maxAmount,
     },
     [MobileMoneyProvider.ORANGE_MADAGASCAR]: {
-      minAmount: providers.orangeMadagascar.minAmount,
-      maxAmount: providers.orangeMadagascar.maxAmount,
+      minAmount:
+        providers.orangeMadagascar?.minAmount ??
+        DEFAULT_PROVIDER_LIMITS[MobileMoneyProvider.ORANGE_MADAGASCAR].minAmount,
+      maxAmount:
+        providers.orangeMadagascar?.maxAmount ??
+        DEFAULT_PROVIDER_LIMITS[MobileMoneyProvider.ORANGE_MADAGASCAR].maxAmount,
     },
     [MobileMoneyProvider.ORANGE_GUINEA]: {
-      minAmount: providers.orangeGuinea.minAmount,
-      maxAmount: providers.orangeGuinea.maxAmount,
+      minAmount:
+        providers.orangeGuinea?.minAmount ??
+        DEFAULT_PROVIDER_LIMITS[MobileMoneyProvider.ORANGE_GUINEA].minAmount,
+      maxAmount:
+        providers.orangeGuinea?.maxAmount ??
+        DEFAULT_PROVIDER_LIMITS[MobileMoneyProvider.ORANGE_GUINEA].maxAmount,
     },
     [MobileMoneyProvider.WAVE_SENEGAL]: {
-      minAmount: providers.waveSenegal.minAmount,
-      maxAmount: providers.waveSenegal.maxAmount,
+      minAmount:
+        providers.waveSenegal?.minAmount ??
+        DEFAULT_PROVIDER_LIMITS[MobileMoneyProvider.WAVE_SENEGAL].minAmount,
+      maxAmount:
+        providers.waveSenegal?.maxAmount ??
+        DEFAULT_PROVIDER_LIMITS[MobileMoneyProvider.WAVE_SENEGAL].maxAmount,
     },
     [MobileMoneyProvider.SMS_PORTAL]: {
-      minAmount: providers.smsPortal.minAmount,
-      maxAmount: providers.smsPortal.maxAmount,
+      minAmount:
+        providers.smsPortal?.minAmount ??
+        DEFAULT_PROVIDER_LIMITS[MobileMoneyProvider.SMS_PORTAL].minAmount,
+      maxAmount:
+        providers.smsPortal?.maxAmount ??
+        DEFAULT_PROVIDER_LIMITS[MobileMoneyProvider.SMS_PORTAL].maxAmount,
     },
   };
 }

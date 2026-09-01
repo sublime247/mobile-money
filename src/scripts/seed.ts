@@ -14,12 +14,26 @@ if (process.env.NODE_ENV !== "development") {
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
+let cachedRoleId: string | null = null;
+
+async function getOrCreateUserRole() {
+  const roleRes = await pool.query(
+    `INSERT INTO roles (name, description) VALUES ('user', 'Standard user')
+     ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+     RETURNING id`,
+  );
+  return roleRes.rows[0].id;
+}
+
 async function upsertUser(phone: string, kyc: string) {
+  if (!cachedRoleId) {
+    cachedRoleId = await getOrCreateUserRole();
+  }
   const res = await pool.query(
-    `INSERT INTO users (phone_number, kyc_level, role_id) VALUES ($1, $2, 'de8e8649-68ee-4e66-a4e5-2005fd2bfc71')
+    `INSERT INTO users (phone_number, kyc_level, role_id) VALUES ($1, $2, $3)
      ON CONFLICT (phone_number) DO UPDATE SET kyc_level = EXCLUDED.kyc_level
      RETURNING id`,
-    [phone, kyc],
+    [phone, kyc, cachedRoleId],
   );
   return res.rows[0].id;
 }
@@ -192,6 +206,7 @@ async function seed() {
     process.exit(1);
   } finally {
     await pool.end();
+    process.exit(0);
   }
 }
 

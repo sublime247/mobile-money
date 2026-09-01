@@ -76,6 +76,104 @@ export const configSchema = convict({
     },
   },
 
+  // Transaction Limits by KYC Tier
+  transactionLimits: {
+    unverified: {
+      doc: "Daily transaction limit for unverified tier (XAF)",
+      format: "nat",
+      default: 50000,
+      env: "LIMIT_UNVERIFIED",
+    },
+    basic: {
+      doc: "Daily transaction limit for basic KYC tier (XAF)",
+      format: "nat",
+      default: 200000,
+      env: "LIMIT_BASIC",
+    },
+    full: {
+      doc: "Daily transaction limit for full KYC tier (XAF)",
+      format: "nat",
+      default: 1000000,
+      env: "LIMIT_FULL",
+    },
+  },
+
+  // Per-Transaction Min/Max Limits
+  transactions: {
+    minAmount: {
+      doc: "Global minimum transaction amount (XAF)",
+      format: "nat",
+      default: 100,
+      env: "MIN_TRANSACTION_AMOUNT",
+    },
+    maxAmount: {
+      doc: "Global maximum transaction amount (XAF)",
+      format: "nat",
+      default: 5000000,
+      env: "MAX_TRANSACTION_AMOUNT",
+    },
+  },
+
+  // Logging
+  logging: {
+    enableSlowQueryLogging: {
+      doc: "Whether to enable slow query logging",
+      format: Boolean,
+      default: false,
+      env: "ENABLE_SLOW_QUERY_LOGGING",
+    },
+  },
+
+  // CORS
+  cors: {
+    allowedOrigins: {
+      doc: "Allowed CORS origins",
+      format: Array,
+      default: ["http://localhost:3000"],
+      env: "CORS_ALLOWED_ORIGINS",
+    },
+  },
+
+  // Workers
+  worker: {
+    concurrency: {
+      doc: "Worker job concurrency",
+      format: "nat",
+      default: 50,
+      env: "WORKER_CONCURRENCY",
+    },
+    syncConcurrency: {
+      doc: "Sync worker concurrency",
+      format: "nat",
+      default: 20,
+      env: "SYNC_CONCURRENCY",
+    },
+    webhookRetryConcurrency: {
+      doc: "Webhook retry concurrency",
+      format: "nat",
+      default: 10,
+      env: "WEBHOOK_RETRY_CONCURRENCY",
+    },
+    accountingRetryConcurrency: {
+      doc: "Accounting retry concurrency",
+      format: "nat",
+      default: 5,
+      env: "ACCOUNTING_RETRY_CONCURRENCY",
+    },
+    accountingTokenRefreshConcurrency: {
+      doc: "Accounting token refresh concurrency",
+      format: "nat",
+      default: 3,
+      env: "ACCOUNTING_TOKEN_REFRESH_CONCURRENCY",
+    },
+    providerBalanceAlertConcurrency: {
+      doc: "Provider balance alert concurrency",
+      format: "nat",
+      default: 1,
+      env: "PROVIDER_BALANCE_ALERT_CONCURRENCY",
+    },
+  },
+
   // Mobile Money Provider Limits
   providers: {
     mtn: {
