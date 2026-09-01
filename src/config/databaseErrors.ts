@@ -32,6 +32,7 @@ export function isTransientDatabaseConnectionError(error: unknown): boolean {
     message.includes("connection lost") ||
     message.includes("disconnect") ||
     message.includes("connection timeout") ||
+    message.includes("timeout exceeded") ||
     message.includes("socket")
   );
 }

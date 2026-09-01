@@ -652,6 +652,37 @@ async function initializeRuntime(): Promise<void> {
   app.post("/admin/queues/pause", pauseQueueEndpoint);
   app.post("/admin/queues/resume", resumeQueueEndpoint);
 
+  const useHTTP2 = process.env.USE_HTTP2 === "true";
+
+  if (useHTTP2) {
+    const sslOptions = {
+      key: fs.readFileSync(path.join(__dirname, "../certs/key.pem")),
+      cert: fs.readFileSync(path.join(__dirname, "../certs/cert.pem")),
+      requestCert: true,
+      rejectUnauthorized: false,
+    };
+
+    const http2Server = http2.createSecureServer(
+      { ...sslOptions, allowHTTP1: true },
+      app as any,
+    );
+    http2Server.listen(PORT, () => {
+      console.log(`HTTP/2 server running on https://localhost:${PORT}`);
+    });
+    server = http2Server as unknown as Server;
+  } else {
+    server = app.listen(PORT, () => {
+      console.log(`HTTP/1.1 server running on http://localhost:${PORT}`);
+    });
+
+    wsManager = new WebSocketManager(server);
+    console.log("WebSocket server attached");
+
+    // Start Apollo Server with APQ enabled (must run after HTTP server is created)
+    await startApolloServer(app, server);
+    console.log("Apollo GraphQL server started at /graphql with Redis APQ");
+  }
+
   try {
     await connectRedis();
     console.log("Redis initialized");
@@ -684,38 +715,6 @@ async function initializeRuntime(): Promise<void> {
 
   const { createQueueDashboard } = await import("./queue/dashboard.js");
   app.use("/admin/queues", createQueueDashboard());
-
-  //
-  const useHTTP2 = process.env.USE_HTTP2 === "true";
-
-  if (useHTTP2) {
-    const sslOptions = {
-      key: fs.readFileSync(path.join(__dirname, "../certs/key.pem")),
-      cert: fs.readFileSync(path.join(__dirname, "../certs/cert.pem")),
-      requestCert: true,
-      rejectUnauthorized: false,
-    };
-
-    const http2Server = http2.createSecureServer(
-      { ...sslOptions, allowHTTP1: true },
-      app as any,
-    );
-    http2Server.listen(PORT, () => {
-      console.log(`HTTP/2 server running on https://localhost:${PORT}`);
-    });
-    server = http2Server as unknown as Server;
-  } else {
-    server = app.listen(PORT, () => {
-      console.log(`HTTP/1.1 server running on http://localhost:${PORT}`);
-    });
-
-    wsManager = new WebSocketManager(server);
-    console.log("WebSocket server attached");
-
-    // Start Apollo Server with APQ enabled (must run after HTTP server is created)
-    await startApolloServer(app, server);
-    console.log("Apollo GraphQL server started at /graphql with Redis APQ");
-  }
 }
 
 if (process.env.NODE_ENV !== "test") {

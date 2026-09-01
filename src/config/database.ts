@@ -59,7 +59,7 @@ const POOL_IDLE_TIMEOUT_MS = parseInt(
   10,
 );
 const POOL_CONNECTION_TIMEOUT_MS = parseInt(
-  process.env.DB_POOL_CONNECTION_TIMEOUT_MS || "5000",
+  process.env.DB_POOL_CONNECTION_TIMEOUT_MS || "30000",
   10,
 );
 const REPLICA_IDLE_TIMEOUT_MS = parseInt(
