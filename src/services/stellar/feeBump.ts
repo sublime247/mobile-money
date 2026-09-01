@@ -129,7 +129,6 @@ export async function sendSponsorLowBalanceAlert(
               availableBalance: payload.currentBalance,
               threshold: payload.threshold,
               currency: payload.currency,
-              timestamp: payload.timestamp,
             },
           ])
           .catch((emailErr) => {
