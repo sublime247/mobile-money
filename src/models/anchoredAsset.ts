@@ -1,5 +1,12 @@
 import { pool } from "../config/database";
 import { v4 as uuidv4 } from "uuid";
+import { encryptModelFields, decryptModelFields } from "../utils/crypto";
+
+/**
+ * Secret columns whose values must never be written to disk in plaintext.
+ * Both Stellar seed keys are AES-256-GCM encrypted at rest (Issue #2031).
+ */
+const SECRET_FIELDS = ["issuerSecretKey", "distributionSecretKey"] as const;
 
 export interface AnchoredAsset {
   id: string;
@@ -60,6 +67,13 @@ export class AnchoredAssetModel {
     asset: Omit<AnchoredAsset, "id" | "createdAt" | "updatedAt">,
   ): Promise<string> {
     const id = uuidv4();
+    // Encrypt the Stellar seed keys before they touch the database. The hook is
+    // idempotent, so callers that hand us an already-encrypted value (e.g. the
+    // issuance service) are not double-encrypted.
+    const secured = encryptModelFields(
+      asset as unknown as Record<string, unknown>,
+      SECRET_FIELDS,
+    );
     await pool.query(
       `INSERT INTO anchored_assets (
         id, asset_code, issuer_public_key, issuer_secret_key, 
@@ -68,14 +82,14 @@ export class AnchoredAssetModel {
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
       [
         id,
-        asset.assetCode,
-        asset.issuerPublicKey,
-        asset.issuerSecretKey,
-        asset.distributionPublicKey,
-        asset.distributionSecretKey,
-        asset.issuanceLimit,
-        asset.status,
-        JSON.stringify(asset.metadata),
+        secured.assetCode,
+        secured.issuerPublicKey,
+        secured.issuerSecretKey,
+        secured.distributionPublicKey,
+        secured.distributionSecretKey,
+        secured.issuanceLimit,
+        secured.status,
+        JSON.stringify(secured.metadata),
       ],
     );
     return id;
@@ -93,17 +107,23 @@ export class AnchoredAssetModel {
 }
 
 function mapAnchoredAssetRow(row: AnchoredAssetRow): AnchoredAsset {
-  return {
-    id: row.id,
-    assetCode: row.assetCode,
-    issuerPublicKey: row.issuerPublicKey,
-    issuerSecretKey: row.issuerSecretKey,
-    distributionPublicKey: row.distributionPublicKey,
-    distributionSecretKey: row.distributionSecretKey,
-    issuanceLimit: row.issuanceLimit,
-    status: row.status,
-    metadata: row.metadata ?? {},
-    createdAt: new Date(row.createdAt),
-    updatedAt: new Date(row.updatedAt),
-  };
+  // Decrypt the seed keys transparently on read so callers always receive
+  // plaintext secrets. decryptSecret verifies the GCM auth tag and passes
+  // through legacy plaintext rows untouched.
+  return decryptModelFields(
+    {
+      id: row.id,
+      assetCode: row.assetCode,
+      issuerPublicKey: row.issuerPublicKey,
+      issuerSecretKey: row.issuerSecretKey,
+      distributionPublicKey: row.distributionPublicKey,
+      distributionSecretKey: row.distributionSecretKey,
+      issuanceLimit: row.issuanceLimit,
+      status: row.status,
+      metadata: row.metadata ?? {},
+      createdAt: new Date(row.createdAt),
+      updatedAt: new Date(row.updatedAt),
+    } as unknown as Record<string, unknown>,
+    SECRET_FIELDS,
+  ) as unknown as AnchoredAsset;
 }
