@@ -50,7 +50,7 @@ describe("Credential encryption helpers (#2031)", () => {
     });
 
     it("round-trips a Stellar seed key", () => {
-      const seed = "SDUHELR2QJTQH24GZKNCT5NBWJ2FCGMPRGKED5Y4REUZK4XCM73JMM4V";
+      const seed = ("S" + "TEST0000ISSUER".padEnd(55, "0"));
       expect(decryptSecret(encryptSecret(seed))).toBe(seed);
     });
 

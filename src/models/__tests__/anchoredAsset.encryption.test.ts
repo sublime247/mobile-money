@@ -17,9 +17,9 @@ describe("AnchoredAssetModel credential encryption (#2031)", () => {
   const model = new AnchoredAssetModel();
 
   const issuerSecret =
-    "SDUHELR2QJTQH24GZKNCT5NBWJ2FCGMPRGKED5Y4REUZK4XCM73JMM4V";
+    ("S" + "TEST0000ISSUER".padEnd(55, "0"));
   const distributionSecret =
-    "SBTSTEL2QJTQH24GZKNCT5NBWJ2FCGMPRGKED5Y4REUZK4XCM73JMM4V";
+    ("S" + "TEST0000DISTRIB".padEnd(55, "0"));
 
   beforeEach(() => {
     mockPoolQuery.mockReset();

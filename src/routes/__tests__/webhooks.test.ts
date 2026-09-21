@@ -92,9 +92,8 @@ describe("Webhooks Routes", () => {
     });
 
     it("returns the Ed25519 public key and keyId when configured", async () => {
-      // Fixed test-only Stellar secret seed (generated for this test, unused elsewhere)
-      process.env.WEBHOOK_ED25519_SIGNING_KEY =
-        "SAJFT5CO2NKRVLI3LYKSE62UT4H3WFCHZAJUC3AV6FGYNTLOYKP2WFN2";
+      const { Keypair } = require("@stellar/stellar-sdk");
+      process.env.WEBHOOK_ED25519_SIGNING_KEY = Keypair.random().secret();
 
       const response = await request(app)
         .get("/api/webhooks/signing-key")
