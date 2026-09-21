@@ -33,6 +33,13 @@ import {
 import logger from "../utils/logger";
 import axios from "axios";
 import { withReconciliationDbRetry } from "./reconciliationDbRetry";
+import {
+  providerReportConfigModel,
+  type ProviderReportConfig,
+} from "../models/providerReportConfig";
+
+// Re-exported for backwards compatibility with existing importers.
+export type { ProviderReportConfig };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -76,18 +83,6 @@ export interface SettlementSummary {
   totalTransactionsProcessed: number;
   issues: string[];
   completedAt: Date;
-}
-
-export interface ProviderReportConfig {
-  id: string;
-  provider: string;
-  is_enabled: boolean;
-  download_method: "api" | "manual"; // Simplified for now
-  api_endpoint?: string;
-  api_key?: string;
-  api_secret?: string;
-  report_timezone?: string;
-  report_time_format?: string;
 }
 
 export interface ReconciliationRun {
@@ -594,18 +589,13 @@ export class ProviderReconciliationService {
    * Get provider report configurations
    */
   async getProviderConfigs(): Promise<ProviderReportConfig[]> {
-    const result = await withReconciliationDbRetry(
+    return withReconciliationDbRetry(
       "providerReconciliation:getProviderConfigs",
       {},
-      () =>
-        queryRead(`
-      SELECT * FROM provider_report_configs
-      WHERE is_enabled = true
-      ORDER BY provider
-    `),
+      // The model decrypts the provider credentials transparently, so callers
+      // always receive plaintext API keys / secrets.
+      () => providerReportConfigModel.findEnabled(),
     );
-
-    return result.rows;
   }
 
   /**
@@ -667,29 +657,21 @@ export class ProviderReconciliationService {
       `Starting reconciliation for ${provider} on ${reportDate.toISOString().split("T")[0]}`,
     );
 
-    // Get provider config
-    const configResult = await withReconciliationDbRetry(
+    // Get provider config (credentials are decrypted by the model)
+    const config = await withReconciliationDbRetry(
       "providerReconciliation:loadConfig",
       {
         provider,
         reportDate: reportDate.toISOString().split("T")[0],
       },
-      () =>
-        queryRead(
-          `
-      SELECT * FROM provider_report_configs WHERE provider = $1 AND is_enabled = true
-    `,
-          [provider],
-        ),
+      () => providerReportConfigModel.findEnabledByProvider(provider),
     );
 
-    if (configResult.rows.length === 0) {
+    if (!config) {
       throw new Error(
         `No enabled configuration found for provider: ${provider}`,
       );
     }
-
-    const config = configResult.rows[0];
 
     // Create reconciliation run record
     const reportDateKey = reportDate.toISOString().split("T")[0];
