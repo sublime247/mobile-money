@@ -55,11 +55,11 @@ describe("SEP-24 Interactive Flow", () => {
     txId = res.body.id;
   });
 
-  it("GET /sep24/transaction/:id returns transaction state", async () => {
+  it("GET /sep24/transaction returns transaction state", async () => {
     expect(txId).toBeTruthy();
-    const res = await request(app).get(`/sep24/transaction/${txId}`);
+    const res = await request(app).get(`/sep24/transaction?id=${txId}`);
     expect(res.status).toBe(200);
-    expect(res.body).toHaveProperty("status", "pending_user_transfer_start");
+    expect(res.body.transaction).toHaveProperty("status", "pending_user_transfer_start");
   });
 
   it("POST /sep24/callback/:id completed updates status and returns redirect", async () => {

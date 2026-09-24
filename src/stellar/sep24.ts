@@ -10,6 +10,7 @@ import {
 import { ERROR_CODES } from "../constants/errorCodes";
 import { createError } from "../middleware/errorHandler";
 import { enqueueSepWebhook } from "../services/stellar/webhooks";
+import { TransactionModel } from "../models/transaction";
 
 function isValidStellarPublicKey(key: string): boolean {
   try {
@@ -465,14 +466,73 @@ sep24Router.post(
   },
 );
 
-sep24Router.get("/transaction/:id", async (req: Request, res: Response) => {
-  const transaction = getTransaction(req.params.id);
+const transactionModel = new TransactionModel();
+
+sep24Router.get("/transaction", async (req: Request, res: Response) => {
+  const { id, stellar_transaction_id, external_transaction_id } = req.query;
+  const txId = (id || stellar_transaction_id || external_transaction_id) as string;
+
+  if (!txId) {
+    throw createError(ERROR_CODES.INVALID_INPUT, "Missing id", {
+      error: "Missing id",
+    });
+  }
+
+  let transaction = getTransaction(txId);
+
+  if (!transaction) {
+    try {
+      const dbTx = await transactionModel.findById(txId);
+      if (dbTx) {
+        let status: string = "pending_external";
+        if (dbTx.status === "completed") status = "completed";
+        if (["failed", "cancelled", "reversed", "clawed_back"].includes(dbTx.status)) status = "failed";
+        
+        transaction = {
+          id: dbTx.id,
+          kind: dbTx.type === "withdraw" ? "withdrawal" : "deposit",
+          status: status as any,
+          amount_in: dbTx.amount,
+          amount_out: dbTx.amount,
+          created_at: dbTx.createdAt.toISOString(),
+          completed_at: dbTx.status === "completed" && dbTx.updatedAt ? dbTx.updatedAt.toISOString() : undefined,
+          message: dbTx.notes || "Detailed status message",
+          more_info_url: `${getSep24Config().webAuthDomain}/tx/${dbTx.id}`,
+        };
+      }
+    } catch (err) {
+      // ignore invalid uuid
+    }
+  }
+
   if (!transaction) {
     throw createError(ERROR_CODES.NOT_FOUND, "Not found", {
       error: "Not found",
     });
   }
-  res.json(transaction);
+
+  const formatRFC3339 = (dateStr?: string) => {
+    if (!dateStr) return undefined;
+    const d = new Date(dateStr);
+    return Number.isNaN(d.getTime()) ? undefined : d.toISOString();
+  };
+
+  const response = {
+    transaction: {
+      id: transaction.id,
+      kind: transaction.kind,
+      status: transaction.status,
+      amount_in: transaction.amount_in,
+      amount_out: transaction.amount_out,
+      amount_fee: transaction.amount_fee,
+      started_at: formatRFC3339(transaction.created_at),
+      completed_at: formatRFC3339(transaction.completed_at),
+      more_info_url: transaction.more_info_url || `${getSep24Config().webAuthDomain}/tx/${transaction.id}`,
+      message: transaction.message || "Detailed status message",
+    }
+  };
+
+  res.json(response);
 });
 
 sep24Router.put("/transaction/:id", async (req: Request, res: Response) => {
