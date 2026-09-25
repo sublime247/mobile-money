@@ -66,8 +66,8 @@ async function getBreakerOptions(
   provider: string,
 ): Promise<CircuitBreakerOptions> {
   let settings:
-    | import("../services/providerSettingsService").ProviderSettings
-    | null = null;
+    import("../services/providerSettingsService").ProviderSettings | null =
+    null;
   try {
     settings = await providerSettingsService.getProviderSettings(provider);
   } catch {
@@ -93,7 +93,7 @@ async function getBreakerOptions(
       process.env.PROVIDER_CIRCUIT_BREAKER_RESET_TIMEOUT_MS ?? 30_000,
     ),
     rollingCountTimeout: Number(
-      process.env.PROVIDER_CIRCUIT_BREAKER_ROLLING_WINDOW_MS ?? 300_000, // 5 minutes
+      process.env.PROVIDER_CIRCUIT_BREAKER_ROLLING_WINDOW_MS ?? 120_000, // 2 minutes (#1962)
     ),
     rollingCountBuckets: Number(
       process.env.PROVIDER_CIRCUIT_BREAKER_ROLLING_BUCKETS ?? 10,
@@ -314,7 +314,11 @@ export function getAllCircuitBreakerStatesInfo(): CircuitBreakerStateInfo[] {
 
     const jsonState = (breaker as any).toJSON?.()?.state || {};
     let stateStr: "OPEN" | "CLOSED" | "HALF-OPEN" = "CLOSED";
-    if (jsonState.open || (breaker as any).opened || (breaker as any).forcedOpen) {
+    if (
+      jsonState.open ||
+      (breaker as any).opened ||
+      (breaker as any).forcedOpen
+    ) {
       stateStr = "OPEN";
     } else if (jsonState.halfOpen || (breaker as any).halfOpen) {
       stateStr = "HALF-OPEN";
@@ -344,7 +348,9 @@ export function getAllCircuitBreakerStatesInfo(): CircuitBreakerStateInfo[] {
       },
       options: {
         volumeThreshold: Number((breaker as any).options?.volumeThreshold ?? 3),
-        errorThresholdPercentage: Number((breaker as any).options?.errorThresholdPercentage ?? 50),
+        errorThresholdPercentage: Number(
+          (breaker as any).options?.errorThresholdPercentage ?? 50,
+        ),
         timeout: Number((breaker as any).options?.timeout ?? 5000),
       },
     });
@@ -386,4 +392,3 @@ export async function tripCircuitBreaker(
   }
   emitStateTransitionMetric(provider, operation, "open");
 }
-
