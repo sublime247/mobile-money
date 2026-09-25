@@ -122,4 +122,30 @@ describe("sep24DepositRequestSchema", () => {
     expect(result.success).toBe(false);
     expect(result.error!.issues[0].path).toEqual(["memo_type"]);
   });
+
+  describe("voucher_code (#1961)", () => {
+    it("accepts a deposit without a voucher_code", () => {
+      const result = sep24DepositRequestSchema.parse(base);
+      expect(result.voucher_code).toBeUndefined();
+    });
+
+    it("accepts a deposit with a voucher_code", () => {
+      const result = sep24DepositRequestSchema.parse({
+        ...base,
+        voucher_code: "VODAFONE-GH-VOUCH-1",
+      });
+      expect(result.voucher_code).toBe("VODAFONE-GH-VOUCH-1");
+    });
+
+    it("rejects an empty voucher_code", () => {
+      const result = sep24DepositRequestSchema.safeParse({
+        ...base,
+        voucher_code: "",
+      });
+      expect(result.success).toBe(false);
+      expect(result.error!.issues[0].message).toBe(
+        "voucher_code must not be empty",
+      );
+    });
+  });
 });

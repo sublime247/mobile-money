@@ -114,6 +114,11 @@ export interface DepositRequest {
   success_url?: string;
   failure_url?: string;
   sep9_fields?: Record<string, string>;
+  /**
+   * Voucher code authorizing a Vodafone Cash Ghana collection instead of a
+   * USSD PIN prompt (#1961). Ignored by every other provider.
+   */
+  voucher_code?: string;
 }
 
 export interface WithdrawRequest {
@@ -310,6 +315,9 @@ export const generateInteractiveUrl = async (
   if (request.wallet_url) params.append("wallet_url", request.wallet_url);
   if (request.success_url) params.append("success_url", request.success_url);
   if (request.failure_url) params.append("failure_url", request.failure_url);
+  if ("voucher_code" in request && request.voucher_code) {
+    params.append("voucher_code", request.voucher_code);
+  }
 
   const callbackUrl = `${config.webAuthDomain}/sep24/callback/${transactionId}`;
   params.append("callback", callbackUrl);

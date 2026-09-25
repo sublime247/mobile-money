@@ -7,6 +7,7 @@ export enum MobileMoneyProvider {
   ORANGE_MADAGASCAR = "orange_madagascar",
   ORANGE_GUINEA = "orange_guinea",
   WAVE_SENEGAL = "wave_senegal",
+  VODAFONE_GHANA = "vodafone_ghana",
   SMS_PORTAL = "sms_portal",
 }
 
@@ -22,6 +23,7 @@ export interface ProviderLimitsConfig {
   [MobileMoneyProvider.ORANGE_MADAGASCAR]: ProviderLimits;
   [MobileMoneyProvider.ORANGE_GUINEA]: ProviderLimits;
   [MobileMoneyProvider.WAVE_SENEGAL]: ProviderLimits;
+  [MobileMoneyProvider.VODAFONE_GHANA]: ProviderLimits;
   [MobileMoneyProvider.SMS_PORTAL]: ProviderLimits;
 }
 
@@ -63,10 +65,12 @@ export function getProviderLimitsConfig(): ProviderLimitsConfig {
     [MobileMoneyProvider.ORANGE_MADAGASCAR]: {
       minAmount:
         providers.orangeMadagascar?.minAmount ??
-        DEFAULT_PROVIDER_LIMITS[MobileMoneyProvider.ORANGE_MADAGASCAR].minAmount,
+        DEFAULT_PROVIDER_LIMITS[MobileMoneyProvider.ORANGE_MADAGASCAR]
+          .minAmount,
       maxAmount:
         providers.orangeMadagascar?.maxAmount ??
-        DEFAULT_PROVIDER_LIMITS[MobileMoneyProvider.ORANGE_MADAGASCAR].maxAmount,
+        DEFAULT_PROVIDER_LIMITS[MobileMoneyProvider.ORANGE_MADAGASCAR]
+          .maxAmount,
     },
     [MobileMoneyProvider.ORANGE_GUINEA]: {
       minAmount:
@@ -83,6 +87,14 @@ export function getProviderLimitsConfig(): ProviderLimitsConfig {
       maxAmount:
         providers.waveSenegal?.maxAmount ??
         DEFAULT_PROVIDER_LIMITS[MobileMoneyProvider.WAVE_SENEGAL].maxAmount,
+    },
+    [MobileMoneyProvider.VODAFONE_GHANA]: {
+      minAmount:
+        providers.vodafoneGhana?.minAmount ??
+        DEFAULT_PROVIDER_LIMITS[MobileMoneyProvider.VODAFONE_GHANA].minAmount,
+      maxAmount:
+        providers.vodafoneGhana?.maxAmount ??
+        DEFAULT_PROVIDER_LIMITS[MobileMoneyProvider.VODAFONE_GHANA].maxAmount,
     },
     [MobileMoneyProvider.SMS_PORTAL]: {
       minAmount:
@@ -110,6 +122,10 @@ export const DEFAULT_PROVIDER_LIMITS: ProviderLimitsConfig = {
   [MobileMoneyProvider.WAVE_SENEGAL]: {
     minAmount: 100,
     maxAmount: 5000000,
+  },
+  [MobileMoneyProvider.VODAFONE_GHANA]: {
+    minAmount: 1,
+    maxAmount: 5000,
   },
   [MobileMoneyProvider.SMS_PORTAL]: { minAmount: 100, maxAmount: 5000000 },
 };

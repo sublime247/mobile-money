@@ -121,6 +121,16 @@ function withDefaultMemoType<T extends MemoInput>(
     : value;
 }
 
+/**
+ * Optional voucher code authorizing a Vodafone Cash Ghana collection
+ * instead of a USSD PIN prompt (#1961). Not tied to `asset_code`/provider
+ * here — the caller only sends it when routing to Vodafone Ghana — so it
+ * stays a plain optional field rather than a conditionally-required one.
+ */
+const sep24VoucherField = {
+  voucher_code: z.string().min(1, "voucher_code must not be empty").optional(),
+};
+
 /** Body of POST /transactions/deposit/interactive. */
 export const sep24DepositRequestSchema = z
   .object({
@@ -130,6 +140,7 @@ export const sep24DepositRequestSchema = z
       .transform(String),
     account: z.string().min(1, "account is required"),
     ...sep24MemoFields,
+    ...sep24VoucherField,
   })
   .passthrough()
   .superRefine(refineMemo)
