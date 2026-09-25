@@ -31,7 +31,7 @@ jobs:
       - name: Lint changed markdown files
         run: |
           if [ -n "${{ steps.changed-files.outputs.files }}" ]; then
-            npx markdownlint ${{ steps.changed-files.outputs.files }}
+            npx --yes markdownlint-cli ${{ steps.changed-files.outputs.files }}
           else
             echo "No markdown files changed, skipping."
           fi

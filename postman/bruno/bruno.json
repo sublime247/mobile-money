@@ -1,0 +1,9 @@
+{
+  "version": "1",
+  "name": "Mobile Money Bridge API",
+  "type": "collection",
+  "ignore": [
+    "node_modules",
+    ".git"
+  ]
+}
