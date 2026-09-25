@@ -30,7 +30,19 @@ export interface ParsedPhoneInfo {
  */
 export const PROVIDER_PREFIXES: Record<MobileProvider, string[]> = {
   mtn: ["23767", "23768", "25677", "25678", "23324", "23354", "23355", "23359"],
-  airtel: ["23766", "25670", "25675", "23326", "23356", "23357", "25473", "25475", "25478", "25410", "25411"],
+  airtel: [
+    "23766",
+    "25670",
+    "25675",
+    "23326",
+    "23356",
+    "23357",
+    "25473",
+    "25475",
+    "25478",
+    "25410",
+    "25411",
+  ],
   orange: ["23765", "23769", "22507", "22177"],
   vodacom: [
     "255740",
@@ -277,6 +289,65 @@ export function validatePhoneProviderMatch(
   }
 
   return { valid: true };
+}
+
+/**
+ * CEMAC/WAEMU country codes covered by strict E.164 normalization (#1963).
+ * Region codes are ISO 3166-1 alpha-2, matching libphonenumber-js's CountryCode type.
+ */
+export const CEMAC_WAEMU_REGIONS = [
+  "CM",
+  "SN",
+  "CI",
+  "NG",
+  "KE",
+  "GH",
+] as const;
+export type CemacWaemuRegion = (typeof CEMAC_WAEMU_REGIONS)[number];
+
+const CEMAC_WAEMU_REGION_SET: ReadonlySet<string> = new Set(
+  CEMAC_WAEMU_REGIONS,
+);
+
+/**
+ * Strictly validate and normalize a phone number to E.164 for one of the
+ * CEMAC/WAEMU countries this platform serves: Cameroon (+237), Senegal
+ * (+221), Ivory Coast (+225), Nigeria (+234), Kenya (+254), Ghana (+233).
+ *
+ * Whitespace, dashes, parentheses and a local leading zero are stripped
+ * automatically (via {@link parseFlexiblePhoneNumber}). Validity and length
+ * are delegated to libphonenumber-js's own numbering-plan metadata, which is
+ * kept up to date upstream — this function does not hand-roll a second,
+ * potentially stale prefix table for validation.
+ *
+ * Carrier detection (MTN/Orange/Moov/Safaricom) is a separate concern; see
+ * {@link detectProvider}. This platform only has verified carrier-prefix
+ * data for Cameroon, Ghana, and single prefixes for Ivory Coast and Senegal
+ * (`PROVIDER_PREFIXES`) — Nigeria, Moov, and Safaricom prefixes are not
+ * encoded anywhere in this codebase, so `detectProvider` correctly returns
+ * `null` for those rather than guessing at unverified numbering-plan data.
+ *
+ * @throws {Error} if the region is not one of the supported CEMAC/WAEMU
+ * countries, or if the number is not a valid number for that region.
+ */
+export function normalizeCemacWaemuE164(
+  phoneNumber: string,
+  region: CemacWaemuRegion,
+): string {
+  if (!CEMAC_WAEMU_REGION_SET.has(region)) {
+    throw new Error(
+      `Unsupported region for CEMAC/WAEMU E.164 normalization: ${region}`,
+    );
+  }
+
+  const parsed = parseFlexiblePhoneNumber(phoneNumber, region);
+  if (!parsed || !parsed.isValid() || parsed.country !== region) {
+    throw new Error(
+      `Invalid phone number for region ${region}: ${phoneNumber}`,
+    );
+  }
+
+  return parsed.number;
 }
 
 /**
