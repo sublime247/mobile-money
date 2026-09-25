@@ -24,6 +24,7 @@
     "start": "node dist/src/index.js",
     "lint": "eslint src",
     "test": "NODE_OPTIONS=--experimental-vm-modules jest --coverage --forceExit --testPathIgnorePatterns=tests/pact",
+    "test:offline": "MTN_BASE_URL=http://localhost:4010/mtn AIRTEL_BASE_URL=http://localhost:4010/airtel ORANGE_BASE_URL=http://localhost:4010/orange MPESA_BASE_URL=http://localhost:4010/mpesa VODACOM_BASE_URL=http://localhost:4010/vodacom NODE_OPTIONS=--experimental-vm-modules jest --coverage --forceExit --testPathIgnorePatterns=tests/pact",
     "test:pact": "NODE_OPTIONS=--experimental-vm-modules jest --coverage --config jest.pact.config.js --forceExit",
     "test:watch": "jest --watch",
     "test:coverage": "NODE_OPTIONS=--experimental-vm-modules jest --coverage --forceExit",
