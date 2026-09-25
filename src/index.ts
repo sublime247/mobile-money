@@ -79,6 +79,7 @@ import { travelRuleRoutes } from "./routes/travelRule";
 import mtnCallbacksRouter from "./routes/mtnCallbacks";
 import orangeMadagascarCallbacksRouter from "./routes/orangeMadagascarCallbacks";
 import orangeGuineaCallbacksRouter from "./routes/orangeGuineaCallbacks";
+import vodafoneGhanaCallbacksRouter from "./routes/vodafoneGhanaCallbacks";
 import multisigCallbacksRouter from "./routes/multisigCallbacks";
 import adminWithdrawalsRouter from "./routes/adminWithdrawals";
 import { createMetricsRouter } from "./routes/metrics";
@@ -454,6 +455,7 @@ app.use("/api/contacts", contactsRoutes);
 app.use("/api/mtn", mtnCallbacksRouter);
 app.use("/api/orange-madagascar", orangeMadagascarCallbacksRouter);
 app.use("/api/orange-guinea", orangeGuineaCallbacksRouter);
+app.use("/api/vodafone-ghana", vodafoneGhanaCallbacksRouter);
 app.use("/api/multisig", multisigCallbacksRouter);
 
 // Apply custom configurable CORS allowlist for admin routes
