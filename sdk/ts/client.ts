@@ -28,7 +28,11 @@ export class StellarBridgeClient {
     if (!config.baseUrl) {
       throw new ValidationError("baseUrl is required to initialize StellarBridgeClient");
     }
-    this.baseUrl = config.baseUrl.replace(/\/+$/, "");
+    let sanitizedUrl = config.baseUrl;
+    while (sanitizedUrl.endsWith("/")) {
+      sanitizedUrl = sanitizedUrl.slice(0, -1);
+    }
+    this.baseUrl = sanitizedUrl;
     this.jwtToken = config.jwtToken;
     this.timeoutMs = config.timeoutMs || 15000;
     this.transport = new FetchTransport();

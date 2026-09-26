@@ -19,7 +19,22 @@ test("OpenAPI 3.1 YAML specification exists and conforms to schema requirements"
   assert.ok(yamlContent.includes("/sep24/transactions/deposit/interactive"), "Must document SEP-24 deposits");
   assert.ok(yamlContent.includes("/sep38/quote"), "Must document SEP-38 quotes");
   assert.ok(yamlContent.includes("BearerAuth:"), "Must document BearerAuth security scheme");
-  assert.ok(yamlContent.includes("sandbox.bridge.stellarwave.io"), "Must document Try it Out sandbox server");
+
+  // Validate sandbox server URL using exact URL object parsing to satisfy CodeQL URL sanitization
+  const allUrls = yamlContent
+    .split("\n")
+    .filter((line) => line.trim().startsWith("- url:"))
+    .map((line) => line.replace(/^.*- url:\s*/, "").trim());
+
+  const hasSandbox = allUrls.some((rawUrl) => {
+    try {
+      const u = new URL(rawUrl);
+      return u.hostname === "sandbox.bridge.stellarwave.io";
+    } catch {
+      return false;
+    }
+  });
+  assert.equal(hasSandbox, true, "Must document Try it Out sandbox server");
 });
 
 test("Swagger UI docs route and sandbox mode are configured in Express app", () => {
@@ -32,6 +47,7 @@ test("Swagger UI docs route and sandbox mode are configured in Express app", () 
 
   const docsContent = fs.readFileSync(docsRoutePath, "utf-8");
   assert.ok(docsContent.includes("swaggerUi"), "Must use swaggerUi");
+  assert.ok(docsContent.includes("docsRateLimiter"), "Must use rate limiting on docs routes");
   assert.ok(docsContent.includes("/openapi.yaml"), "Must expose /openapi.yaml");
   assert.ok(docsContent.includes("/openapi.json"), "Must expose /openapi.json");
   assert.ok(docsContent.includes("/sandbox/"), "Must support sandbox mode mock responses");
