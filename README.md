@@ -378,6 +378,14 @@ Start the dev server and visit:
 
 The API spec is auto-generated from Zod validation schemas at runtime — no manual YAML to maintain.
 
+### [📖 Glossary](./docs/glossary.md)
+
+A comprehensive glossary defining key concepts in the Mobile Money Bridge, including:
+- African mobile money terminology (MSISDN, USSD, STK Push, MoMo providers)
+- Stellar ecosystem standards (SEP-10, SEP-24, SEP-31, Soroban)
+- Financial and compliance terms (KYC, AML, remittances, escrow)
+- Platform-specific concepts (rate limiting, job queues, audit logging)
+
 ### Core Endpoints
 
 ```bash

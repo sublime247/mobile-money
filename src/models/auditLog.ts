@@ -9,6 +9,8 @@ export interface AuditLog {
   diff: Record<string, unknown>;
   ipAddress: string | null;
   userAgent: string | null;
+  payloadHash: string;
+  previousEntryHash: string | null;
   createdAt: Date;
 }
 
@@ -20,6 +22,8 @@ export interface CreateAuditLogInput {
   diff: Record<string, unknown>;
   ipAddress?: string | null;
   userAgent?: string | null;
+  payloadHash: string;
+  previousEntryHash?: string | null;
 }
 
 export interface AuditLogFilter {
@@ -40,6 +44,8 @@ const selectFields = `
   diff,
   ip_address AS "ipAddress",
   user_agent AS "userAgent",
+  payload_hash AS "payloadHash",
+  previous_entry_hash AS "previousEntryHash",
   created_at AS "createdAt"
 `;
 
@@ -76,9 +82,11 @@ export class AuditLogModel {
           resource_id,
           diff,
           ip_address,
-          user_agent
+          user_agent,
+          payload_hash,
+          previous_entry_hash
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         RETURNING ${selectFields}
       `,
       [
@@ -89,6 +97,8 @@ export class AuditLogModel {
         JSON.stringify(input.diff),
         input.ipAddress ?? null,
         input.userAgent ?? null,
+        input.payloadHash,
+        input.previousEntryHash ?? null,
       ],
     );
 
