@@ -283,17 +283,22 @@ export async function verifyAirtelWebhookSignature(
   res: Response,
   next: () => void,
 ) {
-  const signature = req.headers["x-airtel-signature"] as string | undefined;
+  const signatureHeader = req.headers["x-airtel-signature"];
+  // Express gives an array when a header is repeated; a repeated
+  // x-airtel-signature is itself a sign of a malformed/spoofed request,
+  // so only a single string value is accepted.
+  const signature =
+    typeof signatureHeader === "string" ? signatureHeader : undefined;
   if (!signature) {
-    console.warn("[webhook-airtel] Missing signature header");
-    return res.status(400).json({ error: "Missing x-airtel-signature header" });
+    console.warn("[webhook-airtel] Missing or malformed signature header");
+    return res.status(401).json({ error: "Missing x-airtel-signature header" });
   }
 
   const rawPayload = JSON.stringify(req.body);
   const isValid = await airtelValidator.verifySignature(rawPayload, signature);
   if (!isValid) {
     console.warn("[webhook-airtel] Invalid signature");
-    return res.status(400).json({ error: "Invalid signature" });
+    return res.status(401).json({ error: "Invalid signature" });
   }
 
   next();

@@ -20,7 +20,7 @@ jest.mock("../../models/transaction", () => {
 
 jest.mock("axios");
 
-import webhookRoutes from "../webhooks";
+import webhookRoutes, { verifyAirtelWebhookSignature } from "../webhooks";
 
 const axiosMock = axios as any;
 
@@ -80,25 +80,47 @@ describe("Airtel Webhook Routes", () => {
     return sign.sign(privateKey, "base64");
   }
 
-  it("should reject webhook request when signature header is missing", async () => {
+  it("should reject webhook request with 401 when signature header is missing", async () => {
     const response = await request(app)
       .post("/api/webhooks/airtel")
       .send(samplePayload)
-      .expect(400);
+      .expect(401);
 
     expect(response.body.error).toBe("Missing x-airtel-signature header");
     expect(mockFindById).not.toHaveBeenCalled();
   });
 
-  it("should reject webhook request when signature is invalid", async () => {
+  it("should reject webhook request with 401 when signature is invalid", async () => {
     const response = await request(app)
       .post("/api/webhooks/airtel")
       .set("X-Airtel-Signature", "invalid-signature-value")
       .send(samplePayload)
-      .expect(400);
+      .expect(401);
 
     expect(response.body.error).toBe("Invalid signature");
     expect(mockFindById).not.toHaveBeenCalled();
+  });
+
+  it("should reject with 401 when the signature header is an array (malformed/duplicated header)", async () => {
+    // Node's http server can deliver a repeated header as string[] rather
+    // than a single string (superagent's .set() instead overwrites, so
+    // this is exercised directly against the middleware). The signature
+    // must be a single string to be usable at all.
+    const req: any = {
+      headers: { "x-airtel-signature": ["sig-one", "sig-two"] },
+      body: samplePayload,
+    };
+    const json = jest.fn();
+    const res: any = { status: jest.fn(() => ({ json })) };
+    const next = jest.fn();
+
+    await verifyAirtelWebhookSignature(req, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(json).toHaveBeenCalledWith({
+      error: "Missing x-airtel-signature header",
+    });
+    expect(next).not.toHaveBeenCalled();
   });
 
   it("should fetch public keys from remote endpoint and verify signature successfully", async () => {
