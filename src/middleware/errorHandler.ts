@@ -4,6 +4,7 @@ import { ERROR_CODES, getHttpStatus } from "../constants/errorCodes";
 import { getLocalizedMessage } from "../locales/messages";
 import { resolveLocale, resolveLocaleFromRequest } from "../utils/i18n";
 import logger from "../utils/logger";
+import { isQueryCanceledError } from "../config/databaseErrors";
 
 /**
  * Extended Error interface with error-specific properties.
@@ -162,13 +163,19 @@ export const errorHandler = (
   };
   responseWithLocals.locals = responseWithLocals.locals || {};
   responseWithLocals.locals["__criticalError"] = err;
-  const inferredCode = err.code || getCodeFromStatus(err.statusCode || 500);
-  const statusCode =
-    typeof err.statusCode === "number" && err.statusCode >= 400
+  const isTimeout = isQueryCanceledError(err) || err.code === "57014" || err.code === "GATEWAY_TIMEOUT" || (err as any)?.originalError?.code === "57014";
+  const inferredCode = isTimeout
+    ? ERROR_CODES.GATEWAY_TIMEOUT
+    : err.code || getCodeFromStatus(err.statusCode || 500);
+  const statusCode = isTimeout
+    ? 504
+    : typeof err.statusCode === "number" && err.statusCode >= 400
       ? err.statusCode
       : getHttpStatus(inferredCode) || 500;
 
-  const errorCode = err.code || getCodeFromStatus(statusCode);
+  const errorCode = isTimeout
+    ? ERROR_CODES.GATEWAY_TIMEOUT
+    : err.code || getCodeFromStatus(statusCode);
 
   const locale = resolveLocale(err.locale || resolveLocaleFromRequest(req));
   const localizedMessage = getLocalizedMessage(errorCode, locale);

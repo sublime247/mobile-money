@@ -55,10 +55,21 @@ import { ERROR_CODES } from "../constants/errorCodes";
 import { createError } from "../middleware/errorHandler";
 import { AuditLogFilter, AuditLogModel } from "../models/auditLog";
 
-import adminControllerRouter from "../controllers/adminController";
+import adminControllerRouter, {
+  getDeadLetterJobsHandler,
+  getDeadLetterJobByIdHandler,
+  replayDeadLetterJobHandler,
+} from "../controllers/adminController";
 
 const router = Router();
 router.use("/monitoring", adminControllerRouter);
+
+// Dead-Letter Queue (DLQ) Admin Endpoints (#1989)
+router.get("/dlq", dlqInspectorHandler);
+router.get("/dlq/jobs", getDeadLetterJobsHandler);
+router.get("/dlq/jobs/:id", getDeadLetterJobByIdHandler);
+router.get("/dlq/:id", getDeadLetterJobByIdHandler);
+router.post("/dlq/replay/:id", replayDeadLetterJobHandler);
 const IMPERSONATION_TOKEN_EXPIRES_IN = "15m";
 const IMPERSONATION_TOKEN_TTL_MS = 15 * 60 * 1000;
 const READ_ONLY_IMPERSONATION_MESSAGE = "Read-only mode active";

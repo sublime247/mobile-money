@@ -24,6 +24,7 @@
     "INTERNAL_ERROR": "Internal server error",
     "SERVICE_UNAVAILABLE": "Service temporarily unavailable",
     "DATABASE_ERROR": "Database operation failed",
+    "GATEWAY_TIMEOUT": "Database query timed out. Please try again later",
     "DEFAULT": "An error occurred"
   },
   "sms": {

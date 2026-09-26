@@ -24,6 +24,7 @@
     "INTERNAL_ERROR": "Erreur interne du serveur",
     "SERVICE_UNAVAILABLE": "Le service est temporairement indisponible",
     "DATABASE_ERROR": "L operation de base de donnees a echoue",
+    "GATEWAY_TIMEOUT": "Le delai d attente de la requete de base de donnees a expire. Veuillez reessayer plus tard",
     "DEFAULT": "Une erreur est survenue"
   },
   "sms": {
