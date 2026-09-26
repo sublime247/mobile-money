@@ -33,6 +33,7 @@ import { startNotificationWorker } from "../workers/notificationWorker";
 import { runTravelRuleExportJob } from "../services/compliance/travelRuleExport";
 import { runDlqCleanupJob } from "../queue/dlq";
 import { runHighValueComplianceReportJob } from "./highValueComplianceReportJob";
+import { runStellarReconciliationJob } from "../workers/stellarReconciliation";
 
 interface JobConfig {
   name: string;
@@ -171,6 +172,12 @@ const JOBS: JobConfig[] = [
     // Every 15 minutes - checks internal double-entry ledger consistency
     schedule: process.env.LEDGER_RECONCILIATION_CRON || "*/15 * * * *",
     handler: runLedgerReconciliationJob,
+  },
+  {
+    name: "stellar-anchor-reconciliation",
+    // Every 10 minutes - reconciles on-chain payment hashes against internal DB records
+    schedule: process.env.STELLAR_RECONCILIATION_CRON || "*/10 * * * *",
+    handler: runStellarReconciliationJob,
   },
   {
     name: "database-backup",
