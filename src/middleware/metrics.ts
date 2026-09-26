@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import {
   httpRequestsTotal,
   httpRequestDurationSeconds,
+  httpRequestDurationSummary,
   activeConnections,
 } from "../utils/metrics";
 
@@ -32,6 +33,7 @@ export const metricsMiddleware = (
 
     httpRequestsTotal.inc(labels);
     httpRequestDurationSeconds.observe(labels, durationSeconds);
+    httpRequestDurationSummary.observe(labels, durationSeconds);
   });
 
   next();

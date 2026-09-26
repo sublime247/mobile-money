@@ -28,6 +28,7 @@ module.exports = {
       // top-level options) mapper below — lets `jest.mock("../foo.js")`
       // resolve to the real "../foo.ts" source file.
       moduleNameMapper: {
+        "^uint8array-extras$": "<rootDir>/__mocks__/uint8array-extras.js",
         "^(\\.\\.?\\/.+)\\.js$": "$1",
       },
     },

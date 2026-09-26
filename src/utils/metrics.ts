@@ -24,17 +24,57 @@ export const httpRequestDurationSeconds = new Histogram({
   name: "http_request_duration_seconds",
   help: "Duration of HTTP requests in seconds",
   labelNames: ["method", "route", "status_code"],
-  buckets: [0.1, 0.3, 0.5, 0.7, 1, 3, 5, 7, 10], // standard buckets
+  buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10], // standard latency buckets
+  registers: [register],
+});
+
+export const httpRequestDurationSummary = new Summary({
+  name: "http_request_duration_summary_seconds",
+  help: "Summary of HTTP request durations with p50, p95, and p99 percentiles",
+  labelNames: ["method", "route", "status_code"],
+  percentiles: [0.5, 0.95, 0.99],
   registers: [register],
 });
 
 // Business Logic Metrics
+export const transactionsTotal = new Counter({
+  name: "transactions_total",
+  help: "Total number of transactions processed",
+  labelNames: ["provider", "status", "currency"],
+  registers: [register],
+});
+
 export const transactionTotal = new Counter({
   name: "transaction_total",
   help: "Total number of transactions processed",
   labelNames: ["type", "provider", "status"], // type: payment/payout
   registers: [register],
 });
+
+export const activeTransactions = new Gauge({
+  name: "active_transactions",
+  help: "Current number of active transactions being processed",
+  labelNames: ["provider"],
+  registers: [register],
+});
+
+export interface RecordTransactionParams {
+  provider: string;
+  status: string;
+  currency: string;
+  count?: number;
+}
+
+export function recordTransactionMetrics({
+  provider,
+  status,
+  currency,
+  count = 1,
+}: RecordTransactionParams): void {
+  transactionsTotal.inc({ provider, status, currency }, count);
+  // Also keep backward-compatible transactionTotal updated
+  transactionTotal.inc({ type: "payment", provider, status }, count);
+}
 
 export const transactionErrorsTotal = new Counter({
   name: "transaction_errors_total",
