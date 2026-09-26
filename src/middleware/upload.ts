@@ -8,17 +8,19 @@ import sharp from "sharp";
 /**
  * Allowed file types for KYC documents
  */
-const ALLOWED_MIME_TYPES = [
+export const ALLOWED_MIME_TYPES = [
   "application/pdf",
   "image/jpeg",
   "image/jpg",
   "image/png",
 ];
 
+export const ALLOWED_EXTENSIONS = [".pdf", ".jpg", ".jpeg", ".png"];
+
 /**
- * Maximum file size: 5MB
+ * Maximum file size for document uploads: 10MB (#1943)
  */
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB in bytes
+export const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB in bytes
 
 /**
  * File filter to validate file types

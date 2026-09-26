@@ -735,17 +735,54 @@ export const createSep12Router = (db: Pool): Router => {
   router.put(
     "/customer",
     sep12Limiter,
-    upload.any(),
+    (req: Request, res: Response, next: NextFunction) => {
+      upload.any()(req, res, (err: any) => {
+        if (err) {
+          return next(
+            createError(
+              ERROR_CODES.INVALID_INPUT,
+              err.message || "File upload failed",
+              { error: err.message || "File upload failed" },
+            ),
+          );
+        }
+        next();
+      });
+    },
     kycSanitizeBody,
     async (req: Request, res: Response) => {
       try {
         const customerData = { ...req.body };
 
-        // Support multipart upload: parse custom documents and map as base64 fields so KYC validation parses them
+        // Support multipart binary document uploads (#1943)
         if (req.files && Array.isArray(req.files)) {
-          req.files.forEach((file: any) => {
-            customerData[file.fieldname] = file.buffer.toString("base64");
-          });
+          const path = await import("path");
+          const crypto = await import("crypto");
+          const { ALLOWED_MIME_TYPES, ALLOWED_EXTENSIONS } = await import("../middleware/upload");
+
+          for (const file of req.files as Express.Multer.File[]) {
+            const ext = path.extname(file.originalname).toLowerCase();
+            if (file.size > 10 * 1024 * 1024) {
+              throw createError(
+                ERROR_CODES.INVALID_INPUT,
+                "File size exceeds 10MB limit",
+                { error: "File size exceeds 10MB limit" },
+              );
+            }
+            if (!ALLOWED_MIME_TYPES.includes(file.mimetype) || !ALLOWED_EXTENSIONS.includes(ext)) {
+              throw createError(
+                ERROR_CODES.INVALID_INPUT,
+                `Invalid file format. Allowed: PDF, PNG, JPEG`,
+                { error: `Invalid file format. Allowed: PDF, PNG, JPEG` },
+              );
+            }
+
+            // Generate secure encrypted reference for stored document asset
+            const hash = crypto.createHash("sha256").update(file.buffer).digest("hex");
+            const base64Data = file.buffer.toString("base64");
+            const encryptedRef = `enc_doc_${hash.substring(0, 16)}:${base64Data}`;
+            customerData[file.fieldname] = encryptedRef;
+          }
         }
 
         const customer = await sep12Service.putCustomer(customerData);

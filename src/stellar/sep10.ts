@@ -99,6 +99,60 @@ export function getSep10Config(): Sep10Config {
   };
 }
 
+const clientDomainCache = new Map<string, { signingKey: string; fetchedAt: number }>();
+const CACHE_TTL_MS = 15 * 60 * 1000;
+
+export async function fetchClientDomainSigningKey(
+  clientDomain: string,
+  fetchFn?: typeof fetch,
+): Promise<string> {
+  const normalizedDomain = clientDomain.toLowerCase().trim();
+  const cached = clientDomainCache.get(normalizedDomain);
+  if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
+    return cached.signingKey;
+  }
+
+  const protocol =
+    normalizedDomain.startsWith("localhost") || normalizedDomain.includes("127.0.0.1")
+      ? "http"
+      : "https";
+  const url = `${protocol}://${normalizedDomain}/.well-known/stellar.toml`;
+
+  try {
+    const customFetch = fetchFn || globalThis.fetch;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+
+    const response = await customFetch(url, { signal: controller.signal });
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status} fetching stellar.toml`);
+    }
+
+    const text = await response.text();
+    const match =
+      text.match(/SIGNING_KEY\s*=\s*["']?([G][A-Z0-9]{55})["']?/i) ||
+      text.match(/URI_REQUEST_SIGNER\s*=\s*["']?([G][A-Z0-9]{55})["']?/i);
+
+    if (!match || !match[1]) {
+      throw new Error(`No SIGNING_KEY found in ${normalizedDomain}/.well-known/stellar.toml`);
+    }
+
+    const signingKey = match[1];
+    clientDomainCache.set(normalizedDomain, { signingKey, fetchedAt: Date.now() });
+    return signingKey;
+  } catch (error: any) {
+    logger.warn(
+      { clientDomain: normalizedDomain, err: error.message },
+      "[SEP-10] Failed to fetch or parse client domain stellar.toml",
+    );
+    throw new Error(
+      `Client domain verification failed: ${error.message || "Unable to fetch SIGNING_KEY"}`,
+    );
+  }
+}
+
 // ============================================================================
 // SEP-10 Service
 // ============================================================================
@@ -287,15 +341,24 @@ export class Sep10Service {
    *
    * @param clientPublicKey - The client's Stellar public key
    * @param homeDomain - Optional home domain (defaults to config)
+   * @param clientDomain - Optional client domain to verify against stellar.toml (#1946)
    * @returns Challenge response with transaction XDR and network passphrase
    */
-  generateChallenge(
+  async generateChallenge(
     clientPublicKey: string,
     homeDomain?: string,
-  ): Sep10ChallengeResponse {
+    clientDomain?: string,
+    fetchFn?: typeof fetch,
+  ): Promise<Sep10ChallengeResponse> {
     // Validate account address
     if (!Sep10Service.isValidPublicKey(clientPublicKey)) {
       throw new Error("Invalid Stellar public key");
+    }
+
+    // Verify client domain against its stellar.toml if provided (#1946)
+    let clientDomainSigningKey: string | null = null;
+    if (clientDomain) {
+      clientDomainSigningKey = await fetchClientDomainSigningKey(clientDomain, fetchFn);
     }
 
     const domain = homeDomain || this.config.homeDomain;
@@ -348,6 +411,17 @@ export class Sep10Service {
       }),
     );
 
+    // Add client_domain operation if requested (#1946)
+    if (clientDomain) {
+      builder = builder.addOperation(
+        StellarSdk.Operation.manageData({
+          name: "client_domain",
+          value: clientDomain,
+          source: clientPublicKey,
+        }),
+      );
+    }
+
     // Add web_auth_domain operation from server
     builder = builder.addOperation(
       StellarSdk.Operation.manageData({
@@ -377,6 +451,7 @@ export class Sep10Service {
   async verifyChallenge(
     transactionXDR: string,
     clientAccountID?: string,
+    fetchFn?: typeof fetch,
   ): Promise<Sep10TokenResponse> {
     // Parse the transaction from XDR
     let transaction: StellarSdk.Transaction;
@@ -468,6 +543,31 @@ export class Sep10Service {
       );
     }
 
+    // Verify client domain signature if client_domain operation is present (#1946)
+    const clientDomainOp = transaction.operations.find(
+      (op: any) => op.type === "manageData" && op.name === "client_domain",
+    ) as any;
+    if (clientDomainOp && clientDomainOp.value) {
+      const clientDomainStr = clientDomainOp.value.toString("utf8");
+      const clientDomainSigningKey = await fetchClientDomainSigningKey(clientDomainStr, fetchFn);
+      const clientDomainKeypair = StellarSdk.Keypair.fromPublicKey(clientDomainSigningKey);
+      const domainSigned = transaction.signatures.some((sig) => {
+        try {
+          return clientDomainKeypair.verify(
+            Buffer.from(txHash),
+            Buffer.from(sig.signature.toString(), "hex"),
+          );
+        } catch {
+          return false;
+        }
+      });
+      if (!domainSigned) {
+        throw new Error(
+          `Transaction is not signed by client domain SIGNING_KEY (${clientDomainSigningKey})`,
+        );
+      }
+    }
+
     // Issue a JWT token
     return this.issueToken(clientPublicKey);
   }
@@ -547,7 +647,7 @@ export function createSep10Router(service?: Sep10Service): Router {
    * SEP-10 challenge endpoint
    * Returns a challenge transaction for the client to sign
    */
-  router.get("/", (req: Request, res: Response) => {
+  router.get("/", async (req: Request, res: Response) => {
     if (!sep10Service) {
       throw createError(
         ERROR_CODES.SERVICE_UNAVAILABLE,
@@ -559,7 +659,7 @@ export function createSep10Router(service?: Sep10Service): Router {
     }
 
     try {
-      const { account, home_domain } = req.query;
+      const { account, home_domain, client_domain } = req.query;
 
       // Validate required parameters
       if (!account || typeof account !== "string") {
@@ -573,9 +673,10 @@ export function createSep10Router(service?: Sep10Service): Router {
       }
 
       // Generate the challenge transaction
-      const challenge = sep10Service.generateChallenge(
+      const challenge = await sep10Service.generateChallenge(
         account,
         home_domain as string | undefined,
+        client_domain as string | undefined,
       );
 
       return res.json(challenge);
