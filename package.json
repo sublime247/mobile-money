@@ -34,6 +34,7 @@
     "test:mutation": "stryker run stryker.conf.json",
     "test:mutation:queue": "stryker run stryker.queue.conf.json",
     "type-check": "tsc --noEmit",
+    "test:migrations": "bash scripts/testMigrations.sh",
     "migrate:up": "tsx src/scripts/migrate.ts up",
     "migrate:down": "tsx src/scripts/migrate.ts down",
     "migrate:create": "tsx src/scripts/migrate.ts create",

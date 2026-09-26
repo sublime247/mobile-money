@@ -179,8 +179,8 @@ jobs:
             sleep 1
           done
 
-      - name: Run database migrations
-        run: npm run migrate:up 2>&1
+      - name: Run database migrations and rollback test
+        run: bash scripts/testMigrations.sh 2>&1
         continue-on-error: false
         env:
           DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_db
