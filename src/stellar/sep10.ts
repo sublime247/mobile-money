@@ -369,7 +369,7 @@ export class Sep10Service {
     const timebounds =
       this.config.challengeExpiresIn < 0
         ? {
-            minTime: String(now - 60),
+            minTime: String(now + this.config.challengeExpiresIn - 60),
             maxTime: String(now + this.config.challengeExpiresIn),
           }
         : {
@@ -469,15 +469,19 @@ export class Sep10Service {
       throw new Error("Transaction sequence number must be 0");
     }
 
-    // Verify timebounds
+    // Verify timebounds (#1942)
     const timeBounds = transaction.timeBounds;
-    if (!timeBounds) {
+    if (!timeBounds || !timeBounds.minTime || !timeBounds.maxTime) {
       throw new Error("Transaction must have timebounds");
     }
 
     const now = Math.floor(Date.now() / 1000);
     const minTime = parseInt(timeBounds.minTime, 10);
     const maxTime = parseInt(timeBounds.maxTime, 10);
+
+    if (isNaN(minTime) || isNaN(maxTime) || (maxTime === 0 && minTime === 0)) {
+      throw new Error("Invalid challenge timebounds");
+    }
 
     if (now < minTime) {
       throw new Error("Transaction is not yet valid");
