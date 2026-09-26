@@ -1,0 +1,570 @@
+openapi: 3.1.0
+info:
+  title: Mobile Money Stellar Bridge API
+  version: 1.0.0
+  description: >
+    Official REST API for bridging Mobile Money operators (MTN, Airtel, Orange, M-Pesa)
+    with the Stellar network. Provides SEP-10 Authentication, SEP-12 KYC verification,
+    SEP-24 Interactive Deposits & Withdrawals, and SEP-38 RFQ Price Quotes.
+  contact:
+    name: Stellar Wave Support
+    url: https://stellarwave.io/support
+    email: support@stellarwave.io
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:3000
+    description: Local Development Server
+  - url: https://sandbox.bridge.stellarwave.io
+    description: Try it Out Sandbox Mock Server (simulates live mobile money transitions)
+  - url: https://api.bridge.stellarwave.io
+    description: Production Stellar Mainnet Bridge
+
+paths:
+  /health:
+    get:
+      summary: Health Check
+      description: Returns service availability status and connected provider states.
+      operationId: getHealth
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  version:
+                    type: string
+                    example: 1.0.0
+                  timestamp:
+                    type: string
+                    format: date-time
+                    example: "2026-09-25T12:00:00Z"
+
+  /api/auth/sep10/challenge:
+    get:
+      summary: Request SEP-10 Auth Challenge
+      description: Issues a cryptographically random Stellar transaction challenge for client signature.
+      operationId: getSep10Challenge
+      parameters:
+        - name: account
+          in: query
+          required: true
+          description: Stellar G-address of client wallet
+          schema:
+            type: string
+            example: GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5
+        - name: home_domain
+          in: query
+          required: false
+          description: Client anchor domain
+          schema:
+            type: string
+            example: stellarwave.io
+      responses:
+        "200":
+          description: Challenge transaction successfully created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Sep10ChallengeResponse"
+        "400":
+          $ref: "#/components/responses/400BadRequest"
+
+  /api/auth/sep10/token:
+    post:
+      summary: Exchange Signed SEP-10 Challenge for JWT
+      description: Verifies client signature on challenge transaction and grants a bearer JWT token.
+      operationId: exchangeSep10Token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - transaction
+              properties:
+                transaction:
+                  type: string
+                  description: Base64 encoded signed challenge transaction envelope XDR
+                  example: AAAAAgAAAAAUW3R4...
+      responses:
+        "200":
+          description: Authentication successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthTokenResponse"
+        "401":
+          $ref: "#/components/responses/401Unauthorized"
+
+  /sep12/customer:
+    get:
+      summary: Query KYC Status (SEP-12)
+      description: Inspects KYC identity status and missing required fields for a customer account.
+      operationId: getCustomerKyc
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: account
+          in: query
+          required: false
+          schema:
+            type: string
+            example: GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5
+      responses:
+        "200":
+          description: KYC status details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KycCustomerResponse"
+        "401":
+          $ref: "#/components/responses/401Unauthorized"
+    put:
+      summary: Submit Customer KYC Data (SEP-12)
+      description: Registers or updates customer identity information for compliance verification.
+      operationId: putCustomerKyc
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KycCustomerRequest"
+      responses:
+        "200":
+          description: KYC data accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KycCustomerResponse"
+        "400":
+          $ref: "#/components/responses/400BadRequest"
+
+  /sep38/quote:
+    post:
+      summary: Request Firm Currency Conversion Quote (SEP-38)
+      description: Locks in a guaranteed exchange rate between off-chain fiat (e.g. XAF, KES, NGN) and Stellar tokens.
+      operationId: requestSep38Quote
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuoteRequest"
+      responses:
+        "201":
+          description: Quote created and locked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuoteResponse"
+        "400":
+          $ref: "#/components/responses/400BadRequest"
+
+  /sep24/transactions/deposit/interactive:
+    post:
+      summary: Initiate SEP-24 Interactive Deposit
+      description: Generates an interactive webview URL for mobile money pin entry and on-ramp processing.
+      operationId: initiateDepositInteractive
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DepositRequest"
+      responses:
+        "200":
+          description: Interactive webview URL generated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DepositResponse"
+        "400":
+          $ref: "#/components/responses/400BadRequest"
+
+  /sep24/transactions/withdraw/interactive:
+    post:
+      summary: Initiate SEP-24 Interactive Withdrawal
+      description: Generates an interactive webview URL for off-ramp disbursement to mobile money phone.
+      operationId: initiateWithdrawalInteractive
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WithdrawalRequest"
+      responses:
+        "200":
+          description: Interactive withdrawal flow initiated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DepositResponse"
+        "400":
+          $ref: "#/components/responses/400BadRequest"
+
+  /sep24/transaction:
+    get:
+      summary: Query Transaction Status
+      description: Returns real-time status of a SEP-24 deposit or withdrawal lifecycle.
+      operationId: getTransactionStatus
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: query
+          required: true
+          description: Unique bridge transaction UUID
+          schema:
+            type: string
+            example: 550e8400-e29b-41d4-a716-446655440000
+      responses:
+        "200":
+          description: Transaction found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  transaction:
+                    $ref: "#/components/schemas/TransactionStatus"
+        "404":
+          $ref: "#/components/responses/404NotFound"
+
+  /api/fees/estimate:
+    get:
+      summary: Estimate Mobile Money Network Fees
+      description: Calculates provider network fees, bridge commission, and total deduction.
+      operationId: estimateFees
+      parameters:
+        - name: amount
+          in: query
+          required: true
+          schema:
+            type: string
+            example: "50000"
+        - name: provider
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [mtn, airtel, orange, mpesa]
+            example: mtn
+        - name: currency
+          in: query
+          required: true
+          schema:
+            type: string
+            example: XAF
+      responses:
+        "200":
+          description: Fee estimation breakdown
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeeEstimateResponse"
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: SEP-10 issued JSON Web Token
+
+  responses:
+    400BadRequest:
+      description: Invalid request parameters or malformed body
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    401Unauthorized:
+      description: Missing or expired authentication token
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    404NotFound:
+      description: Requested resource was not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+  schemas:
+    Sep10ChallengeResponse:
+      type: object
+      required:
+        - transaction
+        - network_passphrase
+      properties:
+        transaction:
+          type: string
+          description: Challenge transaction envelope XDR
+          example: AAAAAgAAAABX...
+        network_passphrase:
+          type: string
+          example: "Test SDF Network ; September 2015"
+
+    AuthTokenResponse:
+      type: object
+      required:
+        - token
+      properties:
+        token:
+          type: string
+          description: JWT token for subsequent requests
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+    KycCustomerRequest:
+      type: object
+      required:
+        - account
+      properties:
+        account:
+          type: string
+          example: GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5
+        first_name:
+          type: string
+          example: Amina
+        last_name:
+          type: string
+          example: Diallo
+        email_address:
+          type: string
+          format: email
+          example: amina.diallo@example.com
+        mobile_number:
+          type: string
+          example: "+237671234567"
+        type:
+          type: string
+          example: sep12-individual
+
+    KycCustomerResponse:
+      type: object
+      required:
+        - id
+        - status
+      properties:
+        id:
+          type: string
+          example: cust_9f8e7d6c
+        status:
+          type: string
+          enum: [ACCEPTED, PROCESSING, NEEDS_INFO, REJECTED]
+          example: ACCEPTED
+        message:
+          type: string
+          example: Verification completed successfully
+
+    QuoteRequest:
+      type: object
+      required:
+        - sell_asset
+        - buy_asset
+      properties:
+        sell_asset:
+          type: string
+          example: "iso4217:XAF"
+        buy_asset:
+          type: string
+          example: "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+        sell_amount:
+          type: string
+          example: "60250"
+        buy_amount:
+          type: string
+          example: "100.0"
+        expire_after:
+          type: string
+          format: date-time
+          example: "2026-10-01T12:00:00Z"
+
+    QuoteResponse:
+      type: object
+      required:
+        - id
+        - price
+        - sell_asset
+        - buy_asset
+        - expires_at
+      properties:
+        id:
+          type: string
+          example: quote_1a2b3c4d
+        price:
+          type: string
+          example: "600.0"
+        total_price:
+          type: string
+          example: "602.5"
+        sell_asset:
+          type: string
+          example: "iso4217:XAF"
+        sell_amount:
+          type: string
+          example: "60250"
+        buy_asset:
+          type: string
+          example: "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+        buy_amount:
+          type: string
+          example: "100.0"
+        expires_at:
+          type: string
+          format: date-time
+          example: "2026-10-01T12:15:00Z"
+
+    DepositRequest:
+      type: object
+      required:
+        - asset_code
+        - account
+      properties:
+        asset_code:
+          type: string
+          example: USDC
+        account:
+          type: string
+          example: GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5
+        amount:
+          type: string
+          example: "100.0"
+        phone_number:
+          type: string
+          example: "+237671234567"
+        provider:
+          type: string
+          enum: [mtn, airtel, orange, mpesa]
+          example: mtn
+
+    DepositResponse:
+      type: object
+      required:
+        - type
+        - url
+        - id
+      properties:
+        type:
+          type: string
+          example: interactive_customer_info_needed
+        url:
+          type: string
+          format: uri
+          example: https://bridge.stellarwave.io/sep24/flow?token=mock-deposit-token
+        id:
+          type: string
+          example: 550e8400-e29b-41d4-a716-446655440000
+        status:
+          type: string
+          example: pending_user_transfer_start
+
+    WithdrawalRequest:
+      type: object
+      required:
+        - asset_code
+        - account
+      properties:
+        asset_code:
+          type: string
+          example: USDC
+        account:
+          type: string
+          example: GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5
+        amount:
+          type: string
+          example: "100.0"
+        phone_number:
+          type: string
+          example: "+237671234567"
+        provider:
+          type: string
+          example: orange
+
+    TransactionStatus:
+      type: object
+      required:
+        - id
+        - status
+      properties:
+        id:
+          type: string
+          example: 550e8400-e29b-41d4-a716-446655440000
+        status:
+          type: string
+          enum: [pending_user_transfer_start, pending_ussd, pending_anchor, completed, error]
+          example: completed
+        amount_in:
+          type: string
+          example: "60250"
+        amount_out:
+          type: string
+          example: "100.0"
+        amount_fee:
+          type: string
+          example: "250"
+        started_at:
+          type: string
+          format: date-time
+          example: "2026-09-25T11:45:00Z"
+        completed_at:
+          type: string
+          format: date-time
+          example: "2026-09-25T11:46:30Z"
+        message:
+          type: string
+          example: "Payment confirmed and USDC minted on Stellar"
+
+    FeeEstimateResponse:
+      type: object
+      required:
+        - fee
+        - currency
+      properties:
+        fee:
+          type: string
+          example: "250"
+        currency:
+          type: string
+          example: XAF
+        provider_fee:
+          type: string
+          example: "150"
+        bridge_fee:
+          type: string
+          example: "100"
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          example: "Invalid parameter value"
+        code:
+          type: string
+          example: "VALIDATION_FAILED"
