@@ -22,6 +22,7 @@ import {
   validateVersionMiddleware,
   VersionedRequest,
 } from "./middleware/apiVersion";
+import { createGracefulShutdownHandler } from "./server";
 import {
   bulkRoutesV1,
   disputeRoutesV1,
@@ -150,13 +151,27 @@ const app = express();
 app.set("trust proxy", getSessionTrustProxy());
 const PORT = process.env.PORT || 3000;
 const SHUTDOWN_TIMEOUT_MS = parseInt(
-  process.env.SHUTDOWN_TIMEOUT_MS || "30000",
+  process.env.SHUTDOWN_TIMEOUT_MS || "10000",
+  10,
 );
 
 let server: Server | null = null;
-let isShuttingDown = false;
-let shutdownInProgress = false;
-let activeRequests = 0;
+
+export const shutdownHandler = createGracefulShutdownHandler({
+  pool,
+  disconnectRedis,
+  timeoutMs: SHUTDOWN_TIMEOUT_MS,
+  onCleanup: async () => {
+    console.log("[Shutdown] Draining queue resources");
+    const { shutdownQueue } = await import("./queue/index.js");
+    await shutdownQueue();
+    console.log("[Shutdown] Queue resources closed");
+
+    console.log("[Shutdown] Stopping heartbeat service");
+    stopHeartbeatService();
+    console.log("[Shutdown] Heartbeat service stopped");
+  },
+});
 
 if (process.env.SENTRY_DSN) {
   Sentry.setupExpressErrorHandler(app);
@@ -225,31 +240,7 @@ app.use(ipBlacklistMiddleware);
 app.use(dbConnectionLeakDetector);
 app.use(providerLogMaskingMiddleware);
 
-app.use((req: Request, res: Response, next: NextFunction) => {
-  if (isShuttingDown) {
-    res.setHeader("Connection", "close");
-    throw createError(ERROR_CODES.SERVICE_UNAVAILABLE, "Service Unavailable", {
-      error: "Service Unavailable",
-      message: "Server is shutting down. Please retry shortly.",
-    });
-  }
-
-  activeRequests += 1;
-  let completed = false;
-
-  const onRequestFinished = () => {
-    if (completed) {
-      return;
-    }
-    completed = true;
-    activeRequests = Math.max(0, activeRequests - 1);
-  };
-
-  res.on("finish", onRequestFinished);
-  res.on("close", onRequestFinished);
-
-  next();
-});
+app.use(shutdownHandler.middleware);
 
 const sessionSecret =
   process.env.SESSION_SECRET || "default-secret-change-in-production";
@@ -313,6 +304,7 @@ app.get("/api/live-rates", async (_req: Request, res: Response) => {
 });
 
 app.get("/ready", async (_req: Request, res: Response) => {
+  const isShuttingDown = shutdownHandler.getIsShuttingDown();
   const checks: Record<string, string> = {
     database: "down",
     redis: "down",
@@ -373,7 +365,7 @@ app.get("/health/lb", async (req: Request, res: Response) => {
   };
   let healthy = true;
 
-  if (isShuttingDown) {
+  if (shutdownHandler.getIsShuttingDown()) {
     healthy = false;
   }
 
@@ -527,98 +519,7 @@ if (process.env.SENTRY_DSN) {
 app.use(timeoutErrorHandler);
 app.use(errorHandler);
 
-function waitForActiveRequests(timeoutMs: number): Promise<void> {
-  if (activeRequests === 0) {
-    return Promise.resolve();
-  }
-
-  return new Promise((resolve) => {
-    const startedAt = Date.now();
-    const interval = setInterval(() => {
-      if (activeRequests === 0 || Date.now() - startedAt >= timeoutMs) {
-        clearInterval(interval);
-        resolve();
-      }
-    }, 100);
-  });
-}
-
-async function gracefulShutdown(signal: NodeJS.Signals): Promise<void> {
-  if (shutdownInProgress) {
-    console.log(`[Shutdown] ${signal} received; shutdown already in progress`);
-    return;
-  }
-
-  shutdownInProgress = true;
-  isShuttingDown = true;
-  console.log(`[Shutdown] Received ${signal}. Starting graceful shutdown...`);
-
-  try {
-    if (server) {
-      console.log(
-        "[Shutdown] Stopping HTTP server from accepting new requests",
-      );
-      await new Promise<void>((resolve, reject) => {
-        server?.close((error) => {
-          if (error) {
-            reject(error);
-            return;
-          }
-          resolve();
-        });
-      });
-      console.log("[Shutdown] HTTP listener closed");
-    }
-
-    const pendingAtStart = activeRequests;
-    if (pendingAtStart > 0) {
-      console.log(
-        `[Shutdown] Waiting for ${pendingAtStart} active request(s) to finish (timeout ${SHUTDOWN_TIMEOUT_MS}ms)`,
-      );
-    }
-
-    await waitForActiveRequests(SHUTDOWN_TIMEOUT_MS);
-
-    if (activeRequests > 0) {
-      console.warn(
-        `[Shutdown] Timed out waiting for active requests. Remaining: ${activeRequests}`,
-      );
-    } else {
-      console.log("[Shutdown] All active requests finished");
-    }
-
-    console.log("[Shutdown] Draining queue resources");
-    const { shutdownQueue } = await import("./queue/index.js");
-    await shutdownQueue();
-    console.log("[Shutdown] Queue resources closed");
-
-    console.log("[Shutdown] Stopping heartbeat service");
-    stopHeartbeatService();
-    console.log("[Shutdown] Heartbeat service stopped");
-
-    console.log("[Shutdown] Closing PostgreSQL pool");
-    await pool.end();
-    console.log("[Shutdown] PostgreSQL pool closed");
-
-    console.log("[Shutdown] Closing Redis client");
-    await disconnectRedis();
-    console.log("[Shutdown] Redis client closed");
-
-    console.log("[Shutdown] Graceful shutdown complete");
-    process.exit(0);
-  } catch (error) {
-    logger.error("[Shutdown] Shutdown sequence failed", error);
-    process.exit(1);
-  }
-}
-
-process.once("SIGTERM", () => {
-  void gracefulShutdown("SIGTERM");
-});
-
-process.once("SIGINT", () => {
-  void gracefulShutdown("SIGINT");
-});
+shutdownHandler.registerSignalHandlers();
 
 export let wsManager: WebSocketManager | null = null;
 
@@ -681,10 +582,12 @@ async function initializeRuntime(): Promise<void> {
       console.log(`HTTP/2 server running on https://localhost:${PORT}`);
     });
     server = http2Server as unknown as Server;
+    shutdownHandler.setServer(server);
   } else {
     server = app.listen(PORT, () => {
       console.log(`HTTP/1.1 server running on http://localhost:${PORT}`);
     });
+    shutdownHandler.setServer(server);
 
     wsManager = new WebSocketManager(server);
     console.log("WebSocket server attached");
