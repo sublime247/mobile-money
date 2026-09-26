@@ -3,6 +3,7 @@ import { Router, Request, Response } from "express";
 import { v4 as uuidv4 } from "uuid";
 import NodeCache from "node-cache";
 import { rateProvider } from "../services/sep38/rateProvider";
+import { sep38Service } from "../services/sep38Service";
 import { SUPPORTED_CURRENCIES } from "../services/currency";
 
 const router = Router();
@@ -42,16 +43,16 @@ interface SupportedAssetPair {
 // ─── Supported assets ───────────────────────────────────────────────────────
 
 function getUsdcAssetId(): string {
-  const issuer =
-    process.env.SEP38_USDC_ISSUER ||
-    process.env.STELLAR_ASSET_ISSUER ||
-    "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN";
-  return `stellar:USDC:${issuer}`;
+  return sep38Service.getUsdcAssetId();
+}
+
+function getEurcAssetId(): string {
+  return sep38Service.getEurcAssetId();
 }
 
 function buildSupportedPairs(): SupportedAssetPair[] {
   const pairs: SupportedAssetPair[] = [];
-  const fiatCurrencies = [...SUPPORTED_CURRENCIES];
+  const fiatCurrencies = [...SUPPORTED_CURRENCIES, "XOF"];
 
   for (let i = 0; i < fiatCurrencies.length; i++) {
     for (let j = 0; j < fiatCurrencies.length; j++) {
@@ -75,10 +76,19 @@ function buildSupportedPairs(): SupportedAssetPair[] {
   }
 
   const usdcId = getUsdcAssetId();
-  pairs.push({ sell_asset: usdcId, buy_asset: "iso4217:USD" });
-  pairs.push({ sell_asset: "iso4217:USD", buy_asset: usdcId });
-  pairs.push({ sell_asset: "stellar:XLM", buy_asset: usdcId });
-  pairs.push({ sell_asset: usdcId, buy_asset: "stellar:XLM" });
+  const eurcId = getEurcAssetId();
+
+  for (const stable of [usdcId, eurcId]) {
+    pairs.push({ sell_asset: stable, buy_asset: "iso4217:USD" });
+    pairs.push({ sell_asset: "iso4217:USD", buy_asset: stable });
+    pairs.push({ sell_asset: "stellar:XLM", buy_asset: stable });
+    pairs.push({ sell_asset: stable, buy_asset: "stellar:XLM" });
+
+    for (const fiat of ["XAF", "XOF", "KES", "NGN", "GHS", "TZS", "RWF"]) {
+      pairs.push({ sell_asset: stable, buy_asset: `iso4217:${fiat}` });
+      pairs.push({ sell_asset: `iso4217:${fiat}`, buy_asset: stable });
+    }
+  }
 
   return pairs;
 }
@@ -283,49 +293,14 @@ router.post("/quote", async (req: Request, res: Response) => {
       }
     }
 
-    const quoteResult = await rateProvider.getFirmPrice(sellAsset, buyAsset);
-
-    if (!quoteResult) {
-      res
-        .status(503)
-        .json({ error: "Insufficient liquidity for the requested asset pair" });
-      return;
-    }
-
-    const priceNum = parseFloat(quoteResult.price);
-    let computedSellAmount: string;
-    let computedBuyAmount: string;
-
-    if (sell_amount) {
-      computedSellAmount = parseFloat(sell_amount).toFixed(PRICE_PRECISION);
-      computedBuyAmount = (parseFloat(sell_amount) * priceNum).toFixed(
-        PRICE_PRECISION,
-      );
-    } else {
-      computedBuyAmount = parseFloat(buy_amount!).toFixed(PRICE_PRECISION);
-      computedSellAmount = (parseFloat(buy_amount!) / priceNum).toFixed(
-        PRICE_PRECISION,
-      );
-    }
-
-    const quoteId = uuidv4();
-    const createdAt = new Date().toISOString();
-    const expiresAt = new Date(Date.now() + quoteTTL * 1000).toISOString();
-
-    const quote: Quote = {
-      id: quoteId,
-      expires_at: expiresAt,
-      sell_asset: sellAsset,
-      buy_asset: buyAsset,
-      sell_amount: computedSellAmount,
-      buy_amount: computedBuyAmount,
-      price: quoteResult.price,
-      fee_percent: quoteResult.fee_percent,
-      fee_fixed: quoteResult.fee_fixed,
-      created_at: createdAt,
-    };
-
-    quoteCache.set(quoteId, quote, quoteTTL);
+    const quote = await sep38Service.createQuote({
+      sellAsset,
+      buyAsset,
+      sellAmount: sell_amount ? String(sell_amount) : undefined,
+      buyAmount: buy_amount ? String(buy_amount) : undefined,
+      ttl: quoteTTL,
+      context: context as string | undefined,
+    });
 
     res.json(quote);
   } catch (err) {
@@ -334,7 +309,7 @@ router.post("/quote", async (req: Request, res: Response) => {
   }
 });
 
-router.get("/quote/:id", (req: Request, res: Response) => {
+router.get("/quote/:id", async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
@@ -343,19 +318,15 @@ router.get("/quote/:id", (req: Request, res: Response) => {
       return;
     }
 
-    const quote = quoteCache.get<Quote>(id);
+    const { quote, expired } = await sep38Service.getQuote(id);
 
-    if (!quote) {
-      res.status(404).json({ error: "Quote not found" });
+    if (expired) {
+      res.status(410).json({ error: "Quote has expired" });
       return;
     }
 
-    const now = new Date();
-    const expiresAt = new Date(quote.expires_at);
-
-    if (now >= expiresAt) {
-      quoteCache.del(id);
-      res.status(410).json({ error: "Quote has expired" });
+    if (!quote) {
+      res.status(404).json({ error: "Quote not found" });
       return;
     }
 
