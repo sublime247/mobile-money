@@ -16,6 +16,50 @@ export interface WinstonDailyRotateOptions {
 const DEFAULT_LOG_DIR = process.env.LOG_DIR ?? path.join(process.cwd(), "logs");
 const DEFAULT_RETENTION = process.env.LOG_FILE_RETENTION ?? "14d";
 
+const REDACTED = "[REDACTED]";
+const SENSITIVE_LOG_KEYS = new Set([
+  "password",
+  "secret",
+  "token",
+  "privatekey",
+  "private_key",
+  "nationalid",
+  "national_id",
+  "phone",
+  "phonenumber",
+  "phone_number",
+  "msisdn",
+]);
+
+function maskString(value: string): string {
+  return value
+    .replace(/\+2376\d*(\d{2})\b/g, "+2376****$1")
+    .replace(/\bS[A-Z2-7]{55}\b/g, REDACTED)
+    .replace(/\b(password|secret|token|private[_-]?key)\s*[=:]\s*[^\s,;]+/gi, "$1=" + REDACTED);
+}
+
+function redactValue(value: unknown): unknown {
+  if (typeof value === "string") return maskString(value);
+  if (Array.isArray(value)) return value.map(redactValue);
+  if (!value || typeof value !== "object") return value;
+
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([key, nested]) => [
+      key,
+      SENSITIVE_LOG_KEYS.has(key.toLowerCase()) ? REDACTED : redactValue(nested),
+    ]),
+  );
+}
+
+const redactSensitiveData = winston.format((info) => {
+  for (const [key, value] of Object.entries(info)) {
+    info[key] = SENSITIVE_LOG_KEYS.has(key.toLowerCase())
+      ? REDACTED
+      : redactValue(value);
+  }
+  return info;
+});
+
 /**
  * Creates a Winston DailyRotateFile transport helper configured with default 14-day retention limits
  * and clean date-stamped log file formatting.
