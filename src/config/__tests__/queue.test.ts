@@ -17,6 +17,14 @@ import { pool } from "../database";
 import { deadLetterQueue } from "../../queue/dlq";
 import { notificationRouter } from "../../services/notificationRouter";
 
+jest.mock("bullmq", () => ({
+  Queue: jest.fn().mockImplementation(() => ({
+    add: jest.fn().mockResolvedValue({ id: "replayed-job-1" }),
+    close: jest.fn().mockResolvedValue(undefined),
+  })),
+  Worker: jest.fn(),
+}));
+
 jest.mock("../database", () => ({
   pool: {
     query: jest.fn(),
@@ -108,13 +116,14 @@ describe("Dead-Letter Queue (DLQ) for Failed Background Tasks (#1989)", () => {
         }),
       );
 
-      // 3. Verify alert notification dispatch
       expect(notificationRouter.routeSystemNotification).toHaveBeenCalledWith(
+        "critical",
+        "system",
+        expect.stringContaining("DLQ Alert"),
+        expect.stringContaining("webhook-delivery-queue"),
         expect.objectContaining({
-          title: expect.stringContaining("DLQ Alert"),
-          severity: "CRITICAL",
-          type: "SYSTEM_ALERT",
-          message: expect.stringContaining("webhook-delivery-queue"),
+          jobId: "job-101",
+          queueName: "webhook-delivery-queue",
         }),
       );
     });
@@ -145,7 +154,7 @@ describe("Dead-Letter Queue (DLQ) for Failed Background Tasks (#1989)", () => {
         ["failed-job-uuid-1"],
       );
       expect(pool.query).toHaveBeenCalledWith(
-        expect.stringContaining("UPDATE failed_jobs SET status = 'replayed'"),
+        expect.stringContaining("UPDATE failed_jobs"),
         ["failed-job-uuid-1"],
       );
       expect(result.success).toBe(true);

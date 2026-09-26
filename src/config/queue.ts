@@ -111,12 +111,12 @@ export async function handleFailedJob(
 
   // 3. Send alert notification to administrators / operations
   try {
-    await notificationRouter.routeSystemNotification({
-      title: `🚨 DLQ Alert: Job ${jobName} permanently failed`,
-      message: `Background task in queue '${queueName}' failed after ${attemptsMade} attempts. Error: ${errorMessage}`,
-      severity: "CRITICAL",
-      type: "SYSTEM_ALERT",
-      metadata: {
+    await notificationRouter.routeSystemNotification(
+      "critical",
+      "system",
+      `🚨 DLQ Alert: Job ${jobName} permanently failed`,
+      `Background task in queue '${queueName}' failed after ${attemptsMade} attempts. Error: ${errorMessage}`,
+      {
         jobId,
         queueName,
         jobName,
@@ -124,7 +124,7 @@ export async function handleFailedJob(
         failedAt,
         error: errorMessage,
       },
-    });
+    );
   } catch (alertError) {
     logger.warn("[DLQ] Failed to dispatch notification alert:", alertError);
   }
