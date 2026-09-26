@@ -308,6 +308,9 @@ export const generateInteractiveUrl = async (
     lang: request.lang || "en",
   });
 
+  if ((request as any).token) params.append("token", (request as any).token);
+  if ((request as any).session_token) params.append("session_token", (request as any).session_token);
+
   if (request.memo) params.append("memo", request.memo);
   if (transaction.memo_type) params.append("memo_type", transaction.memo_type);
   if (request.email) params.append("email", request.email);
@@ -780,6 +783,16 @@ sep24Router.get("/transaction/:id", async (req: Request, res: Response) => {
     });
   }
   res.json(transaction);
+});
+
+sep24Router.get("/interactive/callback", async (req: Request, res: Response, next: NextFunction) => {
+  const { sep24RouteHandler } = await import("../routes/sep24");
+  return sep24RouteHandler(req, res, next);
+});
+
+sep24Router.get("/callback/popup", async (req: Request, res: Response, next: NextFunction) => {
+  const { sep24RouteHandler } = await import("../routes/sep24");
+  return sep24RouteHandler(req, res, next);
 });
 
 sep24Router.put("/transaction/:id", async (req: Request, res: Response) => {

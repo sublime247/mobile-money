@@ -331,6 +331,29 @@ router.post(
       );
     }
 
+    // Strict KYC schema validation per country specifications (#1945)
+    const { validateSep31KycFields } = await import("../validators/sep31");
+    const kycValidation = validateSep31KycFields(
+      fields,
+      finalSenderId,
+      finalReceiverId,
+      req.body.country_code || req.body.destination_country,
+    );
+    if (!kycValidation.valid) {
+      throw createError(
+        ERROR_CODES.INVALID_INPUT,
+        kycValidation.error || "Missing mandatory KYC compliance fields",
+        {
+          error: "invalid_request",
+          message: kycValidation.error || "Missing mandatory KYC compliance fields",
+          details: {
+            missingSenderFields: kycValidation.missingSenderFields,
+            missingReceiverFields: kycValidation.missingReceiverFields,
+          },
+        },
+      );
+    }
+
     if (!SEP31_CONFIG.receivingAccount) {
       logger.error("SEP-31: STELLAR_RECEIVING_ACCOUNT not configured");
       throw createError(

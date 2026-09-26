@@ -33,7 +33,7 @@ function validateUploadFile(file: Express.Multer.File): {
     "image/png",
   ];
   const allowedExtensions = [".pdf", ".jpeg", ".jpg", ".png"];
-  const maxSize = 5 * 1024 * 1024;
+  const maxSize = 10 * 1024 * 1024; // 10MB in bytes (#1943)
   const filename = String(file.originalname || "").toLowerCase();
 
   const hasAllowedMimeType = allowedMimeTypes.includes(file.mimetype);
@@ -110,8 +110,8 @@ export const createKYCRoutes = (db: Pool): Router => {
   // File upload to S3
   router.post(
     "/documents/upload",
-    annotateDocumentVisibility,
     upload.single("document"),
+    annotateDocumentVisibility,
     async (req: Request, res: Response) => {
       try {
         const userId = req.jwtUser?.userId;
@@ -144,12 +144,19 @@ export const createKYCRoutes = (db: Pool): Router => {
           rawExpiryDate !== null &&
           rawExpiryDate !== ""
         ) {
-          const isValidExpiry = validateExpiryDate(rawExpiryDate);
-          if (!isValidExpiry) {
+          const d = new Date(rawExpiryDate);
+          if (isNaN(d.getTime())) {
             throw createError(
               ERROR_CODES.INVALID_INPUT,
-              "Invalid expiry date",
-              { error: "Invalid expiry date" }
+              "Invalid expiry date format",
+              { error: "Invalid expiry date format" },
+            );
+          }
+          if (d.getTime() <= Date.now()) {
+            throw createError(
+              ERROR_CODES.INVALID_INPUT,
+              "Document has expired",
+              { error: "Document has expired" },
             );
           }
         }
@@ -260,14 +267,14 @@ export const createKYCRoutes = (db: Pool): Router => {
           fileBuffer: req.file.buffer,
         });
 
-        const canViewRaw = Boolean(res.locals.canViewRawKycUploads);
+        const canViewRaw = canViewRawKycUploads(req) || Boolean(res.locals.canViewRawKycUploads);
         let responseFileUrl: string = REDACTED_FILE_URL;
 
         if (canViewRaw && uploadResult.key) {
           try {
-            responseFileUrl = await getSignedObjectUrl(uploadResult.key);
+            responseFileUrl = (await getSignedObjectUrl(uploadResult.key)) || uploadResult.fileUrl;
           } catch {
-            responseFileUrl = REDACTED_FILE_URL;
+            responseFileUrl = uploadResult.fileUrl || REDACTED_FILE_URL;
           }
         }
 
