@@ -74,6 +74,10 @@ export const registerSchema = z.object({
 
 /**
  * POST /api/auth/register
+ *
+ * Registers a new user with phone number and password.
+ * Returns 409 Conflict if phone number already registered (active user).
+ * Allows re-registration if prior account was soft-deleted.
  */
 authRoutes.post(
   "/register",
@@ -93,6 +97,18 @@ authRoutes.post(
         .status(201)
         .json({ message: "User registered successfully", userId: user.id });
     } catch (error) {
+      // Handle unique constraint violation for phone_number
+      // PostgreSQL error code 23505 = unique constraint violation
+      const pgError = error as any;
+      if (pgError?.code === "23505" && pgError?.detail?.includes("phone_number")) {
+        res.status(409).json({
+          error: "Phone number already registered",
+          message: "This phone number is already associated with an active account. If you believe this is an error, please contact support.",
+          code: "PHONE_NUMBER_EXISTS",
+        });
+        return;
+      }
+
       throw createError(ERROR_CODES.INTERNAL_ERROR, "Registration failed", {
         error: "Registration failed",
         message: error instanceof Error ? error.message : "Unknown error",
