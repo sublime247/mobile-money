@@ -15,6 +15,7 @@ import { providerSettingsService } from "../services/providerSettingsService";
 import { AuthRequest } from "../middleware/auth";
 import { TransactionModel, TransactionStatus } from "../models/transaction";
 import { coldVaultService } from "../services/stellar/vault";
+import { replayDeadLetterJob, listDeadLetterJobs } from "../config/queue";
 
 const transactionModel = new TransactionModel();
 
@@ -343,11 +344,65 @@ export const executeColdVaultTransferHandler = async (req: AuthRequest, res: Res
   }
 };
 
+export const getDeadLetterJobsHandler = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const limit = parseInt(req.query.limit as string) || 50;
+    const offset = parseInt(req.query.offset as string) || 0;
+    const queueName = req.query.queueName as string;
+    const status = req.query.status as string;
+
+    const result = await listDeadLetterJobs({ limit, offset, queueName, status });
+    res.json({
+      success: true,
+      ...result,
+    });
+  } catch (error: any) {
+    throw error.statusCode ? error : createError(ERROR_CODES.INTERNAL_ERROR, error.message || "Failed to fetch dead letter jobs");
+  }
+};
+
+export const getDeadLetterJobByIdHandler = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query("SELECT * FROM failed_jobs WHERE id = $1;", [id]);
+    if (!result.rows || result.rows.length === 0) {
+      throw createError(ERROR_CODES.NOT_FOUND, `Failed job not found with ID: ${id}`);
+    }
+    res.json({
+      success: true,
+      job: result.rows[0],
+    });
+  } catch (error: any) {
+    throw error.statusCode ? error : createError(ERROR_CODES.INTERNAL_ERROR, error.message || "Failed to fetch dead letter job");
+  }
+};
+
+export const replayDeadLetterJobHandler = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      throw createError(ERROR_CODES.MISSING_FIELD, "Failed job ID is required for replay");
+    }
+
+    const result = await replayDeadLetterJob(id);
+    res.json({
+      success: true,
+      message: "Failed dead-letter job replayed successfully",
+      ...result,
+    });
+  } catch (error: any) {
+    throw error.statusCode ? error : createError(ERROR_CODES.INTERNAL_ERROR, error.message || "Failed to replay dead letter job");
+  }
+};
+
 const adminRouter = Router();
 adminRouter.get("/circuit-breakers", getCircuitBreakerStatus);
 adminRouter.post("/outage", logOutageStatus);
 adminRouter.post("/test-alert", testEngineeringAlert);
 adminRouter.post("/circuit-breakers/reset", resetCircuitBreakerStatus);
 adminRouter.get("/logs", getWinstonLogs);
+adminRouter.get("/dlq", getDeadLetterJobsHandler);
+adminRouter.get("/dlq/:id", getDeadLetterJobByIdHandler);
+adminRouter.post("/dlq/replay/:id", replayDeadLetterJobHandler);
 
 export default adminRouter;

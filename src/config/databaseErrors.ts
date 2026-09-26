@@ -68,3 +68,21 @@ export function isRetryableDatabaseError(error: unknown): boolean {
     RETRYABLE_DATABASE_MESSAGE_HINTS.some((hint) => message.includes(hint))
   );
 }
+
+export function isQueryCanceledError(error: unknown): boolean {
+  const unwrappedError = unwrapDatabaseError(error);
+  if (!unwrappedError || typeof unwrappedError !== "object") return false;
+
+  const candidate = unwrappedError as { code?: string; message?: string };
+  const code = candidate.code?.toUpperCase() ?? "";
+  const message = candidate.message?.toLowerCase() ?? "";
+
+  return (
+    code === "57014" ||
+    message.includes("canceling statement due to statement timeout") ||
+    message.includes("canceling statement due to user request") ||
+    message.includes("query_canceled") ||
+    message.includes("statement_timeout")
+  );
+}
+

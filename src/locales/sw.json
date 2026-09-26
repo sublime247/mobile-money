@@ -24,6 +24,7 @@
     "INTERNAL_ERROR": "Hitilafu ya ndani ya seva",
     "SERVICE_UNAVAILABLE": "Huduma haipatikani kwa muda",
     "DATABASE_ERROR": "Uendeshaji wa hifadhidata umeshindikana",
+    "GATEWAY_TIMEOUT": "Muda wa ombi la hifadhidata umekwisha. Tafadhali jaribu tena baadaye",
     "DEFAULT": "Hitilafu imetokea"
   },
   "sms": {

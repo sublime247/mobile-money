@@ -24,6 +24,7 @@
     "INTERNAL_ERROR": "Error interno del servidor",
     "SERVICE_UNAVAILABLE": "El servicio no esta disponible temporalmente",
     "DATABASE_ERROR": "La operacion de base de datos fallo",
+    "GATEWAY_TIMEOUT": "Se agoto el tiempo de espera de la consulta. Por favor intente mas tarde",
     "DEFAULT": "Ocurrio un error"
   },
   "sms": {

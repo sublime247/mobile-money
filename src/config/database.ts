@@ -49,7 +49,7 @@ const QUERY_TIMEOUT_MS = parseInt(
   10,
 );
 const STATEMENT_TIMEOUT_MS = parseInt(
-  process.env.DB_STATEMENT_TIMEOUT_MS || "10000",
+  process.env.DB_STATEMENT_TIMEOUT_MS || "15000",
   10,
 );
 const POOL_ALLOW_EXIT_ON_IDLE =
