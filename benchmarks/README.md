@@ -23,6 +23,82 @@ The k6 suite benchmarks high-throughput callback ingestion services (`ingest-nod
 
 ---
 
+## Quote Calculation High Concurrency Load Test: `k6-quote-load.js`
+
+Simulates 200 concurrent virtual users over a 60 second duration executing realistic real-time FX rate discovery, firm quote calculation, and cached quote retrieval across multiple currency pairs.
+
+### Endpoints Under Test
+
+| Operation | Method and Endpoint | Description |
+| --------- | ------------------- | ----------- |
+| FX Rate Discovery | `GET /sep38/prices` | Real-time indicative exchange rate calculation across pairs |
+| Firm Quote Calculation | `POST /sep38/quote` | Binding quote generation with rate locking and liquidity reserve |
+| Cached Quote Retrieval | `GET /sep38/quote/:id` | High-concurrency cached quote reads verifying cache hit performance |
+
+### Currency Corridors Tested
+
+1. USD/XOF (West African CFA franc)
+2. EUR/KES (Kenyan shilling)
+3. GBP/GHS (Ghanaian cedi)
+4. USD/NGN (Nigerian naira)
+5. EUR/XAF (Central African CFA franc)
+6. GBP/TZS (Tanzanian shilling)
+7. USD/KES (Kenyan shilling)
+8. XLM/USD (Stellar native asset)
+
+### Acceptance Criteria and Performance Thresholds
+
+| Metric | Target Threshold | Condition |
+| ------ | ---------------- | --------- |
+| Cached Quote Latency (p95) | < 150 ms | 95 percent of cached quote retrievals complete under 150 milliseconds |
+| Overall Latency (p99) | < 500 ms | 99 percent of all requests complete under 500 milliseconds |
+| Error Budget | < 0.5% | Total request failure rate remains strictly below 0.5 percent |
+| Concurrency Profile | 200 VUs | Peak concurrency of 200 virtual users across 60 seconds |
+
+### Concurrency Stages
+
+1. Stage 1 (0s to 10s): Warm-up ramp from 0 to 50 virtual users.
+2. Stage 2 (10s to 25s): Ramp-up to peak concurrency of 200 virtual users.
+3. Stage 3 (25s to 50s): Sustained steady-state peak load at 200 virtual users.
+4. Stage 4 (50s to 60s): Graceful ramp-down from 200 to 0 virtual users.
+
+### Execution Instructions
+
+1. Prerequisites:
+   1. Node.js server running locally (`npm run dev` on port 3000)
+   2. Redis running on port 6379
+   3. k6 installed on system path
+
+2. Standard execution with threshold enforcement:
+   ```bash
+   npm run bench:quote-load
+   ```
+   Or using k6 CLI directly:
+   ```bash
+   k6 run benchmarks/k6-quote-load.js
+   ```
+
+3. Observation mode (metrics collected without threshold assertions failing the run):
+   ```bash
+   npm run bench:quote-load:observe
+   ```
+   Or using k6 CLI directly:
+   ```bash
+   k6 run -e OBSERVE_ONLY=true benchmarks/k6-quote-load.js
+   ```
+
+4. Custom target host, virtual user count, or duration override:
+   ```bash
+   k6 run -e BASE_URL=http://staging.example.com -e VUS=200 -e DURATION=60s benchmarks/k6-quote-load.js
+   ```
+
+5. Generating JSON results artifact:
+   ```bash
+   k6 run --out json=benchmarks/results/quote-load-results.json benchmarks/k6-quote-load.js
+   ```
+
+---
+
 ## 500 RPS API Load Test — `load_test.js`
 
 Verifies that the three highest-traffic HTTP endpoints sustain **500 requests/second**

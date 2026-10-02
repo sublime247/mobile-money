@@ -52,7 +52,7 @@ function getEurcAssetId(): string {
 
 function buildSupportedPairs(): SupportedAssetPair[] {
   const pairs: SupportedAssetPair[] = [];
-  const fiatCurrencies = [...SUPPORTED_CURRENCIES, "XOF"];
+  const fiatCurrencies = [...SUPPORTED_CURRENCIES, "XOF", "EUR", "GBP"];
 
   for (let i = 0; i < fiatCurrencies.length; i++) {
     for (let j = 0; j < fiatCurrencies.length; j++) {
