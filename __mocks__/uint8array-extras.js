@@ -24,4 +24,9 @@ module.exports = {
   stringToUint8Array: (str) => new Uint8Array(Buffer.from(str, "utf-8")),
   uint8ArrayToBase64: (arr) => Buffer.from(arr).toString("base64"),
   base64ToUint8Array: (b64) => new Uint8Array(Buffer.from(b64, "base64")),
+  isUint8Array: (val) => val instanceof Uint8Array,
+  uint8ArrayToHex: (arr) => Buffer.from(arr).toString("hex"),
+  hexToUint8Array: (hex) => new Uint8Array(Buffer.from(hex, "hex")),
+  toUint8Array: (val) => (val instanceof Uint8Array ? val : new Uint8Array(Buffer.from(val))),
 };
+

@@ -19,7 +19,7 @@ jest.mock("../../src/models/transaction", () => ({
   }))
 }));
 
-import sep24Router from "../../src/stellar/sep24";
+import sep24Router, { sep24StatusEmitter } from "../../src/stellar/sep24";
 import { errorHandler } from "../../src/middleware/errorHandler";
 
 // Generate a valid Stellar public key for test requests
@@ -107,4 +107,30 @@ describe("SEP-24 Interactive Flow", () => {
     expect(res.body.transaction.status).toBe("failed");
     expect(res.body).toHaveProperty("redirect");
   });
+
+  it("emits statusChange event on sep24StatusEmitter when status transitions", async () => {
+    const statusListener = jest.fn();
+    sep24StatusEmitter.on("statusChange", statusListener);
+
+    const createRes = await request(app).post("/sep24/deposit").send({
+      asset_code: "XLM",
+      amount: "25",
+      account: testAccount,
+    });
+    const emittedTxId = createRes.body.id;
+
+    await request(app)
+      .post(`/sep24/callback/${emittedTxId}`)
+      .send({ status: "completed", message: "Deposit completed via emitter" });
+
+    expect(statusListener).toHaveBeenCalledWith(
+      expect.objectContaining({
+        transactionId: emittedTxId,
+        status: "completed",
+      }),
+    );
+
+    sep24StatusEmitter.off("statusChange", statusListener);
+  });
 });
+
