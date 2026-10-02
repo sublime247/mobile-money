@@ -140,6 +140,62 @@ export const providerCircuitBreakerState = new Gauge({
   registers: [register],
 });
 
+export const CIRCUIT_BREAKER_STATE_VALUES = {
+  closed: 0,
+  half_open: 0.5,
+  open: 1,
+} as const;
+
+export function recordCircuitBreakerTransition(
+  provider: string,
+  operation: string,
+  state:
+    | "closed"
+    | "half_open"
+    | "open"
+    | "CLOSED"
+    | "HALF_OPEN"
+    | "OPEN"
+    | "HALF-OPEN"
+    | "half-open",
+): void {
+  const s = state.toLowerCase().replace("-", "_");
+  const normState = (
+    s === "half_open" ? "half_open" : s
+  ) as "closed" | "half_open" | "open";
+
+  providerCircuitBreakerTransitionsTotal.inc({
+    provider,
+    operation,
+    state: normState,
+  });
+
+  const gaugeValue = CIRCUIT_BREAKER_STATE_VALUES[normState] ?? 0;
+  providerCircuitBreakerState.set({ provider, operation }, gaugeValue);
+}
+
+export function setCircuitBreakerStateMetric(
+  provider: string,
+  operation: string,
+  state:
+    | "closed"
+    | "half_open"
+    | "open"
+    | "CLOSED"
+    | "HALF_OPEN"
+    | "OPEN"
+    | "HALF-OPEN"
+    | "half-open",
+): void {
+  const s = state.toLowerCase().replace("-", "_");
+  const normState = (
+    s === "half_open" ? "half_open" : s
+  ) as "closed" | "half_open" | "open";
+
+  const gaugeValue = CIRCUIT_BREAKER_STATE_VALUES[normState] ?? 0;
+  providerCircuitBreakerState.set({ provider, operation }, gaugeValue);
+}
+
 // Horizon node rotation / failover metrics
 export const horizonNodeFailuresTotal = new Counter({
   name: "horizon_node_failures_total",
