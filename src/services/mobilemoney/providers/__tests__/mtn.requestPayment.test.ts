@@ -1,5 +1,10 @@
 import axios from "axios";
 import { MTNProvider } from "../mtn";
+import {
+  momoProviderRequestDurationSeconds,
+  momoProviderErrorsTotal,
+  register,
+} from "../../../../utils/metrics";
 
 jest.mock("axios");
 
@@ -152,5 +157,34 @@ describe("MTNProvider.requestPayment — MTN Cameroon integration", () => {
     expect(result.success).toBe(true);
     expect(tokenCalls).toBe(2);
     expect(payAuthHeaders).toEqual(["Bearer tok-1", "Bearer tok-2"]);
+  });
+
+  it("records duration metrics in momo_provider_request_duration_seconds on successful payment", async () => {
+    mockMtn();
+    const provider = new MTNProvider();
+
+    await provider.requestPayment("+237670000001", "5000");
+
+    const metricsText = await register.metrics();
+    expect(metricsText).toContain("momo_provider_request_duration_seconds");
+    expect(metricsText).toContain('provider="mtn",operation="requestPayment"');
+  });
+
+  it("increments momo_provider_errors_total when requestPayment fails", async () => {
+    (axiosMock.post as jest.Mock).mockImplementation(async (url: string) => {
+      if (String(url).includes("/collection/token/")) {
+        return { data: { access_token: "tok", expires_in: 3600 } };
+      }
+      const err: any = new Error("Bad gateway");
+      err.response = { status: 502 };
+      throw err;
+    });
+    const provider = new MTNProvider();
+
+    await provider.requestPayment("+237670000001", "5000");
+
+    const metricsText = await register.metrics();
+    expect(metricsText).toContain("momo_provider_errors_total");
+    expect(metricsText).toContain('provider="mtn",error_type="HTTP_502"');
   });
 });

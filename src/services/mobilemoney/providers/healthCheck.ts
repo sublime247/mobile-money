@@ -1,6 +1,10 @@
 import logger from "../../../utils/logger";
 import { createClient, RedisClientType } from "redis";
-import { healthCheckResponseTimeSeconds } from "../../../utils/metrics";
+import {
+  healthCheckResponseTimeSeconds,
+  recordProviderRequestDuration,
+  recordProviderErrorMetric,
+} from "../../../utils/metrics";
 import { getConfigValue } from "../../../config/appConfig";
 
 // ─── Public types ─────────────────────────────────────────────────────────────
@@ -290,6 +294,7 @@ export async function pingProvider(
     clearTimeout(timer);
 
     const responseTime = Date.now() - start;
+    recordProviderRequestDuration(name, "health_check", responseTime / 1000);
 
     if (response.status < 500) {
       recordSuccess(name);
@@ -306,6 +311,7 @@ export async function pingProvider(
     }
 
     recordFailure(name);
+    recordProviderErrorMetric(name, `HTTP_${response.status}`);
     healthCheckResponseTimeSeconds.observe(
       { provider: name, status: "down" },
       responseTime / 1000,
@@ -324,6 +330,10 @@ export async function pingProvider(
       err instanceof Error &&
       (err.name === "AbortError" ||
         err.message.toLowerCase().includes("abort"));
+
+    const duration = (Date.now() - start) / 1000;
+    recordProviderRequestDuration(name, "health_check", duration);
+    recordProviderErrorMetric(name, isAbort ? "TIMEOUT" : "NETWORK_ERROR");
 
     log("error", "Provider ping failed", {
       provider: name,

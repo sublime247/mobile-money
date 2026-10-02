@@ -22,6 +22,10 @@ interface MtnTokenResponse {
 }
 import logger from "../../../utils/logger";
 import { maskPII } from "../../../utils/masking";
+import {
+  recordProviderRequestDuration,
+  recordProviderErrorMetric,
+} from "../../../utils/metrics";
 
 interface MtnBalanceResponse {
   availableBalance?: string | number;
@@ -250,6 +254,7 @@ export class MTNProvider extends BaseProvider {
       );
 
       const duration = Date.now() - startTime;
+      recordProviderRequestDuration("mtn", "requestPayment", duration / 1000);
       log.info(
         maskPII({ duration, status: response.status }),
         "MTN: Payment request successful",
@@ -263,6 +268,12 @@ export class MTNProvider extends BaseProvider {
       };
     } catch (error: any) {
       const duration = Date.now() - startTime;
+      recordProviderRequestDuration("mtn", "requestPayment", duration / 1000);
+      const errorType =
+        error?.response?.status
+          ? `HTTP_${error.response.status}`
+          : (error?.code || error?.name || "REQUEST_PAYMENT_ERROR");
+      recordProviderErrorMetric("mtn", String(errorType));
       log.error(
         maskPII({
           duration,
@@ -283,7 +294,21 @@ export class MTNProvider extends BaseProvider {
   async sendPayout(phoneNumber: string, amount: string, requestId?: string) {
     const log = requestId ? logger.child({ requestId }) : logger;
     log.info(maskPII({ phoneNumber, amount }), "MTN: Sending payout");
-    return { success: true };
+    const startTime = Date.now();
+    try {
+      const duration = Date.now() - startTime;
+      recordProviderRequestDuration("mtn", "sendPayout", duration / 1000);
+      return { success: true };
+    } catch (error: any) {
+      const duration = Date.now() - startTime;
+      recordProviderRequestDuration("mtn", "sendPayout", duration / 1000);
+      const errorType =
+        error?.response?.status
+          ? `HTTP_${error.response.status}`
+          : (error?.code || error?.name || "PAYOUT_ERROR");
+      recordProviderErrorMetric("mtn", String(errorType));
+      throw error;
+    }
   }
 
   /**
@@ -372,8 +397,13 @@ export class MTNProvider extends BaseProvider {
       );
 
       const duration = Date.now() - startTime;
+      recordProviderRequestDuration("mtn", "sendBatchPayout", duration / 1000);
       const successCount = results.filter((r) => r.success).length;
       const failureCount = results.filter((r) => !r.success).length;
+
+      if (failureCount > 0 && successCount === 0) {
+        recordProviderErrorMetric("mtn", "BATCH_PAYOUT_FAILED");
+      }
 
       log.info(
         maskPII({
@@ -395,6 +425,12 @@ export class MTNProvider extends BaseProvider {
       };
     } catch (error: any) {
       const duration = Date.now() - startTime;
+      recordProviderRequestDuration("mtn", "sendBatchPayout", duration / 1000);
+      const errorType =
+        error?.response?.status
+          ? `HTTP_${error.response.status}`
+          : (error?.code || error?.name || "BATCH_PAYOUT_ERROR");
+      recordProviderErrorMetric("mtn", String(errorType));
       const errorMessage = error.message || "Batch payout request failed";
 
       log.error(
@@ -555,6 +591,7 @@ export class MTNProvider extends BaseProvider {
   async getTransactionStatus(
     referenceId: string,
   ): Promise<{ status: "completed" | "failed" | "pending" | "unknown" }> {
+    const startTime = Date.now();
     try {
       const response = await this.withAuth((token) =>
         axios.get(
@@ -569,12 +606,33 @@ export class MTNProvider extends BaseProvider {
         ),
       );
 
+      const duration = Date.now() - startTime;
+      recordProviderRequestDuration(
+        "mtn",
+        "getTransactionStatus",
+        duration / 1000,
+      );
+
       const providerStatus = String(response.data?.status ?? "").toUpperCase();
       if (providerStatus === "SUCCESSFUL") return { status: "completed" };
-      if (providerStatus === "FAILED") return { status: "failed" };
+      if (providerStatus === "FAILED") {
+        recordProviderErrorMetric("mtn", "TRANSACTION_FAILED");
+        return { status: "failed" };
+      }
       if (providerStatus === "PENDING") return { status: "pending" };
       return { status: "unknown" };
-    } catch {
+    } catch (error: any) {
+      const duration = Date.now() - startTime;
+      recordProviderRequestDuration(
+        "mtn",
+        "getTransactionStatus",
+        duration / 1000,
+      );
+      const errorType =
+        error?.response?.status
+          ? `HTTP_${error.response.status}`
+          : (error?.code || error?.name || "STATUS_CHECK_ERROR");
+      recordProviderErrorMetric("mtn", String(errorType));
       return { status: "unknown" };
     }
   }
