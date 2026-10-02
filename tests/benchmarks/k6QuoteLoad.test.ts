@@ -192,7 +192,7 @@ describe("k6 Quote Calculation Load Benchmark Suite", () => {
     });
 
     it("should configure required currency pairs including USD/XOF, EUR/KES, GBP/GHS", () => {
-      const content = fs.readFileSync(scriptPath, "utf-8");
+      const content = fs.readFileSync(scriptPath, "utf-8").replace(/\r\n/g, "\n");
       expect(content).toContain("base: \"USD\",\n    quote: \"XOF\"");
       expect(content).toContain("base: \"EUR\",\n    quote: \"KES\"");
       expect(content).toContain("base: \"GBP\",\n    quote: \"GHS\"");
