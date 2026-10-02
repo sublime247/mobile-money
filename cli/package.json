@@ -12,18 +12,18 @@
     "test": "tsx --test src/**/*.test.ts"
   },
   "dependencies": {
-    "axios": "^1.6.2",
+    "axios": "^1.20.0",
     "chalk": "^5.3.0",
     "cli-table3": "^0.6.3",
     "commander": "^12.0.0",
     "dotenv": "^17.3.1",
     "inquirer": "^12.7.0",
-    "figlet": "^1.7.0"
+    "figlet": "^1.12.0"
   },
   "devDependencies": {
     "@types/figlet": "^1.5.8",
     "@types/node": "^20.0.0",
-    "tsx": "^4.0.0",
+    "tsx": "^4.23.15",
     "typescript": "^5.0.0"
   }
 }
