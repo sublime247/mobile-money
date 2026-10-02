@@ -60,16 +60,69 @@ import adminControllerRouter, {
   getDeadLetterJobByIdHandler,
   replayDeadLetterJobHandler,
 } from "../controllers/adminController";
+import { dlqMonitorService } from "../services/dlqMonitorService";
 
 const router = Router();
 router.use("/monitoring", adminControllerRouter);
 
-// Dead-Letter Queue (DLQ) Admin Endpoints (#1989)
+// Dead-Letter Queue (DLQ) Admin Endpoints (#1989, #2162)
 router.get("/dlq", dlqInspectorHandler);
 router.get("/dlq/jobs", getDeadLetterJobsHandler);
 router.get("/dlq/jobs/:id", getDeadLetterJobByIdHandler);
 router.get("/dlq/:id", getDeadLetterJobByIdHandler);
 router.post("/dlq/replay/:id", replayDeadLetterJobHandler);
+
+/**
+ * POST /api/admin/queues/replay (#2162)
+ * Safely retry failed jobs with filtered error codes.
+ */
+export async function replayFilteredQueueJobsHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const { queueName, errorCodes, jobIds, limit, dryRun } = req.body || {};
+
+    if (errorCodes !== undefined && !Array.isArray(errorCodes)) {
+      throw createError(
+        ERROR_CODES.INVALID_INPUT,
+        "errorCodes parameter must be an array of string error codes",
+      );
+    }
+
+    if (jobIds !== undefined && !Array.isArray(jobIds)) {
+      throw createError(
+        ERROR_CODES.INVALID_INPUT,
+        "jobIds parameter must be an array of string IDs",
+      );
+    }
+
+    const parsedLimit =
+      limit !== undefined ? parseInt(String(limit), 10) : undefined;
+    if (parsedLimit !== undefined && (isNaN(parsedLimit) || parsedLimit <= 0)) {
+      throw createError(
+        ERROR_CODES.INVALID_INPUT,
+        "limit parameter must be a positive integer",
+      );
+    }
+
+    const result = await dlqMonitorService.replayFailedJobs({
+      queueName: queueName ? String(queueName) : undefined,
+      errorCodes: errorCodes ? errorCodes.map(String) : undefined,
+      jobIds: jobIds ? jobIds.map(String) : undefined,
+      limit: parsedLimit,
+      dryRun: Boolean(dryRun),
+    });
+
+    return res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+router.post("/queues/replay", replayFilteredQueueJobsHandler);
+router.post("/dlq/replay", replayFilteredQueueJobsHandler);
 const IMPERSONATION_TOKEN_EXPIRES_IN = "15m";
 const IMPERSONATION_TOKEN_TTL_MS = 15 * 60 * 1000;
 const READ_ONLY_IMPERSONATION_MESSAGE = "Read-only mode active";
