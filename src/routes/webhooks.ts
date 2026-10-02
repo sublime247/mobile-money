@@ -9,6 +9,7 @@ import {
   verifyWebhookPayloadEd25519,
   derivePublicSigningKey,
 } from "../crypto/webhookSigning";
+import { orangeWebhookVerificationMiddleware } from "../services/mobilemoney/orangeWebhookVerifier";
 
 const router = Router();
 const transactionModel = new TransactionModel();
@@ -348,6 +349,59 @@ router.post(
       });
     } catch (error) {
       console.error("[webhook-airtel] Processing error", error);
+      return res.status(500).json({ error: "Internal server error" });
+    }
+  },
+);
+
+/**
+ * POST /api/webhooks/orange (#2130)
+ * Cryptographic signature verification for Orange Money callback notifications.
+ */
+router.post(
+  "/orange",
+  orangeWebhookVerificationMiddleware,
+  async (req: Request, res: Response) => {
+    try {
+      const payload = req.body as FlatWebhookPayload;
+      if (
+        !payload.transaction_id &&
+        !payload.event_type &&
+        !payload.reference_number
+      ) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+
+      if (payload.transaction_id) {
+        const transaction = await transactionModel.findById(
+          payload.transaction_id,
+        );
+        if (transaction && payload.status) {
+          await transactionModel.updateStatus(
+            transaction.id,
+            payload.status as TransactionStatus,
+          );
+        }
+      }
+
+      logger.info(
+        `[webhook-orange] Successfully verified and processed Orange Money callback`,
+        {
+          transactionId: payload.transaction_id,
+          eventId: payload.event_id,
+          status: payload.status,
+        },
+      );
+
+      return res.status(200).json({
+        success: true,
+        message: "Orange Money callback verified and processed",
+        event_id: payload.event_id,
+        transaction_id: payload.transaction_id,
+        processed_at: new Date().toISOString(),
+      });
+    } catch (error) {
+      logger.error("[webhook-orange] Processing error", error);
       return res.status(500).json({ error: "Internal server error" });
     }
   },
