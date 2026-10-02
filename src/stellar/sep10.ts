@@ -112,23 +112,37 @@ function readDecoratedSignature(
   const signature = sig.signature as unknown;
 
   if (typeof signature === "function") {
-    const raw = (signature as () => unknown).call(sig);
-    if (Buffer.isBuffer(raw) || raw instanceof Uint8Array) {
-      return Buffer.from(raw);
+    try {
+      const raw = (signature as () => unknown).call(sig);
+      if (Buffer.isBuffer(raw) || raw instanceof Uint8Array || ArrayBuffer.isView(raw)) {
+        return Buffer.from(raw as any);
+      }
+    } catch {
+      // ignore
     }
   }
 
-  const rendered =
-    signature && typeof (signature as { toString?: () => string }).toString === "function"
-      ? String(signature)
-      : "";
-  if (/^[0-9a-f]+$/i.test(rendered) && rendered.length % 2 === 0) {
-    return Buffer.from(rendered, "hex");
+  const value = (signature as { value?: Uint8Array } | null)?.value;
+  if (
+    value &&
+    (Buffer.isBuffer(value) ||
+      value instanceof Uint8Array ||
+      ArrayBuffer.isView(value) ||
+      typeof (value as any).length === "number")
+  ) {
+    return Buffer.from(value as any);
   }
 
-  const value = (signature as { value?: Uint8Array } | null)?.value;
-  if (value && (Buffer.isBuffer(value) || value instanceof Uint8Array)) {
-    return Buffer.from(value);
+  try {
+    const rendered =
+      signature && typeof (signature as { toString?: () => string }).toString === "function"
+        ? String(signature)
+        : "";
+    if (/^[0-9a-f]+$/i.test(rendered) && rendered.length % 2 === 0) {
+      return Buffer.from(rendered, "hex");
+    }
+  } catch {
+    // ignore toString error
   }
 
   throw new Error("Unreadable signature");
