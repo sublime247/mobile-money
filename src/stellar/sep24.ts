@@ -32,6 +32,11 @@ import {
   OrangeQrCodeGenerator,
   renderOrangeMoneyQrSection,
 } from "../providers/orange/qrCode";
+import { EventEmitter } from "events";
+import { registerSep24CallbackDispatcher } from "../queue/callbackQueue";
+
+export const sep24StatusEmitter = new EventEmitter();
+registerSep24CallbackDispatcher(sep24StatusEmitter);
 
 function isValidStellarPublicKey(key: string): boolean {
   try {
@@ -454,15 +459,24 @@ export const updateTransactionStatus = (
     decrementActiveTransactionCount(transaction.account);
   }
 
-  if (statusChanged && transaction.callback) {
-    enqueueSepWebhook(
-      transaction.id,
+  if (statusChanged) {
+    sep24StatusEmitter.emit("statusChange", {
+      transactionId: transaction.id,
       status,
-      transaction.callback,
+      callbackUrl: transaction.callback,
       transaction,
-    ).catch((err) =>
-      logger.error(`[sep24-webhook] Error enqueuing webhook:`, err),
-    );
+    });
+
+    if (transaction.callback) {
+      enqueueSepWebhook(
+        transaction.id,
+        status,
+        transaction.callback,
+        transaction,
+      ).catch((err) =>
+        logger.error(`[sep24-webhook] Error enqueuing webhook:`, err),
+      );
+    }
   }
 
   return transaction;
@@ -511,15 +525,24 @@ export const processCallback = async (
   transactions.set(transaction_id, transaction);
   void persistTransaction(transaction);
 
-  if (statusChanged && transaction.callback) {
-    enqueueSepWebhook(
-      transaction.id,
+  if (statusChanged) {
+    sep24StatusEmitter.emit("statusChange", {
+      transactionId: transaction.id,
       status,
-      transaction.callback,
+      callbackUrl: transaction.callback,
       transaction,
-    ).catch((err) =>
-      logger.error(`[sep24-webhook] Error enqueuing webhook:`, err),
-    );
+    });
+
+    if (transaction.callback) {
+      enqueueSepWebhook(
+        transaction.id,
+        status,
+        transaction.callback,
+        transaction,
+      ).catch((err) =>
+        logger.error(`[sep24-webhook] Error enqueuing webhook:`, err),
+      );
+    }
   }
 
   return transaction;
