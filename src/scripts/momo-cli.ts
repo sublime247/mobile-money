@@ -19,6 +19,13 @@ import {
   printSuccess,
   printWarning,
 } from "../utils/cli";
+import {
+  DEFAULT_PROVIDERS,
+  pingProvider,
+  ProviderConfig,
+  ProviderHealth,
+  ProviderName,
+} from "../services/mobilemoney/providers/healthCheck";
 
 export { printError } from "../utils/cli";
 
@@ -90,11 +97,177 @@ Commands:
   setup                    Interactive setup for database and Stellar credentials.
   retry-batch <batch_id>   Retry all failed or stuck transactions for a specific batch ID (UUID).
   dashboard                Render an active terminal overview of node CPU, memory, and queue lengths.
+  provider:health          Inspect health status, latency, and balance across providers.
 
 Options:
   --help, -h             Show this help information.
   --file, -f <path>      Config file path for setup. Defaults to .env.
 `);
+}
+
+export interface ProviderHealthTableRow {
+  provider: string;
+  status: string;
+  balance: string;
+  latency: string;
+  isPrimary?: boolean;
+}
+
+export function formatProviderHealthTable(
+  rows: ProviderHealthTableRow[],
+): string {
+  const colProvider = 20;
+  const colStatus = 10;
+  const colBalance = 20;
+  const colLatency = 14;
+
+  const header =
+    `${"Provider".padEnd(colProvider)} | ` +
+    `${"Status".padEnd(colStatus)} | ` +
+    `${"Balance".padEnd(colBalance)} | ` +
+    `${"Latency".padEnd(colLatency)}`;
+
+  const totalWidth = colProvider + colStatus + colBalance + colLatency + 9;
+  const separator = "=".repeat(totalWidth);
+
+  const lines = [header, separator];
+
+  for (const row of rows) {
+    const line =
+      `${row.provider.padEnd(colProvider)} | ` +
+      `${row.status.padEnd(colStatus)} | ` +
+      `${row.balance.padEnd(colBalance)} | ` +
+      `${row.latency.padEnd(colLatency)}`;
+    lines.push(line);
+  }
+
+  lines.push(separator);
+  return lines.join("\n");
+}
+
+export async function getProviderLiquidity(provider: string): Promise<string> {
+  const envKey = `${provider.toUpperCase()}_FLOATING_BALANCE`;
+  if (process.env[envKey]) {
+    return process.env[envKey]!;
+  }
+  if (process.env.NODE_ENV === "test") {
+    return "N/A";
+  }
+  if (provider === "mtn") {
+    try {
+      let mtnModule: any;
+      try {
+        mtnModule = require("../services/mobilemoney/providers/mtn");
+      } catch {
+        mtnModule = await import("../services/mobilemoney/providers/mtn");
+      }
+      const MTNProvider = mtnModule.MTNProvider || mtnModule.default;
+      if (MTNProvider) {
+        const mtn = new MTNProvider();
+        if (typeof mtn.getOperationalBalance === "function") {
+          const res = await mtn.getOperationalBalance();
+          if (res?.success && res?.data?.availableBalance !== undefined) {
+            const curr = res.data.currency || "XAF";
+            return `${Number(res.data.availableBalance).toLocaleString()} ${curr}`;
+          }
+        }
+      }
+    } catch {
+      // Fallback
+    }
+  }
+  if (provider === "airtel") {
+    try {
+      let airtelModule: any;
+      try {
+        airtelModule = require("../services/mobilemoney/providers/airtel");
+      } catch {
+        airtelModule = await import("../services/mobilemoney/providers/airtel");
+      }
+      const AirtelService = airtelModule.AirtelService || airtelModule.default;
+      if (AirtelService) {
+        const airtel = new AirtelService();
+        if (typeof airtel.getOperationalBalance === "function") {
+          const res = await airtel.getOperationalBalance();
+          if (res?.success && res?.data?.availableBalance !== undefined) {
+            const curr = res.data.currency || "XAF";
+            return `${Number(res.data.availableBalance).toLocaleString()} ${curr}`;
+          }
+        }
+      }
+    } catch {
+      // Fallback
+    }
+  }
+  return "N/A";
+}
+
+export interface ProviderHealthCheckOptions {
+  providers?: ProviderConfig[];
+  fetchFn?: typeof fetch;
+  liquidityFetcher?: (provider: string) => Promise<string>;
+  primaryProviders?: string[];
+}
+
+export async function runProviderHealthCheck(
+  options: ProviderHealthCheckOptions = {},
+): Promise<ProviderHealthTableRow[]> {
+  const providers = options.providers || DEFAULT_PROVIDERS;
+  const fetchFn = options.fetchFn || fetch;
+  const liquidityFetcher = options.liquidityFetcher || getProviderLiquidity;
+
+  const rawPrimary =
+    options.primaryProviders ||
+    (process.env.PRIMARY_PROVIDERS
+      ? process.env.PRIMARY_PROVIDERS.split(",").map((s) => s.trim().toLowerCase())
+      : ["mtn", "airtel", "orange"]);
+  const primaryList = rawPrimary.map((p) => p.toLowerCase());
+
+  console.log(formatCliHeading("Mobile Money Provider Health & Liquidity Status"));
+
+  const rows: ProviderHealthTableRow[] = await Promise.all(
+    providers.map(async (provider) => {
+      const [health, balance] = await Promise.all([
+        pingProvider(provider, fetchFn).catch(() => ({
+          status: "down" as const,
+          responseTime: null,
+        })),
+        liquidityFetcher(provider.name).catch(() => "N/A"),
+      ]);
+
+      const latencyStr =
+        health.responseTime !== null ? `${health.responseTime} ms` : "timeout";
+
+      return {
+        provider: provider.name,
+        status: health.status.toUpperCase(),
+        balance,
+        latency: latencyStr,
+        isPrimary: primaryList.includes(provider.name.toLowerCase()),
+      };
+    }),
+  );
+
+  const tableOutput = formatProviderHealthTable(rows);
+  console.log(tableOutput);
+
+  const downPrimary = rows.filter(
+    (r) => r.isPrimary && r.status === "DOWN",
+  );
+
+  if (downPrimary.length > 0) {
+    const downNames = downPrimary.map((p) => p.provider).join(", ");
+    printError(
+      `Primary provider down: ${downNames}`,
+      undefined,
+      CLI_ERROR_CODES.ExecutionFailed,
+    );
+    process.exitCode = 1;
+  } else {
+    printSuccess("All primary mobile money providers are operational.");
+  }
+
+  return rows;
 }
 
 export async function runCli(args: string[]): Promise<void> {
@@ -103,6 +276,11 @@ export async function runCli(args: string[]): Promise<void> {
 
   if (!command || command === "--help" || command === "-h") {
     showHelp();
+    return;
+  }
+
+  if (command === "provider:health") {
+    await runProviderHealthCheck();
     return;
   }
 
@@ -194,11 +372,22 @@ export async function runCli(args: string[]): Promise<void> {
       return;
     }
 
-    const [{ pool }, queueModule, transactionQueueModule] = await Promise.all([
-      import("../config/database.js"),
-      import("../queue/index.js"),
-      import("../queue/transactionQueue.js"),
-    ]);
+    let dbModule: any;
+    let queueModule: any;
+    let transactionQueueModule: any;
+
+    try {
+      dbModule = require("../config/database");
+      queueModule = require("../queue");
+      transactionQueueModule = require("../queue/transactionQueue");
+    } catch {
+      [dbModule, queueModule, transactionQueueModule] = await Promise.all([
+        import("../config/database"),
+        import("../queue"),
+        import("../queue/transactionQueue"),
+      ]);
+    }
+    const { pool } = dbModule;
     const { addTransactionJob } = queueModule;
     activePool = pool;
     activeTransactionQueue = transactionQueueModule.transactionQueue;

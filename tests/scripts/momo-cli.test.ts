@@ -17,11 +17,23 @@ jest.mock("../../src/queue", () => ({
   addTransactionJob: mockAddTransactionJob,
 }));
 
-jest.mock("../../src/queue/index.js", () => ({
-  addTransactionJob: mockAddTransactionJob,
-}));
+const mockPingProvider = jest.fn();
 
-import { runCli, showHelp } from "../../src/scripts/momo-cli";
+jest.mock("../../src/services/mobilemoney/providers/healthCheck", () => {
+  const actual = jest.requireActual("../../src/services/mobilemoney/providers/healthCheck");
+  return {
+    ...actual,
+    pingProvider: mockPingProvider,
+  };
+});
+
+import {
+  runCli,
+  showHelp,
+  formatProviderHealthTable,
+  getProviderLiquidity,
+  runProviderHealthCheck,
+} from "../../src/scripts/momo-cli";
 import { pool } from "../../src/config/database";
 import { addTransactionJob } from "../../src/queue";
 import { TransactionStatus } from "../../src/models/transaction";
@@ -209,5 +221,118 @@ describe("momo-cli retry-batch", () => {
     expect(logSpy).toHaveBeenCalledWith(
       expect.stringContaining("Successfully re-queued all 2 transaction(s)"),
     );
+  });
+});
+
+describe("momo-cli provider:health", () => {
+  let logSpy: jest.SpyInstance;
+  let warnSpy: jest.SpyInstance;
+  let errorSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    process.exitCode = undefined;
+    delete process.env.PRIMARY_PROVIDERS;
+    delete process.env.MTN_FLOATING_BALANCE;
+
+    logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+    warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+
+    mockPingProvider.mockResolvedValue({ status: "up", responseTime: 45 });
+  });
+
+  afterEach(() => {
+    logSpy.mockRestore();
+    warnSpy.mockRestore();
+    errorSpy.mockRestore();
+  });
+
+  it("should show provider:health in help menu", async () => {
+    await runCli(["--help"]);
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.stringContaining("provider:health"),
+    );
+  });
+
+  it("should execute provider:health and display table with all providers UP", async () => {
+    process.env.MTN_FLOATING_BALANCE = "1,500,000 XAF";
+
+    await runCli(["provider:health"]);
+
+    expect(mockPingProvider).toHaveBeenCalled();
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Mobile Money Provider Health & Liquidity Status"),
+    );
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Provider"),
+    );
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Status"),
+    );
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Balance"),
+    );
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Latency"),
+    );
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.stringContaining("1,500,000 XAF"),
+    );
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.stringContaining("All primary mobile money providers are operational."),
+    );
+    expect(process.exitCode).toBeUndefined();
+  });
+
+  it("should exit with status 1 when a primary provider is DOWN", async () => {
+    mockPingProvider.mockImplementation(async (config: any) => {
+      if (config.name === "mtn") {
+        return { status: "down", responseTime: null };
+      }
+      return { status: "up", responseTime: 30 };
+    });
+
+    await runCli(["provider:health"]);
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Primary provider down: mtn"),
+    );
+    expect(process.exitCode).toBe(1);
+  });
+
+  it("should not exit with status 1 when a non-primary provider is DOWN", async () => {
+    mockPingProvider.mockImplementation(async (config: any) => {
+      if (config.name === "wave_senegal") {
+        return { status: "down", responseTime: null };
+      }
+      return { status: "up", responseTime: 25 };
+    });
+
+    await runCli(["provider:health"]);
+
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.stringContaining("All primary mobile money providers are operational."),
+    );
+    expect(process.exitCode).toBeUndefined();
+  });
+
+  it("should format table correctly using formatProviderHealthTable", () => {
+    const rows = [
+      { provider: "mtn", status: "UP", balance: "100 XAF", latency: "20 ms" },
+      { provider: "airtel", status: "DOWN", balance: "N/A", latency: "timeout" },
+    ];
+    const table = formatProviderHealthTable(rows);
+    expect(table).toContain("Provider");
+    expect(table).toContain("Status");
+    expect(table).toContain("Balance");
+    expect(table).toContain("Latency");
+    expect(table).toContain("mtn");
+    expect(table).toContain("airtel");
+  });
+
+  it("should return N/A when liquidity is unavailable", async () => {
+    const balance = await getProviderLiquidity("unknown_provider");
+    expect(balance).toBe("N/A");
   });
 });
