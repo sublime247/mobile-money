@@ -22,6 +22,7 @@ interface MtnTokenResponse {
 }
 import logger from "../../../utils/logger";
 import { maskPII } from "../../../utils/masking";
+import type { MtnCircuitBreaker } from "../mtnCircuitBreaker";
 
 interface MtnBalanceResponse {
   availableBalance?: string | number;
@@ -104,6 +105,10 @@ export interface BatchPayoutResult {
   providerReference?: string;
 }
 
+export interface MTNProviderOptions {
+  circuitBreaker?: MtnCircuitBreaker;
+}
+
 export class MTNProvider extends BaseProvider {
   protected readonly subscriptionKey: string;
   protected readonly environment: string;
@@ -111,10 +116,12 @@ export class MTNProvider extends BaseProvider {
   private readonly batchPollMaxAttempts: number;
   private readonly batchPollDelayMs: number;
   private readonly auth: MomoAuthManager;
+  private circuitBreaker?: MtnCircuitBreaker;
 
-  constructor() {
+  constructor(options?: MTNProviderOptions) {
     const config = buildConfig();
     super(config);
+    this.circuitBreaker = options?.circuitBreaker;
     this.subscriptionKey = config.subscriptionKey;
     this.environment = config.targetEnvironment;
     this.currency = config.currency;
@@ -126,6 +133,14 @@ export class MTNProvider extends BaseProvider {
       targetEnvironment: this.environment,
       fetchToken: () => this.requestNewToken(),
     });
+  }
+
+  public getCircuitBreaker(): MtnCircuitBreaker | undefined {
+    return this.circuitBreaker;
+  }
+
+  public setCircuitBreaker(cb: MtnCircuitBreaker): void {
+    this.circuitBreaker = cb;
   }
 
   // ─── Authentication ─────────────────────────────────────────────────────
@@ -226,6 +241,10 @@ export class MTNProvider extends BaseProvider {
     // transaction status afterwards, so it is surfaced to the caller.
     const referenceId = randomUUID();
 
+    if (this.circuitBreaker?.isOpen()) {
+      return this.circuitBreaker.buildFallbackResponse();
+    }
+
     try {
       const response = await this.withAuth((token) =>
         axios.post(
@@ -250,6 +269,7 @@ export class MTNProvider extends BaseProvider {
       );
 
       const duration = Date.now() - startTime;
+      this.circuitBreaker?.recordSuccess();
       log.info(
         maskPII({ duration, status: response.status }),
         "MTN: Payment request successful",
@@ -263,6 +283,7 @@ export class MTNProvider extends BaseProvider {
       };
     } catch (error: any) {
       const duration = Date.now() - startTime;
+      this.circuitBreaker?.recordFailure(error);
       log.error(
         maskPII({
           duration,
