@@ -480,6 +480,7 @@ export interface CallbackData {
   from?: string;
   to?: string;
   memo?: string;
+  stellar_transaction_id?: string;
 }
 
 export const processCallback = async (
@@ -502,6 +503,8 @@ export const processCallback = async (
   if (extra.from) transaction.from = extra.from;
   if (extra.to) transaction.to = extra.to;
   if (extra.memo) transaction.memo = extra.memo;
+  if (extra.stellar_transaction_id)
+    transaction.stellar_transaction_id = extra.stellar_transaction_id;
 
   if (["completed", "failed", "expired"].includes(status)) {
     transaction.completed_at = new Date().toISOString();
@@ -846,6 +849,7 @@ sep24Router.get("/transaction", async (req: Request, res: Response) => {
       amount_fee: transaction.amount_fee,
       started_at: formatRFC3339(transaction.created_at),
       completed_at: formatRFC3339(transaction.completed_at),
+      stellar_transaction_id: transaction.stellar_transaction_id,
       more_info_url: transaction.more_info_url || `${getSep24Config().webAuthDomain}/tx/${transaction.id}`,
       message: transaction.message || "Detailed status message",
     }
@@ -854,13 +858,13 @@ sep24Router.get("/transaction", async (req: Request, res: Response) => {
   res.json(response);
 });
 
-sep24Router.get("/interactive/callback", async (req: Request, res: Response, next: NextFunction) => {
-  const { sep24RouteHandler } = await import("../routes/sep24.js");
+sep24Router.get("/interactive/callback", (req: Request, res: Response, next: NextFunction) => {
+  const { sep24RouteHandler } = require("../routes/sep24");
   return sep24RouteHandler(req, res, next);
 });
 
-sep24Router.get("/callback/popup", async (req: Request, res: Response, next: NextFunction) => {
-  const { sep24RouteHandler } = await import("../routes/sep24.js");
+sep24Router.get("/callback/popup", (req: Request, res: Response, next: NextFunction) => {
+  const { sep24RouteHandler } = require("../routes/sep24");
   return sep24RouteHandler(req, res, next);
 });
 

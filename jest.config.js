@@ -14,7 +14,7 @@ module.exports = {
       testPathIgnorePatterns: [
         "/node_modules/",
         "<rootDir>/src/tests/frontend/",
-        "<rootDir>/tests/e2e/",
+        "<rootDir>/tests/e2e/.*\\.spec\\.ts",
         "<rootDir>/tests/pact/",
         "<rootDir>/tests/contracts/",
       ],
@@ -55,7 +55,7 @@ module.exports = {
     "/node_modules/",
     "/tests/pact/",
     "/tests/contracts/",
-    "/tests/e2e/",
+    "<rootDir>/tests/e2e/.*\\.spec\\.ts",
   ],
   testTimeout: 30000,
   moduleNameMapper: {

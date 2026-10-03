@@ -24,4 +24,27 @@ module.exports = {
   stringToUint8Array: (str) => new Uint8Array(Buffer.from(str, "utf-8")),
   uint8ArrayToBase64: (arr) => Buffer.from(arr).toString("base64"),
   base64ToUint8Array: (b64) => new Uint8Array(Buffer.from(b64, "base64")),
+  isUint8Array: (value) =>
+    Boolean(
+      value &&
+        (value instanceof Uint8Array ||
+          Buffer.isBuffer(value) ||
+          Object.prototype.toString.call(value) === "[object Uint8Array]"),
+    ),
+  uint8ArrayToHex: (arr) => Buffer.from(arr).toString("hex"),
+  hexToUint8Array: (hex) => new Uint8Array(Buffer.from(hex, "hex")),
+  toUint8Array: (value) =>
+    value instanceof Uint8Array ? value : new Uint8Array(Buffer.from(value)),
+  assertUint8Array: (value) => {
+    if (
+      !Boolean(
+        value &&
+          (value instanceof Uint8Array ||
+            Buffer.isBuffer(value) ||
+            Object.prototype.toString.call(value) === "[object Uint8Array]"),
+      )
+    ) {
+      throw new TypeError("Expected Uint8Array");
+    }
+  },
 };
