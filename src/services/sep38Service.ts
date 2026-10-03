@@ -126,6 +126,7 @@ export class Sep38Service {
       USDC: 1.0,
       EUR: 0.92,
       EURC: 0.92,
+      GBP: 0.78,
       XAF: 610.5,
       XOF: 610.5,
       KES: 129.5,

@@ -60,6 +60,8 @@
     "bench:soroban-gas": "node benchmarks/soroban-gas-bench.js",
     "bench:load-test-500rps": "k6 run -e BASE_URL=http://localhost:3000 -e RPS=500 benchmarks/load_test.js",
     "bench:load-test-observe": "k6 run -e BASE_URL=http://localhost:3000 -e RPS=500 -e OBSERVE_ONLY=true benchmarks/load_test.js",
+    "bench:quote-load": "k6 run benchmarks/k6-quote-load.js",
+    "bench:quote-load:observe": "k6 run -e OBSERVE_ONLY=true benchmarks/k6-quote-load.js",
     "bench:html-report": "node benchmarks/generate-html-report.js",
     "sdk:generate": "echo 'Start dev server first (npm run dev), then run: openapi-generator-cli generate -i http://localhost:3000/docs/openapi.json -c sdk-config.yaml -o sdk'",
     "sdk:generate:python": "openapi-generator-cli generate --generator-key python",
