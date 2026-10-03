@@ -320,3 +320,18 @@ export function emitPoolMetrics(
   dbPoolIdleConnections.labels(poolName).set(idle);
   dbPoolWaitingClients.labels(poolName).set(waiting);
 }
+
+// Dead-Letter Queue (DLQ) Metrics (#2162)
+export const dlqTotal = new Gauge({
+  name: "dlq_total",
+  help: "Current number of failed jobs in the dead-letter queue",
+  labelNames: ["queue"],
+  registers: [register],
+});
+
+export const dlqReplayed = new Counter({
+  name: "dlq_replayed",
+  help: "Total number of dead-letter queue jobs replayed",
+  labelNames: ["queue", "status"],
+  registers: [register],
+});
