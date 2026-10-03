@@ -6,6 +6,10 @@ import { getConfigValue } from "../../../config/appConfig";
 
 import logger from "../../../utils/logger";
 import { maskPII } from "../../../utils/masking";
+import {
+  recordProviderRequestDuration,
+  recordProviderErrorMetric,
+} from "../../../utils/metrics";
 import { Browser, BrowserContext, Page, chromium } from "playwright";
 
 type OrangeOperation = "payment" | "payout";
@@ -193,7 +197,9 @@ export class OrangeProvider extends BaseProvider {
   }
 
   async checkStatus(reference: string): Promise<OrangeResult> {
+    const startTime = Date.now();
     try {
+      let result: OrangeResult;
       if (this.mode === "proxy") {
         const response = await this.sendRequest(this.proxyClient!, {
           method: "GET",
@@ -203,28 +209,40 @@ export class OrangeProvider extends BaseProvider {
             : undefined,
         });
 
-        return this.toProviderResult(response, reference);
-      }
-
-      if (this.mode === "direct") {
+        result = this.toProviderResult(response, reference);
+      } else if (this.mode === "direct") {
         const response = await this.requestDirect({
           method: "GET",
           url: this.formatPath(this.config.directStatusPath, reference),
         });
 
-        return this.toProviderResult(response, reference);
+        result = this.toProviderResult(response, reference);
+      } else {
+        const response = await this.requestWithSession(
+          {
+            method: "GET",
+            url: this.formatPath(this.config.statusPath, reference),
+          },
+          "payment",
+        );
+
+        result = this.toProviderResult(response, reference);
       }
 
-      const response = await this.requestWithSession(
-        {
-          method: "GET",
-          url: this.formatPath(this.config.statusPath, reference),
-        },
-        "payment",
-      );
-
-      return this.toProviderResult(response, reference);
-    } catch (error) {
+      const duration = Date.now() - startTime;
+      recordProviderRequestDuration("orange", "checkStatus", duration / 1000);
+      if (result.success === false) {
+        recordProviderErrorMetric("orange", "STATUS_CHECK_FAILED");
+      }
+      return result;
+    } catch (error: any) {
+      const duration = Date.now() - startTime;
+      recordProviderRequestDuration("orange", "checkStatus", duration / 1000);
+      const errorType =
+        error?.response?.status
+          ? `HTTP_${error.response.status}`
+          : (error?.code || error?.name || "STATUS_CHECK_ERROR");
+      recordProviderErrorMetric("orange", String(errorType));
       return { success: false, error, reference };
     }
   }
@@ -444,6 +462,15 @@ export class OrangeProvider extends BaseProvider {
       })();
 
       const duration = Date.now() - startTime;
+      recordProviderRequestDuration("orange", operation, duration / 1000);
+      if (response.success === false) {
+        const errorType =
+          (response.error as any)?.code ||
+          (response.error as any)?.name ||
+          (response as any).status ||
+          "OPERATION_FAILED";
+        recordProviderErrorMetric("orange", String(errorType));
+      }
       log.info(
         maskPII({ duration, success: response.success !== false }),
         "Orange: Operation completed",
@@ -451,6 +478,12 @@ export class OrangeProvider extends BaseProvider {
       return response;
     } catch (error: any) {
       const duration = Date.now() - startTime;
+      recordProviderRequestDuration("orange", operation, duration / 1000);
+      const errorType =
+        error?.response?.status
+          ? `HTTP_${error.response.status}`
+          : (error?.code || error?.name || "OPERATION_ERROR");
+      recordProviderErrorMetric("orange", String(errorType));
       log.error({ duration, error: error.message }, "Orange: Operation failed");
       return { success: false, error };
     }

@@ -34,6 +34,10 @@ import logger from "../../../utils/logger";
 import { maskPII } from "../../../utils/masking";
 import { formatPhoneForProvider } from "../../../utils/phoneUtils";
 import { attachCorrelationIdInterceptor } from "../../../utils/correlationIdInterceptor";
+import {
+  recordProviderRequestDuration,
+  recordProviderErrorMetric,
+} from "../../../utils/metrics";
 
 // ============================================================================
 // TYPES & INTERFACES
@@ -481,6 +485,14 @@ export class AirtelService {
               );
 
       const duration = Date.now() - startTime;
+      recordProviderRequestDuration("airtel", "requestPayment", duration / 1000);
+      if (response.success === false) {
+        const errorType =
+          (response.error as any)?.code ||
+          (response.error as any)?.name ||
+          "PAYMENT_FAILED";
+        recordProviderErrorMetric("airtel", String(errorType));
+      }
       log.info(
         maskPII({ duration, success: response.success }),
         "Airtel: Payment request completed",
@@ -493,6 +505,12 @@ export class AirtelService {
       };
     } catch (error: any) {
       const duration = Date.now() - startTime;
+      recordProviderRequestDuration("airtel", "requestPayment", duration / 1000);
+      const errorType =
+        error?.response?.status
+          ? `HTTP_${error.response.status}`
+          : (error?.code || error?.name || "PAYMENT_ERROR");
+      recordProviderErrorMetric("airtel", String(errorType));
       log.error(
         maskPII({ duration, error: error.message }),
         "Airtel: Payment request failed",
@@ -541,6 +559,14 @@ export class AirtelService {
               );
 
       const duration = Date.now() - startTime;
+      recordProviderRequestDuration("airtel", "sendPayout", duration / 1000);
+      if (response.success === false) {
+        const errorType =
+          (response.error as any)?.code ||
+          (response.error as any)?.name ||
+          "PAYOUT_FAILED";
+        recordProviderErrorMetric("airtel", String(errorType));
+      }
       log.info(
         maskPII({ duration, success: response.success }),
         "Airtel: Payout completed",
@@ -553,6 +579,12 @@ export class AirtelService {
       };
     } catch (error: any) {
       const duration = Date.now() - startTime;
+      recordProviderRequestDuration("airtel", "sendPayout", duration / 1000);
+      const errorType =
+        error?.response?.status
+          ? `HTTP_${error.response.status}`
+          : (error?.code || error?.name || "PAYOUT_ERROR");
+      recordProviderErrorMetric("airtel", String(errorType));
       log.error(
         maskPII({ duration, error: error.message }),
         "Airtel: Payout failed",
@@ -573,18 +605,42 @@ export class AirtelService {
   async getTransactionStatus(
     reference: string,
   ): Promise<{ status: "completed" | "failed" | "pending" | "unknown" }> {
+    const startTime = Date.now();
     try {
       const result = await this.checkStatus(reference);
-      if (!result.success) return { status: "unknown" };
+      const duration = Date.now() - startTime;
+      recordProviderRequestDuration(
+        "airtel",
+        "getTransactionStatus",
+        duration / 1000,
+      );
+      if (!result.success) {
+        recordProviderErrorMetric("airtel", "STATUS_CHECK_FAILED");
+        return { status: "unknown" };
+      }
       const txStatus = String(
         (result.data as AirtelResponse)?.data?.transaction?.status ?? "",
       ).toUpperCase();
       // TS = success, TF = failed, TP = pending
       if (txStatus === "TS") return { status: "completed" };
-      if (txStatus === "TF") return { status: "failed" };
+      if (txStatus === "TF") {
+        recordProviderErrorMetric("airtel", "TRANSACTION_FAILED");
+        return { status: "failed" };
+      }
       if (txStatus === "TP") return { status: "pending" };
       return { status: "unknown" };
-    } catch {
+    } catch (error: any) {
+      const duration = Date.now() - startTime;
+      recordProviderRequestDuration(
+        "airtel",
+        "getTransactionStatus",
+        duration / 1000,
+      );
+      const errorType =
+        error?.response?.status
+          ? `HTTP_${error.response.status}`
+          : (error?.code || error?.name || "STATUS_CHECK_ERROR");
+      recordProviderErrorMetric("airtel", String(errorType));
       return { status: "unknown" };
     }
   }

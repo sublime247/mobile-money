@@ -111,6 +111,78 @@ export const providerResponseTimeSummary = new Summary({
   registers: [register],
 });
 
+// Provider HTTP Latency & Error Observability Metrics (#2170)
+export const momoProviderRequestDurationSeconds = new Histogram({
+  name: "momo_provider_request_duration_seconds",
+  help: "Latency of mobile money provider HTTP requests in seconds",
+  labelNames: ["provider", "operation"],
+  buckets: [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30],
+  registers: [register],
+});
+
+export const momoProviderErrorsTotal = new Counter({
+  name: "momo_provider_errors_total",
+  help: "Total number of mobile money provider errors",
+  labelNames: ["provider", "error_type"],
+  registers: [register],
+});
+
+export function recordProviderRequestDuration(
+  provider: string,
+  operation: string,
+  durationSeconds: number,
+): void {
+  momoProviderRequestDurationSeconds.observe(
+    { provider, operation },
+    durationSeconds,
+  );
+}
+
+export function recordProviderErrorMetric(
+  provider: string,
+  errorType: string,
+): void {
+  momoProviderErrorsTotal.inc({ provider, error_type: errorType });
+}
+
+export async function trackProviderCall<T>(
+  provider: string,
+  operation: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const start = Date.now();
+  try {
+    const result = await fn();
+    const durationSeconds = (Date.now() - start) / 1000;
+    recordProviderRequestDuration(provider, operation, durationSeconds);
+
+    if (result && typeof result === "object") {
+      const resObj = result as Record<string, unknown>;
+      if (resObj.success === false) {
+        const errorType =
+          (resObj.error as any)?.code ||
+          (resObj.error as any)?.name ||
+          (resObj as any).errorCode ||
+          "PROVIDER_ERROR";
+        recordProviderErrorMetric(provider, String(errorType));
+      }
+    }
+
+    return result;
+  } catch (error: any) {
+    const durationSeconds = (Date.now() - start) / 1000;
+    recordProviderRequestDuration(provider, operation, durationSeconds);
+
+    const errorType =
+      error?.code ||
+      error?.name ||
+      (error?.response?.status ? `HTTP_${error.response.status}` : "NETWORK_ERROR");
+
+    recordProviderErrorMetric(provider, String(errorType));
+    throw error;
+  }
+}
+
 // Failover metrics
 export const providerFailoverTotal = new Counter({
   name: "provider_failover_total",

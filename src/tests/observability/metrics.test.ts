@@ -7,7 +7,13 @@ import {
   httpRequestDurationSummary,
   activeTransactions,
   recordTransactionMetrics,
+  momoProviderRequestDurationSeconds,
+  momoProviderErrorsTotal,
+  recordProviderRequestDuration,
+  recordProviderErrorMetric,
+  trackProviderCall,
 } from "../../utils/metrics";
+import { MTNProvider } from "../../services/mobilemoney/providers/mtn";
 import { metricsMiddleware } from "../../middleware/metrics";
 import { createMetricsRouter } from "../../routes/metrics";
 import {
@@ -274,6 +280,160 @@ describe("Prometheus Metrics & Observability (#1994)", () => {
       } as any;
 
       expect(getClientIp(mockReq)).toBe("203.0.113.10");
+    });
+  });
+
+  describe("Mobile Money Provider Observability Metrics (#2170)", () => {
+    let app: express.Application;
+
+    beforeEach(() => {
+      app = express();
+      app.use(
+        "/metrics",
+        createMetricsRouter({ authEnabled: false, internalOnly: false }),
+      );
+    });
+
+    it("should observe momo_provider_request_duration_seconds with provider and operation labels", async () => {
+      recordProviderRequestDuration("mtn", "requestPayment", 0.45);
+      recordProviderRequestDuration("airtel", "sendPayout", 1.25);
+
+      const res = await request(app).get("/metrics");
+
+      expect(res.status).toBe(200);
+      expect(res.text).toContain(
+        "# TYPE momo_provider_request_duration_seconds histogram",
+      );
+      expect(res.text).toContain(
+        'momo_provider_request_duration_seconds_bucket{le="0.5",provider="mtn",operation="requestPayment"}',
+      );
+      expect(res.text).toContain(
+        'momo_provider_request_duration_seconds_count{provider="mtn",operation="requestPayment"}',
+      );
+      expect(res.text).toContain(
+        'momo_provider_request_duration_seconds_count{provider="airtel",operation="sendPayout"}',
+      );
+    });
+
+    it("should increment momo_provider_errors_total with provider and error_type labels", async () => {
+      recordProviderErrorMetric("mtn", "HTTP_500");
+      recordProviderErrorMetric("mtn", "TIMEOUT");
+      recordProviderErrorMetric("orange", "AUTH_FAILURE");
+
+      const res = await request(app).get("/metrics");
+
+      expect(res.status).toBe(200);
+      expect(res.text).toContain("# TYPE momo_provider_errors_total counter");
+      expect(res.text).toContain(
+        'momo_provider_errors_total{provider="mtn",error_type="HTTP_500"}',
+      );
+      expect(res.text).toContain(
+        'momo_provider_errors_total{provider="mtn",error_type="TIMEOUT"}',
+      );
+      expect(res.text).toContain(
+        'momo_provider_errors_total{provider="orange",error_type="AUTH_FAILURE"}',
+      );
+    });
+
+    it("should track provider calls with trackProviderCall wrapper on success", async () => {
+      const mockResult = await trackProviderCall(
+        "wave_senegal",
+        "collect",
+        async () => {
+          return { success: true, id: "wave-123" };
+        },
+      );
+
+      expect(mockResult.success).toBe(true);
+
+      const res = await request(app).get("/metrics");
+      expect(res.status).toBe(200);
+      expect(res.text).toContain(
+        'momo_provider_request_duration_seconds_count{provider="wave_senegal",operation="collect"}',
+      );
+    });
+
+    it("should track provider calls and increment error metric on exception in trackProviderCall", async () => {
+      const failingFn = async () => {
+        const err: any = new Error("Gateway timeout");
+        err.code = "ETIMEDOUT";
+        throw err;
+      };
+
+      await expect(
+        trackProviderCall("mtn", "requestPayment", failingFn),
+      ).rejects.toThrow("Gateway timeout");
+
+      const res = await request(app).get("/metrics");
+      expect(res.status).toBe(200);
+      expect(res.text).toContain(
+        'momo_provider_errors_total{provider="mtn",error_type="ETIMEDOUT"}',
+      );
+    });
+
+    it("should record error metric when trackProviderCall returns an object with success: false", async () => {
+      await trackProviderCall("airtel", "sendPayout", async () => {
+        return { success: false, error: { code: "INSUFFICIENT_FUNDS" } };
+      });
+
+      const res = await request(app).get("/metrics");
+      expect(res.status).toBe(200);
+      expect(res.text).toContain(
+        'momo_provider_errors_total{provider="airtel",error_type="INSUFFICIENT_FUNDS"}',
+      );
+    });
+  });
+
+  describe("OpenMetrics Content Negotiation (#2170)", () => {
+    let app: express.Application;
+
+    beforeEach(() => {
+      app = express();
+      app.use(
+        "/metrics",
+        createMetricsRouter({ authEnabled: false, internalOnly: false }),
+      );
+    });
+
+    it("should return standard Prometheus text format by default without Accept header", async () => {
+      const res = await request(app).get("/metrics");
+
+      expect(res.status).toBe(200);
+      expect(res.headers["content-type"]).toContain("text/plain");
+      expect(res.headers["content-type"]).toContain("version=0.0.4");
+    });
+
+    it("should negotiate OpenMetrics format when Accept header requests application/openmetrics-text", async () => {
+      const res = await request(app)
+        .get("/metrics")
+        .set(
+          "Accept",
+          "application/openmetrics-text; version=1.0.0; charset=utf-8",
+        );
+
+      expect(res.status).toBe(200);
+      expect(res.headers["content-type"]).toContain(
+        "application/openmetrics-text",
+      );
+      expect(res.headers["content-type"]).toContain("version=1.0.0");
+      expect(res.text).toContain("# EOF");
+    });
+
+    it("should return OpenMetrics format when METRICS_OPENMETRICS is set to 'true'", async () => {
+      const originalEnv = process.env.METRICS_OPENMETRICS;
+      process.env.METRICS_OPENMETRICS = "true";
+
+      try {
+        const res = await request(app).get("/metrics");
+
+        expect(res.status).toBe(200);
+        expect(res.headers["content-type"]).toContain(
+          "application/openmetrics-text",
+        );
+        expect(res.text).toContain("# EOF");
+      } finally {
+        process.env.METRICS_OPENMETRICS = originalEnv;
+      }
     });
   });
 });
