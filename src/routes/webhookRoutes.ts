@@ -4,6 +4,7 @@ import { validateWebhookSignature } from "../middleware/validateWebhookSignature
 import { ingestRateLimiter } from "../middleware/ingestRateLimit";
 import { validateRequest } from "../middleware/validation";
 import { validateSourceIp } from "../middleware/validateSourceIp";
+import { idempotency } from "../middleware/idempotency";
 import logger from "../utils/logger";
 
 const router = Router();
@@ -36,6 +37,7 @@ const orangeBatchCallbackSchema = z.object({
 // MTN webhook
 router.post(
   "/mtn/callback",
+  idempotency,
   validateSourceIp("mtn"),
   validateWebhookSignature("mtn"),
   async (req: Request, res: Response) => {
@@ -105,6 +107,7 @@ router.post(
 // Airtel webhook
 router.post(
   "/airtel/callback",
+  idempotency,
   validateSourceIp("airtel"),
   validateWebhookSignature("airtel"),
   async (req: Request, res: Response) => {

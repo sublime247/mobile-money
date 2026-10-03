@@ -9,6 +9,7 @@ import {
   verifyWebhookPayloadEd25519,
   derivePublicSigningKey,
 } from "../crypto/webhookSigning";
+import { idempotency } from "../middleware/idempotency";
 
 const router = Router();
 const transactionModel = new TransactionModel();
@@ -222,7 +223,7 @@ router.get("/signing-key", (_req: Request, res: Response) => {
   }
 });
 
-router.post("/", async (req: Request, res: Response) => {
+router.post("/", idempotency, async (req: Request, res: Response) => {
   const webhookSecret = process.env.WEBHOOK_SECRET;
   if (!webhookSecret) {
     logger.error("[webhook] WEBHOOK_SECRET not configured");
@@ -306,6 +307,7 @@ export async function verifyAirtelWebhookSignature(
 
 router.post(
   "/airtel",
+  idempotency,
   verifyAirtelWebhookSignature,
   async (req: Request, res: Response) => {
     try {

@@ -5,11 +5,12 @@ import {
   BusinessLogicError,
 } from "../utils/errors";
 import { ERROR_CODES } from "../constants/errorCodes";
+import { idempotency } from "../middleware/idempotency";
 
 const router = Router();
 
 // Example: Validation error
-router.post("/transfer", (req: Request, res: Response, next: NextFunction) => {
+router.post("/transfer", idempotency, (req: Request, res: Response, next: NextFunction) => {
   const { phoneNumber, amount } = req.body;
 
   if (!phoneNumber) {

@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { authenticateToken } from "../../middleware/auth";
+import { idempotency } from "../../middleware/idempotency";
 import {
   createVault,
   getUserVaults,
@@ -25,7 +26,7 @@ router.put("/:vaultId", updateVault);
 router.delete("/:vaultId", deleteVault);
 
 // Vault transaction routes
-router.post("/:vaultId/transfer", transferFunds);
+router.post("/:vaultId/transfer", idempotency, transferFunds);
 router.get("/:vaultId/transactions", getVaultTransactions);
 
 export { router as vaultRoutesV1 };

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { authenticateToken } from "../middleware/auth";
 import { TimeoutPresets, haltOnTimedout } from "../middleware/timeout";
+import { idempotency } from "../middleware/idempotency";
 import {
   createPaymentLinkHandler,
   renderPaymentLinkLandingHandler,
@@ -14,6 +15,7 @@ export const paymentLinkRoutes = Router();
 // Secure endpoint for merchants to generate payment links
 paymentLinkRoutes.post(
   "/api/payment-links",
+  idempotency,
   TimeoutPresets.quick,
   haltOnTimedout,
   authenticateToken,
@@ -30,6 +32,7 @@ paymentLinkRoutes.get(
 
 paymentLinkRoutes.post(
   "/pay/:token/process",
+  idempotency,
   TimeoutPresets.long,
   haltOnTimedout,
   processPaymentHandler,

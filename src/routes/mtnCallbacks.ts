@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import { verifyMtnCallbackSignature } from "../middleware/mtnCallbackSignature";
 import { ingestRateLimiter } from "../middleware/ingestRateLimit";
+import { idempotency } from "../middleware/idempotency";
 import logger from "../utils/logger";
 
 const router = Router();
@@ -8,7 +9,7 @@ const router = Router();
 router.use(ingestRateLimiter);
 router.use(verifyMtnCallbackSignature);
 
-router.post("/callback", async (req: Request, res: Response) => {
+router.post("/callback", idempotency, async (req: Request, res: Response) => {
   const transactionId = req.body?.transactionId;
   const traceId =
     (req.headers["x-trace-id"] as string) ||
