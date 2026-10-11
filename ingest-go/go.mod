@@ -1,13 +1,13 @@
 module github.com/mobile-money/ingest-go
 
-go 1.22
+go 1.24
 
 require (
 	github.com/getsentry/sentry-go v0.27.0
 	github.com/nats-io/nats.go v1.37.0
 	github.com/redis/go-redis/v9 v9.7.0
 	github.com/valyala/fasthttp v1.57.0
-	github.com/valyala/fastjson v1.6.4
+	github.com/valyala/fastjson v1.6.10
 )
 
 require (
