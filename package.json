@@ -204,7 +204,7 @@
     "@pact-foundation/pact": "^16.3.0",
     "@playwright/test": "^1.59.1",
     "@stryker-mutator/core": "^9.6.1",
-    "@stryker-mutator/jest-runner": "^9.6.1",
+    "@stryker-mutator/jest-runner": "^10.0.0",
     "@stryker-mutator/typescript-checker": "^9.6.1",
     "@types/amqplib": "^0.10.8",
     "@types/archiver": "^7.0.0",
