@@ -103,7 +103,7 @@
     "@opentelemetry/exporter-metrics-otlp-grpc": "^0.221.0",
     "@opentelemetry/exporter-prometheus": "^0.221.0",
     "@opentelemetry/exporter-trace-otlp-grpc": "^0.221.0",
-    "@opentelemetry/resources": "^1.30.0",
+    "@opentelemetry/resources": "^2.11.0",
     "@opentelemetry/sdk-metrics": "^1.30.0",
     "@opentelemetry/sdk-node": "^0.221.0",
     "@opentelemetry/sdk-trace-base": "^1.30.0",
