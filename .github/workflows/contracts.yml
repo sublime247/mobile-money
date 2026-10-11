@@ -106,7 +106,7 @@ jobs:
             -exec du -sh {} \;
 
       - name: Upload WASM artefacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: escrow-wasm-${{ github.sha }}
           path: contracts/target/wasm32v1-none/release/*.wasm
@@ -182,7 +182,7 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-results-${{ github.sha }}
           path: |
@@ -237,7 +237,7 @@ jobs:
           grep -E 'line-rate|branch-rate' coverage/cobertura.xml | head -5 || true
 
       - name: Upload coverage report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-report-${{ github.sha }}
           path: contracts/coverage/
