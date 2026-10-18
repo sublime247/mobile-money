@@ -9,7 +9,7 @@
     "dev": "tsx src/index.ts"
   },
   "dependencies": {
-    "fastify": "^4.28.1",
+    "fastify": "^5.12.5",
     "ioredis": "^5.4.1",
     "nats": "^2.28.2",
     "prom-client": "^15.1.3",
