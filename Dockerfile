@@ -1,7 +1,7 @@
 # =============================================================================
 # Stage 1: builder — Compile TypeScript to JavaScript
 # =============================================================================
-FROM node:24-alpine AS builder
+FROM node:26-alpine AS builder
 RUN apk upgrade --no-cache
 WORKDIR /app
 
@@ -20,7 +20,7 @@ RUN npm run build
 # =============================================================================
 # Stage 2: deps — Install ONLY production modules, then aggressively prune
 # =============================================================================
-FROM node:24-alpine AS deps
+FROM node:26-alpine AS deps
 RUN apk upgrade --no-cache
 WORKDIR /app
 
@@ -90,7 +90,7 @@ RUN npm ci --omit=dev --legacy-peer-deps --ignore-scripts && \
 # =============================================================================
 # Stage 3: production — Minimal Alpine runtime image
 # =============================================================================
-FROM node:24-alpine AS production
+FROM node:26-alpine AS production
 RUN apk upgrade --no-cache
 
 ENV NODE_ENV=production
