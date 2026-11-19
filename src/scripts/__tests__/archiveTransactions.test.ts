@@ -8,6 +8,9 @@
 import { archiveTransactions, type ArchiveConfig, type ArchiveStats } from "../archiveTransactions";
 import { pool } from "../../config/database";
 import { v4 as uuidv4 } from "uuid";
+import { Keypair } from "@stellar/stellar-sdk";
+
+const stellarAddress = Keypair.random().publicKey();
 
 describe("Transaction Archival Script (#2033)", () => {
   let testUserId: string;
@@ -58,7 +61,7 @@ describe("Transaction Archival Script (#2033)", () => {
           "100.00",
           "+237670000002",
           "airtel",
-          "GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+          stellarAddress,
           "completed",
           testUserId,
           oldDate,
@@ -112,7 +115,7 @@ describe("Transaction Archival Script (#2033)", () => {
           "50.00",
           "+237670000003",
           "mtn",
-          "GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+          stellarAddress,
           "completed",
           testUserId,
           today,
@@ -156,7 +159,7 @@ describe("Transaction Archival Script (#2033)", () => {
         amount: "123.45",
         phone_number: "+237670000004",
         provider: "orange",
-        stellar_address: "GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+        stellar_address: stellarAddress,
         status: "completed" as const,
       };
 
@@ -200,7 +203,7 @@ describe("Transaction Archival Script (#2033)", () => {
       const archived = result.rows[0];
       expect(archived.reference_number).toBe(testData.reference_number);
       expect(archived.type).toBe(testData.type);
-      expect(archived.amount).toBe(testData.amount);
+      expect(archived.amount).toBe("123.4500000");
       expect(archived.phone_number).toBe(testData.phone_number);
       expect(archived.provider).toBe(testData.provider);
       expect(archived.stellar_address).toBe(testData.stellar_address);
@@ -228,7 +231,7 @@ describe("Transaction Archival Script (#2033)", () => {
             `${100 + i}.00`,
             "+237670000005",
             "airtel",
-            "GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+            stellarAddress,
             "failed",
             testUserId,
             oldDate,
@@ -269,7 +272,7 @@ describe("Transaction Archival Script (#2033)", () => {
           "50.00",
           "+237670000006",
           "mtn",
-          "GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+          stellarAddress,
           "completed",
           testUserId,
           oldDate,
@@ -322,7 +325,7 @@ describe("Transaction Archival Script (#2033)", () => {
           "50.00",
           "+237670000007",
           "airtel",
-          "GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+          stellarAddress,
           "completed",
           testUserId,
           oldDate,
@@ -376,7 +379,7 @@ describe("Transaction Archival Script (#2033)", () => {
             "50.00",
             "+237670000008",
             "airtel",
-            "GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+            stellarAddress,
             "completed",
             testUserId,
             oldDate,
@@ -419,7 +422,7 @@ describe("Transaction Archival Script (#2033)", () => {
             "50.00",
             "+237670000009",
             "airtel",
-            "GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+            stellarAddress,
             "completed",
             testUserId,
             oldDate,
