@@ -200,6 +200,19 @@ export const configSchema = convict({
     },
   },
 
+  healthCheck: {
+    failureThreshold: {
+      doc: "Consecutive provider health failures before opening the circuit",
+      format: "nat",
+      default: 3,
+    },
+    openDurationMs: {
+      doc: "Provider health circuit cooldown in milliseconds",
+      format: "nat",
+      default: 60_000,
+    },
+  },
+
   // Mobile Money Provider Limits
   providers: {
     mtn: {

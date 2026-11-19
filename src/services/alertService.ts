@@ -224,3 +224,44 @@ export async function sendLowBalanceAlert(params: {
     },
   });
 }
+
+export interface WebhookBacklog {
+  depth: number;
+  oldestAgeSeconds?: number;
+}
+
+export function webhookBacklogAction(
+  { depth, oldestAgeSeconds = 0 }: WebhookBacklog,
+  incidentActive: boolean,
+): "trigger" | "resolve" | undefined {
+  if (depth > 500 || oldestAgeSeconds > 900) {
+    return incidentActive ? undefined : "trigger";
+  }
+  if (incidentActive && depth < 100) return "resolve";
+  return undefined;
+}
+
+export async function dispatchWebhookBacklogAlert(
+  routingKey: string,
+  dedupKey: string,
+  action: "trigger" | "resolve",
+  backlog: WebhookBacklog,
+): Promise<void> {
+  await axios.post(
+    "https://events.pagerduty.com/v2/enqueue",
+    {
+      routing_key: routingKey,
+      event_action: action,
+      dedup_key: dedupKey,
+      ...(action === "trigger" && {
+        payload: {
+          summary: "Merchant webhook delivery retry backlog exceeds threshold",
+          source: "mobile-money-api",
+          severity: "critical",
+          custom_details: backlog,
+        },
+      }),
+    },
+    { timeout: 5000, maxRedirects: 0 },
+  );
+}

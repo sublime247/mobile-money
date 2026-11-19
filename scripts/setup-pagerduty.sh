@@ -22,13 +22,14 @@ echo "📋 Verifying implementation files..."
 
 files=(
   "src/services/pagerDutyService.ts"
+  "src/services/alertService.ts"
+  "src/queue/webhookRetryQueue.ts"
   "src/services/monitoringService.ts"
   "src/middleware/providerMetrics.ts"
   "src/jobs/scheduler.ts"
   "src/config/env.ts"
   "src/index.ts"
   "docs/PAGERDUTY_INTEGRATION.md"
-  "QUICK_START_PAGERDUTY.md"
 )
 
 missing_files=()
@@ -93,7 +94,7 @@ echo "🧪 Running Tests"
 echo "================"
 echo ""
 
-if npm run test -- pagerDutyService.test.ts 2>/dev/null; then
+if npm run test -- pagerDutyService.test.ts alertService.test.ts setupPagerduty.test.ts --coverage=false --runInBand 2>/dev/null; then
   echo "✅ All tests passed"
 else
   echo "⚠️  Build project first: npm run build"
@@ -104,7 +105,6 @@ echo "✅ Setup Complete!"
 echo ""
 echo "📚 Documentation:"
 echo "  - Full Guide:   docs/PAGERDUTY_INTEGRATION.md"
-echo "  - Quick Start:  QUICK_START_PAGERDUTY.md"
 echo "  - Examples:     src/services/examples/pagerDutyIntegrationExamples.ts"
 echo ""
 echo "🎯 Next Steps:"

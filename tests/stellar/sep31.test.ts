@@ -1,5 +1,6 @@
 import request from "supertest";
 import express from "express";
+import { randomUUID } from "crypto";
 
 // Prefix with 'mock' to allow use in hoisted jest.mock
 const mockCreate = jest.fn();
@@ -16,6 +17,28 @@ jest.mock("../../src/config/database", () => ({
   },
   queryRead: jest.fn(),
   queryWrite: jest.fn(),
+}));
+
+jest.mock("../../src/models/users", () => ({
+  UserModel: jest.fn().mockImplementation(() => ({
+    findById: jest.fn().mockResolvedValue({ kycLevel: "basic" }),
+  })),
+}));
+
+jest.mock("../../src/config/redis", () => ({
+  ...jest.requireActual("../../src/config/redis"),
+  redisClient: {
+    get: jest.fn().mockResolvedValue(null),
+    set: jest.fn().mockResolvedValue("OK"),
+  },
+}));
+
+jest.mock("../../src/utils/lock", () => ({
+  ...jest.requireActual("../../src/utils/lock"),
+  lockManager: {
+    acquire: jest.fn().mockResolvedValue({ release: jest.fn().mockResolvedValue(undefined) }),
+    release: jest.fn().mockResolvedValue(undefined),
+  },
 }));
 
 // Mock sanctionService
@@ -98,11 +121,23 @@ describe("SEP-31 Cross-Border Payments API", () => {
 
   describe("POST /sep31/transactions", () => {
     const validPayload = {
+      destination_country: "NG",
       amount: "100.00",
       asset_code: "XLM",
       sender_id: "sender-123",
       receiver_id: "receiver-456",
       fields: {
+        sender: {
+          first_name: "Test",
+          last_name: "Sender",
+          id_number: "test-id",
+          mobile_number: "+2348031234567",
+        },
+        receiver: {
+          first_name: "Test",
+          last_name: "Receiver",
+          mobile_number: "+2348031234568",
+        },
         transaction: {
           sender_id: "sender-123",
           receiver_id: "receiver-456",
@@ -122,7 +157,7 @@ describe("SEP-31 Cross-Border Payments API", () => {
       });
 
       const res = await request(app)
-        .post("/sep31/transactions")
+        .post("/sep31/transactions").set("Idempotency-Key", randomUUID())
         .send(validPayload);
 
       expect(res.status).toBe(201);
@@ -147,7 +182,7 @@ describe("SEP-31 Cross-Border Payments API", () => {
       });
 
       const res = await request(app)
-        .post("/sep31/transactions")
+        .post("/sep31/transactions").set("Idempotency-Key", randomUUID())
         .send(validPayload);
 
       expect(res.status).toBe(201);
@@ -163,7 +198,7 @@ describe("SEP-31 Cross-Border Payments API", () => {
         createdAt: new Date(),
       });
 
-      await request(app).post("/sep31/transactions").send(validPayload);
+      await request(app).post("/sep31/transactions").set("Idempotency-Key", randomUUID()).send(validPayload);
 
       expect(mockCreate).toHaveBeenCalledTimes(1);
       const createArg = mockCreate.mock.calls[0][0];
@@ -209,10 +244,11 @@ describe("SEP-31 Cross-Border Payments API", () => {
       });
 
       const res = await request(app)
-        .post("/sep31/transactions")
+        .post("/sep31/transactions").set("Idempotency-Key", randomUUID())
         .send({
           ...validPayload,
           fields: {
+            ...validPayload.fields,
             transaction: {
               ...validPayload.fields.transaction,
               receiver_name: "John Doe",
@@ -246,7 +282,9 @@ describe("SEP-31 Cross-Border Payments API", () => {
         createdAt: new Date(),
       });
 
-      const res = await request(app).post("/sep31/transactions").send({
+      const res = await request(app).post("/sep31/transactions").set("Idempotency-Key", randomUUID()).send({
+        ...validPayload,
+        fields: { sender: validPayload.fields.sender, receiver: validPayload.fields.receiver },
         amount: "50",
         asset_code: "XLM",
         sender_id: "top-sender",
@@ -268,7 +306,7 @@ describe("SEP-31 Cross-Border Payments API", () => {
       });
 
       const res = await request(app)
-        .post("/sep31/transactions")
+        .post("/sep31/transactions").set("Idempotency-Key", randomUUID())
         .send({
           ...validPayload,
           asset_code: "stellar:XLM",
@@ -279,36 +317,36 @@ describe("SEP-31 Cross-Border Payments API", () => {
 
     it("should return 400 for missing amount", async () => {
       const res = await request(app)
-        .post("/sep31/transactions")
+        .post("/sep31/transactions").set("Idempotency-Key", randomUUID())
         .send({ asset_code: "XLM", sender_id: "s", receiver_id: "r" });
 
       expect(res.status).toBe(400);
-      expect(res.body.error).toBe("Validation error");
-      expect(res.body.details[0].message).toContain("Amount is required");
+      expect(res.body.error).toBe("invalid_request");
+      expect(res.body.message).toContain("amount");
     });
 
     it("should return 400 for missing asset_code", async () => {
       const res = await request(app)
-        .post("/sep31/transactions")
+        .post("/sep31/transactions").set("Idempotency-Key", randomUUID())
         .send({ amount: "100", sender_id: "s", receiver_id: "r" });
 
       expect(res.status).toBe(400);
-      expect(res.body.error).toBe("Validation error");
-      expect(res.body.details[0].message).toContain("Asset code is required");
+      expect(res.body.error).toBe("invalid_request");
+      expect(res.body.message).toContain("asset_code");
     });
 
     it("should return 400 for missing sender_id and receiver_id", async () => {
       const res = await request(app)
-        .post("/sep31/transactions")
+        .post("/sep31/transactions").set("Idempotency-Key", randomUUID())
         .send({ amount: "100", asset_code: "XLM" });
 
       expect(res.status).toBe(400);
-      expect(res.body.error).toBe("Validation error");
+      expect(res.body.error).toBe("invalid_request");
     });
 
     it("should return 400 for negative amount", async () => {
       const res = await request(app)
-        .post("/sep31/transactions")
+        .post("/sep31/transactions").set("Idempotency-Key", randomUUID())
         .send({ ...validPayload, amount: "-50" });
 
       expect(res.status).toBe(400);
@@ -317,7 +355,7 @@ describe("SEP-31 Cross-Border Payments API", () => {
 
     it("should return 400 for amount below minimum", async () => {
       const res = await request(app)
-        .post("/sep31/transactions")
+        .post("/sep31/transactions").set("Idempotency-Key", randomUUID())
         .send({ ...validPayload, amount: "0.001" });
 
       expect(res.status).toBe(400);
@@ -326,7 +364,7 @@ describe("SEP-31 Cross-Border Payments API", () => {
 
     it("should return 400 for amount above maximum", async () => {
       const res = await request(app)
-        .post("/sep31/transactions")
+        .post("/sep31/transactions").set("Idempotency-Key", randomUUID())
         .send({ ...validPayload, amount: "99999999" });
 
       expect(res.status).toBe(400);
@@ -335,7 +373,7 @@ describe("SEP-31 Cross-Border Payments API", () => {
 
     it("should return 400 for unsupported asset", async () => {
       const res = await request(app)
-        .post("/sep31/transactions")
+        .post("/sep31/transactions").set("Idempotency-Key", randomUUID())
         .send({ ...validPayload, asset_code: "UNSUPPORTED" });
 
       expect(res.status).toBe(400);
@@ -344,27 +382,28 @@ describe("SEP-31 Cross-Border Payments API", () => {
 
     it("should return 400 for invalid MSISDN format", async () => {
       const res = await request(app)
-        .post("/sep31/transactions")
+        .post("/sep31/transactions").set("Idempotency-Key", randomUUID())
         .send({
           ...validPayload,
           fields: {
             ...validPayload.fields,
-            sender: {
-              mobile_number: "08012345678", // Missing country code
+            receiver: {
+              ...validPayload.fields.receiver,
+              mobile_number: "08012345678",
             },
           },
         });
 
       expect(res.status).toBe(400);
-      expect(res.body.error).toBe("Validation error");
-      expect(res.body.details[0].message).toContain("Invalid MSISDN");
+      expect(res.body.error).toBe("invalid_request");
+      expect(res.body.message).toContain("E.164");
     });
 
     it("should return 500 on database error", async () => {
       mockCreate.mockRejectedValue(new Error("DB connection failed"));
 
       const res = await request(app)
-        .post("/sep31/transactions")
+        .post("/sep31/transactions").set("Idempotency-Key", randomUUID())
         .send(validPayload);
 
       expect(res.status).toBe(500);
@@ -641,7 +680,7 @@ describe("SEP-31 Cross-Border Payments API", () => {
     });
 
     it("should calculate fees correctly", () => {
-      const result = calculateFee(100);
+      const result = calculateFee(100, { providerProcessingFee: 1, fxConversionMarginPercent: 0.5 });
       expect(result.fee).toBeGreaterThan(0);
       expect(result.total).toBe(100 + result.fee);
     });

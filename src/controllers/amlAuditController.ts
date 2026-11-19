@@ -117,28 +117,16 @@ export const listAmlAlertsForAudit = async (
 
     const result = await amlAlertModel.list(filter);
 
-    const limitVal = filter.limit ?? 50;
-    const pagination: any = {
+    const cursorFor = (alert: (typeof result.alerts)[number] | undefined) =>
+      alert ? Buffer.from(`${alert.createdAt}|${alert.id}`).toString("base64") : null;
+    const pagination = {
       total: result.total,
-      limit: limitVal,
+      limit: filter.limit ?? 50,
+      ...(!filter.before && !filter.after && { offset: filter.offset ?? 0 }),
+      before: cursorFor(result.alerts[0]),
+      after: cursorFor(result.alerts[result.alerts.length - 1]),
+      hasMore: result.hasMore ?? false,
     };
-
-    if (before || after || filter.before || filter.after) {
-      pagination.before = result.alerts.length
-        ? Buffer.from(
-            `${result.alerts[0].createdAt}|${result.alerts[0].id}`,
-          ).toString("base64")
-        : null;
-      pagination.after = result.alerts.length
-        ? Buffer.from(
-            `${result.alerts[result.alerts.length - 1].createdAt}|${result.alerts[result.alerts.length - 1].id}`,
-          ).toString("base64")
-        : null;
-      pagination.hasMore = result.hasMore ?? false;
-    } else {
-      pagination.offset = filter.offset ?? 0;
-      pagination.hasMore = result.hasMore ?? false;
-    }
 
     res.json({
       data: result.alerts,

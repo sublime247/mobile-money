@@ -25,7 +25,7 @@ describe("Logger PII Scrubbing (#1578)", () => {
     const parsed = JSON.parse(scrubbed);
 
     expect(parsed.email).toBe("[REDACTED]");
-    expect(parsed.phoneNumber).toBe("[REDACTED]");
+    expect(parsed.phoneNumber).toBe("+1*****671");
     expect(parsed.firstName).toBe("[REDACTED]");
     expect(parsed.lastName).toBe("[REDACTED]");
   });
@@ -50,9 +50,9 @@ describe("Logger PII Scrubbing (#1578)", () => {
 
     expect(next).toHaveBeenCalled();
     expect(req.body.email).toBe("[REDACTED]");
-    expect(req.body.phone).toBe("[REDACTED]");
+    expect(req.body.phone).toBe("+237*****122");
     expect(req.body.firstName).toBe("[REDACTED]");
     expect(req.query.user_email).toBe("[REDACTED]");
-    expect(req.params.phone_number).toBe("[REDACTED]");
+    expect(req.params.phone_number).toBe("+237*****122");
   });
 });

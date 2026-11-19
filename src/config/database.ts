@@ -278,7 +278,6 @@ class SlowQueryPool extends Pool {
  * continue operating once the database becomes available again.
  */
 let primaryPoolQuery: (...args: any[]) => Promise<any>;
-let primaryPoolConnect: () => Promise<PoolClient>;
 let isPrimaryPoolReconnecting = false;
 let primaryPoolReconnectAttempt = 0;
 let primaryPoolReconnectPromise: Promise<void> | null = null;
@@ -359,18 +358,19 @@ function attachPrimaryPoolRecovery(poolInstance: Pool): void {
   const originalConnect = poolInstance.connect.bind(poolInstance);
 
   primaryPoolQuery = originalQuery;
-  primaryPoolConnect = originalConnect;
 
   const wrappedPool = poolInstance as Pool & {
     query: (...args: any[]) => Promise<any>;
-    connect: () => Promise<PoolClient>;
   };
 
   wrappedPool.query = (...args: any[]): Promise<any> => runQuery(args, true);
 
-  wrappedPool.connect = async (): Promise<PoolClient> => {
-    return executeWithRetry(() => primaryPoolConnect(), "connect");
-  };
+  // pg-pool's own query implementation checks out clients with a callback.
+  // Leave that path to pg so query-level recovery can retry it as a whole.
+  wrappedPool.connect = ((callback?: Parameters<Pool["connect"]>[0]) => {
+    if (callback) return originalConnect(callback);
+    return executeWithRetry(() => originalConnect(), "connect");
+  }) as Pool["connect"];
 }
 
 async function verifyPrimaryPoolHealth(): Promise<void> {

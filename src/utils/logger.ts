@@ -6,6 +6,7 @@ import https from "https";
 import winston from "winston";
 import Transport from "winston-transport";
 import DailyRotateFile from "winston-daily-rotate-file";
+import { getCountries, getCountryCallingCode } from "libphonenumber-js";
 import { REDACT_KEYS } from "./redact";
 import { AsyncLocalStorage } from "async_hooks";
 import {
@@ -121,31 +122,29 @@ export const PII_USER_FIELDS = [
 
 type ScrubFilter = { pattern: RegExp; replacement: string };
 
-function buildJsonKeyValueScrubFilters(keys: string[]): ScrubFilter[] {
-  return keys.flatMap((key) => {
-    const escaped = key.replace(/[_-]/g, "[_-]?");
-    return [
-      {
-        pattern: new RegExp(
-          `("${escaped}"\\s*:\\s*")([^"\\\\]*(?:\\\\.[^"\\\\]*)*)(")`,
-          "gi",
-        ),
-        replacement: `$1${SCRUB_CENSOR}$3`,
-      },
-      {
-        pattern: new RegExp(`('${escaped}'\\s*:\\s*')([^']*)(')`, "gi"),
-        replacement: `$1${SCRUB_CENSOR}$3`,
-      },
-    ];
-  });
-}
+const PHONE_FIELDS =
+  /^(?:phone(?:[_ -]?number)?|mobile(?:[_ -]?number)?|msisdn|telephone)$/i;
+const ID_FIELDS =
+  /^(?:(?:customer[_ -]?)?(?:national[_ -]?id(?:[_ -]?number)?|(?:identity|id)[_ -]?number)|bank[_ -]?account(?:[_ -]?(?:number|no))?|account[_ -]?(?:number|no)|iban)$/i;
+
+const privateFields = Array.from(
+  new Set(
+    [
+      ...REDACT_KEYS,
+      ...PII_MASTER_KEY_FIELDS,
+      ...PII_USER_FIELDS.filter((key) => !PHONE_FIELDS.test(key)),
+    ].map((key) => key.toLowerCase().replace(/[_-]/g, "[_-]?")),
+  ),
+).join("|");
+
+const privateJsonField = new RegExp(
+  "([\"'])(" +
+    privateFields +
+    ")\\1\\s*:\\s*(?:\"(?:[^\"\\\\]|\\\\.)*\"|'[^']*')",
+  "gi",
+);
 
 const PII_SCRUB_REGEX_FILTERS: ScrubFilter[] = [
-  ...buildJsonKeyValueScrubFilters([
-    ...REDACT_KEYS,
-    ...PII_MASTER_KEY_FIELDS,
-    ...PII_USER_FIELDS,
-  ]),
   // Bearer tokens embedded in message strings
   {
     pattern: /Bearer\s+[A-Za-z0-9\-._~+/]+=*/g,
@@ -159,11 +158,6 @@ const PII_SCRUB_REGEX_FILTERS: ScrubFilter[] = [
   // Standalone email addresses
   {
     pattern: /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,
-    replacement: SCRUB_CENSOR,
-  },
-  // Standalone international phone numbers (E.164: + followed by 8-15 digits)
-  {
-    pattern: /\+1?\d{9,14}\b/g,
     replacement: SCRUB_CENSOR,
   },
   // JWT tokens anywhere in text (three base64url segments separated by dots)
@@ -200,13 +194,56 @@ const PII_SCRUB_REGEX_FILTERS: ScrubFilter[] = [
 ];
 
 const PII_KEY_VALUE_PATTERN =
-  /\b(master[_-]?key|pii[_-]?master[_-]?key|db[_-]?encryption[_-]?key|email|user[_-]?email|phone[_-]?number|phone|msisdn|mobile|first[_-]?name|last[_-]?name|display[_-]?name|full[_-]?name|user[_-]?name)\s*[=:]\s*['"]?[^\s'",}]+['"]?/gi;
+  /\b(master[_-]?key|pii[_-]?master[_-]?key|db[_-]?encryption[_-]?key|email|user[_-]?email|first[_-]?name|last[_-]?name|display[_-]?name|full[_-]?name|user[_-]?name)\s*[=:]\s*['"]?[^\s'",}]+['"]?/gi;
+
+const FINANCIAL_FIELD =
+  /((?:\\?["'])?\b((?:customer[_ -]?)?(?:national[_ -]?id(?:[_ -]?number)?|(?:identity|id)[_ -]?number)|bank[_ -]?account(?:[_ -]?(?:number|no))?|account[_ -]?(?:number|no)|iban|phone(?:[_ -]?number)?|mobile(?:[_ -]?number)?|msisdn|telephone)(?:\\?["'])?\s*[=:]\s*)(?:(\\?["'])(.*?)\3|([+\w(][\w().-]*(?:[ .()-]+\d+)*))/gi;
+const callingCodes = new Set<string>(
+  getCountries().map((country) => getCountryCallingCode(country)),
+);
+const INTERNATIONAL_PHONE =
+  /(?<![\w+])\+[1-9](?:[ .()-]?\d){7,14}(?![ .()-]?\d)/g;
+
+function maskLoggedPhone(value: string): string {
+  if (/^\+[1-9]\d{0,2}\*{5}\d{3}$/.test(value)) return value;
+  const digits = value.replace(/[ .()-]/g, "");
+  if (!/^\+?[1-9]\d{7,14}$/.test(digits)) return SCRUB_CENSOR;
+  const international = digits.startsWith("+") ? digits.slice(1) : digits;
+  const code = [1, 2, 3]
+    .map((length) => international.slice(0, length))
+    .find((prefix) => callingCodes.has(prefix));
+  return code ? "+" + code + "*****" + international.slice(-3) : SCRUB_CENSOR;
+}
 
 export function scrubLogOutput(chunk: string): string {
-  let result = chunk.replace(
-    PII_KEY_VALUE_PATTERN,
-    (match, key: string) => `${key}=${SCRUB_CENSOR}`,
-  );
+  let result = chunk
+    .replace(
+      FINANCIAL_FIELD,
+      (
+        _match,
+        prefix: string,
+        key: string,
+        quote: string | undefined,
+        quoted: string | undefined,
+        unquoted: string | undefined,
+      ) => {
+        const value = PHONE_FIELDS.test(key)
+          ? maskLoggedPhone(quoted ?? unquoted ?? "")
+          : SCRUB_CENSOR;
+        const delimiter = quote ?? (/^["']/.test(prefix) ? prefix[0] : "");
+        return prefix + delimiter + value + delimiter;
+      },
+    )
+    .replace(INTERNATIONAL_PHONE, maskLoggedPhone)
+    .replace(
+      PII_KEY_VALUE_PATTERN,
+      (_match, key: string) => key + "=" + SCRUB_CENSOR,
+    )
+    .replace(
+      privateJsonField,
+      (_match, quote: string, key: string) =>
+        quote + key + quote + ":" + quote + SCRUB_CENSOR + quote,
+    );
 
   for (const { pattern, replacement } of PII_SCRUB_REGEX_FILTERS) {
     pattern.lastIndex = 0;
@@ -246,7 +283,13 @@ export function logSanitizerMiddleware(req: any, res: any, next: any): void {
  */
 function safeStringify(value: unknown): string {
   const seen = new WeakSet<object>();
-  return JSON.stringify(value, (_key, item: unknown) => {
+  return JSON.stringify(value, (key, item: unknown) => {
+    if (ID_FIELDS.test(key)) return SCRUB_CENSOR;
+    if (PHONE_FIELDS.test(key)) {
+      return typeof item === "string" || typeof item === "number"
+        ? maskLoggedPhone(String(item))
+        : SCRUB_CENSOR;
+    }
     if (item instanceof Error) {
       return { name: item.name, message: item.message, stack: item.stack };
     }
@@ -421,8 +464,8 @@ export const prettyFormat = winston.format.combine(
       : "";
     const msg =
       typeof message === "string" && message.length > 0
-        ? message
-        : safeStringify(meta);
+        ? scrubLogOutput(message)
+        : scrubLogOutput(safeStringify(meta));
     return `${String(timestamp ?? new Date().toISOString())} ${String(
       level,
     ).toUpperCase()}: ${msg}${extrasStr}`;

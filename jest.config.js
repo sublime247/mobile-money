@@ -8,7 +8,11 @@ module.exports = {
       preset: "ts-jest",
       testEnvironment: "node",
       setupFiles: ["<rootDir>/tests/jest.setup.ts"],
-      roots: ["<rootDir>/src", "<rootDir>/tests"],
+      roots: [
+        "<rootDir>/src",
+        "<rootDir>/tests",
+        "<rootDir>/scripts/__tests__",
+      ],
       testMatch: ["**/__tests__/**/*.ts", "**/?(*.)+(spec|test).ts"],
       // Exclude frontend JS, Playwright E2E, and Pact tests from backend Jest run
       testPathIgnorePatterns: [
@@ -49,7 +53,7 @@ module.exports = {
   preset: "ts-jest",
   testEnvironment: "node",
   setupFilesAfterEnv: ["<rootDir>/tests/jest.setup.ts"],
-  roots: ["<rootDir>/src", "<rootDir>/tests"],
+  roots: ["<rootDir>/src", "<rootDir>/tests", "<rootDir>/scripts/__tests__"],
   testMatch: ["**/__tests__/**/*.ts", "**/?(*.)+(spec|test).ts"],
   testPathIgnorePatterns: [
     "/node_modules/",

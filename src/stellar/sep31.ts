@@ -1,3 +1,9 @@
+import { UserModel } from "../models/users";
+import {
+  validateReceiverPhoneCountryMatch,
+  validateSenderKycApproved,
+  validateSep31KycFields,
+} from "../validators/sep31";
 import { ipReputationService } from "../services/ipReputation";
 import logger from "../utils/logger";
 import { Router, Request, Response } from "express";
@@ -480,11 +486,6 @@ router.post(
     }
 
     // Strict KYC schema validation per country specifications (#1945)
-    const {
-      validateSep31KycFields,
-      validateReceiverPhoneCountryMatch,
-      validateSenderKycApproved,
-    } = await import("../validators/sep31.js");
     const kycValidation = validateSep31KycFields(
       fields,
       finalSenderId,
@@ -531,7 +532,6 @@ router.post(
     }
 
     // Sender SEP-12 KYC approval status (#2263)
-    const { UserModel } = await import("../models/users.js");
     const userModel = new UserModel();
     const senderKycValidation = await validateSenderKycApproved(
       finalSenderId,

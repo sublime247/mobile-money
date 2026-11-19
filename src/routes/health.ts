@@ -63,7 +63,8 @@ async function checkRedis(): Promise<ComponentStatus> {
     if (!redisClient?.isOpen) {
       return { status: "down", error: "Redis client not connected" };
     }
-    await redisClient.ping();
+    if ((await redisClient.ping()) !== "PONG")
+      throw new Error("Unexpected Redis response");
     return { status: "up", latencyMs: Date.now() - start };
   } catch (error) {
     logger.error("[health/deep] Redis check failed:", error);
@@ -78,7 +79,7 @@ async function checkRedis(): Promise<ComponentStatus> {
 /**
  * Pings the configured Stellar Horizon server's root endpoint.
  */
-async function checkHorizon(): Promise<ComponentStatus> {
+async function checkHorizon(verifySync = false): Promise<ComponentStatus> {
   const horizonUrl =
     process.env.STELLAR_HORIZON_URL || "https://horizon-testnet.stellar.org";
   const start = Date.now();
@@ -86,7 +87,19 @@ async function checkHorizon(): Promise<ComponentStatus> {
     const server = new StellarSdk.Horizon.Server(horizonUrl, {
       allowHttp: horizonUrl.startsWith("http://"),
     });
-    await server.root();
+    const root = await server.root();
+    if (
+      verifySync &&
+      (!Number.isFinite(root.history_latest_ledger) ||
+        !Number.isFinite(root.core_latest_ledger) ||
+        root.history_latest_ledger < root.core_latest_ledger)
+    ) {
+      return {
+        status: "down",
+        latencyMs: Date.now() - start,
+        error: "Horizon is out of sync",
+      };
+    }
     return { status: "up", latencyMs: Date.now() - start };
   } catch (error) {
     logger.error("[health/deep] Horizon check failed:", error);
@@ -120,6 +133,51 @@ async function checkProviders(): Promise<Record<string, ComponentStatus>> {
     return {};
   }
 }
+
+const probeTimeoutMs = 2_000;
+
+async function readinessProbe(
+  probe: () => Promise<ComponentStatus>,
+): Promise<ComponentStatus> {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      probe(),
+      new Promise<ComponentStatus>((resolve) => {
+        timer = setTimeout(
+          () => resolve({ status: "down", error: "Probe timed out" }),
+          probeTimeoutMs,
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+router.get("/health/liveness", (_req: Request, res: Response) => {
+  res.status(200).json({ status: "ok" });
+});
+
+router.get("/health/readiness", async (_req: Request, res: Response) => {
+  const [database, redis, horizon] = await Promise.all([
+    readinessProbe(checkDatabase),
+    readinessProbe(checkRedis),
+    readinessProbe(() => checkHorizon(true)),
+  ]);
+  const ready = database.status === "up" && redis.status === "up";
+  // Match deep health's criticality policy and keep accepting queued work
+  // during downstream outages.
+  const components = Object.fromEntries(
+    Object.entries({ database, redis, horizon }).map(([name, component]) => [
+      name,
+      { status: component.status, latencyMs: component.latencyMs },
+    ]),
+  );
+  res
+    .status(ready ? 200 : 503)
+    .json({ status: ready ? "ready" : "unready", components });
+});
 
 /**
  * GET /health/deep

@@ -1,3 +1,8 @@
+import {
+  mtnPushCountry,
+  mtnPushOutcome,
+  recordUssdPushOutcome,
+} from "../monitoring/metrics";
 import { Router, Request, Response } from "express";
 import { verifyMtnCallbackSignature } from "../middleware/mtnCallbackSignature";
 import { ingestRateLimiter } from "../middleware/ingestRateLimit";
@@ -22,6 +27,22 @@ router.post("/callback", async (req: Request, res: Response) => {
   try {
     log.info({ event: "mtn.callback.received" }, "MTN callback received");
 
+    const { status, reason, payer, phone, referenceId, externalId } =
+      req.body ?? {};
+    const reference =
+      referenceId ?? req.get("X-Reference-Id") ?? externalId ?? transactionId;
+    const outcome = mtnPushOutcome(
+      typeof status === "string" ? status.toUpperCase() : status,
+      reason,
+    );
+    if (outcome && typeof reference === "string" && reference) {
+      recordUssdPushOutcome(
+        "mtn",
+        mtnPushCountry(payer?.partyId ?? phone),
+        reference,
+        outcome,
+      );
+    }
     res.status(200).json({ status: "accepted" });
 
     log.info(

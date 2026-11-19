@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@jest/globals";
-import { normalizeArgs, jsonFormat, LOG_LEVELS } from "../logger";
+import { normalizeArgs, jsonFormat, prettyFormat, LOG_LEVELS } from "../logger";
 
 /**
  * The structured logger was migrated from pino to Winston (#1851). These
@@ -82,9 +82,24 @@ describe("Winston structured logger (#1851)", () => {
       const parsed = JSON.parse(line);
 
       expect(parsed.email).toBe("[REDACTED]");
-      expect(parsed.phoneNumber).toBe("[REDACTED]");
+      expect(parsed.phoneNumber).toBe("+1*****234");
       expect(line).not.toContain("alice@example.com");
       expect(line).not.toContain("+12025551234");
+    });
+
+    it("masks identifiers in pretty messages and nested Error metadata", () => {
+      const info = {
+        level: "error",
+        [Symbol.for("level")]: "error",
+        message: "Payment for +254712345123",
+        err: new Error("ID number=12345678"),
+        payer: { bankAccount: ["001234567890"] },
+      };
+      const transformed = prettyFormat.transform(info);
+      const line = transformed[Symbol.for("message")] as string;
+      expect(line).toContain("+254*****123");
+      expect(line).toContain("ID number=[REDACTED]");
+      expect(line).not.toContain("001234567890");
     });
 
     it("serializes Error metadata with name, message, and stack", () => {

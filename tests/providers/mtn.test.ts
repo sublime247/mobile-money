@@ -5,6 +5,14 @@ import { MTNProvider } from "../../src/services/mobilemoney/providers/mtn";
 jest.mock("axios");
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 
+function mockAcceptedPayment(response: { data?: object | null }) {
+  mockedAxios.post.mockImplementation(async (url) => (
+    url.endsWith("/collection/token/")
+      ? { data: { access_token: "test-token", expires_in: 3600 }, status: 200 }
+      : { ...response, status: 202 }
+  ));
+}
+
 // Mock environment variables
 const originalEnv = process.env;
 
@@ -60,7 +68,7 @@ describe("MTNProvider", () => {
         },
       };
 
-      mockedAxios.post.mockResolvedValue(mockResponse);
+      mockAcceptedPayment(mockResponse);
 
       const result = await provider.requestPayment(phoneNumber, amount);
 
@@ -68,7 +76,7 @@ describe("MTNProvider", () => {
         "https://sandbox.momodeveloper.mtn.com/collection/v1_0/requesttopay",
         {
           amount,
-          currency: "EUR",
+          currency: "XAF",
           externalId: expect.any(String),
           payer: { partyIdType: "MSISDN", partyId: phoneNumber },
           payerMessage: "Payment for Stellar deposit",
@@ -76,6 +84,8 @@ describe("MTNProvider", () => {
         },
         {
           headers: {
+            Authorization: "Bearer test-token",
+            "X-Reference-Id": expect.any(String),
             "Ocp-Apim-Subscription-Key": "test-subscription-key",
             "X-Target-Environment": "sandbox",
           },
@@ -202,14 +212,14 @@ describe("MTNProvider", () => {
 
     it("should generate unique externalId for each request", async () => {
       const mockResponse = { data: { referenceId: "test-ref" } };
-      mockedAxios.post.mockResolvedValue(mockResponse);
+      mockAcceptedPayment(mockResponse);
 
       await provider.requestPayment(phoneNumber, amount);
-      const firstCall = mockedAxios.post.mock.calls[0];
+      const firstCall = mockedAxios.post.mock.calls.find(([url]) => url.endsWith("/requesttopay"))!;
       const firstPayload = firstCall[1] as { externalId: string };
 
       await provider.requestPayment(phoneNumber, amount);
-      const secondCall = mockedAxios.post.mock.calls[1];
+      const secondCall = mockedAxios.post.mock.calls.filter(([url]) => url.endsWith("/requesttopay"))[1];
       const secondPayload = secondCall[1] as { externalId: string };
 
       expect(firstPayload.externalId).not.toBe(secondPayload.externalId);
@@ -218,7 +228,7 @@ describe("MTNProvider", () => {
     it("should handle invalid phone number format", async () => {
       const invalidPhone = "invalid-phone";
       const mockResponse = { data: { referenceId: "test-ref" } };
-      mockedAxios.post.mockResolvedValue(mockResponse);
+      mockAcceptedPayment(mockResponse);
 
       const result = await provider.requestPayment(invalidPhone, amount);
 
@@ -235,7 +245,7 @@ describe("MTNProvider", () => {
     it("should handle zero amount", async () => {
       const zeroAmount = "0";
       const mockResponse = { data: { referenceId: "test-ref" } };
-      mockedAxios.post.mockResolvedValue(mockResponse);
+      mockAcceptedPayment(mockResponse);
 
       const result = await provider.requestPayment(phoneNumber, zeroAmount);
 
@@ -295,7 +305,7 @@ describe("MTNProvider", () => {
   describe("Authentication Flow", () => {
     it("should use correct API headers for authentication", async () => {
       const mockResponse = { data: { referenceId: "test-ref" } };
-      mockedAxios.post.mockResolvedValue(mockResponse);
+      mockAcceptedPayment(mockResponse);
 
       await provider.requestPayment("+256123456789", "1000");
 
@@ -304,6 +314,8 @@ describe("MTNProvider", () => {
         expect.any(Object),
         {
           headers: {
+            Authorization: "Bearer test-token",
+            "X-Reference-Id": expect.any(String),
             "Ocp-Apim-Subscription-Key": "test-subscription-key",
             "X-Target-Environment": "sandbox",
           },
@@ -321,7 +333,7 @@ describe("MTNProvider", () => {
 
       const providerWithoutSubKey = new MTNProvider();
       const mockResponse = { data: { referenceId: "test-ref" } };
-      mockedAxios.post.mockResolvedValue(mockResponse);
+      mockAcceptedPayment(mockResponse);
 
       await providerWithoutSubKey.requestPayment("+256123456789", "1000");
 
@@ -330,6 +342,8 @@ describe("MTNProvider", () => {
         expect.any(Object),
         {
           headers: {
+            Authorization: "Bearer test-token",
+            "X-Reference-Id": expect.any(String),
             "Ocp-Apim-Subscription-Key": "",
             "X-Target-Environment": "sandbox",
           },
@@ -347,7 +361,7 @@ describe("MTNProvider", () => {
         },
       };
 
-      mockedAxios.post.mockResolvedValue(mockResponse);
+      mockAcceptedPayment(mockResponse);
 
       const result = await provider.requestPayment("+256123456789", "1000");
 
@@ -363,7 +377,7 @@ describe("MTNProvider", () => {
         },
       };
 
-      mockedAxios.post.mockResolvedValue(mockResponse);
+      mockAcceptedPayment(mockResponse);
 
       const result = await provider.requestPayment("+256123456789", "1000");
 
@@ -379,7 +393,7 @@ describe("MTNProvider", () => {
         },
       };
 
-      mockedAxios.post.mockResolvedValue(mockResponse);
+      mockAcceptedPayment(mockResponse);
 
       const result = await provider.requestPayment("+256123456789", "1000");
 
@@ -392,7 +406,7 @@ describe("MTNProvider", () => {
     it("should handle extremely large amounts", async () => {
       const largeAmount = "999999999999";
       const mockResponse = { data: { referenceId: "test-ref" } };
-      mockedAxios.post.mockResolvedValue(mockResponse);
+      mockAcceptedPayment(mockResponse);
 
       const result = await provider.requestPayment(
         "+256123456789",
@@ -418,7 +432,7 @@ describe("MTNProvider", () => {
       ];
 
       const mockResponse = { data: { referenceId: "test-ref" } };
-      mockedAxios.post.mockResolvedValue(mockResponse);
+      mockAcceptedPayment(mockResponse);
 
       for (const phone of internationalNumbers) {
         const result = await provider.requestPayment(phone, "1000");
@@ -429,7 +443,7 @@ describe("MTNProvider", () => {
     it("should handle special characters in amount", async () => {
       const specialAmount = "1000.50";
       const mockResponse = { data: { referenceId: "test-ref" } };
-      mockedAxios.post.mockResolvedValue(mockResponse);
+      mockAcceptedPayment(mockResponse);
 
       const result = await provider.requestPayment(
         "+256123456789",
@@ -453,7 +467,7 @@ describe("MTNProvider", () => {
         data: null, // Malformed response
       };
 
-      mockedAxios.post.mockResolvedValue(malformedResponse);
+      mockAcceptedPayment(malformedResponse);
 
       const result = await provider.requestPayment("+256123456789", "1000");
 
@@ -466,7 +480,7 @@ describe("MTNProvider", () => {
     it("should handle empty API response", async () => {
       const emptyResponse = {};
 
-      mockedAxios.post.mockResolvedValue(emptyResponse);
+      mockAcceptedPayment(emptyResponse);
 
       const result = await provider.requestPayment("+256123456789", "1000");
 

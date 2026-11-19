@@ -232,7 +232,7 @@ describe("AirtelService - Additional Session Proxy Tests", () => {
       expect((service as any).countryCode).toBe("KE");
     });
 
-    it("should throw for mismatched Kenya currency", async () => {
+    it("should reject payment for mismatched Kenya currency", async () => {
       const service = new AirtelService({
         mode: "direct",
         directHttpClient: { post: jest.fn() },
@@ -242,7 +242,12 @@ describe("AirtelService - Additional Session Proxy Tests", () => {
 
       await expect(
         service.requestPayment("254700000000", "1000"),
-      ).rejects.toThrow('country "KE" requires currency "KES"');
+      ).resolves.toMatchObject({
+        success: false,
+        error: expect.objectContaining({
+          message: expect.stringContaining('country "KE" requires currency "KES"'),
+        }),
+      });
     });
 
     it("should accept correct currency for Tanzania", () => {
@@ -337,11 +342,7 @@ describe("AirtelService - Additional Session Proxy Tests", () => {
           data: { access_token: "token", expires_in: 3600 },
         })
         .mockResolvedValueOnce({ status: 500, data: { error: "server error" } })
-        .mockResolvedValueOnce({
-          status: 200,
-          data: { access_token: "token2", expires_in: 3600 },
-        })
-        .mockResolvedValueOnce({ status: 500, data: { error: "server error" } });
+        .mockResolvedValue({ status: 500, data: { error: "server error" } });
 
       const result = await service.sendPayout("2348012345678", "1000");
 
@@ -385,7 +386,10 @@ describe("AirtelService - Additional Session Proxy Tests", () => {
 
       await expect(
         service.sendPayout("2348012345678", "1000"),
-      ).rejects.toThrow("Proxy client not configured");
+      ).resolves.toMatchObject({
+        success: false,
+        error: expect.objectContaining({ message: "Proxy client not configured" }),
+      });
     });
   });
 
@@ -596,7 +600,7 @@ describe("AirtelService - Additional Session Proxy Tests", () => {
         directHttpClient: mockClient,
       });
 
-      mockClient.post = jest.fn().mockResolvedValueOnce({
+      mockClient.post = jest.fn().mockResolvedValue({
         status: 200,
         data: null,
       });
@@ -639,37 +643,26 @@ describe("AirtelService - Additional Session Proxy Tests", () => {
       expect(result.success).toBe(true);
       expect(mockClient.post).toHaveBeenCalledWith(
         "/auth/oauth2/token",
-        undefined,
+        {},
         expect.anything(),
       );
     });
 
     it("should reuse valid token without re-authenticating", async () => {
-      const mockClient = { post: jest.fn(), get: jest.fn() };
-      const now = 1000000;
-
+      const mockClient = {
+        post: jest.fn()
+          .mockResolvedValueOnce({ status: 200, data: { access_token: "token", expires_in: 3600 } })
+          .mockResolvedValue({ status: 200, data: { success: true } }),
+        get: jest.fn(),
+      };
       const service = new AirtelService({
         mode: "direct",
         directHttpClient: mockClient,
-        clock: () => now,
       });
 
-      (service as any).token = "valid-token";
-      (service as any).tokenExpiry = now + 3600000;
-
-      mockClient.post = jest.fn().mockResolvedValueOnce({
-        status: 200,
-        data: { success: true },
-      });
-
-      const result = await service.sendPayout("2348012345678", "1000");
-
-      expect(result.success).toBe(true);
-      expect(mockClient.post).not.toHaveBeenCalledWith(
-        "/auth/oauth2/token",
-        undefined,
-        expect.anything(),
-      );
+      expect((await service.sendPayout("2348012345678", "1000")).success).toBe(true);
+      expect((await service.sendPayout("2348012345678", "1000")).success).toBe(true);
+      expect(mockClient.post.mock.calls.filter(([url]) => url === "/auth/oauth2/token")).toHaveLength(1);
     });
   });
 

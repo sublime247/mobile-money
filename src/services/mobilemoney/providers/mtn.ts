@@ -9,6 +9,12 @@
  * `MTNProvider` from this path continue to work unchanged.
  */
 
+import {
+  mtnPushCountry,
+  mtnPushOutcome,
+  recordUssdPushDispatch,
+  recordUssdPushOutcome,
+} from "../../../monitoring/metrics";
 import axios from "axios";
 import { randomUUID } from "crypto";
 import { BaseProvider, ProviderAuthConfig } from "../../providers/baseProvider";
@@ -237,6 +243,7 @@ export class MTNProvider extends BaseProvider {
         ),
       );
 
+      recordUssdPushDispatch("mtn", mtnPushCountry(phoneNumber), referenceId);
       const duration = Date.now() - startTime;
       log.info(
         maskPII({ duration, status: response.status }),
@@ -561,6 +568,10 @@ export class MTNProvider extends BaseProvider {
       );
 
       const providerStatus = String(response.data?.status ?? "").toUpperCase();
+      const outcome = mtnPushOutcome(providerStatus, response.data?.reason);
+      if (outcome) {
+        recordUssdPushOutcome("mtn", "unknown", referenceId, outcome, true);
+      }
       const operatorCode =
         response.data?.status ?? response.data?.reason ?? "STATUS_QUERY_OK";
 

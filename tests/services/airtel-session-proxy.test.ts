@@ -70,7 +70,7 @@ describe("AirtelService - Session Proxy Wrapper", () => {
       expect(result.success).toBe(true);
       expect(mockClient.post).toHaveBeenCalledWith(
         "/auth/oauth2/token",
-        undefined,
+        {},
         expect.objectContaining({
           headers: expect.objectContaining({
             Authorization: expect.stringMatching(/^Basic /),

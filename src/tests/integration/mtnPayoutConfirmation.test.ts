@@ -26,7 +26,7 @@ const mockQueryRead = queryRead as jest.MockedFunction<typeof queryRead>;
 const mockQueryWrite = queryWrite as jest.MockedFunction<typeof queryWrite>;
 
 function buildSignature(payload: string, secret: string): string {
-  return createHmac("sha256", secret).update(payload).digest("base64");
+  return createHmac("sha256", secret).update(payload).digest("hex");
 }
 
 describe("MTN Payout Confirmation Routines (Integration Tests)", () => {
