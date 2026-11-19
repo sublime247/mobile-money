@@ -1,3 +1,6 @@
+import { createQueueControlRouter } from "./admin/queueControl";
+import { providerQueueControl } from "../queue/providerQueueControl";
+import { auditService } from "../services/auditService";
 import logger, { getTelecomAverageMetrics } from "../utils/logger";
 
 import { Router, Request, Response, NextFunction } from "express";
@@ -356,9 +359,6 @@ router.get(
   async (req: Request, res: Response) => {
     try {
       const category = req.query.category as string | undefined;
-      const { systemConfigService } = await import(
-        "../services/systemConfigService.js"
-      );
       const configs = await systemConfigService.getAll(category);
 
       res.json({
@@ -379,9 +379,6 @@ router.get(
   logAdminAction("GET_SYSTEM_CONFIG"),
   async (req: Request, res: Response) => {
     try {
-      const { systemConfigService } = await import(
-        "../services/systemConfigService.js"
-      );
       const entry = await systemConfigService.get(req.params.key);
 
       if (!entry) {
@@ -425,9 +422,6 @@ router.put(
         );
       }
 
-      const { systemConfigService } = await import(
-        "../services/systemConfigService.js"
-      );
       const entry = await systemConfigService.upsert({
         key: key.trim(),
         value: String(value),
@@ -461,9 +455,6 @@ router.delete(
         throw createError(ERROR_CODES.UNAUTHORIZED, "Authentication required");
       }
 
-      const { systemConfigService } = await import(
-        "../services/systemConfigService.js"
-      );
       const deleted = await systemConfigService.delete(req.params.key);
 
       if (!deleted) {
@@ -515,9 +506,6 @@ router.patch(
         }
       }
 
-      const { systemConfigService } = await import(
-        "../services/systemConfigService.js"
-      );
       const results = await systemConfigService.bulkUpsert(
         configs.map((c: any) => ({
           key: c.key.trim(),

@@ -503,6 +503,7 @@ export class AirtelService {
       return {
         success: response.success ?? false,
         data: response.data,
+        error: response.error,
         providerResponseTimeMs: duration,
       };
     } catch (error: any) {

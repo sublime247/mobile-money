@@ -685,6 +685,7 @@ async function initializeRuntime(): Promise<void> {
       scheduleProviderBalanceAlertJob,
       startAccountingTokenRefreshWorker,
       startWebhookRetryWorker,
+      startWebhookRetryBacklogWatcher,
       startRefundWorker,
       startReceivingAnchorWebhookWorker,
       startRedisBackpressureMonitor,
@@ -696,6 +697,7 @@ async function initializeRuntime(): Promise<void> {
     startProviderBalanceAlertWorker();
     startAccountingTokenRefreshWorker();
     startWebhookRetryWorker();
+    startWebhookRetryBacklogWatcher();
     startRefundWorker();
     startReceivingAnchorWebhookWorker();
     await scheduleProviderBalanceAlertJob();

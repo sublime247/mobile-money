@@ -18,6 +18,7 @@
  *   - getTransactionStatus
  */
 
+import { recordUssdPushDispatch } from "../../monitoring/metrics";
 import axios from "axios";
 import { BaseProvider, ProviderAuthConfig } from "./baseProvider";
 
@@ -324,6 +325,14 @@ export class MpesaProvider extends BaseProvider {
           timeout: this.timeoutMs,
         },
       );
+
+      if (
+        String(response.data.ResponseCode) === "0" &&
+        typeof response.data.CheckoutRequestID === "string" &&
+        response.data.CheckoutRequestID
+      ) {
+        recordUssdPushDispatch("mpesa", "KE", response.data.CheckoutRequestID);
+      }
 
       return {
         success: true,

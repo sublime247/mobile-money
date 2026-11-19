@@ -53,7 +53,7 @@ function buildMetrics(reg: Registry = defaultRegister) {
       // Exemplars let Grafana jump from a latency spike to the exact trace.
       // They are serialized only when the registry serves OpenMetrics
       // (METRICS_OPENMETRICS=true); the Prometheus text format omits them.
-      enableExemplars: true,
+      enableExemplars: String(reg.contentType) === Registry.OPENMETRICS_CONTENT_TYPE,
       registers: [reg],
     });
 
@@ -106,15 +106,15 @@ export function tracingMetricsMiddleware(
       httpRequestErrorsTotal.inc(labels);
     }
 
-    // prom-client switches `observe` to a single-argument form when exemplars
-    // are enabled — always pass the object shape.
-    httpRequestDuration.observe({
-      labels,
-      value: durationSeconds,
-      exemplarLabels: trace_id
-        ? { trace_id, span_id }
-        : {},
-    });
+    if (String(defaultRegister.contentType) === Registry.OPENMETRICS_CONTENT_TYPE) {
+      httpRequestDuration.observe({
+        labels,
+        value: durationSeconds,
+        exemplarLabels: trace_id ? { trace_id, span_id } : {},
+      });
+    } else {
+      httpRequestDuration.observe(labels, durationSeconds);
+    }
   });
 
   next();

@@ -1,6 +1,6 @@
 import request from "supertest";
 import express, { Express } from "express";
-import { Router } from "express";
+import { sep38Service } from "../../src/services/sep38Service";
 import {
   rateProvider,
   setRateProvider,
@@ -161,77 +161,69 @@ describe("SEP-38 Exchange Endpoints", () => {
   });
 
   describe("GET /sep38/prices", () => {
-    it("should return 400 for missing parameters", async () => {
-      const res = await request(app).get("/sep38/prices");
-
-      expect(res.status).toBe(400);
-      expect(res.body).toHaveProperty("error");
-      expect(res.body.error).toContain("Missing required parameters");
+    it("requires a sell asset and amount", async () => {
+      const res = await request(app).get("/sep38/prices").expect(400);
+      expect(res.body.error).toContain(
+        "Missing required parameter: sell_asset",
+      );
+      const missingAmount = await request(app)
+        .get("/sep38/prices")
+        .query({ sell_asset: "stellar:XLM" })
+        .expect(400);
+      expect(missingAmount.body.error).toContain("sell_amount");
     });
 
-    it("should return 400 for unsupported asset pair", async () => {
-      const res = await request(app).get("/sep38/prices").query({
-        sell_asset: "stellar:INVALID",
-        buy_asset: "iso4217:USD",
-      });
-
-      expect(res.status).toBe(400);
-      expect(res.body).toHaveProperty("error");
+    it("rejects an invalid asset format", async () => {
+      const res = await request(app)
+        .get("/sep38/prices")
+        .query({
+          sell_asset: "stellar:INVALID",
+          sell_amount: "50",
+        })
+        .expect(400);
       expect(res.body.error).toContain("Invalid asset format");
     });
 
-    it("should return price for supported asset pair", async () => {
-      const res = await request(app).get("/sep38/prices").query({
-        sell_asset: "stellar:XLM",
-        buy_asset: "iso4217:USD",
-      });
-
-      expect(res.status).toBe(200);
-      expect(res.body).toHaveProperty("sell_asset");
-      expect(res.body).toHaveProperty("buy_asset");
-      expect(res.body).toHaveProperty("price");
-      expect(res.body.sell_asset).toBe("stellar:XLM");
-      expect(res.body.buy_asset).toBe("iso4217:USD");
-      expect(typeof res.body.price).toBe("string");
-      expect(parseFloat(res.body.price)).toBeGreaterThan(0);
+    it.each([
+      ["stellar:XLM", "iso4217:USD"],
+      ["iso4217:USD", "stellar:XLM"],
+    ])("returns discovery prices for %s to %s", async (sellAsset, buyAsset) => {
+      const prices = [{ asset: buyAsset, price: "0.1200000", decimals: 7 }];
+      const getPrices = jest
+        .spyOn(sep38Service, "getPrices")
+        .mockResolvedValue(prices);
+      try {
+        const res = await request(app)
+          .get("/sep38/prices")
+          .query({
+            sell_asset: sellAsset,
+            sell_amount: "50",
+            buy_asset: buyAsset,
+          })
+          .expect(200);
+        expect(getPrices).toHaveBeenCalledWith(sellAsset, "50", [buyAsset]);
+        expect(res.body).toEqual({ buy_assets: prices });
+      } finally {
+        getPrices.mockRestore();
+      }
     });
 
-    it("should return price for reverse asset pair", async () => {
-      const res = await request(app).get("/sep38/prices").query({
-        sell_asset: "iso4217:USD",
-        buy_asset: "stellar:XLM",
-      });
-
-      expect(res.status).toBe(200);
-      expect(res.body).toHaveProperty("sell_asset");
-      expect(res.body).toHaveProperty("buy_asset");
-      expect(res.body).toHaveProperty("price");
-      expect(res.body.sell_asset).toBe("iso4217:USD");
-      expect(res.body.buy_asset).toBe("stellar:XLM");
-      expect(typeof res.body.price).toBe("string");
-      expect(parseFloat(res.body.price)).toBeGreaterThan(0);
-    });
-
-    it("should return 503 when liquidity is insufficient", async () => {
-      setRateProvider({
-        async getIndicativePrice() {
-          return null;
-        },
-        async getFirmPrice() {
-          return null;
-        },
-      });
-
-      const res = await request(app).get("/sep38/prices").query({
-        sell_asset: "stellar:XLM",
-        buy_asset: "iso4217:USD",
-      });
-
-      expect(res.status).toBe(503);
-      expect(res.body).toHaveProperty("error");
-      expect(res.body.error).toContain("Insufficient liquidity");
-
-      setRateProvider(new MockRateProvider());
+    it("returns an empty discovery list when liquidity is unavailable", async () => {
+      const getPrices = jest
+        .spyOn(sep38Service, "getPrices")
+        .mockResolvedValue([]);
+      try {
+        const res = await request(app)
+          .get("/sep38/prices")
+          .query({
+            sell_asset: "stellar:XLM",
+            sell_amount: "50",
+          })
+          .expect(200);
+        expect(res.body).toEqual({ buy_assets: [] });
+      } finally {
+        getPrices.mockRestore();
+      }
     });
   });
 
@@ -410,27 +402,23 @@ describe("SEP-38 Exchange Endpoints", () => {
       expect(actualTTL).toBe(maxTTL);
     });
 
-    it("should return 503 when liquidity is insufficient", async () => {
-      setRateProvider({
-        async getIndicativePrice() {
-          return null;
-        },
-        async getFirmPrice() {
-          return null;
-        },
-      });
-
-      const res = await request(app).post("/sep38/quote").send({
-        sell_asset: "stellar:XLM",
-        buy_asset: "iso4217:USD",
-        sell_amount: "50",
-      });
-
-      expect(res.status).toBe(503);
-      expect(res.body).toHaveProperty("error");
-      expect(res.body.error).toContain("Insufficient liquidity");
-
-      setRateProvider(new MockRateProvider());
+    it("returns 422 when the pricing service cannot quote the pair", async () => {
+      const calculatePrice = jest
+        .spyOn(sep38Service, "calculatePrice")
+        .mockResolvedValueOnce(null);
+      try {
+        const res = await request(app)
+          .post("/sep38/quote")
+          .send({
+            sell_asset: "stellar:XLM",
+            buy_asset: "iso4217:USD",
+            sell_amount: "50",
+          })
+          .expect(422);
+        expect(res.body.error).toContain("No rate available");
+      } finally {
+        calculatePrice.mockRestore();
+      }
     });
   });
 

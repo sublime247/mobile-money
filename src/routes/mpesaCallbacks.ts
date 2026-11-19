@@ -17,6 +17,8 @@
  * as `providerReference` on the transaction when `sendB2CPayment` initiates
  * the payout).
  */
+import { recordUssdPushOutcome } from "../monitoring/metrics";
+import { resolveMpesaStkResult } from "../services/providers/mpesaStkQuery";
 import { Router, Request, Response } from "express";
 import { ingestRateLimiter } from "../middleware/ingestRateLimit";
 import logger from "../utils/logger";
@@ -60,6 +62,17 @@ router.post("/stk/callback", (req: Request, res: Response) => {
     // The callback won the race — cancel the 30s query fallback.
     if (result.checkoutRequestId) {
       mpesaStkQueryWorker.onStkCallback(result.checkoutRequestId);
+      const resolution = resolveMpesaStkResult(result.resultCode);
+      recordUssdPushOutcome(
+        "mpesa",
+        "KE",
+        result.checkoutRequestId,
+        result.success
+          ? "success"
+          : resolution.status === "expired"
+            ? "timeout"
+            : "failed",
+      );
     }
 
     // Safaricom requires this exact acknowledgement body.

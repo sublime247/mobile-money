@@ -6,7 +6,7 @@
 
 import http from "http";
 import { EventEmitter } from "events";
-import { deliverWebhookPayload } from "../outboxWorker";
+import { deliverWebhookPayload, OutboxWorker, runOutboxWorkerJob } from "../outboxWorker";
 
 // ---------------------------------------------------------------------------
 // Mock database
@@ -250,7 +250,7 @@ describe("OutboxWorker retry logic", () => {
     const worker = await startOutboxWorker();
 
     // Let the initial tick fire
-    await jest.runAllTimersAsync();
+    await jest.advanceTimersByTimeAsync(10);
     await stopOutboxWorker(worker);
     jest.useRealTimers();
 
@@ -304,7 +304,7 @@ describe("OutboxWorker retry logic", () => {
     jest.useFakeTimers();
     const { startOutboxWorker, stopOutboxWorker } = await import("../outboxWorker");
     const worker = await startOutboxWorker();
-    await jest.runAllTimersAsync();
+    await jest.advanceTimersByTimeAsync(10);
     await stopOutboxWorker(worker);
     jest.useRealTimers();
 
@@ -314,7 +314,8 @@ describe("OutboxWorker retry logic", () => {
         typeof args[0] === "string" && args[0].includes("next_attempt_at"),
     );
     expect(retryCall).toBeDefined();
-import { OutboxWorker, runOutboxWorkerJob } from "../outboxWorker";
+  });
+});
 
 describe("Outbox Worker (#1984)", () => {
   describe("OutboxWorker processing cycle", () => {
@@ -391,7 +392,6 @@ describe("Outbox Worker (#1984)", () => {
 
       mockPool.query
         .mockResolvedValueOnce({ rows: mockEvents }) // fetchPendingEvents
-        .mockResolvedValueOnce({}) // markAsProcessing
         .mockResolvedValueOnce({ rows: [{ attempts: 1, max_attempts: 5 }] }) // check attempts
         .mockResolvedValueOnce({}) // markAsFailed
         .mockResolvedValueOnce({ rowCount: 0 }); // pruneOldEvents
@@ -431,7 +431,6 @@ describe("Outbox Worker (#1984)", () => {
 
       mockPool.query
         .mockResolvedValueOnce({ rows: mockEvents }) // fetchPendingEvents
-        .mockResolvedValueOnce({}) // markAsProcessing
         .mockResolvedValueOnce({ rows: [{ attempts: 3, max_attempts: 3 }] }) // check attempts
         .mockResolvedValueOnce({}) // markAsFailed (permanent)
         .mockResolvedValueOnce({ rowCount: 0 }); // pruneOldEvents

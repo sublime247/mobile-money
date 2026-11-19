@@ -1,3 +1,4 @@
+import { closeWebhookRetryQueue } from "./webhookRetryQueue";
 import { transactionQueue } from "./transactionQueue";
 import { transactionWorker, closeWorker } from "./worker";
 import { syncQueue } from "./syncQueue";
@@ -41,6 +42,7 @@ export async function shutdownQueue(): Promise<void> {
     transactionQueue.close().catch(() => undefined),
     syncQueue.close().catch(() => undefined),
     closeWebhookRetryWorker().catch(() => undefined),
+    closeWebhookRetryQueue().catch(() => undefined),
     closeRefundWorker().catch(() => undefined),
     closeReceivingAnchorWebhookWorker().catch(() => undefined),
     closeReceivingAnchorWebhookQueue().catch(() => undefined),
@@ -182,3 +184,5 @@ export {
   closeCustomerCallbackQueue,
 } from "./customerCallbackQueue";
 export type { CustomerCallbackJobData } from "./customerCallbackQueue";
+
+export { startWebhookRetryBacklogWatcher } from "./webhookRetryQueue";

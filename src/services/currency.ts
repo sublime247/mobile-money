@@ -286,3 +286,46 @@ export class CurrencyService {
 }
 
 export const currencyService = new CurrencyService();
+
+export interface AirtelFeeTier {
+  min: number;
+  /** Exclusive upper bound. The last tier has no upper bound. */
+  max: number | null;
+  rate: number;
+  label: string;
+}
+
+export const AIRTEL_FEE_TIERS: readonly AirtelFeeTier[] = [
+  { min: 0, max: 1000, rate: 0.01, label: "micro" },
+  { min: 1000, max: 10000, rate: 0.008, label: "standard" },
+  { min: 10000, max: 50000, rate: 0.005, label: "bulk" },
+  { min: 50000, max: null, rate: 0.003, label: "enterprise" },
+];
+
+export const AIRTEL_MIN_FEE = 5;
+
+export interface AirtelFeeResult {
+  grossAmount: number;
+  fee: number;
+  netAmount: number;
+  tier: string;
+  rate: number;
+}
+
+export function calculateAirtelFee(amount: number): AirtelFeeResult {
+  if (!Number.isFinite(amount) || amount < 0) {
+    throw new Error("Amount must be a finite, non-negative number");
+  }
+
+  const tier = AIRTEL_FEE_TIERS.find(
+    ({ min, max }) => amount >= min && (max === null || amount < max),
+  ) ?? AIRTEL_FEE_TIERS[AIRTEL_FEE_TIERS.length - 1];
+  const fee = Math.round(Math.max(amount * tier.rate, AIRTEL_MIN_FEE) * 100) / 100;
+  return {
+    grossAmount: amount,
+    fee,
+    netAmount: Math.round((amount - fee) * 100) / 100,
+    tier: tier.label,
+    rate: tier.rate,
+  };
+}

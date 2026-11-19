@@ -29,10 +29,12 @@
  */
 
 import https from "https";
+import type { Pool } from "pg";
+import cron from "node-cron";
 import http from "http";
 import { URL } from "url";
 import logger from "../utils/logger.js";
-import { queryWrite } from "../config/database.js";
+import { pool as defaultPool, queryWrite } from "../config/database.js";
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -59,7 +61,7 @@ const MAX_ATTEMPTS = BACKOFF_SECONDS.length;
 // Types
 // ---------------------------------------------------------------------------
 
-interface OutboxEvent {
+interface WebhookOutboxEvent {
   id: string;
   merchant_id: string;
   webhook_url: string;
@@ -148,8 +150,8 @@ export function deliverWebhookPayload(
  * Uses `SKIP LOCKED` so concurrent worker instances skip rows already locked
  * by a sibling.
  */
-async function claimBatch(): Promise<OutboxEvent[]> {
-  const result = await queryWrite<OutboxEvent>(
+async function claimBatch(): Promise<WebhookOutboxEvent[]> {
+  const result = await queryWrite<WebhookOutboxEvent>(
     `UPDATE outbox_events
         SET status = 'processing',
             updated_at = NOW()
@@ -229,7 +231,7 @@ async function scheduleRetry(
 // ---------------------------------------------------------------------------
 
 async function processBatch(): Promise<void> {
-  let batch: OutboxEvent[];
+  let batch: WebhookOutboxEvent[];
 
   try {
     batch = await claimBatch();
@@ -363,10 +365,7 @@ export async function stopOutboxWorker(
   handle: OutboxWorkerHandle,
 ): Promise<void> {
   handle.stop();
-import { Pool } from "pg";
-import cron from "node-cron";
-import { pool as defaultPool } from "../config/database";
-import logger from "../utils/logger";
+}
 
 export interface OutboxEvent {
   id: string;

@@ -16,6 +16,7 @@
  *   - 1037 Handset/DS timeout — no response from the subscriber
  */
 
+import { recordUssdPushOutcome } from "../../monitoring/metrics";
 import logger from "../../utils/logger";
 import { MpesaProvider, MpesaStkQueryResult } from "./mpesaService";
 import { TransactionModel, TransactionStatus } from "../../models/transaction";
@@ -391,6 +392,16 @@ export class MpesaStkQueryPoller {
       };
     }
 
+    recordUssdPushOutcome(
+      "mpesa",
+      "KE",
+      target.checkoutRequestId,
+      resolution.status === "completed"
+        ? "success"
+        : resolution.status === "expired"
+          ? "timeout"
+          : "failed",
+    );
     await this.finalize(target, resolution);
     return resolution;
   }

@@ -46,6 +46,7 @@ jest.mock("../../services/logger", () => {
 });
 
 import mpesaCallbacksRouter from "../mpesaCallbacks";
+import { ussdPushRequestsTotal } from "../../monitoring/metrics";
 import logger from "../../utils/logger";
 import { TransactionStatus } from "../../models/transaction";
 import {
@@ -159,11 +160,18 @@ describe("M-Pesa callback signature verification (#2329)", () => {
   });
 
   it("accepts a validly signed STK callback and un-arms the poller", async () => {
+    ussdPushRequestsTotal.reset();
     const response = await post("/api/mpesa/stk/callback", stkPayload);
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ ResultCode: 0, ResultDesc: "Success" });
     expect(mockOnStkCallback).toHaveBeenCalledWith("checkout-1");
+    expect((await ussdPushRequestsTotal.get()).values).toContainEqual(
+      expect.objectContaining({
+        labels: { provider: "mpesa", country: "KE", status: "success" },
+        value: 1,
+      }),
+    );
   });
 
   it("rejects a forged signature with HTTP 401", async () => {
