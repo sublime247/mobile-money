@@ -29,3 +29,5 @@ jobs:
       - name: Run OpenAPI Drift Tests
         run: npx tsx --test scripts/tests/checkOpenApiDrift.test.ts
 
+      - name: Run Pact Contract Tests
+        run: npm run test:pact:anchor

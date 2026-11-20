@@ -27,6 +27,7 @@
     "test": "NODE_OPTIONS=--experimental-vm-modules jest --coverage --forceExit --testPathIgnorePatterns=tests/pact",
     "test:offline": "MTN_BASE_URL=http://localhost:4010/mtn AIRTEL_BASE_URL=http://localhost:4010/airtel ORANGE_BASE_URL=http://localhost:4010/orange MPESA_BASE_URL=http://localhost:4010/mpesa VODACOM_BASE_URL=http://localhost:4010/vodacom NODE_OPTIONS=--experimental-vm-modules jest --coverage --forceExit --testPathIgnorePatterns=tests/pact",
     "test:pact": "NODE_OPTIONS=--experimental-vm-modules jest --coverage --config jest.pact.config.js --forceExit",
+    "test:pact:anchor": "NODE_OPTIONS=--experimental-vm-modules jest tests/pact/anchorPartner.pact.test.ts --config jest.pact.config.js --forceExit",
     "test:watch": "jest --watch",
     "test:coverage": "NODE_OPTIONS=--experimental-vm-modules jest --coverage --forceExit",
     "test:e2e": "npx playwright test --project=chromium",

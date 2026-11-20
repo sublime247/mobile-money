@@ -17,5 +17,8 @@ module.exports = {
   maxWorkers: 1,
   testTimeout: 30000,
   verbose: true,
+  // Consumer contract test configuration and provider verification flags
+  globals: {
+    PACT_PROVIDER_VERIFICATION: process.env.PACT_VERIFICATION === "true",
+  },
 };
-
