@@ -9,8 +9,38 @@ import {
   isComplianceManager,
 } from "./makerChecker";
 import { sarReportService } from "../services/sarReportService";
+import { authenticateToken } from "../middleware/auth";
+import { authorizeObj } from "../middleware/rbac";
+import { auditService, InvalidAuditRangeError } from "../services/auditService";
 
 const router = Router();
+
+router.get(
+  "/audit/export",
+  authenticateToken,
+  authorizeObj("audit_export", "read"),
+  async (req, res, next) => {
+    res.setHeader("Cache-Control", "no-store");
+    try {
+      const archive = await auditService.buildAuditArchive(
+        req.query.start as string,
+        req.query.end as string,
+      );
+      res.setHeader("Content-Type", "application/zip");
+      res.setHeader(
+        "Content-Disposition",
+        'attachment; filename="audit-package.zip"',
+      );
+      res.send(archive);
+    } catch (error) {
+      if (error instanceof InvalidAuditRangeError) {
+        res.status(400).json({ error: error.message });
+        return;
+      }
+      next(error);
+    }
+  },
+);
 
 // Middleware: Verify user is a compliance analyst, compliance officer, or compliance manager
 export const requireComplianceStaff = (
