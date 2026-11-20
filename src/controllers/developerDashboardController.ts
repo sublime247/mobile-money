@@ -208,4 +208,38 @@ export class DeveloperDashboardController {
       });
     }
   }
+
+  /**
+   * POST /api/developer/webhooks/simulate
+   * Triggers simulated payment callback to a developer's target URL
+   */
+  static async simulateWebhook(req: Request, res: Response) {
+    const { provider, status, targetUrl, amount, currency, transactionType, secret } = req.body || {};
+
+    if (!provider || !status || !targetUrl) {
+      return res.status(400).json({
+        error: "Bad Request",
+        message: "Missing required fields: provider, status, and targetUrl are required",
+      });
+    }
+
+    try {
+      const result = await service.simulateWebhook({
+        provider,
+        status,
+        targetUrl,
+        amount,
+        currency,
+        transactionType,
+        secret,
+      });
+      return res.status(200).json(result);
+    } catch (error: any) {
+      logger.error("Webhook simulator error:", error);
+      return res.status(400).json({
+        error: "Simulation Error",
+        message: error.message || "Failed to simulate webhook",
+      });
+    }
+  }
 }

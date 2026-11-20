@@ -187,6 +187,7 @@ Commands:
   dashboard                Render an active terminal overview of node CPU, memory, and queue lengths.
   provider:health          Show status, balance and latency for every mobile money provider.
                            Exits non-zero if a primary provider is DOWN (MOMO_PRIMARY_PROVIDERS, default: mtn,airtel).
+  float:check              Display real-time float account balances across all telecom partners (MTN, Orange, Airtel, M-Pesa, EcoCash).
 
 Options:
   --help, -h             Show this help information.
@@ -480,6 +481,21 @@ export async function runCli(args: string[]): Promise<void> {
     return;
   }
 
+  if (command === "float:check") {
+    try {
+      const { executeFloatCheck } = await import(
+        "../../cli/src/commands/floatCheck"
+      );
+      const isJson = args.includes("--json");
+      await executeFloatCheck({ json: isJson });
+      process.exitCode = 0;
+    } catch (error) {
+      printError("Unable to execute float:check", error);
+      process.exitCode = 1;
+    }
+    return;
+  }
+
   printError(
     `Unknown command "${command}".`,
     undefined,
@@ -499,7 +515,8 @@ if (require.main === module) {
         await activeTransactionQueue?.close().catch(() => undefined);
       } else if (
         process.argv[2] === "dashboard" ||
-        process.argv[2] === "provider:health"
+        process.argv[2] === "provider:health" ||
+        process.argv[2] === "float:check"
       ) {
         process.exit(process.exitCode || 0);
       }
