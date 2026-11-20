@@ -8,6 +8,11 @@ import {
   listBankStatementImports,
   uploadBankStatement,
 } from "../controllers/bankStatementController";
+import {
+  getStellarDiscrepancyReport,
+  listStellarDiscrepancyReports,
+  runStellarDiscrepancyReport,
+} from "../controllers/stellarDiscrepancyController";
 // import { authenticateAdmin } from "../middleware/auth"; // Assuming there's admin auth
 
 const router = Router();
@@ -52,6 +57,26 @@ router.get(
   requireAuth,
   requireFinanceAccess,
   getBankStatementImportLines,
+);
+
+// On-chain (Horizon) vs local ledger discrepancy reports. Finance operators only.
+router.get(
+  "/stellar-discrepancies",
+  requireAuth,
+  requireFinanceAccess,
+  listStellarDiscrepancyReports,
+);
+router.post(
+  "/stellar-discrepancies/run",
+  requireAuth,
+  requireFinanceAccess,
+  runStellarDiscrepancyReport,
+);
+router.get(
+  "/stellar-discrepancies/:id",
+  requireAuth,
+  requireFinanceAccess,
+  getStellarDiscrepancyReport,
 );
 
 // Resolve discrepancy
