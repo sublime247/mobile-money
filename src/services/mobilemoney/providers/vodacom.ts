@@ -1,9 +1,12 @@
-import axios, { AxiosInstance } from "axios";
+import type { AxiosInstance } from "axios";
+import { providerHttp } from "../../providerStatus";
 import crypto from "crypto";
 import logger from "../../../utils/logger";
 import { maskPII } from "../../../utils/masking";
 import { resolveVodacomError } from "./errors/vodacomErrorMatrix";
 import { attachCorrelationIdInterceptor } from "../../../utils/correlationIdInterceptor";
+
+const http = providerHttp("vodacom");
 
 function encrypt(data: string, publicKeyPem: string): string {
   if (!publicKeyPem) {
@@ -48,7 +51,7 @@ export class VodacomProvider {
     this.market = process.env.VODACOM_MARKET || "vodacomTZN";
     this.currency = process.env.VODACOM_CURRENCY || "TZS";
 
-    this.client = axios.create({
+    this.client = http.create({
       baseURL: this.baseUrl,
       timeout: 10000,
       headers: {

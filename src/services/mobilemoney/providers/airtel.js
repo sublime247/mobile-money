@@ -138,12 +138,12 @@ var __generator =
   };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AirtelService = void 0;
-var axios_1 = require("axios");
+var http = require("../../providerStatus").providerHttp("airtel");
 var AirtelService = /** @class */ (function () {
   function AirtelService() {
     this.token = null;
     this.tokenExpiry = 0;
-    this.client = axios_1.default.create({
+    this.client = http.create({
       baseURL: process.env.AIRTEL_BASE_URL,
       timeout: 10000,
     });

@@ -27,6 +27,7 @@ export interface TransactionStreamEvent {
   /** Owner of the transaction. Events are only delivered to that user. */
   userId?: string;
   status?: string;
+  correlation_id?: string | null;
   step?: string;
   message?: string;
   timestamp?: number;

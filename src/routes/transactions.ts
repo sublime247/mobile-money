@@ -1,3 +1,4 @@
+import { geoIpFilter } from "../middleware/geoIpFilter";
 import logger from "../utils/logger";
 import { Router, Request, Response } from "express";
 import {
@@ -243,6 +244,7 @@ transactionRoutes.patch(
 transactionRoutes.post(
   "/deposit",
   authenticateToken,
+  geoIpFilter,
   strictIdempotency,
   TimeoutPresets.long,
   haltOnTimedout,
@@ -255,6 +257,7 @@ transactionRoutes.post(
 transactionRoutes.post(
   "/withdraw",
   authenticateToken,
+  geoIpFilter,
   strictIdempotency,
   TimeoutPresets.long,
   haltOnTimedout,

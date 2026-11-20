@@ -1,4 +1,5 @@
-import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from "axios";
+import type { AxiosInstance, AxiosRequestConfig, AxiosResponse } from "axios";
+import { providerHttp } from "../../providerStatus";
 import { createHmac, randomUUID } from "crypto";
 import logger from "../../../utils/logger";
 import { maskPII } from "../../../utils/masking";
@@ -35,6 +36,8 @@ type OrangeGuineaResult = {
 };
 
 import { BaseProvider } from "../../providers/baseProvider";
+
+const http = providerHttp("orange-guinea");
 
 export class OrangeGuineaProvider extends BaseProvider {
   private readonly authPath: string;
@@ -76,7 +79,7 @@ export class OrangeGuineaProvider extends BaseProvider {
     this.callbackSecret = process.env.ORANGE_GUINEA_CALLBACK_SECRET ?? "";
     this.callbackSignatureHeader = process.env.ORANGE_GUINEA_CALLBACK_SIGNATURE_HEADER ?? "X-Oapi-Signature";
 
-    this.httpClient = axios.create({
+    this.httpClient = http.create({
       baseURL: this.baseUrl,
       timeout: this.timeoutMs,
       validateStatus: () => true,

@@ -11,12 +11,13 @@
  * The refactored implementation makes exactly one token request per refresh.
  */
 
-import axios, {
+import type {
   AxiosInstance,
   AxiosError,
   AxiosRequestConfig,
   AxiosResponse,
 } from "axios";
+import { providerHttp } from "../../providerStatus";
 import {
   BaseProvider,
   ProviderAuthConfig,
@@ -34,6 +35,8 @@ import logger from "../../../utils/logger";
 import { maskPII } from "../../../utils/masking";
 import { formatPhoneForProvider } from "../../../utils/phoneUtils";
 import { attachCorrelationIdInterceptor } from "../../../utils/correlationIdInterceptor";
+
+const http = providerHttp("airtel");
 
 // ============================================================================
 // TYPES & INTERFACES
@@ -240,7 +243,7 @@ export class AirtelService {
     if (opts.httpClient) {
       this.client = opts.httpClient;
     } else {
-      const client = axios.create({
+      const client = http.create({
         baseURL: this.config.webBaseUrl,
         timeout: this.config.requestTimeoutMs,
         maxRedirects: 0,
@@ -253,7 +256,7 @@ export class AirtelService {
     if (opts.directHttpClient) {
       this.directClient = opts.directHttpClient;
     } else {
-      const directClient = axios.create({
+      const directClient = http.create({
         baseURL: this.config.directBaseUrl,
         timeout: this.config.requestTimeoutMs,
         validateStatus: () => true,
@@ -266,7 +269,7 @@ export class AirtelService {
       if (opts.proxyHttpClient) {
         this.proxyClient = opts.proxyHttpClient;
       } else {
-        const proxyClient = axios.create({
+        const proxyClient = http.create({
           baseURL: this.config.proxyBaseUrl,
           timeout: this.config.requestTimeoutMs,
           validateStatus: () => true,

@@ -4,20 +4,24 @@ import { IncomingMessage, Server } from "http";
 import { createClient, RedisClientType } from "redis";
 import { verifyToken } from "../auth/jwt";
 import { TransactionModel, type Transaction } from "../models/transaction";
+import {
+  logWebSocketDispatch,
+  parseSubscriptionCorrelationId,
+  serializeTransactionUpdate,
+  type WebSocketMessage,
+} from "./eventEmitter";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export interface WebSocketMessage {
-  type: string;
-  data: unknown;
-}
+export type { WebSocketMessage } from "./eventEmitter";
 
 export interface TransactionUpdatePayload {
   id: string;
   status: string;
   userId?: string | null;
+  correlationId?: string | null;
   [key: string]: unknown;
 }
 
@@ -194,13 +198,25 @@ export class WebSocketManager {
       return;
     }
 
-    switch (message.type) {
+    switch (message?.type) {
       case "subscribe": {
-        const payload = message.data as { transactionId: string };
-        if (!payload?.transactionId) break;
+        const payload = message.data as { transactionId: string; correlation_id?: string };
+        if (typeof payload?.transactionId !== "string" || !payload.transactionId) break;
+        const suppliedId = message.correlation_id === undefined
+          ? payload.correlation_id
+          : message.correlation_id;
+        const correlationId = parseSubscriptionCorrelationId(suppliedId);
+        if (suppliedId !== undefined && !correlationId) {
+          this.sendToClient(client, {
+            type: "error",
+            data: { message: "Invalid correlation_id" },
+          });
+          break;
+        }
         this.subscribe(clientId, payload.transactionId);
         this.sendToClient(client, {
           type: "subscribe.ack",
+          correlation_id: correlationId,
           data: { transactionId: payload.transactionId },
         });
         break;
@@ -223,7 +239,7 @@ export class WebSocketManager {
       default:
         this.sendToClient(client, {
           type: "error",
-          data: { message: `Unknown message type: ${message.type}` },
+          data: { message: `Unknown message type: ${message?.type}` },
         });
     }
   }
@@ -283,10 +299,7 @@ export class WebSocketManager {
   async broadcastTransactionUpdate(
     payload: TransactionUpdatePayload,
   ): Promise<void> {
-    const message: WebSocketMessage = {
-      type: "transaction.updated",
-      data: { transactionId: payload.id },
-    };
+    const message = serializeTransactionUpdate(payload.id, payload.correlationId);
 
     // Publish to Redis for inter-process distribution
     if (this.redisPub) {
@@ -387,6 +400,7 @@ export class WebSocketManager {
   private sendToClient(client: WebSocket, message: WebSocketMessage): void {
     if (client.readyState === WebSocket.OPEN) {
       client.send(JSON.stringify(message));
+      logWebSocketDispatch(message);
     }
   }
 

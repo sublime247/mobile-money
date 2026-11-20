@@ -1,6 +1,9 @@
-import axios, { AxiosInstance } from "axios";
+import type { AxiosInstance } from "axios";
+import { providerHttp } from "../../providerStatus";
 import { createHmac } from "crypto";
 import { attachCorrelationIdInterceptor } from "../../../utils/correlationIdInterceptor";
+
+const http = providerHttp("wave-senegal");
 
 interface WavePaymentResponse {
   id?: string;
@@ -34,7 +37,7 @@ export class WaveSenegalProvider {
     this.webhookSecret = process.env.WAVE_WEBHOOK_SECRET || "";
     this.currency = process.env.WAVE_CURRENCY || "XOF";
 
-    this.client = axios.create({
+    this.client = http.create({
       baseURL: process.env.WAVE_BASE_URL || "https://api.wave.com/v1",
       timeout: Number(process.env.WAVE_TIMEOUT_MS || 30000),
       headers: {

@@ -18,8 +18,10 @@
  *   - getTransactionStatus
  */
 
-import axios from "axios";
+import { providerHttp } from "../providerStatus";
 import { BaseProvider, ProviderAuthConfig } from "./baseProvider";
+
+const http = providerHttp("mpesa");
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -264,7 +266,7 @@ export class MpesaProvider extends BaseProvider {
       return this.cachedToken!;
     }
 
-    const response = await axios.get<MpesaTokenResponse>(
+    const response = await http.get<MpesaTokenResponse>(
       `${this.baseUrl}/oauth/v1/generate?grant_type=client_credentials`,
       {
         headers: {
@@ -302,7 +304,7 @@ export class MpesaProvider extends BaseProvider {
       );
       const msisdn = normalizeMsisdn(phoneNumber);
 
-      const response = await axios.post(
+      const response = await http.post(
         `${this.baseUrl}/mpesa/stkpush/v1/processrequest`,
         {
           BusinessShortCode: this.shortCode,
@@ -347,7 +349,7 @@ export class MpesaProvider extends BaseProvider {
       const token = await this.getAccessToken();
       const msisdn = normalizeMsisdn(phoneNumber);
 
-      const response = await axios.post(
+      const response = await http.post(
         `${this.baseUrl}/mpesa/b2c/v1/paymentrequest`,
         {
           InitiatorName: this.initiatorName,
@@ -400,7 +402,7 @@ export class MpesaProvider extends BaseProvider {
         timestamp,
       );
 
-      const response = await axios.post(
+      const response = await http.post(
         `${this.baseUrl}/mpesa/stkpushquery/v1/query`,
         {
           BusinessShortCode: this.shortCode,

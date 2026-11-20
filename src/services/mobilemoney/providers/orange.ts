@@ -1,4 +1,5 @@
-import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from "axios";
+import type { AxiosInstance, AxiosRequestConfig, AxiosResponse } from "axios";
+import { providerHttp } from "../../providerStatus";
 import * as fs from "fs";
 import * as path from "path";
 import { BaseProvider } from "../../providers/baseProvider";
@@ -7,6 +8,8 @@ import { getConfigValue } from "../../../config/appConfig";
 import logger from "../../../utils/logger";
 import { maskPII } from "../../../utils/masking";
 import { Browser, BrowserContext, Page, chromium } from "playwright";
+
+const http = providerHttp("orange");
 
 type OrangeOperation = "payment" | "payout";
 type OrangeMode = "web" | "direct" | "proxy";
@@ -141,7 +144,7 @@ export class OrangeProvider extends BaseProvider {
     this.mode = this.resolveMode();
     this.client =
       options.httpClient ??
-      axios.create({
+      http.create({
         baseURL: this.config.webBaseUrl,
         timeout: this.config.requestTimeoutMs,
         maxRedirects: 0,
@@ -149,7 +152,7 @@ export class OrangeProvider extends BaseProvider {
       });
     this.directClient =
       options.directHttpClient ??
-      axios.create({
+      http.create({
         baseURL: this.config.directBaseUrl,
         timeout: this.config.requestTimeoutMs,
         validateStatus: () => true,
@@ -158,7 +161,7 @@ export class OrangeProvider extends BaseProvider {
     if (this.config.proxyBaseUrl) {
       this.proxyClient =
         options.proxyHttpClient ??
-        axios.create({
+        http.create({
           baseURL: this.config.proxyBaseUrl,
           timeout: this.config.requestTimeoutMs,
           validateStatus: () => true,

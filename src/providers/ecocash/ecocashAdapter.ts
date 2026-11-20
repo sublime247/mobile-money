@@ -1,4 +1,5 @@
-import axios, { AxiosError } from "axios";
+import { AxiosError } from "axios";
+import { providerHttp } from "../../services/providerStatus";
 import crypto from "crypto";
 import logger from "../../utils/logger";
 import { maskPII } from "../../utils/masking";
@@ -7,6 +8,8 @@ import {
   ProviderTransactionStatus,
 } from "../../services/mobilemoney/mobileMoneyService";
 import { resolveEcoCashErrorFromResponse } from "../../services/providers/errors/ecocashErrorMatrix";
+
+const http = providerHttp("ecocash");
 
 /**
  * Econet EcoCash disbursement adapter for Zimbabwe (USD / ZWL wallets) --
@@ -179,7 +182,7 @@ export class EcoCashAdapter implements MobileMoneyProvider {
     );
 
     try {
-      const response = await axios.post(
+      const response = await http.post(
         this.joinUrl(this.disbursePath),
         {
           merchantCode: this.merchantCode,
@@ -285,7 +288,7 @@ export class EcoCashAdapter implements MobileMoneyProvider {
     log.info(maskPII({ referenceId }), "EcoCash: Querying transaction status");
 
     try {
-      const response = await axios.get(this.joinUrl(this.statusPath), {
+      const response = await http.get(this.joinUrl(this.statusPath), {
         params: { merchantCode: this.merchantCode, reference: referenceId },
         headers: { "Content-Type": "application/json" },
         timeout: this.timeoutMs,

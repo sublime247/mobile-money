@@ -110,10 +110,12 @@ export const corsOptions: CorsOptions = {
     "Authorization",
     "X-Requested-With",
     "X-Request-ID",
+    "X-Correlation-ID",
   ],
 
   exposedHeaders: [
     "X-Request-ID",
+    "X-Correlation-ID",
     "X-RateLimit-Limit",
     "X-RateLimit-Remaining",
   ],

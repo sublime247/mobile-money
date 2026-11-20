@@ -1,7 +1,10 @@
-import axios, { AxiosInstance, AxiosError, AxiosResponse } from "axios";
+import type { AxiosInstance, AxiosError, AxiosResponse } from "axios";
+import { providerHttp } from "../../providerStatus";
 import logger from "../../../utils/logger";
 import { maskPII } from "../../../utils/masking";
 import { formatPhoneForProvider } from "../../../utils/phoneUtils";
+
+const http = providerHttp("mtn-rwanda");
 
 // ============================================================================
 // TYPES & INTERFACES
@@ -43,7 +46,7 @@ export class MTNRwandaProvider {
 
   constructor(config: MTNRwandaProviderConfig) {
     this.config = config;
-    this.client = axios.create({
+    this.client = http.create({
       baseURL: config.sandboxBaseUrl || config.baseUrl,
       timeout: config.requestTimeoutMs || 30000,
       headers: {

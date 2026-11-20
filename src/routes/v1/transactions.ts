@@ -37,9 +37,9 @@ const transactionModel = new TransactionModel();
 transactionRoutesV1.post(
   "/deposit",
   requireAuth,
+  geoFencingMiddleware,
   strictIdempotency,
   checkAccountStatusStrict,
-  geoFencingMiddleware,
   validateNetworkMiddleware,
   TimeoutPresets.long,
   haltOnTimedout,
@@ -52,9 +52,9 @@ transactionRoutesV1.post(
 transactionRoutesV1.post(
   "/withdraw",
   requireAuth,
+  geoFencingMiddleware,
   strictIdempotency,
   checkAccountStatusStrict,
-  geoFencingMiddleware,
   validateNetworkMiddleware,
   TimeoutPresets.long,
   haltOnTimedout,

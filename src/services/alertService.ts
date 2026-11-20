@@ -224,3 +224,23 @@ export async function sendLowBalanceAlert(params: {
     },
   });
 }
+
+/** The Redis threshold already limits this alert to once per failure streak. */
+export async function sendProviderAuthFailureAlert(
+  provider: string,
+  count: number,
+  status: number,
+): Promise<void> {
+  const url = process.env.SLACK_ALERT_WEBHOOK_URL;
+  if (!url) {
+    logger.warn("Slack alert webhook is not configured", { provider });
+    return;
+  }
+
+  await postWebhook(url, buildSlackPayload({
+    provider,
+    error: `${count} consecutive provider authentication failures`,
+    severity: "critical",
+    meta: { "HTTP status": status },
+  }), "slack");
+}

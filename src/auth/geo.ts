@@ -1,6 +1,9 @@
 import { Request } from "express";
 
 interface GeoLocationResult {
+  city?: { names?: { en?: string } };
+  subdivisions?: Array<{ iso_code?: string }>;
+  location?: { latitude?: number; longitude?: number };
   country?: {
     iso_code?: string;
   };
@@ -39,7 +42,7 @@ function extractClientIp(req: Request): string {
   return req.ip || "";
 }
 
-async function getGeoReader(): Promise<MaxmindReader | null> {
+export async function getGeoReader(): Promise<MaxmindReader | null> {
   if (readerPromise) {
     return readerPromise;
   }

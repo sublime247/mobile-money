@@ -138,7 +138,7 @@ var __generator =
   };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.MTNProvider = void 0;
-var axios_1 = require("axios");
+var http = require("../../providerStatus").providerHttp("mtn");
 var crypto_1 = require("crypto");
 var MTNProvider = /** @class */ (function () {
   function MTNProvider() {
@@ -160,7 +160,7 @@ var MTNProvider = /** @class */ (function () {
           case 0:
             return [
               4 /*yield*/,
-              axios_1.default.post(
+              http.post(
                 "".concat(this.baseUrl, "/collection/token/"),
                 undefined,
                 {
@@ -204,7 +204,7 @@ var MTNProvider = /** @class */ (function () {
             token = _c.sent();
             return [
               4 /*yield*/,
-              axios_1.default.get(
+              http.get(
                 "".concat(this.baseUrl, "/disbursement/v1_0/account/balance"),
                 {
                   headers: {
@@ -259,7 +259,7 @@ var MTNProvider = /** @class */ (function () {
             _a.trys.push([0, 2, , 3]);
             return [
               4 /*yield*/,
-              axios_1.default.post(
+              http.post(
                 "".concat(this.baseUrl, "/collection/v1_0/requesttopay"),
                 {
                   amount: amount,
@@ -309,7 +309,7 @@ var MTNProvider = /** @class */ (function () {
             token = _d.sent();
             return [
               4 /*yield*/,
-              axios_1.default.get(
+              http.get(
                 ""
                   .concat(this.baseUrl, "/collection/v1_0/requesttopay/")
                   .concat(encodeURIComponent(referenceId)),

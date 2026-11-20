@@ -18,11 +18,14 @@
  *   - getAccountBalance (disbursement float inquiry, alias for pre-flight checks)
  */
 
-import axios, { AxiosError } from "axios";
+import { AxiosError } from "axios";
+import { providerHttp } from "../providerStatus";
 import { randomUUID } from "crypto";
 import { BaseProvider, ProviderAuthConfig } from "./baseProvider";
 import { recordTelecomLatency } from "../../utils/logger";
 import logger from "../../utils/logger";
+
+const http = providerHttp("mtn");
 
 const POLL_DELAY_MS = 15_000;
 const MAX_POLL_ATTEMPTS = 4;
@@ -182,7 +185,7 @@ export class MtnMomoProvider extends BaseProvider {
     const startTime = Date.now();
     const endpoint = "/collection/token/";
     try {
-      const response = await axios.post<MtnTokenResponse>(
+      const response = await http.post<MtnTokenResponse>(
         `${this.baseUrl}${endpoint}`,
         undefined,
         {
@@ -235,7 +238,7 @@ export class MtnMomoProvider extends BaseProvider {
     const endpoint = "/collection/v1_0/requesttopay";
     const externalId = randomUUID();
     try {
-      const response = await axios.post(
+      const response = await http.post(
         `${this.baseUrl}${endpoint}`,
         {
           amount,
@@ -314,7 +317,7 @@ export class MtnMomoProvider extends BaseProvider {
     const endpoint = `/collection/v1_0/requesttopay/${encodeURIComponent(referenceId)}`;
     try {
       const token = await this.getAccessToken();
-      const response = await axios.get<MtnTransactionStatusResponse>(
+      const response = await http.get<MtnTransactionStatusResponse>(
         `${this.baseUrl}${endpoint}`,
         {
           headers: {
@@ -373,7 +376,7 @@ export class MtnMomoProvider extends BaseProvider {
     const endpoint = "/disbursement/v1_0/account/balance";
     try {
       const token = await this.getAccessToken();
-      const response = await axios.get<MtnBalanceResponse>(
+      const response = await http.get<MtnBalanceResponse>(
         `${this.baseUrl}${endpoint}`,
         {
           headers: {
@@ -481,7 +484,7 @@ export class MtnMomoProvider extends BaseProvider {
       const token = await this.getAccessToken();
       const batchReference = `BATCH-${randomUUID()}`;
 
-      const response = await axios.post(
+      const response = await http.post(
         `${this.baseUrl}/disbursement/v2_0/batch-payout`,
         {
           batchReference,
