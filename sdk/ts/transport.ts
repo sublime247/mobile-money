@@ -2,7 +2,17 @@
  * Transport adapter interface supporting both native Fetch and Axios
  */
 
-import { BridgeError, AuthenticationError, ValidationError, NotFoundError } from "./errors.ts";
+import {
+  BridgeError,
+  MobileMoneyError,
+  AuthenticationError,
+  InsufficientFundsError,
+  TelcoTimeoutError,
+  RateLimitError,
+  ValidationError,
+  NotFoundError,
+  parseApiError,
+} from "./errors.ts";
 import type { RetryOptions } from "./types.ts";
 
 export interface HttpRequestOptions {
@@ -40,9 +50,10 @@ function isRetryableRequest(options: HttpRequestOptions): boolean {
 }
 
 function isRetryableError(err: unknown): boolean {
-  if (err instanceof BridgeError) {
-    if (err.code === "NETWORK_ERROR") return true;
-    if (err.status !== undefined && RETRYABLE_STATUS_CODES.has(err.status)) return true;
+  if (err instanceof MobileMoneyError || err instanceof BridgeError) {
+    if (err.providerErrorCode === "NETWORK_ERROR" || err.code === "NETWORK_ERROR") return true;
+    const status = err.statusCode ?? err.status;
+    if (status !== undefined && RETRYABLE_STATUS_CODES.has(status)) return true;
     return false;
   }
   return true;
@@ -153,7 +164,7 @@ export class FetchTransport implements Transport {
       }
 
       if (!response.ok) {
-        this.handleErrorResponse(response.status, responseData);
+        this.handleErrorResponse(response.status, responseData, respHeaders);
       }
 
       return {
@@ -163,16 +174,12 @@ export class FetchTransport implements Transport {
       };
     } catch (err: any) {
       if (timer) clearTimeout(timer);
-      if (err instanceof BridgeError) throw err;
+      if (err instanceof MobileMoneyError || err instanceof BridgeError) throw err;
       throw new BridgeError(err.message || "Network request failed", undefined, "NETWORK_ERROR", err);
     }
   }
 
-  private handleErrorResponse(status: number, data: unknown): never {
-    const message = (data as any)?.error || (data as any)?.message || `HTTP request failed with status ${status}`;
-    if (status === 401) throw new AuthenticationError(message, data);
-    if (status === 400) throw new ValidationError(message, data);
-    if (status === 404) throw new NotFoundError(message, data);
-    throw new BridgeError(message, status, "HTTP_ERROR", data);
+  private handleErrorResponse(status: number, data: unknown, headers?: Record<string, string>): never {
+    throw parseApiError(status, data, headers);
   }
 }

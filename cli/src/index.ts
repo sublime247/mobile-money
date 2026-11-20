@@ -8,6 +8,7 @@ import { registerStatusCommand } from "./commands/status";
 import { registerDashboardCommand } from "./commands/dashboard";
 import { registerEscrowCommand } from "./commands/escrow";
 import { registerReconcileCommand } from "./commands/reconcile";
+import { registerReconciliationRunCommand } from "./commands/reconciliationRun";
 import { registerBridgeCommands } from "./commands/bridge";
 import { registerWalletRotateCommand } from "./commands/walletRotate";
 import { printError } from "./dashboard";
@@ -24,6 +25,7 @@ registerProfileCommand(program);
 registerDashboardCommand(program);
 registerEscrowCommand(program);
 registerReconcileCommand(program);
+registerReconciliationRunCommand(program);
 registerBridgeCommands(program);
 registerWalletRotateCommand(program);
 

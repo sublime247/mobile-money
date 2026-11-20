@@ -56,6 +56,8 @@ export interface TransactionTrackerProps {
   onError?: (error: Error | string) => void;
   onTimeout?: () => void;
   onRetry?: () => void;
+  isSandbox?: boolean;
+  onSimulate?: (status: "SUCCESS" | "FAILED") => void | Promise<void>;
 }
 
 export const TransactionTracker: React.FC<TransactionTrackerProps> = ({
@@ -70,6 +72,8 @@ export const TransactionTracker: React.FC<TransactionTrackerProps> = ({
   onError,
   onTimeout,
   onRetry,
+  isSandbox = false,
+  onSimulate,
 }) => {
   const [currentStep, setCurrentStep] = useState<TrackerStep>(initialStep);
   const [status, setStatus] = useState<TrackerStatus>("active");
@@ -133,6 +137,28 @@ export const TransactionTracker: React.FC<TransactionTrackerProps> = ({
     },
     [onComplete, onError]
   );
+
+  const handleSimulate = async (simStatus: "SUCCESS" | "FAILED") => {
+    if (onSimulate) {
+      await onSimulate(simStatus);
+      return;
+    }
+    if (simStatus === "SUCCESS") {
+      handleStateUpdate({
+        step: "stellar_minted",
+        status: "completed",
+        transactionId,
+        message: "Simulated success trigger received",
+      });
+    } else {
+      handleStateUpdate({
+        step: currentStep,
+        status: "failed",
+        transactionId,
+        message: "Simulated failure trigger received",
+      });
+    }
+  };
 
   // Timer interval & timeout handling
   useEffect(() => {
@@ -458,6 +484,43 @@ export const TransactionTracker: React.FC<TransactionTrackerProps> = ({
               Retry Payment
             </button>
           )}
+        </div>
+      )}
+
+      {/* Sandbox Speed-Up and State Simulation Controls */}
+      {isSandbox && status === "active" && (
+        <div
+          data-testid="sandbox-controls"
+          className="mt-6 p-4 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <span className="text-amber-600">⚡</span>
+              <h4 className="font-bold text-sm">Sandbox Speed-Up & Triggers</h4>
+            </div>
+            <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-amber-200 dark:bg-amber-900 text-amber-800 dark:text-amber-300">
+              Testnet
+            </span>
+          </div>
+          <p className="text-xs mt-1.5 text-amber-800 dark:text-amber-300">
+            Manually advance test transaction to verify your webhook listeners:
+          </p>
+          <div className="mt-3 flex space-x-2">
+            <button
+              data-testid="sandbox-simulate-success"
+              onClick={() => handleSimulate("SUCCESS")}
+              className="flex-1 py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-xs transition-colors shadow-sm"
+            >
+              Simulate SUCCESS
+            </button>
+            <button
+              data-testid="sandbox-simulate-failed"
+              onClick={() => handleSimulate("FAILED")}
+              className="flex-1 py-2 px-3 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-medium text-xs transition-colors shadow-sm"
+            >
+              Simulate FAILED
+            </button>
+          </div>
         </div>
       )}
     </div>

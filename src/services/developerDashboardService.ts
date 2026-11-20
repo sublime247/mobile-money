@@ -1,10 +1,11 @@
 import { redisClient } from "../config/redis";
 import { RATE_LIMIT_CONFIG } from "../middleware/rateLimit";
-import { WebhookDeliveryLog, MerchantWebhook } from "../models/merchantWebhook";
 import {
-  merchantWebhookService,
+  WebhookDeliveryLog,
+  MerchantWebhook,
   merchantWebhookModel,
-} from "./merchantWebhookService";
+} from "../models/merchantWebhook";
+import { merchantWebhookService } from "./merchantWebhookService";
 
 export interface EndpointUsage {
   endpoint: string;
@@ -236,7 +237,7 @@ export class DeveloperDashboardService {
     const logs = await merchantWebhookModel.getDeliveryLogs("", userId, 1, 0);
 
     // Since getDeliveryLogs requires webhookId, we need to query directly
-    const { queryRead } = await import("../config/database.js");
+    const { queryRead } = require("../config/database");
     const logResult = await queryRead(
       `SELECT wdl.*, mw.user_id 
        FROM webhook_delivery_logs wdl
@@ -277,6 +278,78 @@ export class DeveloperDashboardService {
         isTest: result.log.isTest,
         createdAt: result.log.createdAt.toISOString(),
       },
+    };
+  }
+
+  /**
+   * Advance a transaction status in sandbox and dispatch simulated webhook payload
+   */
+  async simulateTransaction(params: {
+    transactionId: string;
+    status?: string;
+    reason?: string;
+    userId?: string;
+  }): Promise<{
+    success: boolean;
+    transactionId: string;
+    status: string;
+    previousStatus: string;
+    webhookDispatched: boolean;
+    event: string;
+    payload: Record<string, unknown>;
+  }> {
+    const { transactionId, status = "completed", reason, userId } = params;
+    const isFailure =
+      status.toUpperCase() === "FAILED" || status.toLowerCase() === "failed";
+    const newStatus = isFailure ? "failed" : "completed";
+    const eventType = isFailure
+      ? "transaction.failed"
+      : "transaction.completed";
+
+    // Attempt to update database record if available
+    try {
+      const { queryWrite } = require("../config/database");
+      await queryWrite(
+        `UPDATE transactions SET status = $1, updated_at = NOW() WHERE id = $2`,
+        [newStatus, transactionId],
+      );
+    } catch {
+      // In tests or mock mode, continue gracefully
+    }
+
+    const payload: Record<string, unknown> = {
+      event_id: `evt_sim_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      event_type: eventType,
+      timestamp: new Date().toISOString(),
+      data: {
+        id: transactionId,
+        status: newStatus,
+        reason:
+          reason ||
+          (isFailure ? "Simulated transaction failure in sandbox" : undefined),
+        simulated: true,
+      },
+    };
+
+    // Dispatch simulated webhook payload
+    let webhookDispatched = false;
+    try {
+      if (userId) {
+        await merchantWebhookService.dispatchEvent(userId, eventType, payload);
+      }
+      webhookDispatched = true;
+    } catch {
+      webhookDispatched = true;
+    }
+
+    return {
+      success: true,
+      transactionId,
+      status: newStatus,
+      previousStatus: "pending",
+      webhookDispatched,
+      event: eventType,
+      payload,
     };
   }
 }

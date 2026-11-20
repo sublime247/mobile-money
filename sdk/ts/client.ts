@@ -15,7 +15,42 @@ import type {
   TransactionStatusResult,
 } from "./types.ts";
 import { type Transport, FetchTransport } from "./transport.ts";
-import { AuthenticationError, ValidationError } from "./errors.ts";
+import {
+  MobileMoneyError,
+  BridgeError,
+  AuthenticationError,
+  InsufficientFundsError,
+  TelcoTimeoutError,
+  RateLimitError,
+  ValidationError,
+  NotFoundError,
+  parseApiError,
+} from "./errors.ts";
+
+export {
+  MobileMoneyError,
+  BridgeError,
+  AuthenticationError,
+  InsufficientFundsError,
+  TelcoTimeoutError,
+  RateLimitError,
+  ValidationError,
+  NotFoundError,
+  parseApiError,
+};
+
+/**
+ * API response error interceptor for custom HTTP clients or interceptor pipelines
+ */
+export function apiResponseInterceptor(response: {
+  status: number;
+  data?: unknown;
+  headers?: Record<string, string>;
+}): void {
+  if (response.status >= 400) {
+    throw parseApiError(response.status, response.data, response.headers);
+  }
+}
 
 export class StellarBridgeClient {
   private readonly baseUrl: string;
