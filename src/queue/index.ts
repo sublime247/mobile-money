@@ -24,6 +24,8 @@ import {
   closeWebhookRetryWorker,
 } from "./webhookRetryWorker";
 import { closeRefundWorker, refundQueue, refundWorker } from "./refundWorker";
+import { closeBankDepositSettlementWorker } from "./bankDepositSettlementWorker";
+import { bankDepositSettlementQueue } from "./bankDepositSettlementQueue";
 import {
   closeReceivingAnchorWebhookWorker,
   startReceivingAnchorWebhookWorker,
@@ -44,6 +46,8 @@ export async function shutdownQueue(): Promise<void> {
     closeWebhookRetryWorker().catch(() => undefined),
     closeWebhookRetryQueue().catch(() => undefined),
     closeRefundWorker().catch(() => undefined),
+    closeBankDepositSettlementWorker().catch(() => undefined),
+    bankDepositSettlementQueue.close().catch(() => undefined),
     closeReceivingAnchorWebhookWorker().catch(() => undefined),
     closeReceivingAnchorWebhookQueue().catch(() => undefined),
   ]);
@@ -186,3 +190,12 @@ export {
 export type { CustomerCallbackJobData } from "./customerCallbackQueue";
 
 export { startWebhookRetryBacklogWatcher } from "./webhookRetryQueue";
+
+export {
+  startBankDepositSettlementWorker,
+  closeBankDepositSettlementWorker,
+} from "./bankDepositSettlementWorker";
+export {
+  bankDepositSettlementQueue,
+  enqueueBankDepositSettlement,
+} from "./bankDepositSettlementQueue";
