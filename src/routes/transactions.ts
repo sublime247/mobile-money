@@ -24,6 +24,7 @@ import { cancelTransactionRateLimiter } from "../middleware/rateLimit";
 import { validate2FAForWithdrawal } from "../services/twoFactorWithdrawalService";
 import { TransactionModel, TransactionStatus } from "../models/transaction";
 import { generateTransactionPdfBuffer } from "../services/pdfReceipt";
+import { getReceiptJsonHandler } from "../controllers/receiptController";
 import { generateShareToken, verifyShareToken } from "../utils/share";
 import { createExportRoutes } from "./export";
 import { ERROR_CODES } from "../constants/errorCodes";
@@ -136,6 +137,15 @@ transactionRoutes.get(
       res.status(500).json({ error: "Failed to generate invoice PDF" });
     }
   },
+);
+
+// JSON receipt with itemised multi-currency fee breakdown
+transactionRoutes.get(
+  "/:id/receipt/json",
+  TimeoutPresets.quick,
+  haltOnTimedout,
+  authenticateToken,
+  getReceiptJsonHandler,
 );
 
 // Create a shareable URL (public or private) for a transaction receipt
