@@ -47,3 +47,26 @@ developerDashboardRoutes.post(
   requireAuth,
   DeveloperDashboardController.retryWebhookDelivery,
 );
+
+/**
+ * @route   POST /api/developer/sandbox/transactions/:id/simulate
+ * @desc    Simulate transaction state transition in sandbox
+ * @access  Restricted to testnet/sandbox API keys
+ */
+developerDashboardRoutes.post(
+  "/sandbox/transactions/:id/simulate",
+  DeveloperDashboardController.simulateTransaction,
+);
+
+export const sandboxRouter = Router();
+
+/**
+ * @route   POST /api/v1/sandbox/transactions/:id/simulate
+ * @desc    Simulate advancing test transaction from PENDING to SUCCESS or FAILED in sandbox
+ * @access  Restricted to testnet/sandbox API keys
+ */
+sandboxRouter.post(
+  "/transactions/:id/simulate",
+  DeveloperDashboardController.simulateTransaction,
+);
+
