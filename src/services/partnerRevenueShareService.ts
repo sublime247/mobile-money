@@ -274,7 +274,8 @@ export class PartnerRevenueShareService {
       };
       if (status === "skipped") return record;
 
-      const ledgerRef = `PARTNER-COMM-${partnerId}-${startStr}`;
+      // ledger_entries.reference_number is VARCHAR(50): 6 + 32 + 1 + 10 = 49.
+      const ledgerRef = `PCOMM-${partnerId.replace(/-/g, "")}-${startStr}`;
       await this.ledger.postTransaction(
         ledgerRef,
         `Partner commission accrual — ${partnerId} — ${startStr}`,
