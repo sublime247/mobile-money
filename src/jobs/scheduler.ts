@@ -19,6 +19,7 @@ import { runKycTierUpgradeJob } from "./kycTierUpgradeJob";
 import { runLiquidityRebalanceJob } from "./liquidityRebalanceJob";
 import { runCrossChainMonitorJob } from "./crossChainMonitorJob";
 import { runDailySettlementJob } from "./dailySettlementJob";
+import { runPartnerCommissionJob } from "./partnerCommissionJob";
 import { runDailyProviderReconciliation } from "./providerReconciliationJob";
 import { runReconciliationJob } from "./reconciliationJob";
 import { runLedgerReconciliationJob } from "./ledgerReconciliationJob";
@@ -141,6 +142,12 @@ const JOBS: JobConfig[] = [
     // Daily at 01:00 AM UTC — sweeps merchant fees and settles provider balances
     schedule: process.env.DAILY_SETTLEMENT_CRON || "0 1 * * *",
     handler: runDailySettlementJob,
+  },
+  {
+    name: "partner-commission",
+    // 1st of every month at 02:00 UTC — accrues partner revenue share and queues payouts
+    schedule: process.env.PARTNER_COMMISSION_CRON || "0 2 1 * *",
+    handler: runPartnerCommissionJob,
   },
   {
     name: "provider-reconciliation",
