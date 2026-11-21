@@ -17,6 +17,7 @@
 import { redisClient } from "../config/redis";
 import logger from "../utils/logger";
 import { rateProvider } from "./sep38/rateProvider";
+import { recordFxCacheHit, recordFxCacheMiss } from "./cache";
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -73,6 +74,7 @@ export async function getCachedPrice(
     const cached = await redisClient.get(cacheKey);
     if (cached) {
       const parsed = JSON.parse(String(cached));
+      recordFxCacheHit();
       return {
         ...parsed,
         is_stale: false,
@@ -86,14 +88,17 @@ export async function getCachedPrice(
       logger.debug(
         `[PriceCache] Serving stale price for ${sellAsset}/${buyAsset}`,
       );
+      recordFxCacheHit();
       return {
         ...parsed,
         is_stale: true,
       };
     }
 
+    recordFxCacheMiss();
     return null;
   } catch (error) {
+    recordFxCacheMiss();
     logger.warn(
       error,
       `[PriceCache] Failed to retrieve cached price for ${sellAsset}/${buyAsset}`,
