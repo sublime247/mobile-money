@@ -20,6 +20,7 @@ import { runLiquidityRebalanceJob } from "./liquidityRebalanceJob";
 import { runCrossChainMonitorJob } from "./crossChainMonitorJob";
 import { runDailySettlementJob } from "./dailySettlementJob";
 import { runPartnerCommissionJob } from "./partnerCommissionJob";
+import { runFxRevaluationJob } from "./fxRevaluationJob";
 import { runDailyProviderReconciliation } from "./providerReconciliationJob";
 import { runReconciliationJob } from "./reconciliationJob";
 import { runLedgerReconciliationJob } from "./ledgerReconciliationJob";
@@ -148,6 +149,12 @@ const JOBS: JobConfig[] = [
     // 1st of every month at 02:00 UTC — accrues partner revenue share and queues payouts
     schedule: process.env.PARTNER_COMMISSION_CRON || "0 2 1 * *",
     handler: runPartnerCommissionJob,
+  },
+  {
+    name: "fx-revaluation",
+    // 1st of every month at 03:00 UTC — marks foreign float to market and posts unrealized FX gain/loss
+    schedule: process.env.FX_REVALUATION_CRON || "0 3 1 * *",
+    handler: runFxRevaluationJob,
   },
   {
     name: "provider-reconciliation",
