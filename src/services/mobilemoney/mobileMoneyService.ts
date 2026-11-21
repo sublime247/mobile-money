@@ -13,6 +13,16 @@ import logger from "../../utils/logger";
 import { providerSettingsService } from "../providerSettingsService";
 import { createError } from "../../middleware/errorHandler";
 import { ERROR_CODES } from "../../constants/errorCodes";
+import axios from "axios";
+import {
+  attachTelcoTracingInterceptor,
+  withTelcoSpan,
+} from "../../utils/telcoTracing";
+
+// Providers that use the default axios export report the telco HTTP status to
+// the active telco span through this interceptor (client instances attach it
+// themselves).
+attachTelcoTracingInterceptor(axios);
 
 export type ProviderTransactionStatus =
   "completed" | "failed" | "pending" | "unknown";
@@ -254,10 +264,13 @@ class MobileMoneyService extends MobileMoneyServiceImpl {
 
     let result;
     try {
-      result = await super.initiatePayment(
-        routing.providerKey,
-        phoneNumber,
-        amount,
+      result = await withTelcoSpan(
+        {
+          provider: routing.providerKey,
+          operation: "initiatePayment",
+          phoneNumber,
+        },
+        () => super.initiatePayment(routing.providerKey, phoneNumber, amount),
       );
     } catch (error) {
       if (isUnrecoveredCircuitBreakerFailure(error)) {
@@ -292,7 +305,14 @@ class MobileMoneyService extends MobileMoneyServiceImpl {
 
     let result;
     try {
-      result = await super.sendPayout(routing.providerKey, phoneNumber, amount);
+      result = await withTelcoSpan(
+        {
+          provider: routing.providerKey,
+          operation: "sendPayout",
+          phoneNumber,
+        },
+        () => super.sendPayout(routing.providerKey, phoneNumber, amount),
+      );
     } catch (error) {
       if (isUnrecoveredCircuitBreakerFailure(error)) {
         return buildProviderCircuitOpenResponse(
@@ -336,7 +356,14 @@ class MobileMoneyService extends MobileMoneyServiceImpl {
 
     let result;
     try {
-      result = await super.sendBatchPayout(routing.providerKey, items);
+      result = await withTelcoSpan(
+        {
+          provider: routing.providerKey,
+          operation: "sendBatchPayout",
+          phoneNumber: items[0]?.phoneNumber,
+        },
+        () => super.sendBatchPayout(routing.providerKey, items),
+      );
     } catch (error) {
       if (isUnrecoveredCircuitBreakerFailure(error)) {
         const circuitResponse = buildProviderCircuitOpenResponse(

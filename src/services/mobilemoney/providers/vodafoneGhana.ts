@@ -14,6 +14,7 @@
 
 import axios, { AxiosInstance } from "axios";
 import { createHmac, timingSafeEqual } from "crypto";
+import { attachTelcoTracingInterceptor } from "../../../utils/telcoTracing";
 
 export type VodafoneGhanaTransactionStatus =
   "completed" | "failed" | "pending" | "unknown";
@@ -89,6 +90,7 @@ export class VodafoneGhanaProvider {
         "Content-Type": "application/json",
       },
     });
+    attachTelcoTracingInterceptor(this.client);
   }
 
   private buildBasicAuthHeader(): string {

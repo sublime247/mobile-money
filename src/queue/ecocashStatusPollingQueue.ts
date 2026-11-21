@@ -1,3 +1,4 @@
+import { injectTraceContext } from "./jobTracing";
 import { Queue, JobsOptions } from "bullmq";
 import { queueOptions } from "./config";
 
@@ -63,7 +64,7 @@ export async function scheduleEcoCashStatusPoll(
 
   await ecocashStatusPollingQueue.add(
     `poll-${referenceId}`,
-    data,
+    injectTraceContext(data),
     jobOptions,
   );
 }
@@ -78,7 +79,7 @@ export async function scheduleNextEcoCashStatusPoll(
     startedAt: previous.startedAt,
   };
 
-  await ecocashStatusPollingQueue.add(`poll-${previous.referenceId}`, data, {
+  await ecocashStatusPollingQueue.add(`poll-${previous.referenceId}`, injectTraceContext(data), {
     delay: ECOCASH_POLL_INTERVAL_MS,
     removeOnComplete: true,
     removeOnFail: { age: 24 * 3600 },
