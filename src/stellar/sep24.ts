@@ -672,6 +672,18 @@ export const processCallback = async (
   return transaction;
 };
 
+/**
+ * Replaces the in-memory copy of a transaction with a record loaded from
+ * durable storage. Used by out-of-band settlement (e.g. bank statement
+ * reconciliation) that changes a deposit's state in the database directly.
+ */
+export const loadTransactionFromStore = (
+  transaction: Sep24Transaction,
+): Sep24Transaction => {
+  transactions.set(transaction.id, transaction);
+  return transaction;
+};
+
 /** Sends the Stellar payment for a deposit (StellarService in production). */
 export interface DepositPaymentSender {
   sendPayment(
@@ -703,6 +715,7 @@ async function defaultPaymentSender(): Promise<DepositPaymentSender> {
 export const fulfillDeposit = async (
   id: string,
   sender?: DepositPaymentSender,
+  options: { resumePendingStellar?: boolean } = {},
 ): Promise<Sep24Transaction> => {
   const transaction = transactions.get(id);
   if (!transaction) throw new Error(`Transaction ${id} not found`);
@@ -710,7 +723,7 @@ export const fulfillDeposit = async (
     throw new Error(`Transaction ${id} is not a deposit`);
   }
   if (transaction.status === "completed") return transaction;
-  if (transaction.status === "pending_stellar") {
+  if (transaction.status === "pending_stellar" && !options.resumePendingStellar) {
     throw new Error(`Deposit ${id} is already being submitted`);
   }
   if (["failed", "expired"].includes(transaction.status)) {

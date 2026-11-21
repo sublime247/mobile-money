@@ -26,6 +26,7 @@ import { geolocateMiddleware } from "../../middleware/geolocate";
 import { geoFencingMiddleware } from "../../middleware/geoFencing";
 import { createExportRoutes } from "../export";
 import { TransactionModel, TransactionStatus } from "../../models/transaction";
+import { getReceiptJsonHandler } from "../../controllers/receiptController";
 import { generateTransactionPdfBuffer } from "../../services/pdfReceipt";
 import { validate2FAForWithdrawal } from "../../services/twoFactorWithdrawalService";
 import { strictIdempotency } from "../../middleware/idempotency";
@@ -117,6 +118,16 @@ transactionRoutesV1.get(
   haltOnTimedout,
   setApiVersion("v1"),
   getTransactionHandler,
+);
+
+// JSON receipt with itemised multi-currency fee breakdown
+transactionRoutesV1.get(
+  "/:id/receipt/json",
+  TimeoutPresets.quick,
+  haltOnTimedout,
+  requireAuth,
+  setApiVersion("v1"),
+  getReceiptJsonHandler,
 );
 
 transactionRoutesV1.get(

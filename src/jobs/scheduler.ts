@@ -22,6 +22,7 @@ import { runDailySettlementJob } from "./dailySettlementJob";
 import { runDailyProviderReconciliation } from "./providerReconciliationJob";
 import { runReconciliationJob } from "./reconciliationJob";
 import { runLedgerReconciliationJob } from "./ledgerReconciliationJob";
+import { runStellarDiscrepancyJob } from "./stellarDiscrepancyJob";
 import { runDatabaseBackupJob } from "./databaseBackupJob";
 import { runDatabaseBackupVerifyJob } from "./databaseBackupVerifyJob";
 import { INDEX_REINDEX_CRON, INDEX_REINDEX_JOB_ENABLED } from "../config/env";
@@ -199,6 +200,12 @@ const JOBS: JobConfig[] = [
     // Every 10 minutes - reconciles on-chain payment hashes against internal DB records
     schedule: process.env.STELLAR_RECONCILIATION_CRON || "*/10 * * * *",
     handler: runStellarReconciliationJob,
+  },
+  {
+    name: "stellar-discrepancy",
+    // Daily at 4:00 AM - compares previous 24h of Horizon anchor payments with the local ledger
+    schedule: process.env.STELLAR_DISCREPANCY_CRON || "0 4 * * *",
+    handler: runStellarDiscrepancyJob,
   },
   {
     name: "database-backup",

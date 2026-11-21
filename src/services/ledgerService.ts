@@ -4,6 +4,13 @@ import { SupportedCurrency, currencyService, BASE_CURRENCY } from "./currency";
 import { UserModel } from "../models/users";
 import { notifySlackAlert } from "./loggers";
 import { createPagerDutyService } from "./pagerDutyService";
+import {
+  UnbalancedLedgerException,
+  assertLedgerBalanced,
+  recordUnbalancedAttempt,
+} from "./ledgerInvariant";
+
+export { UnbalancedLedgerException } from "./ledgerInvariant";
 
 /**
  * Double-Entry Ledger Service
@@ -81,40 +88,30 @@ export interface LedgerEntryPage {
 
 const DEFAULT_LEDGER_ENTRY_LIMIT = 100;
 const MAX_LEDGER_ENTRY_LIMIT = 500;
-const LEDGER_BALANCE_TOLERANCE = 0.0000001;
 
-const validateLedgerEntries = (entries: LedgerEntry[]): void => {
+const validateLedgerEntries = (
+  entries: LedgerEntry[],
+  referenceNumber?: string,
+): void => {
   if (!entries || entries.length < 2) {
     throw new Error("At least 2 entries required for double-entry");
   }
 
-  const { totalDebits, totalCredits } = entries.reduce(
-    (totals, entry, index) => {
-      const debitAmount = entry.debit_amount || 0;
-      const creditAmount = entry.credit_amount || 0;
-      const hasDebit = debitAmount > 0;
-      const hasCredit = creditAmount > 0;
+  entries.forEach((entry, index) => {
+    const hasDebit = (entry.debit_amount || 0) > 0;
+    const hasCredit = (entry.credit_amount || 0) > 0;
 
-      if (hasDebit === hasCredit) {
-        throw new Error(
-          `Ledger entry ${index + 1} must have exactly one non-zero amount`,
-        );
-      }
+    if (hasDebit === hasCredit) {
+      throw new Error(
+        `Ledger entry ${index + 1} must have exactly one non-zero amount`,
+      );
+    }
+  });
 
-      totals.totalDebits += debitAmount;
-      totals.totalCredits += creditAmount;
-      return totals;
-    },
-    { totalDebits: 0, totalCredits: 0 },
-  );
+  // Exact sum(debits) == sum(credits) to 7 decimal places (no float tolerance).
+  const { totalDebits } = assertLedgerBalanced(entries, referenceNumber);
 
-  if (Math.abs(totalDebits - totalCredits) > LEDGER_BALANCE_TOLERANCE) {
-    throw new Error(
-      `Transaction not balanced: debits=${totalDebits} credits=${totalCredits}`,
-    );
-  }
-
-  if (totalDebits <= LEDGER_BALANCE_TOLERANCE) {
+  if (Number(totalDebits) <= 0) {
     throw new Error("Transaction amounts cannot be zero");
   }
 };
@@ -273,7 +270,20 @@ export class LedgerService {
     currency?: SupportedCurrency,
     conversionRate?: number,
   ): Promise<PostedEntry[]> {
-    validateLedgerEntries(entries);
+    // Reject unbalanced journals before any database work, and leave an audit trail.
+    try {
+      validateLedgerEntries(entries, referenceNumber);
+    } catch (error) {
+      if (error instanceof UnbalancedLedgerException) {
+        await recordUnbalancedAttempt(error, {
+          referenceNumber,
+          transactionId,
+          postedBy,
+          entries,
+        });
+      }
+      throw error;
+    }
 
     // Attach currency metadata if provided
     const enrichedEntries =
@@ -315,6 +325,34 @@ export class LedgerService {
       }));
     } catch (error) {
       await client.query("ROLLBACK");
+
+      // Defence in depth: post_transaction() enforces the same invariant in SQL.
+      if (
+        !(error instanceof UnbalancedLedgerException) &&
+        error instanceof Error &&
+        /not balanced/i.test(error.message)
+      ) {
+        const totals = entries.reduce(
+          (t, e) => ({
+            d: t.d + (e.debit_amount || 0),
+            c: t.c + (e.credit_amount || 0),
+          }),
+          { d: 0, c: 0 },
+        );
+        const exception = new UnbalancedLedgerException(
+          totals.d.toFixed(7),
+          totals.c.toFixed(7),
+          (totals.d - totals.c).toFixed(7),
+          referenceNumber,
+        );
+        await recordUnbalancedAttempt(exception, {
+          referenceNumber,
+          transactionId,
+          postedBy,
+          entries,
+        });
+        throw exception;
+      }
       throw error;
     } finally {
       client.release();
