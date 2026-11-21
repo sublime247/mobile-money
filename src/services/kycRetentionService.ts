@@ -8,33 +8,26 @@
  * This service:
  *  1. Identifies closed (soft-deleted) customer accounts whose KYC records
  *     have exceeded the retention window.
- *  2. Overwrites sensitive identity fields with null / placeholder data to
- *     ensure no PII can be reconstructed from the database row.
- *  3. Hard-deletes the associated kyc_applicants row and any document
- *     references stored in applicant_data so the KYC provider applicant ID
- *     can no longer be cross-referenced.
- *  4. Emits a structured audit log entry for each purged record so the
- *     compliance team has a verifiable deletion trail.
+ *  2. Deletes associated KYC document blobs from S3 storage when keys exist.
+ *  3. Overwrites sensitive identity fields with anonymized placeholders while
+ *     preserving transaction ledger history.
+ *  4. Hard-deletes the associated kyc_applicants row and any document
+ *     references stored in applicant_data.
+ *  5. Emits a structured audit log entry for each purged record.
  */
 
 import logger from "../utils/logger";
 import { pool } from "../config/database";
+import { DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { getS3Client, s3Config } from "../config/s3";
 
-/** Retention window in years after account closure. Configurable via env. */
-const RETENTION_YEARS = parseInt(
-  process.env.KYC_RETENTION_YEARS || "5",
-  10,
-);
-
-/** Maximum rows processed per run to limit transaction size and lock contention. */
-const BATCH_SIZE = parseInt(
-  process.env.KYC_PURGE_BATCH_SIZE || "100",
-  10,
-);
+const RETENTION_YEARS = parseInt(process.env.KYC_RETENTION_YEARS || "5", 10);
+const BATCH_SIZE = parseInt(process.env.KYC_PURGE_BATCH_SIZE || "100", 10);
 
 export interface KycPurgeResult {
   purgedCount: number;
   skippedCount: number;
+  deletedS3Objects: number;
   errors: string[];
 }
 
@@ -42,98 +35,167 @@ export interface EligibleKycRecord {
   id: string;
   userId: string;
   applicantId: string;
-  deletedAt: Date;
+  closedAt: Date;
   createdAt: Date;
 }
 
-/**
- * Finds kyc_applicants rows linked to accounts that have been soft-deleted
- * for longer than the retention period.
- */
+function anonymizedPlaceholder(prefix: string, id: string): string {
+  const suffix = id.replace(/[^a-zA-Z0-9]/g, "").slice(0, 12) || "redacted";
+  return `${prefix}_${suffix}`;
+}
+
 export async function findExpiredKycRecords(): Promise<EligibleKycRecord[]> {
   const result = await pool.query<{
     id: string;
     user_id: string;
     applicant_id: string;
-    deleted_at: Date;
+    closed_at: Date;
     created_at: Date;
   }>(
     `SELECT
        ka.id,
        ka.user_id,
        ka.applicant_id,
-       u.deleted_at,
+       COALESCE(u.deleted_at, u.closed_at) AS closed_at,
        ka.created_at
      FROM kyc_applicants ka
      JOIN users u ON u.id = ka.user_id
-     WHERE u.deleted_at IS NOT NULL
-       AND u.deleted_at < NOW() - INTERVAL '${RETENTION_YEARS} years'
-     ORDER BY u.deleted_at ASC
-     LIMIT $1`,
-    [BATCH_SIZE],
-  );
+     WHERE COALESCE(u.deleted_at, u.closed_at) IS NOT NULL
+       AND COALESCE(u.deleted_at, u.closed_at) < NOW() - ($1::text || ' years')::interval
+     ORDER BY COALESCE(u.deleted_at, u.closed_at) ASC
+     LIMIT $2`,
+    [String(RETENTION_YEARS), BATCH_SIZE],
+  ).catch(async (error) => {
+    // Fallback for schemas without users.closed_at.
+    const message = error instanceof Error ? error.message : String(error);
+    if (!/closed_at/i.test(message)) throw error;
+    return pool.query<{
+      id: string;
+      user_id: string;
+      applicant_id: string;
+      closed_at: Date;
+      created_at: Date;
+    }>(
+      `SELECT
+         ka.id,
+         ka.user_id,
+         ka.applicant_id,
+         u.deleted_at AS closed_at,
+         ka.created_at
+       FROM kyc_applicants ka
+       JOIN users u ON u.id = ka.user_id
+       WHERE u.deleted_at IS NOT NULL
+         AND u.deleted_at < NOW() - ($1::text || ' years')::interval
+       ORDER BY u.deleted_at ASC
+       LIMIT $2`,
+      [String(RETENTION_YEARS), BATCH_SIZE],
+    );
+  });
 
   return result.rows.map((row) => ({
     id: row.id,
     userId: row.user_id,
     applicantId: row.applicant_id,
-    deletedAt: new Date(row.deleted_at),
+    closedAt: new Date(row.closed_at),
     createdAt: new Date(row.created_at),
   }));
 }
 
-/**
- * Securely purges a single KYC applicant record:
- *  - Overwrites applicant_data (which may contain document references, proofs,
- *    and personal data snapshots) with an empty object.
- *  - Nullifies the applicant_id so the external KYC provider record can no
- *    longer be cross-referenced from our database.
- *  - Replaces verification_status with "purged" to signal intent clearly.
- *  - Deletes the row once the overwrite is committed.
- *
- * Both the overwrite and the hard-delete run in a single transaction so
- * there is no window in which partially-cleared data is visible to other
- * readers.
- */
-async function purgeKycRecord(record: EligibleKycRecord): Promise<void> {
+async function collectKycS3Keys(userId: string): Promise<string[]> {
+  const keys = new Set<string>();
+
+  try {
+    const docs = await pool.query<{ s3_key: string | null }>(
+      `SELECT s3_key FROM kyc_documents WHERE user_id = $1 AND s3_key IS NOT NULL`,
+      [userId],
+    );
+    for (const row of docs.rows) {
+      if (row.s3_key) keys.add(row.s3_key);
+    }
+  } catch (error) {
+    logger.debug({ error, userId }, "[kycRetention] kyc_documents lookup skipped");
+  }
+
+  try {
+    const applicants = await pool.query<{ applicant_data: any }>(
+      `SELECT applicant_data FROM kyc_applicants WHERE user_id = $1`,
+      [userId],
+    );
+    for (const row of applicants.rows) {
+      const data = row.applicant_data;
+      const candidates = [
+        data?.s3Key,
+        data?.s3_key,
+        data?.document?.s3Key,
+        data?.document?.s3_key,
+        ...(Array.isArray(data?.documents) ? data.documents : []).flatMap((d: any) => [d?.s3Key, d?.s3_key]),
+      ];
+      for (const key of candidates) {
+        if (typeof key === "string" && key.trim()) keys.add(key.trim());
+      }
+    }
+  } catch (error) {
+    logger.debug({ error, userId }, "[kycRetention] applicant_data S3 key lookup skipped");
+  }
+
+  return [...keys];
+}
+
+export async function deleteKycS3Objects(keys: string[]): Promise<number> {
+  if (keys.length === 0) return 0;
+  const s3 = getS3Client();
+  let deleted = 0;
+  for (const key of keys) {
+    try {
+      await s3.send(new DeleteObjectCommand({ Bucket: s3Config.bucket, Key: key }));
+      deleted += 1;
+    } catch (error) {
+      logger.warn({ error, key }, "[kycRetention] Failed to delete S3 object");
+    }
+  }
+  return deleted;
+}
+
+async function purgeKycRecord(record: EligibleKycRecord): Promise<number> {
+  const s3Keys = await collectKycS3Keys(record.userId);
+  const deletedS3Objects = await deleteKycS3Objects(s3Keys);
+
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
 
-    // Step 1: Overwrite sensitive fields — defense-in-depth in case the
-    // subsequent DELETE is somehow rolled back or intercepted.
+    try {
+      await client.query(`DELETE FROM kyc_documents WHERE user_id = $1`, [record.userId]);
+    } catch (error) {
+      logger.debug({ error, userId: record.userId }, "[kycRetention] kyc_documents delete skipped");
+    }
+
     await client.query(
       `UPDATE kyc_applicants
        SET applicant_data      = '{}'::jsonb,
-           applicant_id        = 'PURGED',
+           applicant_id        = $2,
            verification_status = 'purged',
            updated_at          = NOW()
        WHERE id = $1`,
-      [record.id],
+      [record.id, anonymizedPlaceholder("PURGED", record.id)],
     );
 
-    // Step 2: Hard-delete the row.
-    await client.query(
-      `DELETE FROM kyc_applicants WHERE id = $1`,
-      [record.id],
-    );
+    await client.query(`DELETE FROM kyc_applicants WHERE id = $1`, [record.id]);
 
-    // Step 3: Overwrite PII columns on the users row (first_name, last_name,
-    // address, date_of_birth, id_number) to ensure no identity data remains
-    // even if the users row is retained for financial audit purposes.
     await client.query(
       `UPDATE users
-       SET first_name    = NULL,
-           last_name     = NULL,
+       SET first_name    = $2,
+           last_name     = $2,
            address       = NULL,
            date_of_birth = NULL,
            id_number     = NULL,
            updated_at    = NOW()
        WHERE id = $1`,
-      [record.userId],
+      [record.userId, anonymizedPlaceholder("REDACTED", record.userId)],
     );
 
     await client.query("COMMIT");
+    return deletedS3Objects;
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;
@@ -142,16 +204,11 @@ async function purgeKycRecord(record: EligibleKycRecord): Promise<void> {
   }
 }
 
-/**
- * Runs the full retention purge cycle. Intended to be called by the
- * scheduled job (kycRetentionPurgeJob.ts) once per day.
- *
- * @returns A summary of purge activity.
- */
 export async function runKycRetentionPurge(): Promise<KycPurgeResult> {
   const result: KycPurgeResult = {
     purgedCount: 0,
     skippedCount: 0,
+    deletedS3Objects: 0,
     errors: [],
   };
 
@@ -170,41 +227,32 @@ export async function runKycRetentionPurge(): Promise<KycPurgeResult> {
     return result;
   }
 
-  logger.info(
-    `[kycRetention] Found ${records.length} expired KYC record(s) — purging`,
-  );
+  logger.info(`[kycRetention] Found ${records.length} expired KYC record(s) — purging`);
 
   for (const record of records) {
     try {
-      await purgeKycRecord(record);
-
-      // Emit a structured audit trail entry so compliance has a verifiable
-      // deletion log: who was purged, when, and under which retention policy.
+      const deletedS3Objects = await purgeKycRecord(record);
+      result.deletedS3Objects += deletedS3Objects;
+      result.purgedCount += 1;
       logger.info({
         event: "kyc_data_purged",
         userId: record.userId,
         kycApplicantId: record.id,
-        // Do NOT log the actual applicant_id as it could be used to query
-        // the external KYC provider. Log only internal IDs.
-        accountClosedAt: record.deletedAt.toISOString(),
+        accountClosedAt: record.closedAt.toISOString(),
         retentionYears: RETENTION_YEARS,
         purgedAt: new Date().toISOString(),
+        deletedS3Objects,
       });
-
-      result.purgedCount += 1;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      logger.error(
-        `[kycRetention] Failed to purge KYC record ${record.id} for user ${record.userId}:`,
-        err,
-      );
+      logger.error(`[kycRetention] Failed to purge KYC record ${record.id} for user ${record.userId}:`, err);
       result.errors.push(`Record ${record.id}: ${message}`);
       result.skippedCount += 1;
     }
   }
 
   logger.info(
-    `[kycRetention] Purge complete — purged: ${result.purgedCount}, skipped: ${result.skippedCount}, errors: ${result.errors.length}`,
+    `[kycRetention] Purge complete — purged: ${result.purgedCount}, skipped: ${result.skippedCount}, deletedS3Objects: ${result.deletedS3Objects}, errors: ${result.errors.length}`,
   );
 
   return result;
