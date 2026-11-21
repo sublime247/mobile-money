@@ -4,6 +4,14 @@ import { register } from "../utils/metrics";
 
 export { register } from "../utils/metrics";
 export {
+  dbPoolActiveConnections,
+  dbPoolIdleConnections,
+  dbPoolWaitingClients,
+  poolActiveConnections,
+  poolWaitingRequests,
+  emitPoolMetrics,
+} from "../utils/metrics";
+export {
   startStellarCollector,
   stopStellarCollector,
   refreshStellarWalletMetrics,
@@ -14,9 +22,11 @@ export {
   stellarWalletXlmBalance,
 } from "./stellarCollector";
 
+// Pool saturation aliases are defined in src/utils/metrics.ts to keep
+// pool event emission cycle-free; re-exported above for compatibility.
+
 /**
  * FX Exchange Rate Cache Metrics (#2505)
- * Counters for cache hits and misses on high-frequency FX rate lookups to monitor cache efficacy.
  */
 export const fxCacheRequestsTotal = new Counter({
   name: "fx_cache_requests_total",
@@ -91,7 +101,6 @@ export function recordUssdPushOutcome(
     pending.delete(key);
   }
 
-  // Bound callback deduplication state. Provider references stay out of labels.
   completed.delete(key);
   completed.set(key, Date.now() + confirmationDeadlineMs);
   if (completed.size > 50_000) {

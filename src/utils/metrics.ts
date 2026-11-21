@@ -320,6 +320,24 @@ export const dbPoolWaitingClients = new Gauge({
   registers: [register],
 });
 
+/**
+ * Compatibility aliases for ops dashboards (#2479).
+ * Kept in utils/metrics so emission stays on the hot path without circular deps.
+ */
+export const poolActiveConnections = new Gauge({
+  name: "pool_active_connections",
+  help: "Number of active PostgreSQL pool connections (alias)",
+  labelNames: ["pool"] as const,
+  registers: [register],
+});
+
+export const poolWaitingRequests = new Gauge({
+  name: "pool_waiting_requests",
+  help: "Number of waiting PostgreSQL pool requests (alias)",
+  labelNames: ["pool"] as const,
+  registers: [register],
+});
+
 export interface PoolMetricsSource {
   totalCount?: number;
   idleCount?: number;
@@ -339,6 +357,8 @@ export function emitPoolMetrics(
   dbPoolActiveConnections.labels(poolName).set(active);
   dbPoolIdleConnections.labels(poolName).set(idle);
   dbPoolWaitingClients.labels(poolName).set(waiting);
+  poolActiveConnections.labels(poolName).set(active);
+  poolWaitingRequests.labels(poolName).set(waiting);
 }
 
 // Provider Liquidity Pool Float Balance Metric

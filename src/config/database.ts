@@ -591,6 +591,92 @@ export function stopPoolHealthCheck(): void {
   }
 }
 
+export const DB_POOL_WAIT_ALERT_MS = parseInt(
+  process.env.DB_POOL_WAIT_ALERT_MS || "2000",
+  10,
+);
+
+const poolWaitStartedAt = new WeakMap<object, number>();
+const instrumentedPools = new WeakSet<object>();
+
+export const attachPoolSaturationListeners = (
+  poolInstance: Pool,
+  poolName = "primary",
+) => {
+  if (instrumentedPools.has(poolInstance as object)) return;
+  instrumentedPools.add(poolInstance as object);
+
+  const emit = () => emitPoolMetrics(poolInstance, poolName);
+  const pendingStarts: number[] = [];
+
+  const onAcquire = (client: unknown) => {
+    if (client && typeof client === "object") {
+      const started =
+        poolWaitStartedAt.get(client as object) ?? pendingStarts.shift();
+      if (started !== undefined) {
+        poolWaitStartedAt.delete(client as object);
+        const waitMs = Date.now() - started;
+        if (waitMs > DB_POOL_WAIT_ALERT_MS) {
+          const total = (poolInstance as any).totalCount ?? 0;
+          const idle = (poolInstance as any).idleCount ?? 0;
+          logger.warn(
+            {
+              pool: poolName,
+              waitMs,
+              thresholdMs: DB_POOL_WAIT_ALERT_MS,
+              waiting: (poolInstance as any).waitingCount ?? 0,
+              active: Math.max(0, total - idle),
+            },
+            "db_pool_wait_exceeded",
+          );
+        }
+      }
+    }
+    emit();
+  };
+
+  poolInstance.on("acquire", onAcquire);
+  poolInstance.on("release", emit);
+  poolInstance.on("connect", emit);
+  poolInstance.on("remove", emit);
+  poolInstance.on("error", emit);
+
+  const originalConnect = poolInstance.connect.bind(poolInstance) as any;
+  (poolInstance as any).connect = (...args: any[]) => {
+    const start = Date.now();
+    pendingStarts.push(start);
+    const markClient = (client: any) => {
+      if (client && typeof client === "object") poolWaitStartedAt.set(client, start);
+      return client;
+    };
+    if (args.length > 0 && typeof args[0] === "function") {
+      const cb = args[0];
+      args[0] = (err: unknown, client: any, release: any) => {
+        if (err) {
+          const idx = pendingStarts.indexOf(start);
+          if (idx >= 0) pendingStarts.splice(idx, 1);
+        } else {
+          markClient(client);
+        }
+        cb(err, client, release);
+      };
+      return originalConnect(...args);
+    }
+    const maybePromise = originalConnect(...args);
+    if (maybePromise && typeof maybePromise.then === "function") {
+      return maybePromise.then(
+        (client: any) => markClient(client),
+        (err: unknown) => {
+          const idx = pendingStarts.indexOf(start);
+          if (idx >= 0) pendingStarts.splice(idx, 1);
+          throw err;
+        },
+      );
+    }
+    return maybePromise;
+  };
+};
+
 async function reconnectPrimaryPool(): Promise<void> {
   try {
     const previousPool = pool;
@@ -600,6 +686,7 @@ async function reconnectPrimaryPool(): Promise<void> {
       handlePoolError(err, client);
     });
 
+    attachPoolSaturationListeners(nextPool, "primary");
     attachPrimaryPoolRecovery(nextPool);
     const isHealthy = await pingDatabasePool(nextPool);
     if (!isHealthy) {
@@ -678,6 +765,7 @@ function createPrimaryPool(): Pool {
     handlePoolError(err, client);
   });
 
+  attachPoolSaturationListeners(newPool, "primary");
   currentPoolMax = POOL_DEFAULT_MAX;
   attachPrimaryPoolRecovery(newPool);
 

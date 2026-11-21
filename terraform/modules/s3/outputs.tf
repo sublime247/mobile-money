@@ -1,0 +1,9 @@
+output "primary_bucket_name" { value = aws_s3_bucket.primary.bucket }
+output "primary_bucket_arn" { value = aws_s3_bucket.primary.arn }
+output "replica_bucket_name" { value = aws_s3_bucket.replica.bucket }
+output "replica_bucket_arn" { value = aws_s3_bucket.replica.arn }
+output "primary_kms_key_arn" { value = aws_kms_key.primary.arn }
+output "primary_kms_alias_arn" { value = aws_kms_alias.primary.arn }
+output "replica_kms_key_arn" { value = aws_kms_replica_key.replica.arn }
+output "replica_kms_alias_arn" { value = aws_kms_alias.replica.arn }
+output "replication_role_arn" { value = aws_iam_role.replication.arn }

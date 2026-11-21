@@ -209,6 +209,16 @@ export class ConcurrentModificationError extends Error {
   }
 }
 
+/**
+ * Backward/issue-compatible alias for optimistic-lock conflicts (#2478).
+ */
+export class OptimisticLockException extends ConcurrentModificationError {
+  constructor(userId: string, currency: string, attempts: number) {
+    super(userId, currency, attempts);
+    this.name = "OptimisticLockException";
+  }
+}
+
 export class InsufficientFundsError extends Error {
   constructor(
     readonly userId: string,
@@ -757,7 +767,7 @@ export class LedgerService {
       }
     }
 
-    throw new ConcurrentModificationError(userId, currency, maxAttempts);
+    throw new OptimisticLockException(userId, currency, maxAttempts);
   }
 
   /**
