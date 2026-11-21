@@ -1,4 +1,4 @@
-import { Counter } from "prom-client";
+import { Counter, Gauge } from "prom-client";
 import { parsePhoneNumberFromString } from "libphonenumber-js";
 import { register } from "../utils/metrics";
 
@@ -13,6 +13,23 @@ export {
   stellarWalletSubentriesTotal,
   stellarWalletXlmBalance,
 } from "./stellarCollector";
+
+/**
+ * FX Exchange Rate Cache Metrics (#2505)
+ * Counters for cache hits and misses on high-frequency FX rate lookups to monitor cache efficacy.
+ */
+export const fxCacheRequestsTotal = new Counter({
+  name: "fx_cache_requests_total",
+  help: "Total number of FX exchange rate cache requests",
+  labelNames: ["result"] as const,
+  registers: [register],
+});
+
+export const fxCacheHitRatio = new Gauge({
+  name: "fx_cache_hit_ratio",
+  help: "FX exchange rate cache hit ratio (hits / (hits + misses))",
+  registers: [register],
+});
 
 type PushProvider = "mpesa" | "mtn";
 type PushOutcome = "success" | "failed" | "timeout";

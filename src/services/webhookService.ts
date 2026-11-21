@@ -4,6 +4,8 @@ import { queueOptions } from "../queue/config";
 import logger from "../utils/logger";
 import { validateWebhookUrl, SsrfBlockedError } from "../security/ssrf";
 import { createWebhookSignature } from "../utils/webhookSigner";
+import { context, propagation, trace } from "@opentelemetry/api";
+import { extractTraceContext, injectTraceContext } from "../queue/jobTracing";
 
 /** Queue used for notifications sent to SEP-31 receiving anchors. */
 export const RECEIVING_ANCHOR_WEBHOOK_QUEUE = "receiving-anchor-webhooks";
@@ -26,6 +28,8 @@ export interface ReceivingAnchorWebhookJob {
   callbackUrl: string;
   secret: string;
   payload: ReceivingAnchorWebhookPayload;
+  _traceparent?: string;
+  _traceId?: string;
 }
 
 export const receivingAnchorWebhookQueue = new Queue<ReceivingAnchorWebhookJob>(
@@ -75,11 +79,11 @@ export class WebhookDispatcherService {
 
     await receivingAnchorWebhookQueue.add(
       "deliver",
-      {
+      injectTraceContext({
         callbackUrl,
         secret,
         payload,
-      },
+      }),
       {
         jobId: `sep31-${payload.id}-${payload.status}-${Date.now()}`,
         attempts: maxAttempts,
@@ -108,6 +112,37 @@ export class WebhookDispatcherService {
 
     const body = JSON.stringify(job.payload);
     const signatureHeaders = createWebhookSignature(body, job.secret);
+
+    // Inject W3C Trace Context headers (traceparent, tracestate, baggage)
+    const activeContext = trace.getActiveSpan()
+      ? context.active()
+      : extractTraceContext(job as any);
+    const traceCarrier: Record<string, string> = {};
+    propagation.inject(activeContext, traceCarrier);
+
+    if (!traceCarrier.traceparent && (job as any)._traceparent) {
+      traceCarrier.traceparent = (job as any)._traceparent;
+    }
+
+    const span = trace.getActiveSpan();
+    const traceId =
+      span?.spanContext().traceId ??
+      (traceCarrier.traceparent
+        ? traceCarrier.traceparent.split("-")[1]
+        : undefined) ??
+      (job as any)._traceId;
+
+    logger.info(
+      {
+        transactionId: job.payload.id,
+        status: job.payload.status,
+        callbackUrl: job.callbackUrl,
+        traceId,
+        traceparent: traceCarrier.traceparent,
+      },
+      "Delivering receiving-anchor webhook with trace context",
+    );
+
     const response = await fetch(job.callbackUrl, {
       method: "POST",
       headers: {
@@ -115,6 +150,7 @@ export class WebhookDispatcherService {
         "X-Stellar-Signature": signatureHeaders["X-Signature"],
         "X-Signature": signatureHeaders["X-Signature"],
         "X-Signature-Timestamp": signatureHeaders["X-Signature-Timestamp"],
+        ...traceCarrier,
       },
       body,
     });

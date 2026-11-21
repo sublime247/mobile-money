@@ -186,6 +186,7 @@ Commands:
   verify-report <report> <signature> [public-key-file]  Verify a signed settlement report.
   dashboard                Render an active terminal overview of node CPU, memory, and queue lengths.
   provider:health          Show status, balance and latency for every mobile money provider.
+  provider:test-connectivity Test outbound HTTPS connectivity and auth for MTN, Orange, Airtel, M-Pesa, Moov.
                            Exits non-zero if a primary provider is DOWN (MOMO_PRIMARY_PROVIDERS, default: mtn,airtel).
 
 Options:
@@ -291,6 +292,25 @@ export async function runCli(args: string[]): Promise<void> {
         err,
         CLI_ERROR_CODES.ExecutionFailed,
       );
+      process.exitCode = 1;
+    }
+    return;
+  }
+
+  if (command === "provider:test-connectivity") {
+    try {
+      const { executeTestConnectivity } =
+        await import("../../cli/src/commands/testConnectivity.js");
+      const isJson = process.argv.includes("--json");
+      const { hasAuthFailure, table } = await executeTestConnectivity({
+        json: isJson,
+      });
+      if (!isJson) {
+        console.log(table);
+      }
+      process.exitCode = hasAuthFailure ? 1 : 0;
+    } catch (error) {
+      printError("Unable to test provider connectivity", error);
       process.exitCode = 1;
     }
     return;
