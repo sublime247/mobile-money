@@ -36,7 +36,11 @@ import subscriptionModel from "../models/subscription";
 import logger from "../utils/logger";
 import { amlScreeningService } from "../services/amlScreening";
 
-import { queueOptions, getWorkerConcurrency } from "./config";
+import { queueOptions } from "./config";
+import {
+  getTransactionWorkerOptions,
+  recordJobPickup,
+} from "../workers/transactionWorker";
 import { providerQueueControl } from "./providerQueueControl";
 import { WorkerAutoscaler, isAutoscalerEnabled } from "./workerAutoscaler";
 import { transactionQueue } from "./transactionQueue";
@@ -53,7 +57,7 @@ const emailService = new EmailService();
 const pushService = pushNotificationService;
 const webhookService = new WebhookService();
 
-const CONCURRENCY = getWorkerConcurrency();
+const CONCURRENCY = getTransactionWorkerOptions().concurrency;
 
 export async function handleSubscriptionFailure(
   subscriptionId: string,
@@ -767,6 +771,9 @@ async function handleTransactionJob(
   job: Parameters<Parameters<typeof createProviderWorker>[1]>[0],
   queueName: string,
 ) {
+  // Time-to-pickup per priority tier (#2446).
+  recordJobPickup(job, queueName);
+
   // Provider paused for maintenance (#2282): divert the job to the
   // provider's hold queue before any provider I/O. It is re-queued
   // here automatically when the provider is resumed.
@@ -847,3 +854,4 @@ export async function closeWorker(): Promise<void> {
     await natsManager.close();
   }
 }
+
