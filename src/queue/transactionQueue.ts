@@ -8,7 +8,11 @@ import {
   isProviderRateLimitedQueuesEnabled,
 } from "./providerRateLimitedQueues";
 import { VipTier } from "../utils/fees";
-import { calculateTransactionPriority } from "./priority";
+import {
+  calculateTransactionPriority,
+  resolveTieredPriority,
+  type TransactionJobCategory,
+} from "./priority";
 import { createBackpressureError, isBackpressureActive, isCriticalPriority } from "./redisBackpressure";
 import {
   enqueueWithOutboxFallback,
@@ -17,7 +21,14 @@ import {
 
 export { stopTransactionOutboxRelay } from "./transactionOutbox";
 
-export { calculateTransactionPriority };
+export { calculateTransactionPriority, resolveTieredPriority };
+export {
+  PRIORITY_TIER,
+  CATEGORY_PRIORITY_BANDS,
+  priorityToTier,
+  resolveJobCategory,
+} from "./priority";
+export type { TransactionJobCategory, PriorityTier } from "./priority";
 
 export const TRANSACTION_QUEUE_NAME = "transaction-processing-queue";
 export const TRANSACTION_JOB_NAME = "transaction-process";
@@ -38,6 +49,12 @@ export interface TransactionJobData {
   tier?: VipTier | string;
   /** Explicit job priority (1 to 10), where 1 is highest priority. */
   priority?: number;
+  /**
+   * Priority tier category (#2446). Defaults from `type`: withdraw →
+   * "withdrawal", deposit → "deposit". Use "instant_refund" for refunds and
+   * "batch_sync" for background re-sync / bulk replays.
+   */
+  category?: TransactionJobCategory;
   _traceId?: string;
   /** Serialized W3C `traceparent` injected at enqueue time (see queue/jobTracing). */
   _traceparent?: string;
@@ -113,7 +130,10 @@ export async function dispatchTransactionJob(
     jobId?: string;
   },
 ): Promise<{ id: string | undefined }> {
-  const resolvedPriority = calculateTransactionPriority({
+  // Tiered priority (#2446): refunds > withdrawals/deposits > batch sync.
+  const { priority: resolvedPriority, category } = resolveTieredPriority({
+    category: data.category,
+    type: data.type,
     priority: options?.priority ?? data.priority,
     tier: data.tier,
     amount: data.amount,
@@ -126,6 +146,7 @@ export async function dispatchTransactionJob(
 
   const jobData = {
     ...data,
+    category,
     priority: resolvedPriority,
   };
 

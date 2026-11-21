@@ -186,6 +186,8 @@ Commands:
   verify-report <report> <signature> [public-key-file]  Verify a signed settlement report.
   dashboard                Render an active terminal overview of node CPU, memory, and queue lengths.
   provider:health          Show status, balance and latency for every mobile money provider.
+  dlq:replay               Inspect dead-lettered jobs and re-enqueue them with failure counters reset.
+                           Flags: --queue <name> --error-match <text|/regex/> --limit <n> (default 50) --dry-run
   provider:test-connectivity Test outbound HTTPS connectivity and auth for MTN, Orange, Airtel, M-Pesa, Moov.
                            Exits non-zero if a primary provider is DOWN (MOMO_PRIMARY_PROVIDERS, default: mtn,airtel).
 
@@ -382,6 +384,41 @@ export async function runCli(args: string[]): Promise<void> {
     return new Promise<void>(() => undefined);
   }
 
+  if (command === "dlq:replay") {
+    const { parseDlqReplayArgs, runDlqReplay, DlqReplayArgError, DLQ_REPLAY_USAGE } =
+      await import("../../cli/src/commands/dlqReplay.js");
+
+    let options;
+    try {
+      options = parseDlqReplayArgs(args.slice(1));
+    } catch (err) {
+      if (err instanceof DlqReplayArgError) {
+        printError(err.message, undefined, CLI_ERROR_CODES.MissingArgument);
+        console.log(DLQ_REPLAY_USAGE);
+        process.exitCode = 1;
+        return;
+      }
+      throw err;
+    }
+
+    const dlq = await import("../queue/dlq.js");
+    try {
+      const result = await runDlqReplay(options, {
+        list: (filter) => dlq.listDlqEntries(filter),
+        replay: (entry, job) =>
+          dlq.replayDlqEntry(entry as import("../queue/dlq").DlqEntry, job),
+      });
+      process.exitCode = result.exitCode;
+    } catch (err) {
+      printError("Unable to replay DLQ jobs", err, CLI_ERROR_CODES.ExecutionFailed);
+      process.exitCode = 1;
+    } finally {
+      await dlq.closeReplayQueues().catch(() => undefined);
+      await dlq.deadLetterQueue.close().catch(() => undefined);
+    }
+    return;
+  }
+
   if (command === "retry-batch") {
     if (!batchId) {
       printError(
@@ -519,7 +556,8 @@ if (require.main === module) {
         await activeTransactionQueue?.close().catch(() => undefined);
       } else if (
         process.argv[2] === "dashboard" ||
-        process.argv[2] === "provider:health"
+        process.argv[2] === "provider:health" ||
+        process.argv[2] === "dlq:replay"
       ) {
         process.exit(process.exitCode || 0);
       }
