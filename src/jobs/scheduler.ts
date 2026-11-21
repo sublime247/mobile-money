@@ -23,7 +23,7 @@ import { runDailyProviderReconciliation } from "./providerReconciliationJob";
 import { runReconciliationJob } from "./reconciliationJob";
 import { runLedgerReconciliationJob } from "./ledgerReconciliationJob";
 import { runStellarDiscrepancyJob } from "./stellarDiscrepancyJob";
-import { runDatabaseBackupJob } from "./databaseBackupJob";
+import { runDatabaseBackupJob, runVacuumAnalyzeJob } from "./databaseBackupJob";
 import { runDatabaseBackupVerifyJob } from "./databaseBackupVerifyJob";
 import { INDEX_REINDEX_CRON, INDEX_REINDEX_JOB_ENABLED } from "../config/env";
 import { runIndexReindexJob } from "./indexReindexJob";
@@ -218,6 +218,13 @@ const JOBS: JobConfig[] = [
     // Daily at 3:00 AM
     schedule: process.env.DATABASE_BACKUP_VERIFY_CRON || "0 3 * * *",
     handler: runDatabaseBackupVerifyJob,
+  },
+  {
+    name: "vacuum-analyze",
+    // Every 6 hours at UTC 00:00, 06:00, 12:00 and 18:00 (#2481).
+    schedule: process.env.VACUUM_ANALYZE_CRON || "0 */6 * * *",
+    timezone: "UTC",
+    handler: runVacuumAnalyzeJob,
   },
   {
     name: "jwt-key-rotation",

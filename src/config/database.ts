@@ -739,6 +739,8 @@ type ReplicaStatus = {
   enabled: boolean;
   healthy: boolean;
   lagSeconds: number | null;
+  /** pg_last_wal_replay_lsn() from the last successful probe (#2484). */
+  walReplayLsn: string | null;
 };
 
 /** Replica URLs with any password masked, for logs, metrics and APIs. */
@@ -759,6 +761,7 @@ const replicaStatuses: ReplicaStatus[] = replicaLabels.map((url) => ({
   enabled: true,
   healthy: true,
   lagSeconds: null,
+  walReplayLsn: null,
 }));
 
 // Build an individual Pool for each replica URL
@@ -852,6 +855,29 @@ async function queryReplica(args: any[]): Promise<any | null> {
   }
 }
 
+/**
+ * Acquire a dedicated client for a read-only transaction (#2483).
+ *
+ * Prefers a healthy replica and falls back to the primary when none is
+ * configured or reachable. The caller owns the client and must always release
+ * it; `withReadOnlyTransaction()` does that in a `finally` block.
+ */
+export async function getReadClient(): Promise<PoolClient> {
+  const idx = getNextReplicaIndex();
+  if (idx !== null) {
+    try {
+      return await replicaPools[idx].connect();
+    } catch (err) {
+      markReplicaUnavailable(idx);
+      logger.warn(
+        `[Database] Replica client acquisition failed for ${replicaLabels[idx]}; using primary for read-only transaction`,
+        err,
+      );
+    }
+  }
+  return pool.connect();
+}
+
 /** Whether a `pool.query` call should be served by a replica. */
 function shouldRouteToReplica(queryString: string, args: any[]): boolean {
   if (!REPLICA_ROUTE_GET_REQUESTS || replicaPools.length === 0) return false;
@@ -865,22 +891,36 @@ async function refreshReplicaStatus(idx: number): Promise<void> {
   const url = replicaLabels[idx];
   let healthy = false;
   let lagSeconds: number | null = null;
+  let walReplayLsn: string | null = null;
   let client: PoolClient | null = null;
 
   try {
     client = await replicaPools[idx].connect();
+    // #2484: the existing lag probe now also reports the last replayed LSN,
+    // so health endpoints can expose both time- and position-based progress
+    // without opening a second connection per request.
     const query = `
-      SELECT CASE
-        WHEN pg_is_in_recovery() THEN EXTRACT(EPOCH FROM (now() - pg_last_xact_replay_timestamp()))
-        ELSE 0
-      END AS lag_seconds
+      SELECT
+        CASE
+          WHEN pg_is_in_recovery()
+          THEN EXTRACT(EPOCH FROM (now() - pg_last_xact_replay_timestamp()))
+          ELSE 0
+        END AS lag_seconds,
+        CASE
+          WHEN pg_is_in_recovery() THEN pg_last_wal_replay_lsn()::text
+        END AS wal_replay_lsn
     `;
-    const result = await client.query<{ lag_seconds: number | null }>(query);
+    const result = await client.query<{
+      lag_seconds: number | null;
+      wal_replay_lsn: string | null;
+    }>(query);
     lagSeconds = result.rows?.[0]?.lag_seconds ?? null;
+    walReplayLsn = result.rows?.[0]?.wal_replay_lsn ?? null;
     healthy = true;
   } catch (error) {
     healthy = false;
     lagSeconds = null;
+    walReplayLsn = null;
     logger.warn(`[Database] Replica health check failed for ${url}:`, error);
   } finally {
     client?.release(healthy ? undefined : true);
@@ -890,7 +930,7 @@ async function refreshReplicaStatus(idx: number): Promise<void> {
     healthy &&
     lagSeconds !== null &&
     lagSeconds <= REPLICA_SYNC_LAG_THRESHOLD_SECONDS;
-  replicaStatuses[idx] = { url, enabled, healthy, lagSeconds };
+  replicaStatuses[idx] = { url, enabled, healthy, lagSeconds, walReplayLsn };
 
   dbReplicaLagSeconds.labels(url).set(lagSeconds ?? 0);
   dbReplicaReadEnabled.labels(url).set(enabled ? 1 : 0);
@@ -1020,6 +1060,7 @@ export interface ReplicaPoolStatus {
   healthy: boolean;
   enabled: boolean;
   lagSeconds: number | null;
+  walReplayLsn: string | null;
   totalConnections: number;
   idleConnections: number;
   waitingClients: number;

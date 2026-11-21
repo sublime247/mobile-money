@@ -1,12 +1,16 @@
-import { pool } from "../config/database";
+import { withReadOnlyTransaction } from "../database/readOnlyClient";
 
 /**
  * Report Generation Job
  * Schedule: Daily at 6:00 AM (0 6 * * *)
  * Generates a daily summary report for the previous day's transactions.
+ *
+ * #2483: reporting reads run inside a READ ONLY transaction and prefer a
+ * replica, so an accidental write cannot mutate reporting data.
  */
 export async function runReportJob(): Promise<void> {
-  const result = await pool.query(`
+  const result = await withReadOnlyTransaction((client) =>
+    client.query(`
     SELECT
       status,
       type,
@@ -17,7 +21,8 @@ export async function runReportJob(): Promise<void> {
       AND created_at <  CURRENT_DATE
     GROUP BY status, type
     ORDER BY type, status
-  `);
+    `),
+  );
 
   const date = new Date();
   date.setDate(date.getDate() - 1);
