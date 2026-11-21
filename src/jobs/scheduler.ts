@@ -33,6 +33,7 @@ import { runRebalanceJobHandler } from "./rebalanceJob";
 import { startNotificationWorker } from "../workers/notificationWorker";
 import { runTravelRuleExportJob } from "../services/compliance/travelRuleExport";
 import { runDlqCleanupJob } from "../queue/dlq";
+import { purgeExpiredProviderErrorLogs } from "../services/providerErrorLogService";
 import { runHighValueComplianceReportJob } from "./highValueComplianceReportJob";
 import { runStellarReconciliationJob } from "../workers/stellarReconciliation";
 import { runAirtelReconciliationWorker } from "../workers/airtelReconciliation";
@@ -270,6 +271,16 @@ const JOBS: JobConfig[] = [
     // Daily at 3:30 AM — removes DLQ entries older than 90 days after overnight audit window
     schedule: process.env.DLQ_CLEANUP_CRON || "30 3 * * *",
     handler: runDlqCleanupJob,
+  },
+  {
+    name: "provider-error-log-purge",
+    // Daily at 03:45 UTC - deletes sanitized provider failure snapshots
+    // older than their 30-day retention window (#2445)
+    schedule: process.env.PROVIDER_ERROR_LOG_PURGE_CRON || "45 3 * * *",
+    timezone: "UTC",
+    handler: async () => {
+      await purgeExpiredProviderErrorLogs();
+    },
   },
   {
     name: "airtel-disbursement-reconciliation",
