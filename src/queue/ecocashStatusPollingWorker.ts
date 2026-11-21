@@ -6,6 +6,7 @@ import {
 } from "./ecocashStatusPollingQueue";
 import { processEcoCashStatusPoll } from "../providers/ecocash/statusPoller";
 import logger from "../utils/logger";
+import { withJobTrace } from "./jobTracing";
 
 let worker: Worker | null = null;
 
@@ -16,7 +17,16 @@ export function startEcoCashStatusPollingWorker(): void {
     ECOCASH_STATUS_POLLING_QUEUE_NAME,
     async (job: Job<EcoCashStatusPollJobData>) => {
       try {
-        await processEcoCashStatusPoll(job.data);
+        await withJobTrace(
+          "queue.ecocash-status-poll.process",
+          job.data,
+          () => processEcoCashStatusPoll(job.data),
+          {
+            "messaging.system": "bullmq",
+            "messaging.destination.name": ECOCASH_STATUS_POLLING_QUEUE_NAME,
+            "messaging.message.id": job.id ?? "",
+          },
+        );
       } catch (error) {
         logger.error(
           error,

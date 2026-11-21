@@ -25,7 +25,9 @@ import {
   TraceIdRatioBasedSampler,
   ParentBasedSampler,
   AlwaysOffSampler,
+  BatchSpanProcessor,
 } from "@opentelemetry/sdk-trace-base";
+import { RedactingSpanProcessor } from "./utils/spanRedaction";
 import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
 import { trace, context, SpanStatusCode } from "@opentelemetry/api";
 
@@ -81,7 +83,12 @@ if (OTEL_ENABLED) {
   sdk = new NodeSDK({
     resource,
     sampler,
-    traceExporter,
+    // Redact auth tokens / phone numbers from every span before export.
+    // (spanProcessors replaces the default BatchSpanProcessor(traceExporter).)
+    spanProcessors: [
+      new RedactingSpanProcessor(),
+      ...(traceExporter ? [new BatchSpanProcessor(traceExporter)] : []),
+    ],
     metricReader,
     // W3C TraceContext + Baggage propagation
     textMapPropagator: new CompositePropagator({

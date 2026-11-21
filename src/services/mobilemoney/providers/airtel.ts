@@ -38,6 +38,7 @@ import {
   AirtelTokenManager,
   calculateJitteredBackoff,
 } from "../airtelClient";
+import { attachTelcoTracingInterceptor } from "../../../utils/telcoTracing";
 
 // ============================================================================
 // TYPES & INTERFACES
@@ -252,6 +253,7 @@ export class AirtelService {
         validateStatus: () => true,
       });
       attachCorrelationIdInterceptor(client);
+      attachTelcoTracingInterceptor(client);
       this.client = client;
     }
 
@@ -264,6 +266,7 @@ export class AirtelService {
         validateStatus: () => true,
       });
       attachCorrelationIdInterceptor(directClient);
+      attachTelcoTracingInterceptor(directClient);
       this.directClient = directClient;
     }
 
@@ -277,6 +280,7 @@ export class AirtelService {
           validateStatus: () => true,
         });
         attachCorrelationIdInterceptor(proxyClient);
+        attachTelcoTracingInterceptor(proxyClient);
         this.proxyClient = proxyClient;
       }
     }

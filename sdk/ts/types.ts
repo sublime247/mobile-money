@@ -123,3 +123,40 @@ export interface TransactionStatusResult {
   completedAt?: string;
   message?: string;
 }
+
+export interface ListTransactionsParams {
+  /** Items requested per page (server clamps to 1-100, default: 20) */
+  limit?: number;
+  /** Stop after yielding this many items in total (default: no cap) */
+  maxItems?: number;
+  /** Start iterating from this cursor instead of the first page */
+  cursor?: string;
+  /** ISO 8601 date (YYYY-MM-DD), inclusive lower bound */
+  startDate?: string;
+  /** ISO 8601 date (YYYY-MM-DD), inclusive upper bound */
+  endDate?: string;
+  minAmount?: number;
+  maxAmount?: number;
+  provider?: string;
+  /** Tags to filter by (sent comma-separated) */
+  tags?: string[];
+}
+
+export interface TransactionListItem {
+  id: string;
+  [key: string]: unknown;
+}
+
+export interface TransactionListPagination {
+  limit?: number;
+  next_cursor?: string | null;
+  next_token?: string | null;
+  has_next?: boolean;
+  hasMore?: boolean;
+  offset?: number;
+}
+
+export interface TransactionListResponse {
+  data: TransactionListItem[];
+  pagination?: TransactionListPagination;
+}
