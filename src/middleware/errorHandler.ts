@@ -4,6 +4,7 @@ import { ERROR_CODES, getHttpStatus } from "../constants/errorCodes";
 import { getLocalizedMessage } from "../locales/messages";
 import { resolveLocale, resolveLocaleFromRequest } from "../utils/i18n";
 import logger from "../utils/logger";
+import { recordFailure, extractClientIp } from "../services/ipReputation.js";
 
 /**
  * Extended Error interface with error-specific properties.
@@ -186,6 +187,22 @@ export const errorHandler = (
     },
     "Request Error",
   );
+
+  // IP reputation tracking — issue #2465
+  // Increment the failure counter for 401 and 400 errors so repeated
+  // authentication or validation failures from the same IP are tracked.
+  if (statusCode === 401 || statusCode === 400) {
+    const clientIp = extractClientIp({
+      ip: (req as any).ip,
+      headers: req.headers as Record<string, string | string[] | undefined>,
+    });
+    if (clientIp && clientIp !== "unknown") {
+      // Fire-and-forget: do not block the error response on Redis latency
+      recordFailure(clientIp).catch((err) =>
+        logger.warn({ err }, "[ipReputation] recordFailure failed in errorHandler"),
+      );
+    }
+  }
 
   const details = extractLegacyDetails(err);
   const body: ErrorResponse & { statusCode: number; error?: string } = {

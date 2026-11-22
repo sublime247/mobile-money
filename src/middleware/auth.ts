@@ -230,6 +230,33 @@ export async function authenticateToken(
       return;
     }
 
+    // token_version check — issue #2464
+    // Reject tokens that were minted before the user's current token_version.
+    // This fires synchronously for every request but uses a lightweight
+    // indexed lookup on the primary key.
+    if (decoded.userId && decoded.tokenVersion !== undefined) {
+      try {
+        const tvResult = await queryRead<{ token_version: number }>(
+          `SELECT token_version FROM users WHERE id = $1 LIMIT 1`,
+          [decoded.userId],
+        );
+        if (tvResult.rows.length > 0) {
+          const dbVersion = tvResult.rows[0].token_version ?? 0;
+          if (decoded.tokenVersion < dbVersion) {
+            res.status(401).json({
+              error: "Token revoked",
+              message: "Your session has been revoked. Please log in again.",
+            });
+            return;
+          }
+        }
+      } catch (tvErr) {
+        // Log but do not block authentication on DB errors — fail open here
+        // so a DB blip doesn't lock out all users.
+        logger.warn("[authenticateToken] token_version check DB error:", tvErr);
+      }
+    }
+
     // IP Geofencing validation
     const geoAccess = await evaluateGeoLoginAccess(req);
     if (!geoAccess.allowed) {
