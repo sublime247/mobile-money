@@ -1,0 +1,1 @@
+# Provider resilience boundaries`n`nProvider resilience requires observable circuit state, bounded prompt expiry, float alert thresholds, and normalized failure categories.
