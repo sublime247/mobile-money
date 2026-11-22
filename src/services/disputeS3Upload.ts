@@ -1,6 +1,18 @@
 import logger from "../utils/logger";
 import { PutObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
-import { getS3Client, s3Config, getS3ObjectUrl } from "../config/s3";
+import {
+  getS3Client,
+  s3Config,
+  getS3ObjectUrl,
+  getS3BucketTargets,
+} from "../config/s3";
+
+type S3BucketTarget = {
+  bucket: string;
+  region: string;
+  client: { send: (command: any) => Promise<any> };
+  isReplica: boolean;
+};
 import {
   generateUniqueFilename,
   generateDisputeS3Key,
@@ -97,23 +109,53 @@ export const uploadMultipleDisputeEvidenceToS3 = async (
 };
 
 /**
- * Check if dispute evidence file exists in S3
+ * Check if dispute evidence file exists in primary or replica S3 bucket.
  */
 export const disputeEvidenceExistsInS3 = async (
   key: string,
+  targets: S3BucketTarget[] = getS3BucketTargets(),
 ): Promise<boolean> => {
-  try {
-    const s3Client = getS3Client();
-    const command = new HeadObjectCommand({
-      Bucket: s3Config.bucket,
-      Key: key,
-    });
-
-    await s3Client.send(command);
-    return true;
-  } catch (error) {
-    return false;
+  for (const target of targets) {
+    try {
+      const command = new HeadObjectCommand({ Bucket: target.bucket, Key: key });
+      await target.client.send(command);
+      return true;
+    } catch (error) {
+      logger.warn("Dispute S3 head check failed for bucket target", {
+        bucket: target.bucket,
+        isReplica: target.isReplica,
+        key,
+      });
+    }
   }
+  return false;
+};
+
+/**
+ * Get dispute evidence URL, falling back to replica when primary read fails.
+ */
+export const getDisputeEvidenceObjectUrl = async (
+  key: string,
+  targets: S3BucketTarget[] = getS3BucketTargets(),
+): Promise<string> => {
+  let lastError: unknown;
+  for (const target of targets) {
+    try {
+      const command = new HeadObjectCommand({ Bucket: target.bucket, Key: key });
+      await target.client.send(command);
+      return getS3ObjectUrl(key, target.bucket, target.region);
+    } catch (error) {
+      lastError = error;
+      logger.warn("Dispute S3 read failed for bucket target", {
+        bucket: target.bucket,
+        isReplica: target.isReplica,
+        key,
+      });
+    }
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("Dispute evidence object not found");
 };
 
 /**
