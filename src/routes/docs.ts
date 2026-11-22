@@ -67,3 +67,71 @@ if (isDev) {
     res.status(404).json({ error: "Not found" });
   });
 }
+
+// ---------------------------------------------------------------------------
+// Signed download endpoint — issue #2461
+// ---------------------------------------------------------------------------
+
+import {
+  validateSignedUrlMiddleware,
+  buildSignedUrl,
+} from "../utils/signedUrl.js";
+import { requireAuth } from "../middleware/auth.js";
+
+/**
+ * GET /docs/download
+ *
+ * Serve a KYC document or transaction export receipt via a signed URL.
+ * The signed URL is generated server-side and sent to the customer out-of-band
+ * (e.g. via email or the customer portal).
+ *
+ * Query params: doc, cid, exp, sig (produced by buildSignedUrl / generateSignedUrlParams)
+ *
+ * validateSignedUrlMiddleware verifies the HMAC-SHA256 signature and expiry
+ * before the handler runs. Any parameter modification is detected and rejected.
+ */
+docsRouter.get("/download", validateSignedUrlMiddleware, (req: Request, res: Response) => {
+  const documentId: string = (req as any).signedDocumentId;
+  const customerId: string = (req as any).signedCustomerId;
+
+  // Placeholder — replace with actual document retrieval (S3 pre-signed URL,
+  // DB lookup, etc.)
+  res.json({
+    message: "Document access granted",
+    documentId,
+    customerId,
+    accessedAt: new Date().toISOString(),
+  });
+});
+
+/**
+ * POST /docs/sign
+ *
+ * Admin / server-side route: generate a signed download URL for a document.
+ * Requires authentication.  Returns the signed URL and its expiry.
+ *
+ * Body: { documentId: string, customerId: string, ttlSeconds?: number }
+ */
+docsRouter.post("/sign", requireAuth, (req: Request, res: Response) => {
+  const { documentId, customerId, ttlSeconds } = req.body ?? {};
+
+  if (!documentId || !customerId) {
+    res.status(400).json({
+      error: "Bad Request",
+      message: "documentId and customerId are required",
+    });
+    return;
+  }
+
+  const expiresAt = ttlSeconds
+    ? Math.floor(Date.now() / 1000) + Number(ttlSeconds)
+    : undefined;
+
+  const url = buildSignedUrl("/docs/download", {
+    documentId,
+    customerId,
+    expiresAt,
+  });
+
+  res.json({ url, expiresAt: expiresAt ?? Math.floor(Date.now() / 1000) + 900 });
+});

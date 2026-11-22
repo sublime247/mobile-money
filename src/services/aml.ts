@@ -19,7 +19,8 @@ export type AMLRule =
   | "rapid_structuring"
   | "sanction_match"
   | "dynamic_profile_score"
-  | "threshold_structuring";
+  | "threshold_structuring"
+  | "smurfing_velocity";
 
 export interface AMLTransactionLocation {
   lat: number;
@@ -101,6 +102,10 @@ export interface AMLConfig {
   geoHopMaxKm: number;
   geoHopMaxHours: number;
   highValueReportThresholdUsd: number;
+  /** Smurfing detection: max number of near-threshold txs in 24h window (#2470) */
+  smurfingCountLimit: number;
+  /** Smurfing detection: 7-day cumulative total to flag smurfing patterns */
+  smurfingWeeklyTotalThresholdXaf: number;
 }
 
 export interface AMLHighValueAssessment {
@@ -175,6 +180,10 @@ const defaultConfig: AMLConfig = {
   geoHopMaxHours: Number(process.env.AML_GEO_HOP_MAX_HOURS || 6),
   highValueReportThresholdUsd: Number(
     process.env.AML_HIGH_VALUE_REPORT_THRESHOLD_USD || 10_000,
+  ),
+  smurfingCountLimit: Number(process.env.AML_SMURFING_COUNT_LIMIT || 5),
+  smurfingWeeklyTotalThresholdXaf: Number(
+    process.env.AML_SMURFING_WEEKLY_TOTAL_XAF || 4_000_000,
   ),
 };
 
@@ -625,6 +634,56 @@ export class AMLService {
       });
     }
 
+    // ── Smurfing / velocity detection — issue #2470 ──────────────────────────
+    // Detect repeated near-threshold transactions spread across 24h and 7-day
+    // windows (smurfing: splitting a large amount into many smaller ones to
+    // evade reporting thresholds).
+    const smurfFloor = this.config.structuringFloorXaf;
+    const smurfCeiling = this.config.singleTransactionThresholdXaf;
+
+    // Transactions in the full rolling window that are near the threshold
+    const nearThresholdWindow = windowTxs.filter(
+      (tx) => tx.amount >= smurfFloor && tx.amount < smurfCeiling,
+    );
+    const isCurrentNearThreshold =
+      current.amount >= smurfFloor && current.amount < smurfCeiling;
+    const nearThresholdCount =
+      nearThresholdWindow.length + (isCurrentNearThreshold ? 1 : 0);
+
+    // 7-day cumulative total across ALL transactions (not just near-threshold)
+    const sevenDaysAgo = new Date(
+      current.createdAt.getTime() - 7 * 24 * 60 * 60 * 1000,
+    );
+    const weeklyTxs = recentTransactions.filter(
+      (tx) => tx.createdAt >= sevenDaysAgo,
+    );
+    const weeklyTotal =
+      weeklyTxs.reduce((sum, tx) => sum + tx.amount, 0) + current.amount;
+
+    const smurfingVelocityBreached =
+      nearThresholdCount >= this.config.smurfingCountLimit ||
+      weeklyTotal >= this.config.smurfingWeeklyTotalThresholdXaf;
+
+    if (smurfingVelocityBreached) {
+      ruleHits.push({
+        rule: "smurfing_velocity",
+        message:
+          nearThresholdCount >= this.config.smurfingCountLimit
+            ? `Smurfing pattern detected: ${nearThresholdCount} near-threshold transactions` +
+              ` (≥${smurfFloor} XAF, <${smurfCeiling} XAF) within 24h (limit: ${this.config.smurfingCountLimit})`
+            : `Smurfing velocity breach: 7-day cumulative total ${weeklyTotal} XAF` +
+              ` exceeds threshold ${this.config.smurfingWeeklyTotalThresholdXaf} XAF`,
+        observed:
+          nearThresholdCount >= this.config.smurfingCountLimit
+            ? nearThresholdCount
+            : weeklyTotal,
+        threshold:
+          nearThresholdCount >= this.config.smurfingCountLimit
+            ? this.config.smurfingCountLimit
+            : this.config.smurfingWeeklyTotalThresholdXaf,
+      });
+    }
+
     if (ruleHits.length === 0) {
       return {
         flagged: false,
@@ -640,7 +699,8 @@ export class AMLService {
       (hit) =>
         hit.rule === "single_transaction_threshold" ||
         hit.rule === "daily_total_threshold" ||
-        hit.rule === "threshold_structuring",
+        hit.rule === "threshold_structuring" ||
+        hit.rule === "smurfing_velocity",
     )
       ? "high"
       : "medium";
@@ -784,6 +844,7 @@ export class AMLService {
       sanction_match: 0,
       dynamic_profile_score: 0,
       threshold_structuring: 0,
+      smurfing_velocity: 0,
     };
 
     const dailyMap = new Map<string, number>();
