@@ -1,6 +1,8 @@
 import { queryRead, queryWrite, pool } from "../config/database";
 import { v4 as uuidv4 } from "uuid";
 import crypto from "crypto";
+import { ConflictError } from "../utils/errors";
+import { ERROR_CODES } from "../constants/errorCodes";
 
 export interface Merchant {
   id: string;
@@ -328,6 +330,41 @@ export class MerchantModel {
     // includeDeleted so a caller can tell "already closed" from "no such
     // merchant" without a second round trip in the common case.
     return this.findById(id, { includeDeleted: true });
+  }
+
+  /**
+   * #2485: hard deletion of a merchant is never permitted. Financial records
+   * (transactions and customer wallets in this schema) are retained for audit
+   * and must outlive the account, so callers must use `softDelete()` instead.
+   *
+   * A single indexed EXISTS probe determines whether active records exist so
+   * the error can be descriptive. Financial rows are keyed to the owning user
+   * account (this schema has no merchant_id FK on those tables), so the probe
+   * joins users by the merchant's email.
+   */
+  async hardDelete(id: string): Promise<never> {
+    const result = await queryRead<{ has_financial_records: boolean }>(
+      `SELECT EXISTS(
+         SELECT 1
+         FROM users u
+         WHERE u.email = (SELECT email FROM merchants WHERE id = $1)
+           AND (
+             EXISTS (SELECT 1 FROM transactions t WHERE t.user_id = u.id)
+             OR EXISTS (SELECT 1 FROM customer_wallets cw WHERE cw.user_id = u.id)
+           )
+       ) AS has_financial_records`,
+      [id],
+    );
+    const hasFinancialRecords =
+      result.rows?.[0]?.has_financial_records === true;
+
+    throw new ConflictError(
+      hasFinancialRecords
+        ? `Merchant ${id} cannot be hard deleted: active transactions or wallet balances exist. Use softDelete() to close the account.`
+        : `Merchant ${id} cannot be hard deleted. Use softDelete() to close the account while retaining audit history.`,
+      ERROR_CODES.CONFLICT,
+      { merchantId: id, hasFinancialRecords, useInstead: "softDelete" },
+    );
   }
 
   /** Reverses a soft delete, e.g. after a successful account-closure appeal. */

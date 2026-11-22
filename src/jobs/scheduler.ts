@@ -19,11 +19,13 @@ import { runKycTierUpgradeJob } from "./kycTierUpgradeJob";
 import { runLiquidityRebalanceJob } from "./liquidityRebalanceJob";
 import { runCrossChainMonitorJob } from "./crossChainMonitorJob";
 import { runDailySettlementJob } from "./dailySettlementJob";
+import { runPartnerCommissionJob } from "./partnerCommissionJob";
+import { runFxRevaluationJob } from "./fxRevaluationJob";
 import { runDailyProviderReconciliation } from "./providerReconciliationJob";
 import { runReconciliationJob } from "./reconciliationJob";
 import { runLedgerReconciliationJob } from "./ledgerReconciliationJob";
 import { runStellarDiscrepancyJob } from "./stellarDiscrepancyJob";
-import { runDatabaseBackupJob } from "./databaseBackupJob";
+import { runDatabaseBackupJob, runVacuumAnalyzeJob } from "./databaseBackupJob";
 import { runDatabaseBackupVerifyJob } from "./databaseBackupVerifyJob";
 import { INDEX_REINDEX_CRON, INDEX_REINDEX_JOB_ENABLED } from "../config/env";
 import { runIndexReindexJob } from "./indexReindexJob";
@@ -144,6 +146,18 @@ const JOBS: JobConfig[] = [
     handler: runDailySettlementJob,
   },
   {
+    name: "partner-commission",
+    // 1st of every month at 02:00 UTC — accrues partner revenue share and queues payouts
+    schedule: process.env.PARTNER_COMMISSION_CRON || "0 2 1 * *",
+    handler: runPartnerCommissionJob,
+  },
+  {
+    name: "fx-revaluation",
+    // 1st of every month at 03:00 UTC — marks foreign float to market and posts unrealized FX gain/loss
+    schedule: process.env.FX_REVALUATION_CRON || "0 3 1 * *",
+    handler: runFxRevaluationJob,
+  },
+  {
     name: "provider-reconciliation",
     // Daily at 4:00 AM - runs automated reconciliation against provider CSV reports
     schedule: process.env.PROVIDER_RECONCILIATION_CRON || "0 4 * * *",
@@ -219,6 +233,13 @@ const JOBS: JobConfig[] = [
     // Daily at 3:00 AM
     schedule: process.env.DATABASE_BACKUP_VERIFY_CRON || "0 3 * * *",
     handler: runDatabaseBackupVerifyJob,
+  },
+  {
+    name: "vacuum-analyze",
+    // Every 6 hours at UTC 00:00, 06:00, 12:00 and 18:00 (#2481).
+    schedule: process.env.VACUUM_ANALYZE_CRON || "0 */6 * * *",
+    timezone: "UTC",
+    handler: runVacuumAnalyzeJob,
   },
   {
     name: "jwt-key-rotation",

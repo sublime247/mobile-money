@@ -315,6 +315,36 @@ router.get(
 );
 
 router.get(
+  "/audit-export",
+  requireAdmin,
+  logAdminAction("EXPORT_AUDIT_PACKAGE"),
+  async (req: Request, res: Response) => {
+    try {
+      const fromRaw = String(req.query.from || "");
+      const toRaw = String(req.query.to || "");
+      const from = fromRaw ? new Date(fromRaw) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const to = toRaw ? new Date(toRaw) : new Date();
+      if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
+        throw createError(ERROR_CODES.INVALID_INPUT, "from and to must be valid ISO dates");
+      }
+      const { archive } = await auditService.buildAuditExportArchive({
+        from,
+        to,
+        includeKycDocuments: String(req.query.includeKycDocuments ?? "true") !== "false",
+      });
+      const filename = `audit-export-${from.toISOString().slice(0, 10)}-${to.toISOString().slice(0, 10)}.zip`;
+      res.setHeader("Content-Type", "application/zip");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      archive.pipe(res);
+    } catch (error) {
+      if ((error as { statusCode?: number }).statusCode) throw error;
+      logger.error("Error generating audit export:", error);
+      throw createError(ERROR_CODES.INTERNAL_ERROR, "Failed to generate audit export");
+    }
+  },
+);
+
+router.get(
   "/audit-logs/view",
   requireAdmin,
   logAdminAction("VIEW_AUDIT_LOGS"),

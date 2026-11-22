@@ -4,6 +4,8 @@ import crypto from "crypto";
 import logger from "../../../utils/logger";
 import { maskPII } from "../../../utils/masking";
 import { resolveVodacomError } from "./errors/vodacomErrorMatrix";
+import { attachCorrelationIdInterceptor } from "../../../utils/correlationIdInterceptor";
+import { attachTelcoTracingInterceptor } from "../../../utils/telcoTracing";
 
 function encrypt(data: string, publicKeyPem: string): string {
   if (!publicKeyPem) {
@@ -57,6 +59,8 @@ export class VodacomProvider {
         Origin: "*",
       },
     });
+    attachCorrelationIdInterceptor(this.client);
+    attachTelcoTracingInterceptor(this.client);
   }
 
   private async getAccessToken(): Promise<string> {
