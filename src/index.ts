@@ -27,6 +27,7 @@ import {
   bulkRoutesV1,
   disputeRoutesV1,
   statsRoutesV1,
+  accountingRoutesV1,
   transactionDisputeRoutesV1,
   transactionRoutesV1,
   vaultRoutesV1,
@@ -463,6 +464,7 @@ app.use("/api/v1/transactions", transactionDisputeRoutesV1);
 app.use("/api/v1/transactions/bulk", bulkRoutesV1);
 app.use("/api/v1/disputes", disputeRoutesV1);
 app.use("/api/v1/stats", statsRoutesV1);
+app.use("/api/v1/accounting", accountingRoutesV1);
 app.use("/api/v1/vaults", vaultRoutesV1);
 app.use("/api/v1/compliance/travel-rule", travelRuleRoutes);
 app.use("/api/v1/compliance", complianceRoutes);

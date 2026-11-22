@@ -3,6 +3,7 @@ import logger from "../utils/logger";
 import { redisClient } from "../config/redis";
 import { currencyService, SUPPORTED_CURRENCIES, type SupportedCurrency } from "./currency";
 import { exchangeRateBufferService } from "./exchangeRateBufferService";
+import { fxVolatilitySpreadService } from "./fxVolatilitySpreadService";
 
 export const PRICE_PRECISION = 7;
 export const DEFAULT_QUOTE_TTL = 60; // 60 seconds
@@ -173,8 +174,15 @@ export class Sep38Service {
     const baseRate = await this.getBaseExchangeRate(sellParsed.code, buyParsed.code);
     if (!baseRate || baseRate <= 0) return null;
 
-    // Configurable spread margin (e.g. 0.5% default)
-    const spreadPct = parseFloat(process.env.SEP38_SPREAD_PERCENT || "0.005");
+    // Configurable base spread margin (fraction, e.g. 0.005 = 0.5%), widened
+    // automatically when the pair's trailing-24h volatility is high.
+    const baseSpreadFraction = parseFloat(process.env.SEP38_SPREAD_PERCENT || "0.005");
+    const dynamicSpread = await fxVolatilitySpreadService.getDynamicSpread(
+      sellParsed.code,
+      buyParsed.code,
+      baseSpreadFraction * 100,
+    );
+    const spreadPct = dynamicSpread.spreadPct / 100;
     const adjustedRate = baseRate * (1 - spreadPct);
 
     // Fee structure (0.25% variable fee + fixed fee)

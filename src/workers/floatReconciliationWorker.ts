@@ -3,6 +3,10 @@ import { pool } from "../config/database";
 import { LedgerService } from "../services/ledgerService";
 import { MTNProvider } from "../services/mobilemoney/providers/mtn";
 import { AirtelService } from "../services/mobilemoney/providers/airtel";
+import {
+  openDriftDispute,
+  resolveReconciliationWindowStart,
+} from "../services/reconciliationDisputeService";
 
 /**
  * Hourly provider float balance reconciliation (#2372).
@@ -146,6 +150,10 @@ export async function runFloatReconciliationJob(
     return;
   }
 
+  // Window = since the previous check; read before this run writes new rows.
+  const windowEnd = new Date();
+  const windowStart = await resolveReconciliationWindowStart(windowEnd);
+
   const ledgerBalance = await ledgerService.getAccountBalance(
     FLOAT_ACCOUNT_CODE,
   );
@@ -173,6 +181,30 @@ export async function runFloatReconciliationJob(
     logger.error(
       `[float-reconciliation] Discrepancy ${discrepancy.toFixed(2)} exceeds tolerance ${tolerance.toFixed(2)} (provider ${combinedProviderBalance.toFixed(2)} vs ledger ${ledgerBalance.toFixed(2)})`,
     );
+
+    // Open a high-priority dispute ticket (with the window's transaction IDs)
+    // and notify compliance. Must not block the existing webhook alerting.
+    try {
+      const currencies = [...new Set(balances.map((b) => b.currency))];
+      await openDriftDispute({
+        providerBalance: combinedProviderBalance,
+        ledgerBalance,
+        tolerance,
+        currency: currencies.length === 1 ? currencies[0] : "MIXED",
+        providers: balances.map((b) => ({
+          provider: b.provider,
+          availableBalance: b.availableBalance,
+          currency: b.currency,
+        })),
+        windowStart,
+        windowEnd,
+      });
+    } catch (error) {
+      logger.error(
+        "[float-reconciliation] Failed to open reconciliation dispute:",
+        error,
+      );
+    }
 
     const webhookUrls = resolveAlertWebhookUrls();
     if (webhookUrls.length === 0) {
