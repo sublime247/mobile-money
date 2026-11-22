@@ -1,0 +1,56 @@
+---
+title: 'Error Handling'
+description: 'Handle errors gracefully with structured error responses'
+---
+
+The Bridge API uses standard HTTP response codes to indicate the success or failure of an API request. In general: Codes in the `2xx` range indicate success. Codes in the `4xx` range indicate an error that failed given the information provided (e.g., a required parameter was omitted). Codes in the `5xx` range indicate an error with our servers.
+
+## Standard Error Format
+
+When an API request fails, the response body will contain a structured JSON object detailing the error.
+
+```json
+{
+  "error": {
+    "code": "AUTH_001",
+    "message": "Invalid API key provided",
+    "details": {
+      "field": "Authorization"
+    }
+  }
+}
+```
+
+## Error Codes
+
+| Error Code | HTTP Status | Description | Retryable? |
+| :--- | :--- | :--- | :--- |
+| `AUTH_001` | 401 | Invalid API key or unauthenticated request. | No |
+| `VAL_001` | 400 | Validation error (e.g., missing parameter). | No |
+| `TXN_001` | 400 | Transaction failed due to business logic. | No |
+| `KYC_001` | 403 | User has not passed required KYC checks. | No |
+| `PROV_001` | 502 | Upstream mobile money provider error. | Yes |
+| `PROV_002` | 504 | Upstream mobile money provider timeout. | Yes |
+| `RATE_LIMIT` | 429 | Too many requests. | Yes |
+| `INTERNAL` | 500 | Internal server error on our end. | Yes |
+
+## Retry Strategies
+
+For network errors or HTTP `502`, `504`, or `429` responses, it's safe to retry the request. We recommend using an **exponential backoff** algorithm.
+
+<Note>
+Always use the `Idempotency-Key` header on POST requests when retrying. This guarantees that a request is not processed twice if a network failure obscures the fact that the Bridge actually received and processed the initial request.
+</Note>
+
+## Rate Limits
+
+The API implements rate limiting to ensure stability. If you exceed the rate limits, you will receive a `429 Too Many Requests` response.
+
+The response will include headers to help you manage your traffic:
+- `X-RateLimit-Limit`: The maximum number of requests allowed in the current window.
+- `X-RateLimit-Remaining`: The number of requests remaining in the current window.
+- `X-RateLimit-Reset`: The time at which the current window resets (in UTC epoch seconds).
+
+## Circuit Breaker
+
+The Bridge sits between your application and various mobile money APIs which can occasionally experience downtime. We implement circuit breakers per provider. If a specific network (e.g., MTN Cameroon) goes down, requests routed to that provider may fail fast with a `PROV_001` error to prevent cascading failures. You should inform your users that the specific corridor is temporarily unavailable.

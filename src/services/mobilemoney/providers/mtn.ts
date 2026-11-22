@@ -9,9 +9,17 @@
  * `MTNProvider` from this path continue to work unchanged.
  */
 
+import {
+  mtnPushCountry,
+  mtnPushOutcome,
+  recordUssdPushDispatch,
+  recordUssdPushOutcome,
+} from "../../../monitoring/metrics";
 import axios from "axios";
 import { randomUUID } from "crypto";
 import { BaseProvider, ProviderAuthConfig } from "../../providers/baseProvider";
+import { MomoAuthManager } from "../../../providers/mtn/momoAuth";
+import type { BatchPayoutItem, BatchPayoutResult } from "../mobileMoneyService";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -90,25 +98,13 @@ function buildConfig(): ProviderAuthConfig & {
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
 
-export interface BatchPayoutItem {
-  referenceId: string;
-  phoneNumber: string;
-  amount: string;
-}
-
-export interface BatchPayoutResult {
-  referenceId: string;
-  success: boolean;
-  error?: string;
-  providerReference?: string;
-}
-
 export class MTNProvider extends BaseProvider {
   protected readonly subscriptionKey: string;
   protected readonly environment: string;
   protected readonly currency: string;
   private readonly batchPollMaxAttempts: number;
   private readonly batchPollDelayMs: number;
+  private readonly auth: MomoAuthManager;
 
   constructor() {
     const config = buildConfig();
@@ -118,19 +114,27 @@ export class MTNProvider extends BaseProvider {
     this.currency = config.currency;
     this.batchPollMaxAttempts = config.batchPollMaxAttempts;
     this.batchPollDelayMs = config.batchPollDelayMs;
+    this.auth = new MomoAuthManager({
+      product: "collection",
+      apiKey: this.apiKey,
+      targetEnvironment: this.environment,
+      fetchToken: () => this.requestNewToken(),
+    });
   }
 
   // ─── Authentication ─────────────────────────────────────────────────────
 
   /**
-   * Obtain a valid MTN bearer token, using the in-memory cache when possible.
-   * `buildBasicAuthHeader()` is inherited from BaseProvider.
+   * Obtain a valid MTN bearer token. Tokens are shared across replicas via
+   * Redis, refreshed before expiry under a distributed lock, and evicted on
+   * 401 — see {@link MomoAuthManager}.
    */
   async getAccessToken(): Promise<string> {
-    if (this.isTokenValid()) {
-      return this.cachedToken!;
-    }
+    return this.auth.getToken();
+  }
 
+  /** Raw token exchange; only called by the auth manager's refresh leader. */
+  private async requestNewToken() {
     const response = await axios.post<MtnTokenResponse>(
       `${this.baseUrl}/collection/token/`,
       undefined,
@@ -142,36 +146,32 @@ export class MTNProvider extends BaseProvider {
         timeout: this.timeoutMs,
       },
     );
+    return {
+      accessToken: response.data?.access_token,
+      expiresIn: response.data?.expires_in,
+    };
+  }
 
-    const { access_token, expires_in } = response.data;
-    if (!access_token || typeof access_token !== "string") {
-      throw new Error("MTN token response did not include access_token");
-    }
-
-    this.cacheToken(access_token, expires_in);
-    // Proactively renew before expiry so the first request after the token
-    // lapses does not eat the full token-exchange round-trip.
-    this.scheduleTokenRenewal(expires_in, async () => {
-      this.invalidateToken();
-      await this.getAccessToken();
-    });
-    return access_token;
+  /** Run an authenticated MTN call, retrying once with a new token on 401. */
+  private withAuth<T>(call: (token: string) => Promise<T>): Promise<T> {
+    return this.auth.withAuthRetry(call, () => this.getAccessToken());
   }
 
   // ─── API operations ──────────────────────────────────────────────────────
 
   async getOperationalBalance() {
     try {
-      const token = await this.getAccessToken();
-      const response = await axios.get<MtnBalanceResponse>(
-        `${this.baseUrl}/disbursement/v1_0/account/balance`,
-        {
-          headers: {
-            Authorization: this.buildBearerAuthHeader(token),
-            "Ocp-Apim-Subscription-Key": this.subscriptionKey,
-            "X-Target-Environment": this.environment,
+      const response = await this.withAuth((token) =>
+        axios.get<MtnBalanceResponse>(
+          `${this.baseUrl}/disbursement/v1_0/account/balance`,
+          {
+            headers: {
+              Authorization: this.buildBearerAuthHeader(token),
+              "Ocp-Apim-Subscription-Key": this.subscriptionKey,
+              "X-Target-Environment": this.environment,
+            },
           },
-        },
+        ),
       );
 
       const availableRaw =
@@ -197,6 +197,15 @@ export class MTNProvider extends BaseProvider {
     }
   }
 
+  /**
+   * Query MTN MoMo disbursement float via
+   * GET /disbursement/v1_0/account/balance (#1967).
+   * Alias over getOperationalBalance for pre-flight payout checks.
+   */
+  async getAccountBalance() {
+    return this.getOperationalBalance();
+  }
+
   async requestPayment(
     phoneNumber: string,
     amount: string,
@@ -212,27 +221,29 @@ export class MTNProvider extends BaseProvider {
     const referenceId = randomUUID();
 
     try {
-      const token = await this.getAccessToken();
-      const response = await axios.post(
-        `${this.baseUrl}/collection/v1_0/requesttopay`,
-        {
-          amount,
-          currency: this.currency,
-          externalId: referenceId,
-          payer: { partyIdType: "MSISDN", partyId: phoneNumber },
-          payerMessage: "Payment for Stellar deposit",
-          payeeNote: "Deposit",
-        },
-        {
-          headers: {
-            Authorization: this.buildBearerAuthHeader(token),
-            "X-Reference-Id": referenceId,
-            "Ocp-Apim-Subscription-Key": this.subscriptionKey,
-            "X-Target-Environment": this.environment,
+      const response = await this.withAuth((token) =>
+        axios.post(
+          `${this.baseUrl}/collection/v1_0/requesttopay`,
+          {
+            amount,
+            currency: this.currency,
+            externalId: referenceId,
+            payer: { partyIdType: "MSISDN", partyId: phoneNumber },
+            payerMessage: "Payment for Stellar deposit",
+            payeeNote: "Deposit",
           },
-        },
+          {
+            headers: {
+              Authorization: this.buildBearerAuthHeader(token),
+              "X-Reference-Id": referenceId,
+              "Ocp-Apim-Subscription-Key": this.subscriptionKey,
+              "X-Target-Environment": this.environment,
+            },
+          },
+        ),
       );
 
+      recordUssdPushDispatch("mtn", mtnPushCountry(phoneNumber), referenceId);
       const duration = Date.now() - startTime;
       log.info(
         maskPII({ duration, status: response.status }),
@@ -312,32 +323,33 @@ export class MTNProvider extends BaseProvider {
     const startTime = Date.now();
 
     try {
-      const token = await this.getAccessToken();
       const batchReference = `BATCH-${randomUUID()}`;
 
       // MTN disbursement batch API endpoint
-      const response = await axios.post(
-        `${this.baseUrl}/disbursement/v2_0/batch-payout`,
-        {
-          batchReference,
-          items: items.map((item) => ({
-            referenceId: item.referenceId,
-            amount: item.amount,
-            currency: this.currency,
-            payee: {
-              partyIdType: "MSISDN",
-              partyId: item.phoneNumber,
-            },
-          })),
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Ocp-Apim-Subscription-Key": this.subscriptionKey,
-            "X-Target-Environment": this.environment,
-            "Content-Type": "application/json",
+      const response = await this.withAuth((token) =>
+        axios.post(
+          `${this.baseUrl}/disbursement/v2_0/batch-payout`,
+          {
+            batchReference,
+            items: items.map((item) => ({
+              referenceId: item.referenceId,
+              amount: item.amount,
+              currency: this.currency,
+              payee: {
+                partyIdType: "MSISDN",
+                partyId: item.phoneNumber,
+              },
+            })),
           },
-        },
+          {
+            headers: {
+              Authorization: this.buildBearerAuthHeader(token),
+              "Ocp-Apim-Subscription-Key": this.subscriptionKey,
+              "X-Target-Environment": this.environment,
+              "Content-Type": "application/json",
+            },
+          },
+        ),
       );
 
       // The disbursement batch endpoint returns 202 with a preliminary set of
@@ -352,7 +364,6 @@ export class MTNProvider extends BaseProvider {
         results,
         initialResponseItems,
         effectiveBatchRef,
-        token,
       );
 
       const duration = Date.now() - startTime;
@@ -491,7 +502,6 @@ export class MTNProvider extends BaseProvider {
     initialResults: BatchPayoutResult[],
     initialResponseItems: MtnBatchResponseItem[],
     batchReference: string,
-    token: string,
   ): Promise<BatchPayoutResult[]> {
     let results = initialResults;
     let latest = initialResponseItems;
@@ -508,17 +518,19 @@ export class MTNProvider extends BaseProvider {
 
       let pollResponse;
       try {
-        pollResponse = await axios.get(
-          `${this.baseUrl}/disbursement/v2_0/batch-payout/${encodeURIComponent(
-            batchReference,
-          )}`,
-          {
-            headers: {
-              Authorization: this.buildBearerAuthHeader(token),
-              "Ocp-Apim-Subscription-Key": this.subscriptionKey,
-              "X-Target-Environment": this.environment,
+        pollResponse = await this.withAuth((token) =>
+          axios.get(
+            `${this.baseUrl}/disbursement/v2_0/batch-payout/${encodeURIComponent(
+              batchReference,
+            )}`,
+            {
+              headers: {
+                Authorization: this.buildBearerAuthHeader(token),
+                "Ocp-Apim-Subscription-Key": this.subscriptionKey,
+                "X-Target-Environment": this.environment,
+              },
             },
-          },
+          ),
         );
       } catch {
         break;
@@ -537,27 +549,50 @@ export class MTNProvider extends BaseProvider {
 
   async getTransactionStatus(
     referenceId: string,
-  ): Promise<{ status: "completed" | "failed" | "pending" | "unknown" }> {
+  ): Promise<{
+    status: "completed" | "failed" | "pending" | "unknown";
+    operatorCode?: string;
+  }> {
     try {
-      const token = await this.getAccessToken();
-      const response = await axios.get(
-        `${this.baseUrl}/collection/v1_0/requesttopay/${encodeURIComponent(referenceId)}`,
-        {
-          headers: {
-            Authorization: this.buildBearerAuthHeader(token),
-            "Ocp-Apim-Subscription-Key": this.subscriptionKey,
-            "X-Target-Environment": this.environment,
+      const response = await this.withAuth((token) =>
+        axios.get(
+          `${this.baseUrl}/collection/v1_0/requesttopay/${encodeURIComponent(referenceId)}`,
+          {
+            headers: {
+              Authorization: this.buildBearerAuthHeader(token),
+              "Ocp-Apim-Subscription-Key": this.subscriptionKey,
+              "X-Target-Environment": this.environment,
+            },
           },
-        },
+        ),
       );
 
       const providerStatus = String(response.data?.status ?? "").toUpperCase();
-      if (providerStatus === "SUCCESSFUL") return { status: "completed" };
-      if (providerStatus === "FAILED") return { status: "failed" };
-      if (providerStatus === "PENDING") return { status: "pending" };
-      return { status: "unknown" };
-    } catch {
-      return { status: "unknown" };
+      const outcome = mtnPushOutcome(providerStatus, response.data?.reason);
+      if (outcome) {
+        recordUssdPushOutcome("mtn", "unknown", referenceId, outcome, true);
+      }
+      const operatorCode =
+        response.data?.status ?? response.data?.reason ?? "STATUS_QUERY_OK";
+
+      if (providerStatus === "SUCCESSFUL" || providerStatus === "SUCCESS") {
+        return { status: "completed", operatorCode };
+      }
+      if (providerStatus === "FAILED" || providerStatus === "REJECTED") {
+        return {
+          status: "failed",
+          operatorCode: response.data?.reason || providerStatus,
+        };
+      }
+      if (providerStatus === "PENDING") {
+        return { status: "pending", operatorCode };
+      }
+      return { status: "unknown", operatorCode: providerStatus || "UNKNOWN" };
+    } catch (err: any) {
+      const operatorCode = err.response?.status
+        ? `HTTP_${err.response.status}`
+        : "NETWORK_ERROR";
+      return { status: "unknown", operatorCode };
     }
   }
 }

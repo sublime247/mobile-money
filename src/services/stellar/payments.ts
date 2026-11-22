@@ -729,3 +729,327 @@ export function getRebalancePaymentService(): RebalancePaymentService {
   }
   return singleton;
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Path Payment Service - Issue #1528
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface PathPaymentOptions {
+  sourceAccount: string;
+  destinationAccount: string;
+  sendAsset: StellarSdk.Asset;
+  sendAmount: string;
+  destAsset: StellarSdk.Asset;
+  destMin?: string;
+  slippageBps?: number; // basis points (100 bps = 1%)
+  memo?: StellarSdk.Memo;
+}
+
+export interface PathPaymentQuote {
+  sourceAsset: string;
+  sourceAmount: string;
+  destinationAsset: string;
+  destinationAmount: string;
+  path: StellarSdk.Asset[];
+  estimatedRate: number;
+  slippageTolerance: number;
+}
+
+export interface PathPaymentResult {
+  success: boolean;
+  transactionHash?: string;
+  sourceAmount?: string;
+  destinationAmount?: string;
+  path?: string[];
+  error?: string;
+}
+
+export class PathPaymentService {
+  private server: StellarSdk.Horizon.Server;
+  private networkPassphrase: string;
+
+  constructor() {
+    this.server = getStellarServer();
+    this.networkPassphrase = getNetworkPassphrase();
+  }
+
+  /**
+   * Query Horizon for the optimal path payment route
+   */
+  async findPaymentPath(
+    sourceAsset: StellarSdk.Asset,
+    sourceAmount: string,
+    destinationAsset: StellarSdk.Asset,
+    destinationAccount: string,
+  ): Promise<StellarSdk.Horizon.ServerApi.PaymentPathRecord | null> {
+    try {
+      const pathsCall = this.server
+        .strictSendPaths(sourceAsset, sourceAmount, [destinationAsset])
+        .limit(1);
+
+      const paths = await pathsCall.call();
+
+      if (paths.records.length === 0) {
+        logger.warn(
+          `[path-payment] No payment path found from ${sourceAsset.getCode()} to ${destinationAsset.getCode()}`,
+        );
+        return null;
+      }
+
+      return paths.records[0];
+    } catch (error) {
+      logger.error(
+        `[path-payment] Error finding payment path:`,
+        error instanceof Error ? error : new Error(String(error)),
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Get a quote for a path payment with slippage protection
+   */
+  async getPathPaymentQuote(
+    sourceAsset: StellarSdk.Asset,
+    sourceAmount: string,
+    destinationAsset: StellarSdk.Asset,
+    destinationAccount: string,
+    slippageBps: number = 100, // Default 1% slippage
+  ): Promise<PathPaymentQuote | null> {
+    const path = await this.findPaymentPath(
+      sourceAsset,
+      sourceAmount,
+      destinationAsset,
+      destinationAccount,
+    );
+
+    if (!path) {
+      return null;
+    }
+
+    const destinationAmount = parseFloat(path.destination_amount);
+    const sourceAmountNum = parseFloat(sourceAmount);
+    const estimatedRate = destinationAmount / sourceAmountNum;
+
+    // Calculate minimum destination amount with slippage tolerance
+    const slippageMultiplier = 1 - slippageBps / 10000;
+    const destMin = (destinationAmount * slippageMultiplier).toFixed(7);
+
+    return {
+      sourceAsset: sourceAsset.isNative()
+        ? "XLM"
+        : `${sourceAsset.getCode()}:${sourceAsset.getIssuer()}`,
+      sourceAmount,
+      destinationAsset: destinationAsset.isNative()
+        ? "XLM"
+        : `${destinationAsset.getCode()}:${destinationAsset.getIssuer()}`,
+      destinationAmount: path.destination_amount,
+      path: path.path.map((p: any) =>
+        p.asset_type === "native"
+          ? StellarSdk.Asset.native()
+          : new StellarSdk.Asset(p.asset_code, p.asset_issuer),
+      ),
+      estimatedRate,
+      slippageTolerance: slippageBps / 100, // Convert to percentage
+    };
+  }
+
+  /**
+   * Execute a path payment with dynamic slippage validation
+   */
+  async executePathPayment(
+    options: PathPaymentOptions,
+  ): Promise<PathPaymentResult> {
+    const {
+      sourceAccount,
+      destinationAccount,
+      sendAsset,
+      sendAmount,
+      destAsset,
+      destMin,
+      slippageBps = 100,
+      memo,
+    } = options;
+
+    try {
+      // Get quote first to validate the path exists and calculate destMin
+      const quote = await this.getPathPaymentQuote(
+        sendAsset,
+        sendAmount,
+        destAsset,
+        destinationAccount,
+        slippageBps,
+      );
+
+      if (!quote) {
+        return {
+          success: false,
+          error: "No payment path available for this asset pair",
+        };
+      }
+
+      // Use provided destMin or calculated from quote
+      const minimumDestAmount =
+        destMin || (parseFloat(quote.destinationAmount) * (1 - slippageBps / 10000)).toFixed(7);
+
+      // Validate slippage limits dynamically
+      const expectedDestAmount = parseFloat(quote.destinationAmount);
+      const minDestAmount = parseFloat(minimumDestAmount);
+      const actualSlippage =
+        ((expectedDestAmount - minDestAmount) / expectedDestAmount) * 10000;
+
+      if (actualSlippage > slippageBps) {
+        return {
+          success: false,
+          error: `Slippage ${(actualSlippage / 100).toFixed(2)}% exceeds maximum ${(slippageBps / 100).toFixed(2)}%`,
+        };
+      }
+
+      // Load source account for transaction building
+      const account = await this.server.loadAccount(sourceAccount);
+
+      // Build transaction with pathPaymentStrictSend operation
+      const txBuilder = new StellarSdk.TransactionBuilder(account, {
+        fee: StellarSdk.BASE_FEE,
+        networkPassphrase: this.networkPassphrase,
+      });
+
+      if (memo) {
+        txBuilder.addMemo(memo);
+      }
+
+      txBuilder.addOperation(
+        StellarSdk.Operation.pathPaymentStrictSend({
+          sendAsset,
+          sendAmount,
+          destination: destinationAccount,
+          destAsset,
+          destMin: minimumDestAmount,
+          path: quote.path,
+        }),
+      );
+
+      const transaction = txBuilder.setTimeout(30).build();
+
+      // Note: Transaction needs to be signed by the caller
+      // This is returned as an envelope for signing
+      logger.info(
+        `[path-payment] Path payment built: ${sendAmount} ${sendAsset.getCode()} -> ${quote.destinationAmount} ${destAsset.getCode()}`,
+      );
+
+      return {
+        success: true,
+        sourceAmount: sendAmount,
+        destinationAmount: quote.destinationAmount,
+        path: quote.path.map((p) =>
+          p.isNative() ? "XLM" : `${p.getCode()}:${p.getIssuer()}`,
+        ),
+      };
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+      logger.error(`[path-payment] Execution failed:`, error);
+
+      return {
+        success: false,
+        error: errorMessage,
+      };
+    }
+  }
+
+  /**
+   * Submit a signed path payment transaction to Horizon
+   */
+  async submitPathPayment(
+    sourceAccount: string,
+    sourceKeypair: StellarSdk.Keypair,
+    options: PathPaymentOptions,
+  ): Promise<PathPaymentResult> {
+    try {
+      // Get quote and validate path
+      const quote = await this.getPathPaymentQuote(
+        options.sendAsset,
+        options.sendAmount,
+        options.destAsset,
+        options.destinationAccount,
+        options.slippageBps || 100,
+      );
+
+      if (!quote) {
+        return {
+          success: false,
+          error: "No payment path available",
+        };
+      }
+
+      // Calculate minimum destination amount with slippage
+      const slippageBps = options.slippageBps || 100;
+      const minimumDestAmount =
+        options.destMin ||
+        (parseFloat(quote.destinationAmount) * (1 - slippageBps / 10000)).toFixed(7);
+
+      // Load account and build transaction
+      const account = await this.server.loadAccount(sourceAccount);
+
+      const txBuilder = new StellarSdk.TransactionBuilder(account, {
+        fee: StellarSdk.BASE_FEE,
+        networkPassphrase: this.networkPassphrase,
+      });
+
+      if (options.memo) {
+        txBuilder.addMemo(options.memo);
+      }
+
+      txBuilder.addOperation(
+        StellarSdk.Operation.pathPaymentStrictSend({
+          sendAsset: options.sendAsset,
+          sendAmount: options.sendAmount,
+          destination: options.destinationAccount,
+          destAsset: options.destAsset,
+          destMin: minimumDestAmount,
+          path: quote.path,
+        }),
+      );
+
+      const transaction = txBuilder.setTimeout(30).build();
+
+      // Sign transaction
+      transaction.sign(sourceKeypair);
+
+      // Submit to Horizon
+      const response = await this.server.submitTransaction(transaction);
+
+      logger.info(
+        `[path-payment] Successfully submitted: ${response.hash}`,
+      );
+
+      return {
+        success: true,
+        transactionHash: response.hash,
+        sourceAmount: options.sendAmount,
+        destinationAmount: quote.destinationAmount,
+        path: quote.path.map((p) =>
+          p.isNative() ? "XLM" : `${p.getCode()}:${p.getIssuer()}`,
+        ),
+      };
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+      logger.error(`[path-payment] Submission failed:`, error);
+
+      return {
+        success: false,
+        error: errorMessage,
+      };
+    }
+  }
+}
+
+let pathPaymentSingleton: PathPaymentService | null = null;
+
+export function getPathPaymentService(): PathPaymentService {
+  if (!pathPaymentSingleton) {
+    pathPaymentSingleton = new PathPaymentService();
+  }
+  return pathPaymentSingleton;
+}

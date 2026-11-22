@@ -380,7 +380,12 @@ export const sep12RateLimiter = async (
   res: Response,
   next: NextFunction,
 ) => {
-  const userId = (req as any).user?.id;
+  const userId =
+    (req as any).user?.id ||
+    (req as any).query?.account ||
+    (req as any).body?.account ||
+    req.ip ||
+    "anonymous";
 
   if (!userId) {
     return res.status(401).json({ message: "Unauthorized" });

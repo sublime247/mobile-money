@@ -6,45 +6,22 @@ import {
   getActiveSigningKey,
   getVerificationKeys,
 } from "./jwtKeys";
+import {
+  generateToken as coreGenerateToken,
+  verifyToken as coreVerifyToken,
+  isTokenExpired as coreIsTokenExpired,
+  JWT_EXPIRES_IN,
+  JWTImpersonationClaim,
+  JWTPayload,
+} from "../utils/jwt";
 
 dotenv.config();
 
-const JWT_EXPIRES_IN = "1h";
 const REFRESH_TOKEN_EXPIRES_IN = "7d";
 const refreshTokenFamilyModel = new RefreshTokenFamilyModel();
 
-export interface JWTImpersonationClaim {
-  active: true;
-  readOnly: true;
-  actorUserId: string;
-  actorRole: string;
-  targetUserId: string;
-  reason: string;
-  issuedAt: string;
-}
-
-interface GenerateTokenOptions {
-  expiresIn?: string | number;
-}
-
-export interface JWTPayload {
-  userId: string;
-  email: string;
-  role?: string;
-  impersonation?: JWTImpersonationClaim;
-  tokenVersion?: number;
-  iat?: number;
-  exp?: number;
-}
-
-export interface RefreshTokenPayload {
-  userId: string;
-  familyId: string;
-  tokenId: string;
-  parentTokenId?: string;
-  iat?: number;
-  exp?: number;
-}
+export { JWT_EXPIRES_IN, coreVerifyToken as verifyToken };
+export type { JWTImpersonationClaim, JWTPayload };
 
 /**
  * Generates a JWT token for the given user payload
@@ -53,14 +30,9 @@ export interface RefreshTokenPayload {
  */
 export function generateToken(
   payload: Omit<JWTPayload, "iat" | "exp">,
-  options?: GenerateTokenOptions,
+  options?: { expiresIn?: string | number },
 ): string {
-  const { key, kid } = getActiveSigningKey();
-  const expiresIn = options?.expiresIn ?? JWT_EXPIRES_IN;
-  return jwt.sign(payload, key, {
-    expiresIn: typeof expiresIn === "string" ? expiresIn : expiresIn,
-    header: { alg: "HS256", kid },
-  } as jwt.SignOptions);
+  return coreGenerateToken(payload, options);
 }
 
 /**
@@ -95,37 +67,6 @@ export async function generateRefreshToken(
     parent_token: parentTokenId,
   });
   return token;
-}
-
-/**
- * Verifies a JWT token and returns the decoded payload
- * @param token - JWT token to verify
- * @returns Decoded token payload
- * @throws Error if token is invalid or expired
- */
-export function verifyToken(token: string): JWTPayload {
-  const keys = getVerificationKeys();
-  let lastError: unknown;
-  for (const { key } of keys) {
-    try {
-      const decoded = jwt.verify(token, key, {
-        clockTolerance: 60,
-      }) as JWTPayload;
-      return decoded;
-    } catch (error: unknown) {
-      lastError = error;
-      if (error instanceof jwt.TokenExpiredError) {
-        throw new Error("Token has expired", { cause: error });
-      }
-    }
-  }
-  if (lastError instanceof jwt.TokenExpiredError) {
-    throw new Error("Token has expired", { cause: lastError });
-  }
-  if (lastError instanceof jwt.JsonWebTokenError) {
-    throw new Error("Invalid token", { cause: lastError });
-  }
-  throw new Error("Token verification failed", { cause: lastError });
 }
 
 /**
@@ -181,10 +122,17 @@ export async function verifyRefreshToken(
  * @returns True if token is expired, false otherwise
  */
 export function isTokenExpired(token: string): boolean {
-  try {
-    verifyToken(token);
-    return false;
-  } catch (error) {
-    return error instanceof Error && error.message === "Token has expired";
-  }
+  return coreIsTokenExpired(token);
 }
+
+export interface RefreshTokenPayload {
+  userId: string;
+  familyId: string;
+  tokenId: string;
+  parentTokenId?: string;
+  iat?: number;
+  exp?: number;
+}
+
+// Kept for internal re-use by callers importing from auth/jwt only.
+export { coreVerifyToken };

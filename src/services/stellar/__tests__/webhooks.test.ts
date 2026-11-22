@@ -80,6 +80,21 @@ describe("SEP Webhooks Service and Worker", () => {
 
       expect(getMockQueueAdd()).not.toHaveBeenCalled();
     });
+
+    it("should skip enqueuing for private or internal callback URLs", async () => {
+      const payload = { id: "tx-123", status: "completed" };
+
+      for (const callbackUrl of [
+        "http://169.254.169.254/latest/meta-data/",
+        "http://127.0.0.1:9000/hook",
+        "http://metadata.google.internal/",
+        "http://user:pass@example.com/hook",
+      ]) {
+        await enqueueSepWebhook("tx-123", "completed", callbackUrl, payload);
+      }
+
+      expect(getMockQueueAdd()).not.toHaveBeenCalled();
+    });
   });
 
   describe("sepWebhookWorker", () => {
@@ -147,6 +162,23 @@ describe("SEP Webhooks Service and Worker", () => {
       await expect(processor(mockJob)).rejects.toThrow(
         "HTTP error 500: Internal Server Error",
       );
+    });
+
+    it("should not call fetch when the stored callback URL is blocked", async () => {
+      const processor = getRegisteredProcessor();
+      expect(processor).toBeDefined();
+
+      await processor({
+        id: "job-2",
+        data: {
+          transactionId: "tx-123",
+          status: "completed",
+          callbackUrl: "http://10.0.0.5/callback",
+          payload: { id: "tx-123", status: "completed" },
+        },
+      });
+
+      expect(mockFetch).not.toHaveBeenCalled();
     });
   });
 });

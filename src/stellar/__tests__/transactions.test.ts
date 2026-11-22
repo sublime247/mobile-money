@@ -29,6 +29,10 @@ function makeAccount(accountId: string, sequence = "123") {
 function makeServer(overrides: Record<string, unknown> = {}) {
   return {
     fetchBaseFee: jest.fn().mockResolvedValue(100),
+    feeStats: jest.fn().mockResolvedValue({
+      last_ledger_base_fee: "100",
+      fee_charged: { p90: "100" },
+    }),
     fetchTimebounds: jest.fn().mockResolvedValue({
       minTime: "0",
       maxTime: "1700000000",
@@ -121,7 +125,10 @@ describe("stellar fee bump transactions", () => {
 
   it("enforces the configured fee cap for fee-bumped transactions", async () => {
     const server = makeServer({
-      fetchBaseFee: jest.fn().mockResolvedValue(300),
+      feeStats: jest.fn().mockResolvedValue({
+        last_ledger_base_fee: "300",
+        fee_charged: { p90: "300" },
+      }),
     });
     mockGetStellarServer.mockReturnValue(server);
     mockGetFeeBumpConfig.mockReturnValue({
@@ -211,4 +218,35 @@ describe("stellar fee bump transactions", () => {
       "exceeds max allowed 10000",
     );
   });
+
+  it("handles fee congestion by detecting surge fee and wrapping in fee bump", async () => {
+    const server = makeServer({
+      feeStats: jest.fn().mockResolvedValue({
+        last_ledger_base_fee: "500",
+        fee_charged: { p90: "800" },
+      }),
+    });
+    mockGetStellarServer.mockReturnValue(server);
+    mockGetFeeBumpConfig.mockReturnValue({
+      baseFeeStroops: 100,
+      maxFeePerTransaction: 10_000,
+      feePayerPublicKey: feePayerKeypair.publicKey(),
+      feePayerPrivateKey: feePayerKeypair.secret(),
+    });
+
+    const feeStats = await server.feeStats();
+    const surgeFee = Number(feeStats.fee_charged.p90);
+    expect(surgeFee).toBe(800);
+
+    const result = await buildTransactionWithFeeBump({
+      sourceAccount: sourceKeypair.publicKey(),
+      operations: [makePaymentOperation()],
+      enableFeeBump: true,
+    });
+
+    expect(result.usedFeeBump).toBe(true);
+    expect(result.fee).toBeGreaterThanOrEqual(100);
+    expect(result.envelope).toBeDefined();
+  });
 });
+

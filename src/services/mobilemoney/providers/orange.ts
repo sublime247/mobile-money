@@ -1,4 +1,5 @@
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from "axios";
+import { createHash } from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 import { BaseProvider } from "../../providers/baseProvider";
@@ -7,6 +8,10 @@ import { getConfigValue } from "../../../config/appConfig";
 import logger from "../../../utils/logger";
 import { maskPII } from "../../../utils/masking";
 import { Browser, BrowserContext, Page, chromium } from "playwright";
+import {
+  OrangeTokenCache,
+  isUnauthorizedStatus,
+} from "./orangeTokenCache";
 
 type OrangeOperation = "payment" | "payout";
 type OrangeMode = "web" | "direct" | "proxy";
@@ -127,6 +132,7 @@ export class OrangeProvider extends BaseProvider {
   private directAuthPromise: Promise<string> | null = null;
   private prefetchTimer: NodeJS.Timeout | null = null;
   private destroyed = false;
+  private readonly tokenCache: OrangeTokenCache;
 
   constructor(options: OrangeProviderOptions = {}) {
     const cfg = buildTempConfig(options);
@@ -154,6 +160,18 @@ export class OrangeProvider extends BaseProvider {
         timeout: this.config.requestTimeoutMs,
         validateStatus: () => true,
       });
+
+    // Scope the shared Redis cache key per credential set (hashed so the
+    // API key never appears in Redis key listings), matching the pattern
+    // MomoAuthManager uses for MTN (src/providers/mtn/momoAuth.ts).
+    const credentialScope = createHash("sha256")
+      .update(`${this.config.apiKey}:${this.config.apiSecret}`)
+      .digest("hex")
+      .slice(0, 16);
+    this.tokenCache = new OrangeTokenCache({
+      cacheKey: `orange:direct:token:${credentialScope}`,
+      now: this.clock,
+    });
 
     if (this.config.proxyBaseUrl) {
       this.proxyClient =
@@ -542,8 +560,12 @@ export class OrangeProvider extends BaseProvider {
           },
         });
 
-        if (response.status === 401 || response.status === 403) {
+        if (isUnauthorizedStatus(response.status) || response.status === 403) {
+          // #2273: evict the shared Redis copy too, not just this process's
+          // local field, so every replica fetches a fresh token instead of
+          // continuing to serve the one Orange just rejected.
           this.apiToken = null;
+          await this.tokenCache.invalidate();
           lastResponse = response;
           continue;
         }
@@ -581,6 +603,23 @@ export class OrangeProvider extends BaseProvider {
     return this.authenticateDirect();
   }
 
+  /**
+   * Obtain a valid Orange direct-API bearer token.
+   *
+   * Three layers are checked in order, cheapest first:
+   *   1. The in-process field (`this.apiToken`) - fast path, no I/O.
+   *   2. The shared Redis cache (`this.tokenCache`) - reused across every
+   *      worker process/replica, so only one process in the whole fleet
+   *      needs to call Orange's token endpoint (#2273).
+   *   3. A fresh `POST {directAuthPath}` exchange, whose result is written
+   *      back to both the in-process field and Redis with an expiry equal
+   *      to Orange's reported token lifetime minus a 5-minute safety buffer
+   *      (see `OrangeTokenCache`).
+   *
+   * `forceRefresh` skips layers 1 and 2 entirely; it is used both by the
+   * proactive prefetch daemon and by the 401-triggered single retry in
+   * `requestDirect`.
+   */
   private async authenticateDirect(forceRefresh = false): Promise<string> {
     const now = this.clock();
     if (
@@ -595,31 +634,28 @@ export class OrangeProvider extends BaseProvider {
       return this.directAuthPromise;
     }
 
-    // Use buildBasicAuthHeader inherited from BaseProvider
-    const authHeader = this.buildBasicAuthHeader(
-      this.config.apiKey,
-      this.config.apiSecret,
-    );
-    const response = await this.sendRequest(this.directClient, {
-      method: "POST",
-      url: this.config.directAuthPath,
-      headers: {
-        Authorization: authHeader,
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      data: "grant_type=client_credentials",
-    });
     this.directAuthPromise = (async () => {
       try {
+        if (!forceRefresh) {
+          const cached = await this.tokenCache.get();
+          if (cached) {
+            this.apiToken = cached;
+            // The cache entry's own Redis TTL already enforces the buffer,
+            // so treat a cache hit as fresh for the remainder of this
+            // process's refresh window too.
+            this.apiTokenExpiry = now + this.config.refreshSkewMs;
+            return cached;
+          }
+        }
+
         if (this.config.mode === "direct") {
           this.assertDirectConfig();
         }
 
-        const authHeader =
-          "Basic " +
-          Buffer.from(
-            `${this.config.apiKey}:${this.config.apiSecret}`,
-          ).toString("base64");
+        const authHeader = this.buildBasicAuthHeader(
+          this.config.apiKey,
+          this.config.apiSecret,
+        );
         const response = await this.sendRequest(this.directClient, {
           method: "POST",
           url: this.config.directAuthPath,
@@ -644,9 +680,14 @@ export class OrangeProvider extends BaseProvider {
           throw new Error("Orange direct auth did not return access_token");
         }
 
-        this.apiToken = data.access_token;
         const expires_in = data.expires_in ?? 3600;
+        this.apiToken = data.access_token;
         this.apiTokenExpiry = now + expires_in * 1000;
+
+        await this.tokenCache.set({
+          accessToken: data.access_token,
+          expiresInSeconds: expires_in,
+        });
 
         this.startPrefetchDaemon(expires_in * 1000);
 

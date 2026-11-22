@@ -83,6 +83,23 @@ export class ComplianceController {
     return { status: "success", signature };
   }
 
+  /**
+   * Persist one compliance-verification attempt to the audit trail (#1789).
+   *
+   * This used to call `pool.connect()` to check out a dedicated client, then
+   * run the actual INSERT through `pool.query(...)` — a completely different
+   * call that grabs its own connection from the pool — leaving the checked-out
+   * `client` unused and idle for the duration of the call before being
+   * released. That both leaked a pool slot per call for no reason and meant
+   * no real transaction control existed despite the client acquisition
+   * suggesting there was one.
+   *
+   * A single INSERT is already atomic on its own, so the fix is simply to
+   * call `pool.query` directly — no `client.connect()`/`release()` needed.
+   * (If a future change needs this to span multiple statements atomically,
+   * use `executeTransaction()` from `../config/database` instead, which
+   * correctly wraps BEGIN/COMMIT/ROLLBACK around a client it actually uses.)
+   */
   async saveReceipt(
     transactionId: string,
     host: string,
@@ -91,15 +108,10 @@ export class ComplianceController {
     signature?: string | null,
     error?: string | null,
   ) {
-    const client = await pool.connect();
-    try {
-      await pool.query(
-        "INSERT INTO trisa_exchange_receipts (transaction_id, host, payload, status, error, signature) VALUES ($1, $2, $3, $4, $5, $6)",
-        [transactionId, host, JSON.stringify(payload), status, error || null, signature || null]
-      );
-    } finally {
-      client.release();
-    }
+    await pool.query(
+      "INSERT INTO trisa_exchange_receipts (transaction_id, host, payload, status, error, signature) VALUES ($1, $2, $3, $4, $5, $6)",
+      [transactionId, host, JSON.stringify(payload), status, error || null, signature || null]
+    );
   }
 
   async validateComplianceStatus(req: Request, res: Response): Promise<Response> {
@@ -122,18 +134,56 @@ export class ComplianceController {
 
     if (connectionResult.status === "failed") {
       const errorMsg = connectionResult.error || "Compliance verification failed";
-      await this.saveReceipt(transactionId, `${host}:${port}`, payload, "failed", null, errorMsg);
-      await notificationRouter.routeSystemNotification(
-        "critical",
-        "compliance",
-        "Compliance Verification Failure",
-        `TRISA compliance check failed for transaction ${transactionId}: ${errorMsg}`,
-        { transactionId }
-      );
+
+      // The audit-trail write and the ops notification are independent,
+      // best-effort side effects of an already-determined compliance
+      // failure — the caller must still receive the 400 response below even
+      // if persisting the receipt or sending the alert itself fails (e.g.
+      // a transient DB error). Previously an unhandled rejection from
+      // either `await` here would propagate out of this handler instead,
+      // so a receipt-write failure masked the real compliance failure
+      // behind a 500 (or an unhandled promise rejection) instead of the
+      // correct 400. Both are now caught and logged, never re-thrown.
+      try {
+        await this.saveReceipt(transactionId, `${host}:${port}`, payload, "failed", null, errorMsg);
+      } catch (receiptError) {
+        logger.error(
+          `[compliance] failed to persist failure receipt for transaction ${transactionId}:`,
+          receiptError instanceof Error ? receiptError.message : receiptError,
+        );
+      }
+
+      try {
+        await notificationRouter.routeSystemNotification(
+          "critical",
+          "compliance",
+          "Compliance Verification Failure",
+          `TRISA compliance check failed for transaction ${transactionId}: ${errorMsg}`,
+          { transactionId }
+        );
+      } catch (notifyError) {
+        logger.error(
+          `[compliance] failed to send failure notification for transaction ${transactionId}:`,
+          notifyError instanceof Error ? notifyError.message : notifyError,
+        );
+      }
+
       return res.status(400).json({ compliant: false, error: "Compliance verification failed", details: errorMsg });
     }
 
-    await this.saveReceipt(transactionId, `${host}:${port}`, payload, "success", connectionResult.signature, null);
+    try {
+      await this.saveReceipt(transactionId, `${host}:${port}`, payload, "success", connectionResult.signature, null);
+    } catch (receiptError) {
+      // Same reasoning as the failure branch above: the compliance check
+      // itself succeeded, so the caller gets `compliant: true` regardless
+      // of whether the audit-trail write succeeded — a receipt-persistence
+      // outage must not turn a passed compliance check into an error
+      // response for the transaction being verified.
+      logger.error(
+        `[compliance] failed to persist success receipt for transaction ${transactionId}:`,
+        receiptError instanceof Error ? receiptError.message : receiptError,
+      );
+    }
     return res.json({ compliant: true, message: "Compliance verification successful", signature: connectionResult.signature });
   }
 }

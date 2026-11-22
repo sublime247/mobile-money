@@ -1,0 +1,53 @@
+---
+title: 'Initiate Deposit'
+api: 'POST /v1/transactions/deposit'
+description: 'Create a new mobile money deposit request'
+---
+
+Initiates a new deposit from a mobile money wallet to a Stellar network address.
+
+### Request Body
+
+<ParamField body="provider" type="string" required>
+  The mobile money provider (e.g., `MTN`, `AIRTEL`).
+</ParamField>
+<ParamField body="phone" type="string" required>
+  The MSISDN/phone number in E.164 format.
+</ParamField>
+<ParamField body="amount" type="number" required>
+  The amount to deposit.
+</ParamField>
+<ParamField body="currency" type="string" required>
+  3-letter fiat currency code (e.g., `UGX`, `KES`).
+</ParamField>
+<ParamField body="stellarAddress" type="string" required>
+  The destination Stellar address.
+</ParamField>
+<ParamField body="idempotencyKey" type="string">
+  Unique identifier for the transaction to prevent duplicates.
+</ParamField>
+
+### Response
+
+<ResponseField name="transactionId" type="string">
+  The unique bridge transaction ID.
+</ResponseField>
+<ResponseField name="status" type="string">
+  Current status (e.g., `PENDING_MOBILE_MONEY`).
+</ResponseField>
+<ResponseField name="providerRef" type="string">
+  Reference ID from the mobile money provider.
+</ResponseField>
+
+<RequestExample>
+```json Request
+{
+  "provider": "MTN",
+  "phone": "+256770000000",
+  "amount": 50000,
+  "currency": "UGX",
+  "stellarAddress": "GBXXX...",
+  "idempotencyKey": "uuid-1234"
+}
+```
+</RequestExample>

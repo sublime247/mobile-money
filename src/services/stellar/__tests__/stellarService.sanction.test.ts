@@ -28,13 +28,13 @@ jest.mock("../../../config/stellar", () => ({
 }));
 
 jest.mock("../../../stellar/muxed", () => ({
-  resolveToBaseAddress: (address: string) => {
+  resolveToBaseAddress: jest.fn((address: string) => {
     // If it's a muxed address (starts with M), resolve to base address
     if (address.startsWith("M")) {
       return "GDEST..."; // Return the base address
     }
     return address;
-  },
+  }),
   isMuxedAddress: (address: string) => address.startsWith("M"),
 }));
 
@@ -114,7 +114,7 @@ describe("StellarService.sendPayment — sanction gate", () => {
       (sanctionService.checkParties as jest.Mock).mockResolvedValue(undefined);
       // Mock resolveToBaseAddress to throw for invalid address
       const { resolveToBaseAddress } = require("../../../stellar/muxed");
-      resolveToBaseAddress.mockImplementation((addr: string) => {
+      resolveToBaseAddress.mockImplementationOnce((addr: string) => {
         throw new Error("Invalid address format");
       });
 

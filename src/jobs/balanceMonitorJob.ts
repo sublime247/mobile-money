@@ -249,3 +249,50 @@ export async function runBalanceMonitorJob(): Promise<void> {
     logger.error("[balance-monitor] Reserve liquidity check failed:", err);
   }
 }
+
+export async function checkAirtelBalanceAndAlert(): Promise<void> {
+  const airtel = new AirtelService();
+  try {
+    const result = await airtel.getOperationalBalance();
+    if (!result.success || !result.data) {
+      logger.error("[airtel-balance-monitor] Failed to fetch Airtel balance", result.error);
+      return;
+    }
+
+    const rawBalance = result.data.availableBalance ?? 0;
+    const balance = typeof rawBalance === "number" ? rawBalance : parseFloat(String(rawBalance));
+    
+    // Configurable threshold, defaulting to 50000
+    const threshold = parseFloat(process.env.AIRTEL_LOW_BALANCE_THRESHOLD || "50000");
+
+    logger.info(`[airtel-balance-monitor] Current Airtel balance: ${balance}`);
+
+    // Trigger alert if below threshold
+    if (balance < threshold) {
+      console.warn(`[airtel-balance-monitor] ALERT: Airtel balance is ${balance}, below threshold ${threshold}`);
+      
+      await notifySlackAlert({
+        statusCode: 500,
+        method: "MONITOR",
+        path: `/balance/airtel`,
+        timestamp: new Date().toISOString(),
+        error: new Error(`Airtel Low Liquidity Alert: Operational float balance is ${balance} (threshold: ${threshold})`),
+      }, { appName: "airtel-balance-monitor" });
+    }
+
+    // Record snapshot
+    try {
+      const { pool } = require("../config/database");
+      // Use query directly, assuming a table provider_balance_snapshots exists or just log if not
+      await pool.query(
+        `INSERT INTO provider_balance_snapshots (provider, balance, currency, recorded_at) VALUES ($1, $2, $3, NOW()) ON CONFLICT DO NOTHING`,
+        ["airtel", balance, result.data.currency || "NGN"]
+      );
+    } catch (dbErr) {
+      logger.warn("[airtel-balance-monitor] Failed to record snapshot in DB (table might not exist)", dbErr);
+    }
+    
+  } catch (err) {
+    logger.error("[airtel-balance-monitor] Error running job:", err);
+  }
+}

@@ -1,0 +1,17 @@
+[package]
+name = "proof_of_reserve"
+version = "0.1.0"
+edition = "2021"
+
+# Inherit workspace-level lint configuration.
+[lints]
+workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+soroban-sdk = { version = "26.0.1", features = ["alloc"] }
+
+[dev-dependencies]
+soroban-sdk = { version = "26.0.1", features = ["testutils"] }

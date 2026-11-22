@@ -36,22 +36,21 @@ export class StatsController {
         });
       }
 
-      // Fetch stats from service
-      const [general, byProvider, activeUsers, trends] = await Promise.all([
-        statsService.getGeneralStats(start, end),
-        statsService.getVolumeByProvider(start, end),
-        statsService.getActiveUsersCount(start, end),
-        statsService.getVolumeByPeriod("day", start, end),
+      // Two scans instead of four: one for the overview (totals and active
+      // users share the same filter), one for the provider/daily breakdown.
+      const [overview, breakdown] = await Promise.all([
+        statsService.getOverview(start, end),
+        statsService.getVolumeBreakdown("day", start, end),
       ]);
 
       const response = {
-        totalTransactions: general.totalTransactions,
-        successRate: parseFloat(general.successRate.toFixed(2)),
-        totalVolume: general.totalVolume,
-        averageAmount: parseFloat(general.averageAmount.toFixed(2)),
-        activeUsers,
-        byProvider,
-        trends,
+        totalTransactions: overview.totalTransactions,
+        successRate: parseFloat(overview.successRate.toFixed(2)),
+        totalVolume: overview.totalVolume,
+        averageAmount: parseFloat(overview.averageAmount.toFixed(2)),
+        activeUsers: overview.activeUsers,
+        byProvider: breakdown.byProvider,
+        trends: breakdown.trends,
         timestamp: new Date().toISOString(),
         cached: false,
       };

@@ -61,6 +61,11 @@ export const MOOV_ERROR_MATRIX: Record<string, MoovErrorEntry> = {
     message: "Moov Money request timed out",
     retryable: true,
   },
+  PIN_TIMEOUT: {
+    errorCode: ERROR_CODES.PROVIDER_ERROR,
+    message: "Customer did not enter their PIN in time on the USSD prompt",
+    retryable: true,
+  },
   INTERNAL_ERROR: {
     errorCode: ERROR_CODES.INTERNAL_ERROR,
     message: "Moov internal processing error",
@@ -102,7 +107,10 @@ export function resolveMoovErrorFromResponse(
   const byCode = resolveMoovError(code);
   if (byCode) return byCode;
 
-  if (httpStatus !== undefined && INSUFFICIENT_BALANCE_STATUS_CODES.has(httpStatus)) {
+  if (
+    httpStatus !== undefined &&
+    INSUFFICIENT_BALANCE_STATUS_CODES.has(httpStatus)
+  ) {
     return MOOV_ERROR_MATRIX.INSUFFICIENT_BALANCE;
   }
 

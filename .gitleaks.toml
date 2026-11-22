@@ -1,0 +1,40 @@
+title = "mobile-money gitleaks config"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "stellar-secret-key"
+description = "Stellar secret key (S...)"
+regex = '''\bS[A-Z0-9]{55}\b'''
+keywords = ["s"]
+tags = ["stellar", "secret"]
+
+[[rules]]
+id = "mobile-money-provider-token"
+description = "Hard-coded provider API token or secret"
+regex = '''(?i)(mtn|airtel|orange|ecocash|moov|flutterwave|paystack)[a-z0-9_]*(api[_-]?key|token|secret|password)["']?\s*[:=]\s*["'][A-Za-z0-9_\-\/+=]{16,}["']'''
+keywords = ["mtn", "airtel", "orange", "ecocash", "moov", "flutterwave", "paystack"]
+tags = ["provider", "secret"]
+
+[[rules]]
+id = "database-url-with-password"
+description = "Database connection string with an inline password"
+regex = '''(?i)postgres(?:ql)?:\/\/[^:\s\/]+:[^@\s\/$'"{}]{4,}@(?:[a-z0-9.\-]+)'''
+keywords = ["postgres"]
+tags = ["database", "secret"]
+
+[allowlist]
+description = "Test fixtures, docs and local example env files contain throwaway values"
+paths = [
+  '''(^|/)__tests__/''',
+  '''(^|/)tests?/''',
+  '''(^|/)__mocks__/''',
+  '''\.test\.[cm]?[jt]sx?$''',
+  '''(^|/)postman/''',
+  '''(^|/)\.env\.(example|config\.example|docker)$''',
+  '''package-lock\.json$''',
+]
+regexes = [
+  '''postgres(?:ql)?:\/\/[^:\s]+:(?:password|postgres|changeme|secret|user|pass)@(?:localhost|127\.0\.0\.1|postgres|db)''',
+]

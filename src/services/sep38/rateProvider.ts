@@ -2,15 +2,108 @@ import { currencyService, SupportedCurrency } from "../currency";
 import { exchangeRateBufferService } from "../exchangeRateBufferService";
 import * as StellarSdk from "@stellar/stellar-sdk";
 import { getStellarServer } from "../../config/stellar";
+import { getConfigValue } from "../../config/appConfig";
 
 // ---------------------------------------------------------------------------
 // Interface
 // ---------------------------------------------------------------------------
 
+export interface Sep38FeeDetail {
+  name: string;
+  amount: string;
+  description?: string;
+}
+
+/** SEP-38 fee breakdown object, expressed per 1 unit of sell_asset. */
+export interface Sep38Fee {
+  total: string;
+  asset: string;
+  details: Sep38FeeDetail[];
+}
+
 export interface RateResult {
   price: string;
   fee_percent: string;
   fee_fixed: string;
+  fee: Sep38Fee;
+}
+
+const FEE_PRECISION = 7;
+
+/**
+ * Builds the SEP-38 fee breakdown object for a quote expressed per 1 unit
+ * of sell_asset: a fixed line item plus a percentage-based line item,
+ * summed into `total`. Callers scale this by the actual sell/buy amount
+ * when rendering a specific transaction, matching how `price` is also
+ * expressed per 1 unit of sell_asset.
+ *
+ * `feePercent` is a plain percentage (e.g. 0.5 means 0.5%, not 0.005).
+ */
+export function buildFeeBreakdown(
+  feePercent: number,
+  feeFixed: number,
+  sellAsset: string,
+): Sep38Fee {
+  const percentOfOneUnit = feePercent / 100;
+  const total = feeFixed + percentOfOneUnit;
+
+  const details: Sep38FeeDetail[] = [];
+  if (feeFixed > 0) {
+    details.push({
+      name: "fixed_fee",
+      amount: feeFixed.toFixed(FEE_PRECISION),
+      description: "Fixed anchor fee per transaction, in sell_asset units.",
+    });
+  }
+  details.push({
+    name: "percentage_fee",
+    amount: percentOfOneUnit.toFixed(FEE_PRECISION),
+    description: `${feePercent.toFixed(2)}% conversion fee, in sell_asset units.`,
+  });
+
+  return {
+    total: total.toFixed(FEE_PRECISION),
+    asset: sellAsset,
+    details,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Per-currency-pair spread margin configuration
+// ---------------------------------------------------------------------------
+
+/**
+ * Reads SEP38_SPREAD_MARGINS_BY_PAIR (a JSON object keyed by
+ * "<SELL_CODE>_<BUY_CODE>", values in basis points) and returns the override
+ * for the given pair, or null when the pair has no override configured.
+ *
+ * Malformed JSON is treated as "no overrides configured" rather than thrown,
+ * since this is read on every price lookup and a bad env value should not
+ * take down FX pricing.
+ */
+export function getSpreadMarginBpsForPair(
+  sellCode: string,
+  buyCode: string,
+): number | null {
+  let raw: string;
+  try {
+    raw = getConfigValue<string>("sep38.spreadMarginsByPair");
+  } catch {
+    return null;
+  }
+
+  if (!raw || raw === "{}") return null;
+
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+
+  const key = `${sellCode}_${buyCode}`;
+  const value = parsed[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 export interface IRateProvider {
@@ -180,8 +273,11 @@ export class StellarPathPaymentRateProvider implements IRateProvider {
 
       let price: number;
       if (indicative) {
+        const pairSpreadBps = getSpreadMarginBpsForPair(sellCode, buyCode);
+        const effectiveSpreadBps =
+          pairSpreadBps !== null ? pairSpreadBps : this.spreadBps;
         const spread =
-          (this.spreadBps / 10000) * (Math.random() < 0.5 ? -1 : 1);
+          (effectiveSpreadBps / 10000) * (Math.random() < 0.5 ? -1 : 1);
         price = buffered.bufferedRate * (1 + spread);
       } else {
         price = buffered.bufferedRate;
@@ -191,6 +287,7 @@ export class StellarPathPaymentRateProvider implements IRateProvider {
         price: price.toFixed(PRICE_PRECISION),
         fee_percent: this.feePercent.toFixed(2),
         fee_fixed: this.feeFixed.toFixed(PRICE_PRECISION),
+        fee: buildFeeBreakdown(this.feePercent, this.feeFixed, sellAsset),
       };
     } catch {
       return null;

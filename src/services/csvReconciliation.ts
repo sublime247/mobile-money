@@ -2,6 +2,7 @@ import { Readable } from "stream";
 import csvParser from "csv-parser";
 import { queryRead } from "../config/database";
 import { DiscrepancyType } from "../models/reconciliation";
+import { withReconciliationDbRetry } from "./reconciliationDbRetry";
 
 export interface ProviderCSVRow {
   reference_number?: string;
@@ -131,7 +132,11 @@ export async function reconcileTransactions(
 
   query += ` ORDER BY created_at DESC`;
 
-  const dbResult = await queryRead(query, params);
+  const dbResult = await withReconciliationDbRetry(
+    "reconcileTransactions:queryRead",
+    { dateRange },
+    () => queryRead(query, params),
+  );
   const dbRecords = dbResult.rows;
 
   // Create lookup maps

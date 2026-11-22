@@ -1,0 +1,88 @@
+---
+title: 'Withdrawals'
+description: 'Convert Stellar tokens to mobile money payouts'
+---
+
+Withdrawals allow users to convert their Stellar tokens (like USDC) into local fiat currency, deposited directly into their mobile money wallets.
+
+## The Withdrawal Flow
+
+<Steps>
+  <Step title="Request Withdrawal">
+    Your application creates a withdrawal request via the API, specifying the target phone number and fiat amount.
+  </Step>
+  <Step title="Lock/Burn Tokens">
+    The user sends the required Stellar tokens to the Bridge's operational address, or the Bridge locks/burns them depending on the token model.
+  </Step>
+  <Step title="Initiate Payout">
+    The Bridge initiates a disbursement via the mobile money provider's API.
+  </Step>
+  <Step title="Recipient Receives Funds">
+    The recipient receives the fiat funds in their mobile money wallet.
+  </Step>
+  <Step title="Completion Notification">
+    A webhook notifies your application that the withdrawal is complete.
+  </Step>
+</Steps>
+
+## Making a Withdrawal
+
+To initiate a withdrawal, send a `POST` request to `/v1/withdrawals`.
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://api.mobilemoney.dev/v1/withdrawals \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: wd_987654321" \
+  -d '{
+    "amount": "10000",
+    "currency": "XAF",
+    "phone_number": "+237612345678",
+    "provider": "MTN",
+    "source_stellar_address": "GABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890",
+    "metadata": {
+      "reference": "invoice_8891"
+    }
+  }'
+```
+
+```typescript TypeScript
+import { MobileMoneyBridge } from '@mobilemoney/bridge-sdk';
+
+const bridge = new MobileMoneyBridge('YOUR_API_KEY');
+
+const withdrawal = await bridge.withdrawals.create({
+  amount: '10000',
+  currency: 'XAF',
+  phoneNumber: '+237612345678',
+  provider: 'MTN',
+  sourceStellarAddress: 'GABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890',
+  metadata: {
+    reference: 'invoice_8891'
+  }
+}, {
+  idempotencyKey: 'wd_987654321'
+});
+
+console.log(withdrawal.status); // pending
+```
+</CodeGroup>
+
+### Response
+
+```json
+{
+  "id": "wd_xyz987",
+  "status": "pending",
+  "amount": "10000",
+  "currency": "XAF",
+  "phone_number": "+237612345678",
+  "provider": "MTN",
+  "created_at": "2026-08-31T10:15:00Z"
+}
+```
+
+<Warning>
+  Withdrawals are irreversible once the mobile money disbursement is initiated. Ensure all business logic and fraud checks are complete before requesting a withdrawal.
+</Warning>

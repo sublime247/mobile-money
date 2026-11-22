@@ -1,4 +1,5 @@
 import { queryRead, queryWrite } from "../config/database";
+import { withReconciliationDbRetry } from "../services/reconciliationDbRetry";
 
 export enum ReconciliationStatus {
   Pending = "pending",
@@ -76,17 +77,26 @@ export class ReconciliationModel {
     status?: ReconciliationStatus;
     summary?: Record<string, unknown>;
   }): Promise<ReconciliationReport> {
-    const res = await queryWrite<ReconciliationReportRow>(
-      `INSERT INTO reconciliation_reports (provider, report_date, file_name, status, summary)
+    const res = await withReconciliationDbRetry(
+      "legacyReconciliation:createReport",
+      {
+        provider: data.provider,
+        reportDate: data.reportDate.toISOString(),
+        fileName: data.fileName ?? null,
+      },
+      () =>
+        queryWrite<ReconciliationReportRow>(
+          `INSERT INTO reconciliation_reports (provider, report_date, file_name, status, summary)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
-      [
-        data.provider,
-        data.reportDate,
-        data.fileName ?? null,
-        data.status ?? ReconciliationStatus.Pending,
-        JSON.stringify(data.summary ?? {}),
-      ],
+          [
+            data.provider,
+            data.reportDate,
+            data.fileName ?? null,
+            data.status ?? ReconciliationStatus.Pending,
+            JSON.stringify(data.summary ?? {}),
+          ],
+        ),
     );
     return this.mapReportRow(res.rows[0]);
   }
@@ -114,9 +124,17 @@ export class ReconciliationModel {
 
     if (fields.length === 0) return;
 
-    await queryWrite(
-      `UPDATE reconciliation_reports SET ${fields.join(", ")}, updated_at = NOW() WHERE id = $1`,
-      params,
+    await withReconciliationDbRetry(
+      "legacyReconciliation:updateReport",
+      {
+        reportId: id,
+        fields,
+      },
+      () =>
+        queryWrite(
+          `UPDATE reconciliation_reports SET ${fields.join(", ")}, updated_at = NOW() WHERE id = $1`,
+          params,
+        ),
     );
   }
 
@@ -128,18 +146,27 @@ export class ReconciliationModel {
     expectedValue?: string;
     actualValue?: string;
   }): Promise<ReconciliationDiscrepancy> {
-    const res = await queryWrite<ReconciliationDiscrepancyRow>(
-      `INSERT INTO reconciliation_discrepancies (report_id, transaction_id, reference_number, type, expected_value, actual_value)
+    const res = await withReconciliationDbRetry(
+      "legacyReconciliation:createDiscrepancy",
+      {
+        reportId: data.reportId,
+        type: data.type,
+        referenceNumber: data.referenceNumber,
+      },
+      () =>
+        queryWrite<ReconciliationDiscrepancyRow>(
+          `INSERT INTO reconciliation_discrepancies (report_id, transaction_id, reference_number, type, expected_value, actual_value)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [
-        data.reportId,
-        data.transactionId ?? null,
-        data.referenceNumber,
-        data.type,
-        data.expectedValue ?? null,
-        data.actualValue ?? null,
-      ],
+          [
+            data.reportId,
+            data.transactionId ?? null,
+            data.referenceNumber,
+            data.type,
+            data.expectedValue ?? null,
+            data.actualValue ?? null,
+          ],
+        ),
     );
     return this.mapDiscrepancyRow(res.rows[0]);
   }
@@ -171,11 +198,18 @@ export class ReconciliationModel {
   }
 
   async resolveDiscrepancy(id: string, notes: string): Promise<void> {
-    await queryWrite(
-      `UPDATE reconciliation_discrepancies 
-       SET review_status = 'resolved', resolution_notes = $2, updated_at = NOW() 
+    await withReconciliationDbRetry(
+      "legacyReconciliation:resolveDiscrepancy",
+      {
+        discrepancyId: id,
+      },
+      () =>
+        queryWrite(
+          `UPDATE reconciliation_discrepancies
+       SET review_status = 'resolved', resolution_notes = $2, updated_at = NOW()
        WHERE id = $1`,
-      [id, notes],
+          [id, notes],
+        ),
     );
   }
 

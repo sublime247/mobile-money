@@ -26,6 +26,11 @@ import { translate } from "../utils/i18n";
 import { getLockoutStatus, recordFailedAttempt } from "../auth/lockout";
 import { verifyTOTPToken, verifyBackupCode, is2FAEnabled } from "../auth/2fa";
 import { evaluateAdminLoginAnomaly } from "../services/loginAnomaly";
+import {
+  twoFactorRateLimiter,
+  MAX_ATTEMPTS,
+  LOCKOUT_DURATION_SECONDS,
+} from "../services/twoFactorRateLimiter";
 import { validateRequest } from "../middleware/validation";
 import { hashPassword } from "../utils/password";
 import { redisClient } from "../config/redis";
@@ -74,6 +79,10 @@ export const registerSchema = z.object({
 
 /**
  * POST /api/auth/register
+ *
+ * Registers a new user with phone number and password.
+ * Returns 409 Conflict if phone number already registered (active user).
+ * Allows re-registration if prior account was soft-deleted.
  */
 authRoutes.post(
   "/register",
@@ -93,6 +102,18 @@ authRoutes.post(
         .status(201)
         .json({ message: "User registered successfully", userId: user.id });
     } catch (error) {
+      // Handle unique constraint violation for phone_number
+      // PostgreSQL error code 23505 = unique constraint violation
+      const pgError = error as any;
+      if (pgError?.code === "23505" && pgError?.detail?.includes("phone_number")) {
+        res.status(409).json({
+          error: "Phone number already registered",
+          message: "This phone number is already associated with an active account. If you believe this is an error, please contact support.",
+          code: "PHONE_NUMBER_EXISTS",
+        });
+        return;
+      }
+
       throw createError(ERROR_CODES.INTERNAL_ERROR, "Registration failed", {
         error: "Registration failed",
         message: error instanceof Error ? error.message : "Unknown error",
@@ -201,6 +222,20 @@ authRoutes.post(
           );
         }
 
+        if (await twoFactorRateLimiter.isLocked(user.id)) {
+          const retryAfter =
+            await twoFactorRateLimiter.getLockoutTimeRemaining(user.id);
+          res.setHeader("Retry-After", String(retryAfter));
+          throw createError(
+            ERROR_CODES.ACCOUNT_LOCKED,
+            "Two-factor verification is temporarily locked due to too many failed attempts.",
+            {
+              error: "ACCOUNT_LOCKED",
+              retryAfterSeconds: retryAfter,
+            },
+          );
+        }
+
         const twoFactorToken = req.headers["x-2fa-token"] as string | undefined;
         const backupCode = req.body["backupCode"] || req.body["backup_code"];
 
@@ -226,6 +261,21 @@ authRoutes.post(
         }
 
         if (!verified2fa) {
+          // Only count submitted codes; the initial challenge carries none.
+          const attempts =
+            twoFactorToken || backupCode
+              ? await twoFactorRateLimiter.incrementFailures(user.id)
+              : 0;
+          if (attempts >= MAX_ATTEMPTS) {
+            throw createError(
+              ERROR_CODES.ACCOUNT_LOCKED,
+              "Two-factor verification is temporarily locked due to too many failed attempts.",
+              {
+                error: "ACCOUNT_LOCKED",
+                retryAfterSeconds: LOCKOUT_DURATION_SECONDS,
+              },
+            );
+          }
           throw createError(
             ERROR_CODES.FORBIDDEN,
             "Suspicious admin login detected. Provide X-2FA-Token header or backupCode to continue.",
@@ -236,6 +286,8 @@ authRoutes.post(
             },
           );
         }
+
+        await twoFactorRateLimiter.resetFailures(user.id);
       }
 
       // Device verification check for all users
@@ -327,6 +379,10 @@ authRoutes.post(
         },
       });
     } catch (error) {
+      // Preserve intentional API errors (lockouts, 2FA required, etc.).
+      if ((error as { statusCode?: number })?.statusCode) {
+        throw error;
+      }
       throw createError(
         ERROR_CODES.INTERNAL_ERROR,
         error instanceof Error ? error.message : "Unknown error",

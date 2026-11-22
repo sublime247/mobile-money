@@ -4,6 +4,11 @@ import { ERROR_CODES, getHttpStatus } from "../constants/errorCodes";
 import { getLocalizedMessage } from "../locales/messages";
 import { resolveLocale, resolveLocaleFromRequest } from "../utils/i18n";
 import logger from "../utils/logger";
+import {
+  buildProblemDetails,
+  PROBLEM_CONTENT_TYPE,
+} from "../utils/problemDetails";
+import { isQueryCanceledError } from "../config/databaseErrors";
 
 /**
  * Extended Error interface with error-specific properties.
@@ -108,48 +113,22 @@ export const createError = (
 };
 
 /**
- * Express error handler middleware for standardized API error responses.
+ * Express error handler middleware — emits RFC-7807 Problem Details responses.
  *
- * Normalizes all errors into a consistent JSON format with:
- * - **code**: Standard error code for programmatic handling
- * - **message**: Localized human-readable message based on Accept-Language header
- * - **message_en**: English fallback message (always included)
- * - **timestamp**: ISO 8601 timestamp of error occurrence
- * - **requestId**: Optional unique request identifier for tracing
- * - **details**: Optional context data (development mode only)
+ * Response format selection:
+ *   - Clients sending `Accept: application/problem+json` receive a fully
+ *     standards-compliant RFC-7807 body with `type`, `title`, `status`,
+ *     `detail`, `instance`, and `trace_id`.
+ *   - All other clients continue to receive the legacy format
+ *     `{ code, message, message_en, timestamp, statusCode, requestId, details }`
+ *     so existing integrations are not broken.
  *
- * **Language Support:**
- * - Detects language from Accept-Language HTTP header
- * - Supports: English (en), French (fr), Spanish (es), Portuguese (pt)
- * - Falls back to English for unsupported languages
+ * Both formats:
+ *   - Include the trace correlation ID for debugging (issue #2284)
+ *   - Strip `details` in production to avoid leaking internals
+ *   - Set `Content-Type: application/problem+json` for RFC-7807 responses
  *
- * **HTTP Status Codes:**
- * - Automatically maps error codes to appropriate HTTP status codes
- * - 400: Validation/input errors
- * - 401: Authentication errors
- * - 403: Authorization/permission errors
- * - 404: Resource not found errors
- * - 409: Conflict/state errors
- * - 429: Rate limit/quota exceeded
- * - 500: Server/internal errors
- *
- * **Production vs Development:**
- * - Production: Error details are hidden for security
- * - Development: Error details are included for debugging
- *
- * **Usage:**
  * Mount this middleware after all other middleware and route handlers.
- * Must be last middleware to catch all errors.
- *
- * @param {AppError} err - Error object (may include code, statusCode, details)
- * @param {Request} req - Express request object (reads Accept-Language header)
- * @param {Response} res - Express response object (writes normalized error response)
- * @param {NextFunction} _next - Express next function (unused, required for error middleware)
- *
- * @example
- * // Setup in Express app
- * app.use(routes);
- * app.use(errorHandler); // Must be last
  */
 export const errorHandler = (
   err: AppError,
@@ -162,13 +141,20 @@ export const errorHandler = (
   };
   responseWithLocals.locals = responseWithLocals.locals || {};
   responseWithLocals.locals["__criticalError"] = err;
-  const inferredCode = err.code || getCodeFromStatus(err.statusCode || 500);
-  const statusCode =
-    typeof err.statusCode === "number" && err.statusCode >= 400
+
+  const isTimeout = isQueryCanceledError(err) || err.code === "57014" || err.code === "GATEWAY_TIMEOUT" || (err as any)?.originalError?.code === "57014";
+  const inferredCode = isTimeout
+    ? ERROR_CODES.GATEWAY_TIMEOUT
+    : err.code || getCodeFromStatus(err.statusCode || 500);
+  const statusCode = isTimeout
+    ? 504
+    : typeof err.statusCode === "number" && err.statusCode >= 400
       ? err.statusCode
       : getHttpStatus(inferredCode) || 500;
 
-  const errorCode = err.code || getCodeFromStatus(statusCode);
+  const errorCode = isTimeout
+    ? ERROR_CODES.GATEWAY_TIMEOUT
+    : err.code || getCodeFromStatus(statusCode);
 
   const locale = resolveLocale(err.locale || resolveLocaleFromRequest(req));
   const localizedMessage = getLocalizedMessage(errorCode, locale);
@@ -188,6 +174,38 @@ export const errorHandler = (
   );
 
   const details = extractLegacyDetails(err);
+
+  // ------------------------------------------------------------------
+  // RFC-7807 response — served when client explicitly requests it
+  // ------------------------------------------------------------------
+  const acceptHeader = req.headers["accept"] ?? "";
+  const wantsProblemJson = acceptHeader.includes(PROBLEM_CONTENT_TYPE);
+
+  if (wantsProblemJson) {
+    const extensions: Record<string, unknown> = {};
+    if (process.env.NODE_ENV !== "production" && details && Object.keys(details).length > 0) {
+      extensions["details"] = details;
+    }
+
+    const problemBody = buildProblemDetails(
+      errorCode,
+      statusCode,
+      err.message || englishMessage,
+      req.originalUrl || req.url || "/",
+      requestId,
+      extensions,
+    );
+
+    res
+      .status(statusCode)
+      .type(PROBLEM_CONTENT_TYPE)
+      .json(problemBody);
+    return;
+  }
+
+  // ------------------------------------------------------------------
+  // Legacy response — preserves backward compatibility
+  // ------------------------------------------------------------------
   const body: ErrorResponse & { statusCode: number; error?: string } = {
     code: errorCode,
     message: localizedMessage,
@@ -224,6 +242,12 @@ export const errorHandler = (
 
   if (process.env.NODE_ENV === "production") {
     delete body.details;
+  }
+
+  const retryAfterSeconds = (err as AppError & { retryAfterSeconds?: unknown })
+    .retryAfterSeconds;
+  if (statusCode === 503 && typeof retryAfterSeconds === "number") {
+    res.setHeader("Retry-After", String(retryAfterSeconds));
   }
 
   res.status(statusCode).json(body);

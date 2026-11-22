@@ -2,6 +2,7 @@ import axios, { AxiosInstance, AxiosError, AxiosResponse } from "axios";
 import logger from "../../../utils/logger";
 import { maskPII } from "../../../utils/masking";
 import { formatPhoneForProvider } from "../../../utils/phoneUtils";
+import { attachTelcoTracingInterceptor } from "../../../utils/telcoTracing";
 
 // ============================================================================
 // TYPES & INTERFACES
@@ -51,6 +52,7 @@ export class MTNRwandaProvider {
         "X-Reference-Id": this.generateReferenceId(),
       },
     });
+    attachTelcoTracingInterceptor(this.client);
   }
 
   private generateReferenceId(): string {

@@ -1,6 +1,23 @@
 import { Queue } from "bullmq";
 import { queueOptions } from "./config";
+import { injectTraceContext } from "./jobTracing";
 import { TransactionModel, TransactionStatus } from "../models/transaction";
+import { providerQueueControl } from "./providerQueueControl";
+import {
+  addProviderRateLimitedJob,
+  isProviderRateLimitedQueuesEnabled,
+} from "./providerRateLimitedQueues";
+import { VipTier } from "../utils/fees";
+import { calculateTransactionPriority } from "./priority";
+import { createBackpressureError, isBackpressureActive, isCriticalPriority } from "./redisBackpressure";
+import {
+  enqueueWithOutboxFallback,
+  startTransactionOutboxRelay as startOutboxRelay,
+} from "./transactionOutbox";
+
+export { stopTransactionOutboxRelay } from "./transactionOutbox";
+
+export { calculateTransactionPriority };
 
 export const TRANSACTION_QUEUE_NAME = "transaction-processing-queue";
 export const TRANSACTION_JOB_NAME = "transaction-process";
@@ -17,7 +34,13 @@ export interface TransactionJobData {
   /** IP address of the originating client, forwarded through the queue for blacklist enforcement. */
   clientIp?: string;
   requestId?: string;
+  /** Merchant or user VIP tier to influence processing priority. */
+  tier?: VipTier | string;
+  /** Explicit job priority (1 to 10), where 1 is highest priority. */
+  priority?: number;
   _traceId?: string;
+  /** Serialized W3C `traceparent` injected at enqueue time (see queue/jobTracing). */
+  _traceparent?: string;
 }
 
 export interface TransactionJobResult {
@@ -55,7 +78,11 @@ export const transactionQueue = new Queue<
 
 /**
  * Enqueue a transaction for processing.
+ * Accepts optional priority (1-10) or auto-calculates from tier / amount.
  * Returns a job-shaped result so callers can surface a jobId.
+ *
+ * If Redis is unreachable the job is persisted to the PostgreSQL outbox
+ * instead (`outboxed: true`) and replayed by the outbox relay on recovery.
  */
 export async function addTransactionJob(
   data: TransactionJobData,
@@ -65,16 +92,86 @@ export async function addTransactionJob(
     repeat?: { every: number };
     jobId?: string;
   },
+): Promise<{ id: string | undefined; outboxed?: boolean }> {
+  // Repeatable schedules can't be replayed from the outbox as one-shot jobs.
+  if (options?.repeat) return dispatchTransactionJob(data, options);
+  return enqueueWithOutboxFallback(dispatchTransactionJob, data, options);
+}
+
+/** Start replaying outboxed transactions onto the queue. Idempotent. */
+export function startTransactionOutboxRelay(intervalMs?: number): void {
+  startOutboxRelay(dispatchTransactionJob, { intervalMs });
+}
+
+/** Enqueue straight onto Redis/BullMQ, with no outbox fallback. */
+export async function dispatchTransactionJob(
+  data: TransactionJobData,
+  options?: {
+    priority?: number;
+    delay?: number;
+    repeat?: { every: number };
+    jobId?: string;
+  },
 ): Promise<{ id: string | undefined }> {
-  const job = await transactionQueue.add(TRANSACTION_JOB_NAME, data, {
-    jobId: options?.jobId ?? data.transactionId,
-    priority: options?.priority,
-    delay: options?.delay,
-    repeat: options?.repeat,
+  const resolvedPriority = calculateTransactionPriority({
+    priority: options?.priority ?? data.priority,
+    tier: data.tier,
+    amount: data.amount,
   });
+
+  // Redis memory backpressure: refuse non-critical work while paused.
+  if (isBackpressureActive() && !isCriticalPriority(resolvedPriority)) {
+    throw createBackpressureError();
+  }
+
+  const jobData = {
+    ...data,
+    priority: resolvedPriority,
+  };
+
+  // Providers under maintenance (#2282): park the job in the provider's hold
+  // queue instead of dispatching it. Repeatable schedules are left alone; the
+  // worker diverts their individual runs if they fire while paused.
+  if (!options?.repeat && (await providerQueueControl.isPaused(data.provider))) {
+    return providerQueueControl.hold(injectTraceContext(jobData), {
+      jobId: options?.jobId,
+      priority: resolvedPriority,
+    });
+  }
+
+  // Per-provider BullMQ rate limiting (#2277): when enabled, route onto the
+  // provider's own dedicated queue (each with its own Worker + `limiter`)
+  // instead of the shared queue below, so e.g. MTN and Orange jobs are
+  // throttled independently. Repeatable schedules keep using the shared
+  // queue, matching the maintenance-hold behavior above.
+  if (!options?.repeat && isProviderRateLimitedQueuesEnabled()) {
+    return addProviderRateLimitedJob(injectTraceContext(jobData), {
+      jobId: options?.jobId,
+      priority: resolvedPriority,
+      delay: options?.delay,
+    });
+  }
+
+  // Embed the active OpenTelemetry context so the worker continues the same
+  // distributed trace (HTTP → queue → processor).
+  const job = await transactionQueue.add(
+    TRANSACTION_JOB_NAME,
+    injectTraceContext(jobData),
+    {
+      jobId: options?.jobId ?? data.transactionId,
+      priority: resolvedPriority,
+      delay: options?.delay,
+      repeat: options?.repeat,
+    },
+  );
 
   return { id: job.id ?? data.transactionId };
 }
+
+/**
+ * Alias for addTransactionJob conforming to the issue interface.
+ */
+export const addTransactionToQueue = addTransactionJob;
 
 /**
  * Fetch a job by ID, falling back to the transaction row when the job has

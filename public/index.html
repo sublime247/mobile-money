@@ -1,349 +1,68 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="carbon">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mobile Money ↔ Stellar Bridge | Low-Cost Cross-Border Payments</title>
-  <meta name="description" content="Connect African mobile money providers MTN MoMo, Airtel Money, and Orange Money with the Stellar blockchain network for instant, low-cost cross-border payments.">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/style.css">
+  <title>Mobile Money to Stellar Bridge & KYC Portal</title>
+  <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-
-  <!-- Navigation -->
   <header class="app-header">
-    <div class="container header-container">
-      <div class="logo">
-        <span class="logo-icon">✨</span>
-        <span class="logo-text">Stellar<span class="logo-highlight">Bridge</span></span>
-      </div>
-      <nav class="nav-links">
-        <a href="#features">Features</a>
-        <a href="#integration">How to Integrate</a>
-        <a href="#calculator">Calculator</a>
-        <a href="#api">API Integration</a>
-      </nav>
-      <div class="system-status-badge">
-        <span class="status-dot pulsing" id="status-dot"></span>
-        <span class="status-text" id="status-text">Checking system status...</span>
-      </div>
-      <div class="theme-switcher" role="group" aria-label="Theme selector">
-        <button data-theme="light" aria-label="Light theme">Light</button>
-        <button data-theme="carbon" aria-label="Carbon theme">Carbon</button>
-        <button data-theme="dark" aria-label="Dark theme">Dark</button>
-      </div>
+    <div class="logo-area">
+      <h1>Mobile Money ↔ Stellar</h1>
+      <span id="status-text" class="status-text">System: Connecting...</span>
+      <span id="status-dot" class="status-dot"></span>
+    </div>
+    <div class="theme-switcher">
+      <button data-theme="carbon" aria-pressed="true">Carbon</button>
+      <button data-theme="light" aria-pressed="false">Light</button>
     </div>
   </header>
 
-  <main>
-    <!-- Hero Section -->
-    <section class="hero-section">
-      <div class="container hero-container">
-        <div class="hero-content">
-          <div class="badge">TESTNET PLAYGROUND ACTIVE</div>
-          <h1>African Mobile Money meets the <span class="text-glow">Stellar Blockchain</span></h1>
-          <p>Bridge the border. Instantly convert cash from MTN, Airtel, or Orange Money into Stellar digital assets (USDC, XLM) for low-cost, instant global remittances and payouts.</p>
-          <div class="hero-actions">
-            <a href="#calculator" class="btn btn-primary" id="btn-hero-get-started">Try Calculator</a>
-            <a href="#api" class="btn btn-secondary" id="btn-hero-view-api">Read API Docs</a>
-          </div>
+  <main class="container">
+    <section class="card">
+      <h2>Exchange Rate Calculator</h2>
+      <div class="calculator-grid">
+        <div class="input-group">
+          <label for="calc-send-amount">You Send</label>
+          <input type="number" id="calc-send-amount" value="1000">
+          <select id="calc-send-currency">
+            <option value="XAF">XAF</option>
+            <option value="NGN">NGN</option>
+            <option value="KES">KES</option>
+            <option value="GHS">GHS</option>
+            <option value="TZS">TZS</option>
+            <option value="ZMW">ZMW</option>
+            <option value="RWF">RWF</option>
+          </select>
         </div>
-        <div class="hero-visual">
-          <div class="visual-card glass">
-            <div class="visual-header">
-              <span class="window-dot red"></span>
-              <span class="window-dot yellow"></span>
-              <span class="window-dot green"></span>
-              <span class="window-title">Live Transaction Monitor</span>
-            </div>
-            <div class="visual-body">
-              <div class="flow-step">
-                <div class="step-icon mobile-wallet">📱</div>
-                <div class="step-details">
-                  <span class="step-label">Sender (MTN MoMo Cameroon)</span>
-                  <span class="step-val">+237 670 123 456</span>
-                </div>
-                <div class="step-badge deposit">Deposit</div>
-              </div>
-              <div class="flow-arrow">
-                <div class="line"></div>
-                <div class="pulse"></div>
-              </div>
-              <div class="flow-step bridge">
-                <div class="step-icon bridge-gear">⚙️</div>
-                <div class="step-details">
-                  <span class="step-label">Mobile Money ↔ Stellar Bridge</span>
-                  <span class="step-val">Applying exchange rate: 1 XAF = 0.0016 USDC</span>
-                </div>
-              </div>
-              <div class="flow-arrow">
-                <div class="line"></div>
-                <div class="pulse"></div>
-              </div>
-              <div class="flow-step blockchain">
-                <div class="step-icon stellar-logo">🚀</div>
-                <div class="step-details">
-                  <span class="step-label">Recipient (Stellar Address)</span>
-                  <span class="step-val">GBNG...7E3 (USDC Transferred)</span>
-                </div>
-                <div class="step-badge success">Settled (5s)</div>
-              </div>
-            </div>
-          </div>
+        <div class="input-group">
+          <label for="calc-receive-amount">Recipient Gets</label>
+          <input type="text" id="calc-receive-amount" readonly>
+          <select id="calc-receive-asset">
+            <option value="USDC">USDC</option>
+            <option value="XLM">XLM</option>
+          </select>
         </div>
+      </div>
+      <div class="calc-details">
+        <p>Exchange Rate: <span id="rate-display">-</span></p>
+        <p>Operator Fee (1.5%): <span id="fee-display">-</span></p>
+        <p>Final Settlement: <strong id="final-display">-</strong></p>
       </div>
     </section>
 
-    <!-- Features Section -->
-    <section id="features" class="features-section">
-      <div class="container">
-        <div class="section-header">
-          <h2>Engineered for modern financial integrations</h2>
-          <p>The bridge acts as an automated custodian and gateway complying with global Stellar specs and local telecom standards.</p>
-        </div>
-        <div class="features-grid">
-          <div class="feature-card">
-            <div class="feature-icon">⚡</div>
-            <h3>Instant Payouts</h3>
-            <p>Settle cross-border transfers in 5 seconds. Connects directly to Airtel Money, MTN MoMo, Orange, and Vodacom.</p>
-          </div>
-          <div class="feature-card">
-            <div class="feature-icon">🛡️</div>
-            <h3>Compliance First</h3>
-            <p>Automatic IVMS101 compliance formatting, local KYC level validation, and integrated Travel Rule verification.</p>
-          </div>
-          <div class="feature-card">
-            <div class="feature-icon">📉</div>
-            <h3>Micro Fees</h3>
-            <p>Bypass expensive 7-10% remittance agent fees. Stellar routing drops total transaction costs to below 1.5%.</p>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Integration Steps Section -->
-    <section id="integration" class="integration-section">
-      <div class="container">
-        <div class="section-header">
-          <h2>How to Implement the Bridge</h2>
-          <p>Whether you are building a consumer wallet or a wholesale remittance platform, integrating with the bridge takes 4 standard steps:</p>
-        </div>
-        <div class="steps-timeline">
-          <div class="step-item glass">
-            <div class="step-number">01</div>
-            <h3>Discovery (.toml)</h3>
-            <p>Wallet clients fetch the standard public <a href="/.well-known/stellar.toml" target="_blank">stellar.toml</a> metadata. This defines issued assets, anchor specifications, and verification keys.</p>
-          </div>
-          <div class="step-item glass">
-            <div class="step-number">02</div>
-            <h3>Authentication (SEP-10)</h3>
-            <p>The client authenticates by signing a cryptographic challenge transaction generated by the bridge's SEP-10 endpoint, obtaining a secure JWT access token.</p>
-          </div>
-          <div class="step-item glass">
-            <div class="step-number">03</div>
-            <h3>KYC Registration (SEP-12)</h3>
-            <p>The wallet registers customer identification details using SEP-12. The bridge validates their KYC tier (basic, full, or unverified) and verifies compliance list status.</p>
-          </div>
-          <div class="step-item glass">
-            <div class="step-number">04</div>
-            <h3>Initiate Transfer (SEP-24/31)</h3>
-            <p>Initiate transactions! For consumer apps, open the interactive SEP-24 webview portal. For business-to-business bulk remittance payouts, submit direct JSON requests via SEP-31.</p>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Calculator Section -->
-    <section id="calculator" class="calculator-section">
-      <div class="container calculator-container">
-        <div class="calculator-content">
-          <h2>Exchange Rate & Fee Calculator</h2>
-          <p>Simulate transfers on the bridge. See the local operator fee, network fee, exchange rate, and the exact amount your recipient gets.</p>
-          
-          <div class="calc-widget glass">
-            <div class="calc-form">
-              <div class="input-group">
-                <label for="calc-send-amount">You Send</label>
-                <div class="input-wrapper">
-                  <input type="number" id="calc-send-amount" value="5000" min="500" max="100000">
-                  <select id="calc-send-currency">
-                    <option value="NGN">Nigeria (NGN)</option>
-                    <option value="XAF">Cameroon (XAF)</option>
-                    <option value="KES">Kenya (KES)</option>
-                    <option value="GHS">Ghana (GHS)</option>
-                    <option value="TZS">Tanzania (TZS)</option>
-                    <option value="ZMW">Zambia (ZMW)</option>
-                    <option value="RWF">Rwanda (RWF)</option>
-                  </select>
-                </div>
-              </div>
-              <div class="calc-divider">🔄</div>
-              <div class="input-group">
-                <label for="calc-receive-asset">Recipient Gets</label>
-                <div class="input-wrapper">
-                  <input type="text" id="calc-receive-amount" readonly value="8.00">
-                  <select id="calc-receive-asset">
-                    <option value="USDC">Stellar USDC</option>
-                    <option value="XLM">Stellar XLM</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-            <div class="calc-details">
-              <div class="detail-row">
-                <span>Exchange Rate:</span>
-                <span id="rate-display">1 XAF = 0.0016 USDC</span>
-              </div>
-              <div class="detail-row">
-                <span>Operator Payout Fee (1.5%):</span>
-                <span id="fee-display">75 XAF</span>
-              </div>
-              <div class="detail-row">
-                <span>Stellar Network Fee:</span>
-                <span class="text-free">FREE (Anchor Covered)</span>
-              </div>
-              <hr class="calc-hr">
-              <div class="detail-row total-row">
-                <span>Final Value:</span>
-                <span id="final-display" class="text-highlight">7.88 USDC</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- SLA Monitoring Dashboard -->
-    <section id="sla" class="sla-section">
-      <div class="container">
-        <div class="section-header">
-          <h2>Deposit SLA Dashboard</h2>
-          <p>Live monitoring of deposit approval processing times over the last 24 hours. SLA threshold: 30 seconds.</p>
-        </div>
-        <div class="sla-grid">
-          <div class="sla-card glass">
-            <div class="sla-label">Total Deposits (24h)</div>
-            <div class="sla-value" id="sla-total">—</div>
-          </div>
-          <div class="sla-card glass">
-            <div class="sla-label">SLA Compliance Rate</div>
-            <div class="sla-value" id="sla-compliance">—</div>
-          </div>
-          <div class="sla-card glass">
-            <div class="sla-label">Avg Processing Time</div>
-            <div class="sla-value" id="sla-avg">—</div>
-          </div>
-          <div class="sla-card glass">
-            <div class="sla-label">P95 Processing Time</div>
-            <div class="sla-value" id="sla-p95">—</div>
-          </div>
-          <div class="sla-card glass">
-            <div class="sla-label">Min / Max Delay</div>
-            <div class="sla-value" id="sla-minmax">—</div>
-          </div>
-          <div class="sla-card glass sla-card-alert" id="sla-breach-card">
-            <div class="sla-label">SLA Breaches</div>
-            <div class="sla-value" id="sla-breached">—</div>
-          </div>
-        </div>
-        <p class="sla-updated">Last updated: <span id="sla-updated-at">—</span> &nbsp;·&nbsp; <button class="btn-refresh" id="btn-refresh-sla">Refresh</button></p>
-      </div>
-    </section>
-
-    <!-- Provider Failover Dashboard -->
-    <section id="failover" class="failover-section">
-      <div class="container">
-        <div class="section-header">
-          <h2>Provider Failover Dashboard</h2>
-          <p>Manually toggle mobile money providers offline/online during unscheduled maintenance. Admin authentication required to change state.</p>
-        </div>
-        <div class="failover-grid" id="failover-grid">
-          <p class="failover-loading" id="failover-loading">Loading provider states…</p>
-        </div>
-        <p class="failover-updated">Last updated: <span id="failover-updated-at">—</span> &nbsp;·&nbsp; <button class="btn-refresh" id="btn-refresh-failover">Refresh</button></p>
-      </div>
-    </section>
-
-    <!-- Compliance Overrides Dashboard (#1574) -->
-    <section id="compliance-overrides" class="failover-section">
-      <div class="container">
-        <div class="section-header">
-          <h2>Compliance Overrides</h2>
-          <p>Manually override automated KYC decisions after review. Admin authentication required.</p>
-        </div>
-        <div class="failover-grid" id="compliance-grid">
-          <p class="failover-loading" id="compliance-loading">Loading applicants…</p>
-        </div>
-        <p class="failover-updated">Last updated: <span id="compliance-updated-at">—</span> &nbsp;·&nbsp; <button class="btn-refresh" id="btn-refresh-compliance">Refresh</button></p>
-      </div>
-    </section>
-
-    <!-- Refund Status Inspection Portal (#1669) -->
-    <section id="refund-portal" class="failover-section">
-      <div class="container">
-        <div class="section-header">
-          <h2>Refund Status Inspection Portal</h2>
-          <p>Inspect failed transactions and trigger administrative refunds. Admin authentication required.</p>
-        </div>
-        <div class="failover-grid" id="refund-grid">
-          <p class="failover-loading" id="refund-loading">Loading failed transactions…</p>
-        </div>
-        <p class="failover-updated">Last updated: <span id="refund-updated-at">—</span> &nbsp;·&nbsp; <button class="btn-refresh" id="btn-refresh-refunds">Refresh</button></p>
-      </div>
-    </section>
-
-    <!-- API Section -->
-    <section id="api" class="api-section">
-      <div class="container">
-        <div class="section-header">
-          <h2>Developer API Integration</h2>
-          <p>Get integrated in minutes using our RESTful JSON endpoints and standardized Stellar Anchor protocol (SEP) support.</p>
-        </div>
-
-        <div class="api-widget glass">
-          <div class="api-tabs">
-            <button class="api-tab active" id="tab-btn-deposit">Initiate Deposit</button>
-            <button class="api-tab" id="tab-btn-withdraw">Initiate Withdrawal</button>
-            <button class="api-tab" id="tab-btn-paylink">Create Payment Link</button>
-            <button class="api-tab" id="tab-btn-toml">Stellar TOML</button>
-            <button class="api-tab" id="tab-btn-kyc">KYC Upload</button>
-            <button class="api-tab" id="tab-btn-stats">Admin Stats</button>
-          </div>
-          <div class="api-code-container">
-            <div class="code-header">
-              <span class="code-lang">cURL Request</span>
-              <button class="btn-copy" id="btn-copy-code">Copy Code</button>
-            </div>
-            <pre class="code-block"><code id="code-snippet">curl -X POST http://localhost:3000/api/transactions/deposit \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: dev-admin-key" \
-  -d '{
-    "amount": 2500,
-    "phoneNumber": "+237670000000",
-    "provider": "mtn",
-    "stellarAddress": "GBNGNTEDRBGZN2N7HQ3TUKA76U2YKRMTXPFPDPPJOSVDLQX5S4PXX7E3",
-    "userId": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
-    "notes": "Savings Deposit"
-  }'</code></pre>
-          </div>
+    <section class="card">
+      <h2>Hosted KYC Document Upload Flow</h2>
+      <div id="kyc-upload-container" data-applicant-id="app_sample_123" data-doc-type="passport" data-file-input-id="kyc-file-input">
+        <div class="upload-input-group">
+          <label for="kyc-file-input">Upload Passport / ID Document</label>
+          <input type="file" id="kyc-file-input">
         </div>
       </div>
     </section>
   </main>
 
-  <footer class="app-footer">
-    <div class="container footer-container">
-      <p>&copy; 2026 Mobile Money ↔ Stellar Bridge Project. All rights reserved.</p>
-      <div class="footer-links">
-        <a href="/.well-known/stellar.toml" target="_blank">stellar.toml</a>
-        <a href="/health" target="_blank">Health Status</a>
-        <a href="/ready" target="_blank">Ready Probe</a>
-      </div>
-    </div>
-  </footer>
-
-  <script src="/app.js?v=3"></script>
+  <script src="/app.js"></script>
 </body>
 </html>

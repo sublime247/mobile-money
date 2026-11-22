@@ -1,6 +1,6 @@
 import logger from "../utils/logger";
 /**
- * Database Backup Service (Issue #553)
+ * Database Backup Service (Issue #1867)
  *
  * Provides automated daily snapshots of the production database with encryption
  * and S3 storage. Implements 30-day retention with automatic cleanup.
@@ -40,9 +40,31 @@ const fsUnlink = promisify(fs.unlink);
 // ─── Configuration ────────────────────────────────────────────────────────
 
 const BACKUP_BUCKET = process.env.BACKUP_BUCKET || "mobile-money-backups";
-const BACKUP_RETENTION_DAYS = 30;
+const BACKUP_RETENTION_DAYS = parsePositiveInteger(
+  process.env.BACKUP_RETENTION_DAYS,
+  30,
+);
 const TEMP_BACKUP_DIR = process.env.TEMP_BACKUP_DIR || "/tmp/backups";
-const MAX_BACKUP_SIZE_GB = 10; // Fail if backup exceeds this size
+const MAX_BACKUP_SIZE_GB = parsePositiveNumber(
+  process.env.MAX_BACKUP_SIZE_GB,
+  10,
+);
+
+function parsePositiveInteger(
+  value: string | undefined,
+  fallback: number,
+): number {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function parsePositiveNumber(
+  value: string | undefined,
+  fallback: number,
+): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────
 

@@ -1,0 +1,21 @@
+[package]
+name = "fee_tier"
+version = "0.1.0"
+edition = "2021"
+
+[lints]
+workspace = true
+
+[lib]
+# rlib lets sibling contracts (e.g. bridge) register this contract in tests.
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+soroban-sdk = { version = "26.0.1", features = ["alloc"] }
+
+[dev-dependencies]
+soroban-sdk = { version = "26.0.1", features = ["testutils"] }
+
+[features]
+# Exposes the `mock` module (MockStaking) to other crates' tests.
+testutils = ["soroban-sdk/testutils"]

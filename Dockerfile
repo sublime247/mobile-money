@@ -128,5 +128,13 @@ USER nodejs
 
 EXPOSE 3000
 
+# Probe the lightweight /health endpoint every 30 s.
+# The container is considered healthy once it returns HTTP 200, and unhealthy
+# after 3 consecutive failures (giving the app up to 75 s to start before the
+# first check fires). curl is available on node:24-alpine.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+  CMD ["node", "-e", \
+       "require('http').get('http://localhost:3000/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1); }).on('error', () => process.exit(1));"]
+
 # Run directly with node — no npm/shell wrapper overhead
 CMD ["node", "dist/src/index.js"]

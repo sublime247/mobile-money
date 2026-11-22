@@ -416,33 +416,6 @@ describe("GitHub Actions Workflow Validation", () => {
         expect(deployStep.env[envVar]).toContain("secrets");
       }
     });
-
-    it("should verify Codecov upload step is configured correctly", () => {
-      const testJob = ciWorkflow.jobs.test;
-      expect(testJob).toBeDefined();
-
-      const codecovStep = testJob.steps.find(
-        (step: any) =>
-          step.uses && step.uses.includes("codecov/codecov-action"),
-      );
-
-      expect(codecovStep).toBeDefined();
-      expect(codecovStep.with).toBeDefined();
-
-      // Verify token is configured
-      expect(codecovStep.with.token).toBeDefined();
-      expect(codecovStep.with.token).toContain("secrets.CODECOV_TOKEN");
-
-      // Verify coverage file path
-      expect(codecovStep.with.files).toBeDefined();
-      expect(codecovStep.with.files).toContain("lcov.info");
-
-      // Verify flags are set
-      expect(codecovStep.with.flags).toBeDefined();
-
-      // Verify name is set
-      expect(codecovStep.with.name).toBeDefined();
-    });
   });
 
   describe("Edge Case Tests", () => {
@@ -477,17 +450,6 @@ describe("GitHub Actions Workflow Validation", () => {
 
       // Verify the test command is configured (Jest will handle empty suites)
       expect(testStep.run).toContain("npm run test");
-
-      // Verify coverage upload has fail_ci_if_error set to false
-      // This ensures empty test suites don't fail the pipeline
-      const codecovStep = testJob.steps.find(
-        (step: any) =>
-          step.uses && step.uses.includes("codecov/codecov-action"),
-      );
-
-      expect(codecovStep).toBeDefined();
-      expect(codecovStep.with).toBeDefined();
-      expect(codecovStep.with.fail_ci_if_error).toBe(false);
     });
 
     /**

@@ -98,7 +98,6 @@ sonar-project.properties
 wrangler.toml
 openapitools.json
 sdk-config*.yaml
-codecov.yml
 redis.conf
 stellar.toml
 momo-cli

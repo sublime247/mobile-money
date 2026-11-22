@@ -1,0 +1,12 @@
+{
+  "name": "mobile-money-bridge-bruno",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Dependencies for the Bruno collection scripts (SEP-10 challenge auto-signing).",
+  "scripts": {
+    "test": "echo \"See postman/bruno/README.md\" && exit 0"
+  },
+  "dependencies": {
+    "@stellar/stellar-sdk": "15.1.0"
+  }
+}

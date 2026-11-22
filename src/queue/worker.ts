@@ -1,9 +1,15 @@
+// Tracer must be imported before any other module so HTTP/DB/Redis spans are
+// instrumented in this worker process as well (the standalone worker entry
+// point is `node dist/src/queue/worker.js`).
+import "../tracer";
+
 import { Worker } from "bullmq";
 import {
   TransactionJobData,
   TransactionJobResult,
   TRANSACTION_QUEUE_NAME,
 } from "./transactionQueue";
+import { withJobTrace } from "./jobTracing";
 import { rabbitMQManager, EXCHANGES, ROUTING_KEYS } from "./rabbitmq";
 import {
   natsManager,
@@ -18,9 +24,9 @@ import { StellarService } from "../services/stellar/stellarService";
 import * as highThroughputService from "../services/stellar/highThroughputService";
 import { UserModel } from "../models/users";
 import { EmailService } from "../services/email";
+import { smsService } from "../services/sms";
 import { withRetry } from "../services/retry";
 import { notifyTransactionWebhook, WebhookService } from "../services/webhook";
-import { smsService } from "../services/sms";
 import { notificationRouter } from "../services/notificationRouter";
 import { pushNotificationService } from "../services/push";
 import { capturePersistentFailure } from "./dlq";
@@ -28,8 +34,16 @@ import { isBlacklisted } from "../middleware/ipBlacklist";
 import { queryRead, queryWrite } from "../config/database";
 import subscriptionModel from "../models/subscription";
 import logger from "../utils/logger";
+import { amlScreeningService } from "../services/amlScreening";
 
 import { queueOptions, getWorkerConcurrency } from "./config";
+import { providerQueueControl } from "./providerQueueControl";
+import { WorkerAutoscaler, isAutoscalerEnabled } from "./workerAutoscaler";
+import { transactionQueue } from "./transactionQueue";
+import {
+  createProviderWorker,
+  isProviderRateLimitedQueuesEnabled,
+} from "./providerRateLimitedQueues";
 
 const transactionModel = new TransactionModel();
 const mobileMoneyService = new MobileMoneyService();
@@ -218,6 +232,58 @@ async function resolveKycName(userId: string): Promise<string | null> {
   }
 }
 
+/**
+ * Screens the cash-out recipient against OFAC/UN/EU sanctions and PEP lists
+ * before any disbursement. A match moves the transaction to `review` (frozen
+ * for high-confidence sanctions hits) and returns true so the caller stops.
+ * The customer is deliberately not notified (tipping-off).
+ */
+async function holdWithdrawalIfSanctioned(
+  transactionId: string,
+  userId?: string | null,
+): Promise<boolean> {
+  const recipientName = userId ? await resolveKycName(userId) : null;
+  if (!recipientName) {
+    logger.warn(
+      { transactionId },
+      "[Screening] No KYC name available; skipping sanctions/PEP screening",
+    );
+    return false;
+  }
+
+  const result = await amlScreeningService.screenRecipient({
+    transactionId,
+    userId: userId ?? undefined,
+    recipientName,
+  });
+
+  if (result.pepMatches.length > 0) {
+    await transactionModel.addTags(transactionId, ["pep-flagged"]);
+  }
+  if (result.decision === "clear" || !result.topSanctionsMatch) return false;
+
+  const { topSanctionsMatch: top } = result;
+  const frozen = result.decision === "block";
+  await transactionModel.updateStatus(transactionId, TransactionStatus.Review);
+  await Promise.all([
+    transactionModel.addTags(transactionId, [
+      "compliance-hold",
+      frozen ? "sanctions-frozen" : "sanctions-review",
+    ]),
+    transactionModel.patchMetadata(transactionId, {
+      sanctionsScreening: {
+        frozen,
+        list: top.source,
+        listReference: top.externalId ?? null,
+        score: top.score,
+        auditRecordIds: result.auditRecordIds,
+        screenedAt: new Date().toISOString(),
+      },
+    }),
+  ]);
+  return true;
+}
+
 async function processTransaction(
   data: TransactionJobData,
 ): Promise<TransactionJobResult> {
@@ -323,11 +389,58 @@ async function processTransaction(
 
   // Resolve sender name for sanction screening (best-effort; falls back to phone number)
   const txRow = await transactionModel.findById(transactionId);
+
+  if (
+    type === "withdraw" &&
+    (await holdWithdrawalIfSanctioned(transactionId, txRow?.userId))
+  ) {
+    return { success: false, transactionId };
+  }
+
   const senderName =
     (txRow?.userId ? await resolveKycName(txRow.userId) : null) ?? phoneNumber;
   // Receiver is the mobile money account holder identified by their phone number
   const receiverName = phoneNumber;
 
+  const stellarResult = await withRetry(() => {
+    // Use high-throughput pool service when available; falls back to single-account mode
+    const issuerSecret = process.env.STELLAR_ISSUER_SECRET?.trim();
+    if (highThroughputService.isServiceInitialized() && issuerSecret) {
+      const issuerKp = require("@stellar/stellar-sdk").Keypair.fromSecret(issuerSecret);
+      return highThroughputService
+        .submitPayment({
+          sourceAccount: issuerKp.publicKey(),
+          sourceSecret: issuerSecret,
+          destination: stellarAddress,
+          asset: "native",
+          amount: String(amount),
+        })
+        .then((r) => ({ hash: r.hash, submittedAt: new Date() }));
+    }
+    return stellarService.sendPayment(
+      stellarAddress,
+      amount,
+      senderName,
+      receiverName,
+    );
+  }, retryConfig);
+
+  // Store Stellar transaction details in metadata
+  if (stellarResult.hash) {
+    const currentMetadata =
+      (await transactionModel.findById(transactionId))?.metadata || {};
+    const updatedMetadata = {
+      ...currentMetadata,
+      stellar: {
+        transactionHash: stellarResult.hash,
+        submittedAt: stellarResult.submittedAt?.toISOString(),
+        feeBumps: [],
+      },
+    };
+    await transactionModel.updateMetadata(transactionId, updatedMetadata);
+  }
+
+  await updateProgress(transactionId, 90);
   const sendTxnSms = async (
     kind: "transaction_completed" | "transaction_failed",
     errorMessage?: string,
@@ -559,11 +672,6 @@ async function processTransaction(
       transactionId,
       TransactionStatus.Failed,
     );
-    await notifyTransactionWebhook(transactionId, "transaction.failed", {
-      transactionModel: transactionModel as any,
-      webhookService,
-    });
-
     const transaction = await transactionModel.findById(transactionId);
     if (transaction) {
       await notificationRouter.routeTransactionNotification(
@@ -572,6 +680,11 @@ async function processTransaction(
         getErrorMessage(error),
       );
     }
+
+    await notifyTransactionWebhook(transactionId, "transaction.failed", {
+      transactionModel: transactionModel as any,
+      webhookService,
+    });
 
     // Fan-out event
     await rabbitMQManager.publish(
@@ -626,11 +739,59 @@ if (NATS_QUEUE_ENABLED) {
       NATS_DURABLE_CONSUMER,
       NATS_CONSUMER_GROUP,
       async (data) => {
-        await processTransaction(data);
+        await withJobTrace(
+          "queue.transaction.process",
+          data,
+          () => processTransaction(data),
+          {
+            "messaging.system": "nats",
+            "messaging.destination.name": NATS_SUBJECT,
+            "transaction.id": data.transactionId,
+            "transaction.type": data.type,
+          },
+        );
       },
       CONCURRENCY,
     )
     .catch((err) => logger.error({ err }, "NATS JetStream Consumer error"));
+}
+
+/**
+ * Shared BullMQ job processor, used by both the default single-queue worker
+ * below and, when `PROVIDER_RATE_LIMITED_QUEUES_ENABLED=true` (#2277), by
+ * each provider's own rate-limited worker - so per-provider rate limiting
+ * reuses the exact same transaction-processing logic rather than
+ * duplicating it per provider.
+ */
+async function handleTransactionJob(
+  job: Parameters<Parameters<typeof createProviderWorker>[1]>[0],
+  queueName: string,
+) {
+  // Provider paused for maintenance (#2282): divert the job to the
+  // provider's hold queue before any provider I/O. It is re-queued
+  // here automatically when the provider is resumed.
+  if (await providerQueueControl.divertIfPaused(job)) {
+    return {
+      success: false,
+      transactionId: job.data.transactionId,
+      error: "provider_paused",
+    };
+  }
+
+  return withJobTrace(
+    "queue.transaction.process",
+    job.data,
+    () => processTransaction(job.data),
+    {
+      "messaging.system": "bullmq",
+      "messaging.destination.name": queueName,
+      "messaging.message.id": job.id ?? "",
+      "job.name": job.name,
+      "job.attempt": job.attemptsMade + 1,
+      "transaction.id": job.data.transactionId,
+      "transaction.type": job.data.type,
+    },
+  );
 }
 
 export const transactionWorker:
@@ -645,12 +806,43 @@ export const transactionWorker:
     }
   : new Worker<TransactionJobData, TransactionJobResult>(
       TRANSACTION_QUEUE_NAME,
-      async (job) => processTransaction(job.data),
+      (job) => handleTransactionJob(job, TRANSACTION_QUEUE_NAME),
       { ...queueOptions, concurrency: CONCURRENCY },
     );
 
+// Scale worker concurrency with queue depth (BullMQ worker only; the NATS
+// consumer manages its own concurrency).
+let workerAutoscaler: WorkerAutoscaler | null = null;
+if (
+  transactionWorker instanceof Worker &&
+  isAutoscalerEnabled() &&
+  process.env.NODE_ENV !== "test"
+) {
+  workerAutoscaler = new WorkerAutoscaler(transactionQueue, transactionWorker);
+  workerAutoscaler.start();
+}
+/**
+ * Per-provider rate-limited workers (#2277). Each provider gets its own
+ * BullMQ Worker consuming its own queue (src/queue/providerRateLimitedQueues.ts),
+ * configured with that provider's `limiter` (max jobs/sec), so e.g. MTN and
+ * Orange are throttled independently and a burst is delayed - not
+ * failed - once the configured rate is hit. Only created when
+ * `PROVIDER_RATE_LIMITED_QUEUES_ENABLED=true`; `addTransactionJob` only
+ * routes jobs here when the same flag is set, so the two stay in sync.
+ */
+const providerWorkers: Array<Worker<TransactionJobData, TransactionJobResult>> =
+  !NATS_QUEUE_ENABLED && isProviderRateLimitedQueuesEnabled()
+    ? ["mtn", "orange", "airtel", "vodafone"].map((provider) =>
+        createProviderWorker(provider, (job) =>
+          handleTransactionJob(job, `transaction-provider-${provider}`),
+        ),
+      )
+    : [];
+
 export async function closeWorker(): Promise<void> {
+  workerAutoscaler?.stop();
   await transactionWorker.close();
+  await Promise.all(providerWorkers.map((w) => w.close()));
   if (NATS_QUEUE_ENABLED) {
     await natsManager.close();
   }

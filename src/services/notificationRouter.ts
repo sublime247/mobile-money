@@ -129,6 +129,7 @@ export class NotificationRouter {
       // For now, return defaults with user's language preference
       return {
         ...this.defaultPreferences,
+        sms: !user.smsOptOut,
         // Could be extended to read from user.notificationPreferences field
       };
     } catch (error) {
@@ -413,6 +414,7 @@ export class NotificationRouter {
     const message =
       errorMessage ||
       `Your ${transaction.type} of ${transaction.amount} ${transaction.provider.toUpperCase()} has ${status}`;
+    const user = await this.userModel.findById(transaction.userId);
 
     await this.routeNotification({
       userId: transaction.userId,
@@ -422,7 +424,7 @@ export class NotificationRouter {
       category: "transaction",
       title,
       message,
-      locale: "en", // Could be retrieved from user preferences
+      locale: user?.preferredLanguage,
     });
   }
 

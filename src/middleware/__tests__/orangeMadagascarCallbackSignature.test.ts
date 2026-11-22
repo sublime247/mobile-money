@@ -46,6 +46,7 @@ function hmacHex(payload: string, secret: string): string {
 
 const SECRET = "test-secret";
 const PAYLOAD = JSON.stringify({ reference: "ref-1", status: "SUCCESSFUL" });
+const FRESH_TIMESTAMP = String(Math.floor(Date.now() / 1000));
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -107,7 +108,10 @@ describe("verifyOrangeMadagascarCallbackSignature", () => {
       const rawBody = Buffer.from(PAYLOAD);
       const sig = hmacBase64(PAYLOAD, SECRET);
       const req = makeReq({
-        headers: { "x-callback-signature": sig },
+        headers: {
+          "x-callback-signature": sig,
+          "x-orange-timestamp": FRESH_TIMESTAMP,
+        },
         rawBody,
       });
       const next: NextFunction = jest.fn();
@@ -122,7 +126,10 @@ describe("verifyOrangeMadagascarCallbackSignature", () => {
       const rawBody = Buffer.from(PAYLOAD);
       const sig = hmacHex(PAYLOAD, SECRET);
       const req = makeReq({
-        headers: { "x-callback-signature": sig },
+        headers: {
+          "x-callback-signature": sig,
+          "x-orange-timestamp": FRESH_TIMESTAMP,
+        },
         rawBody,
       });
       const next: NextFunction = jest.fn();
@@ -135,7 +142,13 @@ describe("verifyOrangeMadagascarCallbackSignature", () => {
     it("falls back to req.body when rawBody is absent", async () => {
       const body = { reference: "ref-1", status: "SUCCESSFUL" };
       const sig = hmacBase64(JSON.stringify(body), SECRET);
-      const req = makeReq({ headers: { "x-callback-signature": sig }, body });
+      const req = makeReq({
+        headers: {
+          "x-callback-signature": sig,
+          "x-orange-timestamp": FRESH_TIMESTAMP,
+        },
+        body,
+      });
       const next: NextFunction = jest.fn();
 
       await verifyOrangeMadagascarCallbackSignature(req, makeRes(), next);
@@ -153,12 +166,142 @@ describe("verifyOrangeMadagascarCallbackSignature", () => {
 
       const rawBody = Buffer.from(PAYLOAD);
       const sig = hmacBase64(PAYLOAD, SECRET);
-      const req = makeReq({ headers: { "x-orange-signature": sig }, rawBody });
+      const req = makeReq({
+        headers: {
+          "x-orange-signature": sig,
+          "x-orange-timestamp": FRESH_TIMESTAMP,
+        },
+        rawBody,
+      });
       const next: NextFunction = jest.fn();
 
       await verifyOrangeMadagascarCallbackSignature(req, makeRes(), next);
 
       expect(next).toHaveBeenCalled();
+    });
+  });
+
+  describe("timestamp freshness (replay protection)", () => {
+    it("throws 401 and logs anomaly when the timestamp header is missing", async () => {
+      const rawBody = Buffer.from(PAYLOAD);
+      const sig = hmacBase64(PAYLOAD, SECRET);
+      const req = makeReq({
+        headers: { "x-callback-signature": sig },
+        rawBody,
+      });
+      const next: NextFunction = jest.fn();
+
+      await expect(
+        verifyOrangeMadagascarCallbackSignature(req, makeRes(), next),
+      ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+
+      expect(next).not.toHaveBeenCalled();
+      expect(mockLogSecurityAnomaly).toHaveBeenCalledWith(
+        expect.objectContaining({
+          reason: "orange_madagascar_callback_timestamp_stale",
+          headerPresent: false,
+        }),
+      );
+    });
+
+    it("throws 401 for a timestamp older than the freshness window", async () => {
+      const rawBody = Buffer.from(PAYLOAD);
+      const sig = hmacBase64(PAYLOAD, SECRET);
+      const staleTimestamp = String(
+        Math.floor(Date.now() / 1000) - 600, // 10 minutes old, default window is 5 minutes
+      );
+      const req = makeReq({
+        headers: {
+          "x-callback-signature": sig,
+          "x-orange-timestamp": staleTimestamp,
+        },
+        rawBody,
+      });
+      const next: NextFunction = jest.fn();
+
+      await expect(
+        verifyOrangeMadagascarCallbackSignature(req, makeRes(), next),
+      ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+
+      expect(next).not.toHaveBeenCalled();
+      expect(mockLogSecurityAnomaly).toHaveBeenCalledWith(
+        expect.objectContaining({
+          reason: "orange_madagascar_callback_timestamp_stale",
+          headerPresent: true,
+        }),
+      );
+    });
+
+    it("throws 401 for a timestamp too far in the future", async () => {
+      const rawBody = Buffer.from(PAYLOAD);
+      const sig = hmacBase64(PAYLOAD, SECRET);
+      const futureTimestamp = String(Math.floor(Date.now() / 1000) + 600);
+      const req = makeReq({
+        headers: {
+          "x-callback-signature": sig,
+          "x-orange-timestamp": futureTimestamp,
+        },
+        rawBody,
+      });
+      const next: NextFunction = jest.fn();
+
+      await expect(
+        verifyOrangeMadagascarCallbackSignature(req, makeRes(), next),
+      ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    it("throws 401 for a non-numeric timestamp", async () => {
+      const rawBody = Buffer.from(PAYLOAD);
+      const sig = hmacBase64(PAYLOAD, SECRET);
+      const req = makeReq({
+        headers: {
+          "x-callback-signature": sig,
+          "x-orange-timestamp": "not-a-number",
+        },
+        rawBody,
+      });
+      const next: NextFunction = jest.fn();
+
+      await expect(
+        verifyOrangeMadagascarCallbackSignature(req, makeRes(), next),
+      ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    it("honors a configured custom freshness window", async () => {
+      mockGetConfigValue.mockImplementation((key: string) => {
+        if (key === "providers.orangeMadagascar.callbackSecret") return SECRET;
+        if (key === "providers.orangeMadagascar.callbackSignatureHeader")
+          return "x-callback-signature";
+        if (
+          key ===
+          "providers.orangeMadagascar.callbackTimestampFreshnessSeconds"
+        )
+          return 30;
+        return undefined;
+      });
+
+      const rawBody = Buffer.from(PAYLOAD);
+      const sig = hmacBase64(PAYLOAD, SECRET);
+      // 60s old — within the default 300s window but outside a 30s window.
+      const timestamp = String(Math.floor(Date.now() / 1000) - 60);
+      const req = makeReq({
+        headers: {
+          "x-callback-signature": sig,
+          "x-orange-timestamp": timestamp,
+        },
+        rawBody,
+      });
+      const next: NextFunction = jest.fn();
+
+      await expect(
+        verifyOrangeMadagascarCallbackSignature(req, makeRes(), next),
+      ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+
+      expect(next).not.toHaveBeenCalled();
     });
   });
 

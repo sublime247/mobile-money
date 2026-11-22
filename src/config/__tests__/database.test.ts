@@ -100,6 +100,59 @@ describe("Database pool configuration (#1652)", () => {
         expect(typeof config.querySmart).toBe("function");
       });
     });
+
+    it("routes SELECT queries to the replica pool via querySmart, and writes to primary (#2378)", () => {
+      process.env.DATABASE_READ_URL =
+        "postgresql://replica:replica@localhost:5433/testdb";
+      jest.isolateModules(() => {
+        const config = require("../../config/database");
+        const status = config.getReplicaPoolStatus();
+        expect(status).toHaveLength(1);
+        expect(status[0].url).not.toContain("replica:replica"); // password-redacted
+      });
+    });
+  });
+
+  describe("read replica configuration (#2378)", () => {
+    it("creates a replica pool from DATABASE_READ_URL", () => {
+      process.env.DATABASE_READ_URL =
+        "postgresql://replica:replica@localhost:5433/testdb";
+      jest.isolateModules(() => {
+        const config = require("../../config/database");
+        expect(config.getReplicaPoolStatus()).toHaveLength(1);
+      });
+    });
+
+    it("prefers DATABASE_READ_URL over legacy READ_REPLICA_URL when both are set", () => {
+      process.env.DATABASE_READ_URL =
+        "postgresql://replica1:x@localhost:5433/db1";
+      process.env.READ_REPLICA_URL =
+        "postgresql://replica2:x@localhost:5434/db2,postgresql://replica3:x@localhost:5435/db3";
+      jest.isolateModules(() => {
+        const config = require("../../config/database");
+        // Only DATABASE_READ_URL's single replica should be configured.
+        expect(config.getReplicaPoolStatus()).toHaveLength(1);
+      });
+    });
+
+    it("falls back to legacy READ_REPLICA_URL when DATABASE_READ_URL is unset", () => {
+      delete process.env.DATABASE_READ_URL;
+      process.env.READ_REPLICA_URL =
+        "postgresql://replica2:x@localhost:5434/db2,postgresql://replica3:x@localhost:5435/db3";
+      jest.isolateModules(() => {
+        const config = require("../../config/database");
+        expect(config.getReplicaPoolStatus()).toHaveLength(2);
+      });
+    });
+
+    it("has no replica pools configured when neither env var is set", () => {
+      delete process.env.DATABASE_READ_URL;
+      delete process.env.READ_REPLICA_URL;
+      jest.isolateModules(() => {
+        const config = require("../../config/database");
+        expect(config.getReplicaPoolStatus()).toHaveLength(0);
+      });
+    });
   });
 
   describe("pool monitoring", () => {
@@ -179,5 +232,83 @@ describe("Transactions and Connection Timeouts (#1596)", () => {
     expect(mockQuery).toHaveBeenCalledWith('BEGIN');
     expect(mockQuery).toHaveBeenCalledWith('ROLLBACK');
     expect(mockRelease).toHaveBeenCalledTimes(1);
+  });
+
+  describe("pool eviction policy (#2377)", () => {
+    it("enables TCP keepalive on the primary pool by default", () => {
+      delete process.env.DB_POOL_KEEP_ALIVE;
+      jest.isolateModules(() => {
+        const config = require("../../config/database");
+        expect(config.pool.options.keepAlive).toBe(true);
+        expect(
+          config.pool.options.keepAliveInitialDelayMillis,
+        ).toBeGreaterThan(0);
+      });
+    });
+
+    it("disables keepalive when DB_POOL_KEEP_ALIVE is explicitly false", () => {
+      process.env.DB_POOL_KEEP_ALIVE = "false";
+      jest.isolateModules(() => {
+        const config = require("../../config/database");
+        expect(config.pool.options.keepAlive).toBe(false);
+      });
+    });
+
+    it("recovers (returns false, does not throw) when a connection drop is simulated", async () => {
+      let config: any;
+      jest.isolateModules(() => {
+        config = require("../../config/database");
+      });
+
+      const dropError: Error & { code?: string } = new Error(
+        "Connection terminated unexpectedly",
+      );
+      dropError.code = "ECONNRESET";
+
+      jest.spyOn(config.pool, "connect").mockRejectedValue(dropError);
+
+      const healthy = await config.pingDatabasePool(config.pool);
+
+      expect(healthy).toBe(false);
+    });
+
+    it("reports healthy when the ping query succeeds", async () => {
+      let config: any;
+      jest.isolateModules(() => {
+        config = require("../../config/database");
+      });
+
+      const mockRelease = jest.fn();
+      const mockQuery = jest.fn().mockResolvedValue({ rows: [{ "?column?": 1 }] });
+      jest.spyOn(config.pool, "connect").mockResolvedValue({
+        query: mockQuery,
+        release: mockRelease,
+      } as any);
+
+      const healthy = await config.pingDatabasePool(config.pool);
+
+      expect(healthy).toBe(true);
+      expect(mockQuery).toHaveBeenCalledWith("SELECT 1");
+      expect(mockRelease).toHaveBeenCalledTimes(1);
+    });
+
+    it("starts and stops the periodic health check loop without throwing", () => {
+      let config: any;
+      jest.isolateModules(() => {
+        config = require("../../config/database");
+      });
+
+      const mockRelease = jest.fn();
+      const mockQuery = jest.fn().mockResolvedValue({ rows: [] });
+      jest.spyOn(config.pool, "connect").mockResolvedValue({
+        query: mockQuery,
+        release: mockRelease,
+      } as any);
+
+      expect(() => {
+        config.startPoolHealthCheck(1000);
+        config.stopPoolHealthCheck();
+      }).not.toThrow();
+    });
   });
 });

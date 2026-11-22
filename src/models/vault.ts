@@ -285,17 +285,23 @@ export class VaultModel {
   }
 
   async getUserBalanceSummary(userId: string): Promise<UserBalanceSummary> {
+    // Balance reads must always see the latest committed data: a read-replica
+    // can lag behind the primary, which would let a user see a stale balance
+    // right after a deposit/withdrawal (#2378). queryWrite() routes
+    // unconditionally to the primary pool, giving read-your-own-writes
+    // consistency even though this is a read-only query.
+    //
     // Get main balance from completed transactions
-    const mainBalanceResult = await queryRead(
+    const mainBalanceResult = await queryWrite(
       `SELECT COALESCE(SUM(
-         CASE 
+         CASE
            WHEN type = 'deposit' THEN amount::numeric
            WHEN type = 'withdraw' THEN -amount::numeric
            ELSE 0
          END
        ), 0)::text AS balance
        FROM transactions
-       WHERE user_id = $1 
+       WHERE user_id = $1
          AND status = 'completed'
          AND vault_id IS NULL`,
       [userId],
@@ -303,8 +309,8 @@ export class VaultModel {
 
     const mainBalance = mainBalanceResult.rows[0]?.balance || "0";
 
-    // Get vault balances
-    const vaultBalancesResult = await queryRead(
+    // Get vault balances (also primary — same consistency requirement)
+    const vaultBalancesResult = await queryWrite(
       `SELECT id, name, balance::text AS balance
        FROM vaults
        WHERE user_id = $1 AND is_active = true

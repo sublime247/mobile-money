@@ -351,3 +351,16 @@ For issues or questions:
 2. Verify PagerDuty integration key validity
 3. Test with manual error rate simulation
 4. Review PagerDuty incident history for details
+
+### Merchant webhook retry backlog
+
+With `PAGERDUTY_INTEGRATION_KEY` configured, the backend samples the Redis
+webhook retry queue every 30 seconds. More than 500 pending items or an oldest
+pending item over 15 minutes triggers a critical Events API v2 event.
+The incident resolves when depth drops below 100 and the age threshold has
+cleared. Set the receiving PagerDuty service's incident urgency to High so
+critical backlog events page the on-call responder.
+
+The queue stores the active incident marker in Redis and uses the
+`${PAGERDUTY_DEDUP_KEY}-webhook-retry-backlog` deduplication key. Give each
+deployment its own deduplication prefix when sharing a PagerDuty service.

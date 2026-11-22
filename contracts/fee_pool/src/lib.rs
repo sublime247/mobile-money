@@ -1,7 +1,25 @@
 #![no_std]
 #![allow(clippy::too_many_arguments)]
 
-use soroban_sdk::{contract, contracterror, contractimpl, contracttype, token, Address, Env, Map};
+//! Fee pool — on-chain platform/provider fee split, plus tier-weighted
+//! provider distribution.
+//!
+//! Previously, callers computed the platform's cut and the provider pool's
+//! cut of a fee off-chain and invoked this contract with whatever amount
+//! they claimed belonged to providers — accounting only liquidity
+//! providers, merchants, and anchor operators could not independently
+//! verify. [`FeePoolContract::accumulate_fees`] now takes the *total* fee
+//! amount and computes the split itself, on-chain, from `fee_bps`: the
+//! platform's cut is paid to `platform_treasury` immediately, and the
+//! remainder is pooled for [`FeePoolContract::distribute`] to hand out to
+//! providers, weighted by their liquidity/uptime/transaction-count tier.
+
+use soroban_sdk::{
+    contract, contracterror, contractevent, contractimpl, contracttype, token, Address, Env, Map,
+};
+
+/// Basis-point denominator (100%).
+pub const BPS_DENOMINATOR: i128 = 10_000;
 
 // ── Error types ──────────────────────────────────────────────────────────────
 
@@ -53,7 +71,10 @@ pub struct FeePoolState {
     pub token: Address,
     /// Admin address that can manage the pool.
     pub admin: Address,
-    /// Fee basis points to collect from transactions (0-10_000).
+    /// Address that receives the platform's cut of each accumulated fee.
+    pub platform_treasury: Address,
+    /// Platform's cut of each accumulated fee, in basis points (0-10_000).
+    /// The remainder pools for tier-weighted provider distribution.
     pub fee_bps: u32,
     /// Minimum time between distributions in seconds.
     pub distribution_interval: u64,
@@ -61,6 +82,20 @@ pub struct FeePoolState {
     pub last_distribution: u64,
     /// Total accumulated fees in the pool.
     pub total_fees: i128,
+}
+
+// ── Events ───────────────────────────────────────────────────────────────────
+
+/// Emitted every time `accumulate_fees` splits a fee, so the platform cut
+/// and provider-pool cut are independently auditable on-chain.
+#[contractevent(topics = ["fee_pool", "fees_accumulated"])]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FeesAccumulated {
+    #[topic]
+    pub from: Address,
+    pub amount: i128,
+    pub platform_cut: i128,
+    pub provider_cut: i128,
 }
 
 // ── Storage keys ──────────────────────────────────────────────────────────────
@@ -83,12 +118,14 @@ impl FeePoolContract {
     /// # Arguments
     /// * `admin` - Admin address that can manage the pool
     /// * `token` - Token address for fee collection
-    /// * `fee_bps` - Fee basis points to collect (0-10_000)
+    /// * `platform_treasury` - Receives the platform's cut of each accumulated fee
+    /// * `fee_bps` - Platform's cut of each accumulated fee, in basis points (0-10_000)
     /// * `distribution_interval` - Minimum seconds between distributions
     pub fn initialize(
         env: Env,
         admin: Address,
         token: Address,
+        platform_treasury: Address,
         fee_bps: u32,
         distribution_interval: u64,
     ) {
@@ -111,6 +148,7 @@ impl FeePoolContract {
             &FeePoolState {
                 token: token.clone(),
                 admin,
+                platform_treasury,
                 fee_bps,
                 distribution_interval,
                 last_distribution: 0,
@@ -235,11 +273,13 @@ impl FeePoolContract {
 
     // ── accumulate_fees ───────────────────────────────────────────────────────
 
-    /// Accumulate transaction fees into the pool.
+    /// Accumulate transaction fees into the pool, splitting the platform's
+    /// cut from the provider pool's cut on-chain (per `fee_bps`) instead of
+    /// trusting a caller-supplied, off-chain-computed split.
     ///
     /// # Arguments
     /// * `from` - Address providing the fees
-    /// * `amount` - Fee amount to accumulate
+    /// * `amount` - Total fee amount collected from the transaction
     pub fn accumulate_fees(env: Env, from: Address, amount: i128) -> Result<(), FeePoolError> {
         from.require_auth();
 
@@ -251,14 +291,29 @@ impl FeePoolContract {
             .get(&STATE)
             .ok_or(FeePoolError::NotInitialised)?;
 
-        // Transfer fees to contract
-        let token_client = token::Client::new(&env, &state.token);
-        token_client.transfer(&from, &env.current_contract_address(), &amount);
+        let platform_cut = amount * state.fee_bps as i128 / BPS_DENOMINATOR;
+        let provider_cut = amount - platform_cut;
 
-        state.total_fees += amount;
+        let token_client = token::Client::new(&env, &state.token);
+        if platform_cut > 0 {
+            token_client.transfer(&from, &state.platform_treasury, &platform_cut);
+        }
+        if provider_cut > 0 {
+            token_client.transfer(&from, &env.current_contract_address(), &provider_cut);
+        }
+
+        state.total_fees += provider_cut;
         env.storage().instance().set(&STATE, &state);
 
         env.storage().instance().extend_ttl(1000, 10000);
+
+        FeesAccumulated {
+            from,
+            amount,
+            platform_cut,
+            provider_cut,
+        }
+        .publish(&env);
 
         Ok(())
     }
@@ -403,12 +458,13 @@ mod tests {
 
     const MINT_AMOUNT: i128 = 10_000_000;
 
-    fn setup() -> (Env, Address, Address, Address, FeePoolContractClient<'static>) {
+    fn setup() -> (Env, Address, Address, Address, Address, FeePoolContractClient<'static>) {
         let env = Env::default();
         env.mock_all_auths();
 
         let admin = Address::generate(&env);
         let fee_payer = Address::generate(&env);
+        let platform_treasury = Address::generate(&env);
 
         // Deploy a test token
         let token_admin = Address::generate(&env);
@@ -419,18 +475,19 @@ mod tests {
         let contract_id = env.register(FeePoolContract, ());
         let client = FeePoolContractClient::new(&env, &contract_id);
 
-        (env, admin, fee_payer, token_id.address(), client)
+        (env, admin, fee_payer, platform_treasury, token_id.address(), client)
     }
 
     #[test]
     fn test_initialize() {
-        let (env, admin, _fee_payer, token, client) = setup();
+        let (env, admin, _fee_payer, platform_treasury, token, client) = setup();
 
-        client.initialize(&admin, &token, &100, &3600);
+        client.initialize(&admin, &token, &platform_treasury, &100, &3600);
 
         let state = client.get_state();
         assert_eq!(state.token, token);
         assert_eq!(state.admin, admin);
+        assert_eq!(state.platform_treasury, platform_treasury);
         assert_eq!(state.fee_bps, 100);
         assert_eq!(state.distribution_interval, 3600);
         assert_eq!(state.total_fees, 0);
@@ -439,9 +496,9 @@ mod tests {
 
     #[test]
     fn test_register_provider() {
-        let (env, admin, _fee_payer, token, client) = setup();
+        let (env, admin, _fee_payer, platform_treasury, token, client) = setup();
 
-        client.initialize(&admin, &token, &100, &3600);
+        client.initialize(&admin, &token, &platform_treasury, &100, &3600);
 
         let provider = Address::generate(&env);
         client.register_provider(&provider, &1_000_000, &95).unwrap();
@@ -457,9 +514,9 @@ mod tests {
 
     #[test]
     fn test_register_multiple_providers() {
-        let (env, admin, _fee_payer, token, client) = setup();
+        let (env, admin, _fee_payer, platform_treasury, token, client) = setup();
 
-        client.initialize(&admin, &token, &100, &3600);
+        client.initialize(&admin, &token, &platform_treasury, &100, &3600);
 
         let provider1 = Address::generate(&env);
         let provider2 = Address::generate(&env);
@@ -475,9 +532,9 @@ mod tests {
 
     #[test]
     fn test_update_metrics() {
-        let (env, admin, _fee_payer, token, client) = setup();
+        let (env, admin, _fee_payer, platform_treasury, token, client) = setup();
 
-        client.initialize(&admin, &token, &100, &3600);
+        client.initialize(&admin, &token, &platform_treasury, &100, &3600);
 
         let provider = Address::generate(&env);
         client.register_provider(&provider, &1_000_000, &95).unwrap();
@@ -496,24 +553,28 @@ mod tests {
 
     #[test]
     fn test_accumulate_fees() {
-        let (env, admin, fee_payer, token, client) = setup();
+        let (env, admin, fee_payer, platform_treasury, token, client) = setup();
 
-        client.initialize(&admin, &token, &100, &3600);
+        client.initialize(&admin, &token, &platform_treasury, &100, &3600);
 
         client.accumulate_fees(&fee_payer, &500_000).unwrap();
 
+        // 1% (fee_bps=100) of 500_000 goes to the platform treasury,
+        // the remainder pools for provider distribution.
         let state = client.get_state();
-        assert_eq!(state.total_fees, 500_000);
+        assert_eq!(state.total_fees, 495_000);
 
         let tc = TokenClient::new(&env, &token);
         assert_eq!(tc.balance(&fee_payer), MINT_AMOUNT - 500_000);
+        assert_eq!(tc.balance(&platform_treasury), 5_000);
+        assert_eq!(tc.balance(&client.address), 495_000);
     }
 
     #[test]
     fn test_distribute_single_provider() {
-        let (env, admin, fee_payer, token, client) = setup();
+        let (env, admin, fee_payer, platform_treasury, token, client) = setup();
 
-        client.initialize(&admin, &token, &100, &3600);
+        client.initialize(&admin, &token, &platform_treasury, &100, &3600);
 
         let provider = Address::generate(&env);
         client.register_provider(&provider, &1_000_000, &100).unwrap();
@@ -527,15 +588,17 @@ mod tests {
         assert_eq!(state.total_fees, 0);
         assert_eq!(state.last_distribution, 3600);
 
+        // Platform kept its 1% cut (1_000); the provider gets the rest (99_000).
         let tc = TokenClient::new(&env, &token);
-        assert_eq!(tc.balance(&provider), 100_000);
+        assert_eq!(tc.balance(&platform_treasury), 1_000);
+        assert_eq!(tc.balance(&provider), 99_000);
     }
 
     #[test]
     fn test_distribute_multiple_providers() {
-        let (env, admin, fee_payer, token, client) = setup();
+        let (env, admin, fee_payer, platform_treasury, token, client) = setup();
 
-        client.initialize(&admin, &token, &100, &3600);
+        client.initialize(&admin, &token, &platform_treasury, &100, &3600);
 
         let provider1 = Address::generate(&env);
         let provider2 = Address::generate(&env);
@@ -581,15 +644,16 @@ mod tests {
         assert!(p2_balance > 0);
         assert!(p3_balance > 0);
 
-        // Verify total distribution equals accumulated fees
-        assert_eq!(p1_balance + p2_balance + p3_balance, 1_000_000);
+        // Platform kept its 1% cut (10_000); providers split the rest (990_000).
+        assert_eq!(tc.balance(&platform_treasury), 10_000);
+        assert_eq!(p1_balance + p2_balance + p3_balance, 990_000);
     }
 
     #[test]
     fn test_distribution_interval() {
-        let (env, admin, fee_payer, token, client) = setup();
+        let (env, admin, fee_payer, platform_treasury, token, client) = setup();
 
-        client.initialize(&admin, &token, &100, &3600);
+        client.initialize(&admin, &token, &platform_treasury, &100, &3600);
 
         let provider = Address::generate(&env);
         client.register_provider(&provider, &1_000_000, &100).unwrap();
@@ -613,9 +677,9 @@ mod tests {
 
     #[test]
     fn test_no_fees_available() {
-        let (env, admin, _fee_payer, token, client) = setup();
+        let (env, admin, _fee_payer, platform_treasury, token, client) = setup();
 
-        client.initialize(&admin, &token, &100, &3600);
+        client.initialize(&admin, &token, &platform_treasury, &100, &3600);
 
         let provider = Address::generate(&env);
         client.register_provider(&provider, &1_000_000, &100).unwrap();
@@ -627,9 +691,9 @@ mod tests {
 
     #[test]
     fn test_error_already_registered() {
-        let (env, admin, _fee_payer, token, client) = setup();
+        let (env, admin, _fee_payer, platform_treasury, token, client) = setup();
 
-        client.initialize(&admin, &token, &100, &3600);
+        client.initialize(&admin, &token, &platform_treasury, &100, &3600);
 
         let provider = Address::generate(&env);
         client.register_provider(&provider, &1_000_000, &95).unwrap();
@@ -640,9 +704,9 @@ mod tests {
 
     #[test]
     fn test_error_not_registered() {
-        let (env, admin, _fee_payer, token, client) = setup();
+        let (env, admin, _fee_payer, platform_treasury, token, client) = setup();
 
-        client.initialize(&admin, &token, &100, &3600);
+        client.initialize(&admin, &token, &platform_treasury, &100, &3600);
 
         let provider = Address::generate(&env);
         let result = client.try_get_provider_metrics(&provider);
@@ -651,9 +715,9 @@ mod tests {
 
     #[test]
     fn test_error_invalid_liquidity() {
-        let (env, admin, _fee_payer, token, client) = setup();
+        let (env, admin, _fee_payer, platform_treasury, token, client) = setup();
 
-        client.initialize(&admin, &token, &100, &3600);
+        client.initialize(&admin, &token, &platform_treasury, &100, &3600);
 
         let provider = Address::generate(&env);
         let result = client.try_register_provider(&provider, &0, &95);
@@ -662,9 +726,9 @@ mod tests {
 
     #[test]
     fn test_error_invalid_uptime() {
-        let (env, admin, _fee_payer, token, client) = setup();
+        let (env, admin, _fee_payer, platform_treasury, token, client) = setup();
 
-        client.initialize(&admin, &token, &100, &3600);
+        client.initialize(&admin, &token, &platform_treasury, &100, &3600);
 
         let provider = Address::generate(&env);
         let result = client.try_register_provider(&provider, &1_000_000, &101);

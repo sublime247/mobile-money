@@ -1,0 +1,19 @@
+[package]
+name = "vault"
+version = "0.1.0"
+edition = "2021"
+
+[lints]
+workspace = true
+
+[lib]
+# "rlib" is required in addition to "cdylib" so the fuzz crate
+# (contracts/vault/fuzz) can depend on this crate as an ordinary Rust
+# library and `use vault::{VaultContract, VaultContractClient}`.
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+soroban-sdk = { version = "26.0.1", features = ["alloc"] }
+
+[dev-dependencies]
+soroban-sdk = { version = "26.0.1", features = ["testutils"] }

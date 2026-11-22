@@ -6,22 +6,117 @@ This directory contains performance and load testing tools for the Mobile Money 
 
 The k6 suite benchmarks high-throughput callback ingestion services (`ingest-node` on `:3001`, `ingest-go` on `:3002`).
 
-### Prerequisites
+### k6 Ingest Prerequisites
 
-- [k6](https://k6.io/docs/getting-started/installation/) installed
-- Ingest service running locally
-- Redis on `:6379`
+* [k6](https://k6.io/docs/getting-started/installation/) installed
+* Ingest service running locally
+* Redis on `:6379`
 
 ### Scenarios
 
 | Script | Purpose |
 | ------ | ------- |
 | `k6-bench.js` | Baseline constant-arrival-rate throughput (1k/5k/10k RPS) |
+| `k6-quote-load.js` | Quote calculation under high concurrency (200 VUs, 60s) |
 | `scenarios/smoke.js` | Quick 5-VU sanity check before full runs |
 | `scenarios/peak-day-spike.js` | 30-min realistic peak-day traffic curve |
 | `scenarios/stress.js` | Breaking-point ramp beyond peak load |
 
-### Usage
+---
+
+## k6 Quote Calculation Load Test — `k6-quote-load.js` (#2168)
+
+Benchmarks real-time FX rate calculation and quote generation across multiple currency pairs under high concurrency.
+
+### Profile
+* **Concurrency:** 200 virtual users (VUs)
+* **Duration:** 60 seconds
+* **Endpoints:**
+  * `GET /sep38/prices` (discovery / cached quotes)
+  * `POST /sep38/quote` (firm quotes)
+
+### Acceptance Thresholds
+* `p95` latency < **150 ms** for cached quote lookups
+* `p99` latency < **500 ms** across all quote requests
+* Error rate < **0.5%** (`rate < 0.005`)
+
+### Running the test
+```bash
+# Default local run against http://localhost:3000
+k6 run benchmarks/k6-quote-load.js
+
+# Target custom host
+k6 run -e TARGET_URL=https://api.example.com benchmarks/k6-quote-load.js
+```
+
+---
+
+## 500 RPS API Load Test — `load_test.js`
+
+Verifies that the three highest-traffic HTTP endpoints sustain **500 requests/second**
+with a **p95 latency below 200 ms**.
+
+### Endpoints under test
+
+| Scenario | Endpoint | Traffic share |
+| -------- | -------- | ------------- |
+| Quote discovery | `GET /sep38/prices` | 40% |
+| Customer lookup | `GET /sep12/customer` | 35% |
+| Transaction status polling | `GET /api/v1/transactions/:id` | 25% |
+
+### Load Test Prerequisites
+
+* [k6](https://k6.io/docs/getting-started/installation/) ≥ v0.47 installed and in `$PATH`
+* The mobile-money server running locally on `http://localhost:3000`
+
+### Acceptance criteria
+
+| Metric | Target |
+| ------ | ------ |
+| p95 response time | **< 200 ms** across all scenarios |
+| Error rate | < 1% per scenario |
+| Throughput | ≥ 500 req/s (steady-state) |
+
+### Running the benchmark
+
+```bash
+# Full 500 RPS run (thresholds enforced — fails on breach)
+npm run bench:load-test-500rps
+
+# Observe-only mode (metrics collected but no threshold failures)
+npm run bench:load-test-observe
+
+# Override base URL or RPS
+k6 run -e BASE_URL=http://staging.example.com -e RPS=500 benchmarks/load_test.js
+
+# Collect raw JSON for post-processing
+k6 run --out json=benchmarks/results/load-test-500rps.json benchmarks/load_test.js
+```
+
+### Generating the HTML report
+
+```bash
+# Generate from the latest JSON result file
+npm run bench:html-report
+
+# Or point to a specific file
+node benchmarks/generate-html-report.js benchmarks/results/load-test-500rps.json
+```
+
+The HTML report is written to `benchmarks/results/load-test-report-<timestamp>.html` and
+contains:
+
+* KPI summary cards (throughput, p95, p99, error rate)
+* Per-scenario latency breakdown table with pass/fail badges
+* Canvas-rendered throughput and latency bar charts
+* Red 200 ms threshold marker on the latency chart
+
+> **Note:** Result JSON files and HTML reports are gitignored (`benchmarks/results/`).
+> Only the scripts themselves are committed.
+
+---
+
+### k6 Ingest Suite Usage
 
 ```bash
 # Run the full baseline suite
@@ -47,11 +142,11 @@ Outputs clean gas figures as formatted terminal tables, JSON, and Markdown repor
 
 ## Features
 
-- **Source Analysis Mode** — Parses Rust contract source to compute gas estimates using Soroban Protocol 20 cost model constants (storage, token, crypto, auth operations)
-- **Rust Benchmark Mode** — When `cargo` is available, compiles and runs a native Soroban SDK `testutils`-based benchmark for precise on-chain measurements
-- **WASM Binary Analysis** — When `.wasm` binaries exist, extracts binary size, code section size, and data section metrics
-- **Multi-Contract Support** — Automatically discovers and benchmarks all contracts under the `contracts/` directory
-- **Multiple Output Formats** — Terminal table, JSON (`soroban-gas-report.json`), and Markdown (`soroban-gas-report.md`)
+* **Source Analysis Mode** — Parses Rust contract source to compute gas estimates using Soroban Protocol 20 cost model constants (storage, token, crypto, auth operations)
+* **Rust Benchmark Mode** — When `cargo` is available, compiles and runs a native Soroban SDK `testutils`-based benchmark for precise on-chain measurements
+* **WASM Binary Analysis** — When `.wasm` binaries exist, extracts binary size, code section size, and data section metrics
+* **Multi-Contract Support** — Automatically discovers and benchmarks all contracts under the `contracts/` directory
+* **Multiple Output Formats** — Terminal table, JSON (`soroban-gas-report.json`), and Markdown (`soroban-gas-report.md`)
 
 ## Quick Start
 
@@ -63,7 +158,7 @@ npm run bench:soroban-gas
 node benchmarks/soroban-gas-bench.js
 ```
 
-## Usage
+## Soroban Gas Usage
 
 ```
 node benchmarks/soroban-gas-bench.js [options]
@@ -170,6 +265,6 @@ Clean structured output in `benchmarks/results/soroban-gas-report.json`:
 
 ## Notes
 
-- No external dependencies required — the tool uses only Node.js built-ins
-- The Rust benchmark binary (`benchmarks/src/main.rs`) provides the highest accuracy when `cargo` is available
-- For CI pipelines, the source analysis mode works without any Rust toolchain installation
+* No external dependencies required — the tool uses only Node.js built-ins
+* The Rust benchmark binary (`benchmarks/src/main.rs`) provides the highest accuracy when `cargo` is available
+* For CI pipelines, the source analysis mode works without any Rust toolchain installation

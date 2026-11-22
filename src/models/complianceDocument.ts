@@ -145,30 +145,43 @@ export class ComplianceDocumentModel {
       conditions.push("status <> 'archived'");
     }
 
-    if (filter.country) {
+    if (
+      filter.country &&
+      typeof filter.country === "string" &&
+      filter.country.trim()
+    ) {
       conditions.push(`country_code = $${paramIndex++}`);
-      params.push(filter.country);
+      params.push(filter.country.trim().toUpperCase());
     }
 
-    if (filter.provider) {
+    if (
+      filter.provider &&
+      typeof filter.provider === "string" &&
+      filter.provider.trim()
+    ) {
       conditions.push(`LOWER(provider) = LOWER($${paramIndex++})`);
-      params.push(filter.provider);
+      params.push(filter.provider.trim());
     }
 
-    if (filter.tag) {
+    if (filter.tag && typeof filter.tag === "string" && filter.tag.trim()) {
       conditions.push(`LOWER($${paramIndex++}) = ANY(tags)`);
-      params.push(filter.tag);
+      params.push(filter.tag.trim().toLowerCase());
     }
 
-    if (filter.search) {
+    if (
+      filter.search &&
+      typeof filter.search === "string" &&
+      filter.search.trim()
+    ) {
+      const sanitizedSearch = filter.search.trim().replace(/([%_\\])/g, "\\$1");
       conditions.push(`(
-        title ILIKE $${paramIndex}
-        OR summary ILIKE $${paramIndex}
-        OR body ILIKE $${paramIndex}
-        OR provider ILIKE $${paramIndex}
-        OR array_to_string(tags, ' ') ILIKE $${paramIndex}
+        title ILIKE $${paramIndex} ESCAPE '\\'
+        OR summary ILIKE $${paramIndex} ESCAPE '\\'
+        OR body ILIKE $${paramIndex} ESCAPE '\\'
+        OR provider ILIKE $${paramIndex} ESCAPE '\\'
+        OR array_to_string(tags, ' ') ILIKE $${paramIndex} ESCAPE '\\'
       )`);
-      params.push(`%${filter.search}%`);
+      params.push(`%${sanitizedSearch}%`);
       paramIndex++;
     }
 

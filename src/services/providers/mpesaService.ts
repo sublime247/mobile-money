@@ -18,6 +18,7 @@
  *   - getTransactionStatus
  */
 
+import { recordUssdPushDispatch } from "../../monitoring/metrics";
 import axios from "axios";
 import { BaseProvider, ProviderAuthConfig } from "./baseProvider";
 
@@ -67,6 +68,18 @@ export interface MpesaStkCallbackBody {
   };
 }
 
+/** Normalized response from Safaricom's `stkpushquery` (Lipa Na M-Pesa Query) endpoint. */
+export interface MpesaStkQueryResult {
+  success: boolean;
+  resultCode?: number;
+  resultDesc?: string;
+  merchantRequestId?: string;
+  checkoutRequestId?: string;
+  responseCode?: string;
+  responseDescription?: string;
+  error?: unknown;
+}
+
 export interface MpesaCallbackResult {
   success: boolean;
   merchantRequestId: string;
@@ -84,6 +97,60 @@ export const MPESA_CALLBACK_ACK = {
   ResultCode: 0,
   ResultDesc: "Success",
 } as const;
+
+/** One item from Safaricom's B2C Result `ResultParameters.ResultParameter` array. */
+interface MpesaB2CResultParameter {
+  Key: string;
+  Value?: string | number;
+}
+
+/**
+ * Raw shape of the B2C `ResultURL` callback body Safaricom POSTs once a
+ * `sendB2CPayment` request reaches a terminal outcome.
+ * See: Daraja B2C API — Result and Timeout notifications.
+ */
+export interface MpesaB2CResultBody {
+  Result: {
+    ResultType: number;
+    ResultCode: number;
+    ResultDesc: string;
+    OriginatorConversationID: string;
+    ConversationID: string;
+    TransactionID?: string;
+    ResultParameters?: {
+      ResultParameter: MpesaB2CResultParameter[];
+    };
+  };
+}
+
+/** Raw shape of the B2C `QueueTimeOutURL` callback body. */
+export interface MpesaB2CTimeoutBody {
+  Result: {
+    ResultType: number;
+    ResultCode: number;
+    ResultDesc: string;
+    OriginatorConversationID: string;
+    ConversationID: string;
+  };
+}
+
+export type MpesaB2COutcomeStatus = "completed" | "failed";
+
+/** Normalized outcome of a parsed B2C Result/QueueTimeOut callback. */
+export interface MpesaB2COutcome {
+  status: MpesaB2COutcomeStatus;
+  resultCode: number;
+  resultDesc: string;
+  originatorConversationId: string;
+  conversationId: string;
+  transactionId?: string;
+  transactionAmount?: number;
+  transactionReceipt?: string;
+  transactionCompletedDateTime?: string;
+  receiverPartyPublicName?: string;
+  b2cUtilityAccountAvailableFunds?: number;
+  b2cWorkingAccountAvailableFunds?: number;
+}
 
 export type MpesaTransactionStatus =
   | "completed"
@@ -259,6 +326,14 @@ export class MpesaProvider extends BaseProvider {
         },
       );
 
+      if (
+        String(response.data.ResponseCode) === "0" &&
+        typeof response.data.CheckoutRequestID === "string" &&
+        response.data.CheckoutRequestID
+      ) {
+        recordUssdPushDispatch("mpesa", "KE", response.data.CheckoutRequestID);
+      }
+
       return {
         success: true,
         merchantRequestId: response.data.MerchantRequestID,
@@ -315,10 +390,16 @@ export class MpesaProvider extends BaseProvider {
     }
   }
 
-  /** Query the status of a transaction by its checkout request ID. */
-  async getTransactionStatus(
-    checkoutRequestId: string,
-  ): Promise<{ status: MpesaTransactionStatus }> {
+  /**
+   * Query the Lipa Na M-Pesa Online (`stkpushquery`) endpoint for a checkout
+   * request that has not yet received a callback.
+   *
+   * Safaricom returns the raw `ResultCode` / `ResultDesc` pair (for example
+   * `1032` = cancelled by user, `1037` = handset/DS timeout). Unlike
+   * {@link getTransactionStatus} this preserves the code so the caller can map
+   * it to a precise transaction state — see `mpesaStkQuery.ts` (#1969).
+   */
+  async queryStkPush(checkoutRequestId: string): Promise<MpesaStkQueryResult> {
     try {
       const token = await this.getAccessToken();
       const timestamp = buildTimestamp();
@@ -344,13 +425,36 @@ export class MpesaProvider extends BaseProvider {
         },
       );
 
-      const resultCode = Number(response.data?.ResultCode);
-      if (resultCode === 0) return { status: "completed" };
-      if (Number.isNaN(resultCode)) return { status: "pending" };
-      return { status: "failed" };
-    } catch {
-      return { status: "unknown" };
+      const rawCode = response.data?.ResultCode;
+      const resultCode = Number(rawCode);
+      const resolvedCode = rawCode === undefined || rawCode === null || Number.isNaN(resultCode)
+        ? undefined
+        : resultCode;
+
+      return {
+        success: true,
+        resultCode: resolvedCode,
+        resultDesc: response.data?.ResultDesc,
+        merchantRequestId: response.data?.MerchantRequestID,
+        checkoutRequestId: response.data?.CheckoutRequestID,
+        responseCode: response.data?.ResponseCode,
+        responseDescription: response.data?.ResponseDescription,
+      };
+    } catch (error) {
+      return { success: false, error };
     }
+  }
+
+  /** Query the status of a transaction by its checkout request ID. */
+  async getTransactionStatus(
+    checkoutRequestId: string,
+  ): Promise<{ status: MpesaTransactionStatus }> {
+    const query = await this.queryStkPush(checkoutRequestId);
+    if (!query.success) return { status: "unknown" };
+    if (query.resultCode === undefined) return { status: "pending" };
+    return {
+      status: query.resultCode === 0 ? "completed" : "failed",
+    };
   }
 
   /**
@@ -387,6 +491,64 @@ export class MpesaProvider extends BaseProvider {
         callback.ResultCode === 0
           ? String(findItem("PhoneNumber") ?? "")
           : undefined,
+    };
+  }
+
+  /**
+   * Parses Safaricom's B2C `ResultURL` callback body into a normalized
+   * outcome. `ResultCode === 0` is the only success case; every other code
+   * (including timeouts routed here rather than to `QueueTimeOutURL`) is a
+   * terminal failure — Safaricom does not report a "pending" B2C result.
+   */
+  static processB2CResult(body: MpesaB2CResultBody): MpesaB2COutcome {
+    const result = body.Result;
+    const items = result.ResultParameters?.ResultParameter ?? [];
+
+    const findItem = (key: string): string | number | undefined =>
+      items.find((item) => item.Key === key)?.Value;
+
+    const isSuccess = result.ResultCode === 0;
+
+    return {
+      status: isSuccess ? "completed" : "failed",
+      resultCode: result.ResultCode,
+      resultDesc: result.ResultDesc,
+      originatorConversationId: result.OriginatorConversationID,
+      conversationId: result.ConversationID,
+      transactionId: result.TransactionID,
+      transactionAmount: isSuccess
+        ? Number(findItem("TransactionAmount")) || undefined
+        : undefined,
+      transactionReceipt: isSuccess
+        ? (findItem("TransactionReceipt") as string | undefined)
+        : undefined,
+      transactionCompletedDateTime: isSuccess
+        ? String(findItem("TransactionCompletedDateTime") ?? "") || undefined
+        : undefined,
+      receiverPartyPublicName: isSuccess
+        ? (findItem("ReceiverPartyPublicName") as string | undefined)
+        : undefined,
+      b2cUtilityAccountAvailableFunds:
+        Number(findItem("B2CUtilityAccountAvailableFunds")) || undefined,
+      b2cWorkingAccountAvailableFunds:
+        Number(findItem("B2CWorkingAccountAvailableFunds")) || undefined,
+    };
+  }
+
+  /**
+   * Parses Safaricom's B2C `QueueTimeOutURL` callback body. A queue timeout
+   * always represents a failed disbursement attempt (the request never
+   * reached a terminal processing state within Safaricom's queue), so this
+   * normalizes to the same {@link MpesaB2COutcome} shape as a failed result.
+   */
+  static processB2CTimeout(body: MpesaB2CTimeoutBody): MpesaB2COutcome {
+    const result = body.Result;
+    return {
+      status: "failed",
+      resultCode: result.ResultCode,
+      resultDesc: result.ResultDesc || "B2C request timed out in queue",
+      originatorConversationId: result.OriginatorConversationID,
+      conversationId: result.ConversationID,
     };
   }
 }

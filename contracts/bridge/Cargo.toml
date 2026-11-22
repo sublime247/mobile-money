@@ -1,0 +1,18 @@
+[package]
+name = "bridge"
+version = "0.1.0"
+edition = "2021"
+
+[lints]
+workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+soroban-sdk = { version = "26.0.1", features = ["alloc"] }
+
+[dev-dependencies]
+soroban-sdk = { version = "26.0.1", features = ["testutils"] }
+blacklist = { path = "../blacklist" }
+fee_tier = { path = "../fee_tier", features = ["testutils"] }

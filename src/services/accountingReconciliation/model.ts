@@ -1,4 +1,5 @@
 import { queryRead, queryWrite } from "../../config/database";
+import { withReconciliationDbRetry } from "../reconciliationDbRetry";
 
 export enum AccountingReconciliationStatus {
   Pending = "pending",
@@ -60,18 +61,27 @@ export class AccountingChartOfAccountsReconciliationModel {
     status?: AccountingReconciliationStatus;
     summary?: any;
   }): Promise<AccountingChartOfAccountsReconciliationReport> {
-    const res = await queryWrite(
-      `INSERT INTO accounting_chart_of_accounts_reconciliation_reports 
+    const res = await withReconciliationDbRetry(
+      "accountingReconciliation:createReport",
+      {
+        provider: data.provider,
+        connectionId: data.connectionId,
+        reportDate: data.reportDate.toISOString(),
+      },
+      () =>
+        queryWrite(
+          `INSERT INTO accounting_chart_of_accounts_reconciliation_reports
        (provider, connection_id, report_date, status, summary)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
-      [
-        data.provider,
-        data.connectionId,
-        data.reportDate,
-        data.status ?? AccountingReconciliationStatus.Pending,
-        JSON.stringify(data.summary ?? {}),
-      ],
+          [
+            data.provider,
+            data.connectionId,
+            data.reportDate,
+            data.status ?? AccountingReconciliationStatus.Pending,
+            JSON.stringify(data.summary ?? {}),
+          ],
+        ),
     );
     return this.mapReportRow(res.rows[0]);
   }
@@ -95,9 +105,17 @@ export class AccountingChartOfAccountsReconciliationModel {
 
     if (fields.length === 0) return;
 
-    await queryWrite(
-      `UPDATE accounting_chart_of_accounts_reconciliation_reports SET ${fields.join(", ")}, updated_at = NOW() WHERE id = $1`,
-      params,
+    await withReconciliationDbRetry(
+      "accountingReconciliation:updateReport",
+      {
+        reportId: id,
+        fields,
+      },
+      () =>
+        queryWrite(
+          `UPDATE accounting_chart_of_accounts_reconciliation_reports SET ${fields.join(", ")}, updated_at = NOW() WHERE id = $1`,
+          params,
+        ),
     );
   }
 
@@ -146,24 +164,32 @@ export class AccountingChartOfAccountsReconciliationModel {
     internalValue?: string;
     externalValue?: string;
   }): Promise<AccountingChartOfAccountsReconciliationDiscrepancy> {
-    const res = await queryWrite(
-      `INSERT INTO accounting_chart_of_accounts_reconciliation_discrepancies 
-       (report_id, internal_account_code, internal_account_name, internal_account_type, 
+    const res = await withReconciliationDbRetry(
+      "accountingReconciliation:createDiscrepancy",
+      {
+        reportId: data.reportId,
+        type: data.type,
+      },
+      () =>
+        queryWrite(
+          `INSERT INTO accounting_chart_of_accounts_reconciliation_discrepancies
+       (report_id, internal_account_code, internal_account_name, internal_account_type,
         external_account_id, external_account_name, external_account_type, type, internal_value, external_value)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING *`,
-      [
-        data.reportId,
-        data.internalAccountCode ?? null,
-        data.internalAccountName ?? null,
-        data.internalAccountType ?? null,
-        data.externalAccountId ?? null,
-        data.externalAccountName ?? null,
-        data.externalAccountType ?? null,
-        data.type,
-        data.internalValue ?? null,
-        data.externalValue ?? null,
-      ],
+          [
+            data.reportId,
+            data.internalAccountCode ?? null,
+            data.internalAccountName ?? null,
+            data.internalAccountType ?? null,
+            data.externalAccountId ?? null,
+            data.externalAccountName ?? null,
+            data.externalAccountType ?? null,
+            data.type,
+            data.internalValue ?? null,
+            data.externalValue ?? null,
+          ],
+        ),
     );
     return this.mapDiscrepancyRow(res.rows[0]);
   }
@@ -183,11 +209,19 @@ export class AccountingChartOfAccountsReconciliationModel {
     notes: string,
     reviewedBy: string,
   ): Promise<void> {
-    await queryWrite(
-      `UPDATE accounting_chart_of_accounts_reconciliation_discrepancies 
-       SET review_status = 'resolved', resolution_notes = $2, reviewed_by = $3, reviewed_at = NOW(), updated_at = NOW() 
+    await withReconciliationDbRetry(
+      "accountingReconciliation:resolveDiscrepancy",
+      {
+        discrepancyId: id,
+        reviewedBy,
+      },
+      () =>
+        queryWrite(
+          `UPDATE accounting_chart_of_accounts_reconciliation_discrepancies
+       SET review_status = 'resolved', resolution_notes = $2, reviewed_by = $3, reviewed_at = NOW(), updated_at = NOW()
        WHERE id = $1`,
-      [id, notes, reviewedBy],
+          [id, notes, reviewedBy],
+        ),
     );
   }
 

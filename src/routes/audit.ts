@@ -6,6 +6,7 @@ import {
   listAmlAlertsForAudit,
   getAmlAlertDetails,
   reviewAmlAlert,
+  resolveHeldTransaction,
   searchAmlAlertsByUser,
   getAmlDashboardStats,
   markAlertForSAR,
@@ -66,6 +67,15 @@ auditRoutes.patch(
   haltOnTimedout,
   authorizeObj("aml_alerts", "write"),
   reviewAmlAlert,
+);
+
+// Release or reject a transaction held in PENDING_REVIEW by velocity monitoring
+auditRoutes.post(
+  "/aml/alerts/:alertId/hold",
+  TimeoutPresets.quick,
+  haltOnTimedout,
+  authorizeObj("aml_alerts", "write"),
+  resolveHeldTransaction,
 );
 
 // Manually trigger SAR generation for an alert

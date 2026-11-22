@@ -12,6 +12,7 @@ import {
 export interface User {
   id: string;
   phone_number: string;
+  email?: string | null;
   kyc_level: string;
   role_id?: string;
   role_name?: string;
@@ -21,6 +22,8 @@ export interface User {
   two_factor_enabled?: boolean;
   two_factor_verified?: boolean;
   backup_codes?: string[] | null;
+  /** Timestamp an account was locked until, e.g. after repeated failed 2FA attempts (#2380). Null when not locked. */
+  account_locked_until?: Date | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -81,9 +84,10 @@ export async function getUserByPhoneNumber(
  */
 export async function getUserById(userId: string): Promise<User | null> {
   const query = `
-    SELECT 
+    SELECT
       u.id,
       u.phone_number,
+      u.email,
       u.kyc_level,
       u.role_id,
       u.display_name,
@@ -92,6 +96,7 @@ export async function getUserById(userId: string): Promise<User | null> {
       u.two_factor_enabled,
       u.two_factor_verified,
       u.backup_codes,
+      u.account_locked_until,
       u.created_at,
       u.updated_at,
       r.name as role_name

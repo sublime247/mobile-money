@@ -7,11 +7,41 @@ import { createError } from "./errorHandler";
 
 const DEFAULT_SIGNATURE_HEADER = "x-callback-signature";
 const ALT_SIGNATURE_HEADER = "x-orange-signature";
+const TIMESTAMP_HEADER = "x-orange-timestamp";
+/** Default replay window: reject notifications whose timestamp is older/newer than this. */
+const DEFAULT_TIMESTAMP_FRESHNESS_SECONDS = 300;
 
 function getCallbackSecret(): string {
   return String(
     getConfigValue("providers.orangeGuinea.callbackSecret") ?? "",
   ).trim();
+}
+
+function getTimestampFreshnessSeconds(): number {
+  const configured = Number(
+    getConfigValue("providers.orangeGuinea.callbackTimestampFreshnessSeconds"),
+  );
+  return Number.isFinite(configured) && configured > 0
+    ? configured
+    : DEFAULT_TIMESTAMP_FRESHNESS_SECONDS;
+}
+
+/**
+ * Validates the `X-Orange-Timestamp` header against the configured freshness
+ * window to prevent replay attacks with a captured (but validly signed)
+ * notification. Accepts a Unix timestamp in seconds. Missing or malformed
+ * timestamps are treated as stale so a replayed request can never bypass
+ * this check simply by omitting the header.
+ */
+function isTimestampFresh(headerValue: string | undefined): boolean {
+  if (!headerValue) return false;
+
+  const timestampSeconds = Number(headerValue);
+  if (!Number.isFinite(timestampSeconds)) return false;
+
+  const nowSeconds = Date.now() / 1000;
+  const skewSeconds = Math.abs(nowSeconds - timestampSeconds);
+  return skewSeconds <= getTimestampFreshnessSeconds();
 }
 
 function getSignatureHeaderName(): string {
@@ -114,6 +144,26 @@ export async function verifyOrangeGuineaCallbackSignature(
         error: "Unauthorized callback",
       });
     }
+
+    const timestampHeader = req.headers[TIMESTAMP_HEADER] as
+      | string
+      | undefined;
+    if (!isTimestampFresh(timestampHeader)) {
+      logSecurityAnomaly({
+        event: "security.anomaly",
+        timestamp: new Date().toISOString(),
+        path: req.originalUrl || req.url,
+        method: req.method,
+        ip: getCurrentRequestIp(req),
+        reason: "orange_guinea_callback_timestamp_stale",
+        provider: "orange_guinea",
+        headerPresent: Boolean(timestampHeader),
+      });
+      throw createError(ERROR_CODES.UNAUTHORIZED, "Unauthorized callback", {
+        error: "Unauthorized callback",
+      });
+    }
+
     next();
   } catch {
     logSecurityAnomaly({

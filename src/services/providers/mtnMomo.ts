@@ -15,13 +15,21 @@
  *   - sendPayout     (disbursement)
  *   - getTransactionStatus
  *   - getOperationalBalance
+ *   - getAccountBalance (disbursement float inquiry, alias for pre-flight checks)
  */
 
 import axios, { AxiosError } from "axios";
 import { randomUUID } from "crypto";
 import { BaseProvider, ProviderAuthConfig } from "./baseProvider";
+import type {
+  BatchPayoutItem,
+  BatchPayoutResult,
+} from "../mobilemoney/mobileMoneyService";
 import { recordTelecomLatency } from "../../utils/logger";
 import logger from "../../utils/logger";
+import { executeWithCircuitBreaker } from "../../utils/circuitBreaker";
+
+export type { BatchPayoutItem, BatchPayoutResult };
 
 const POLL_DELAY_MS = 15_000;
 const MAX_POLL_ATTEMPTS = 4;
@@ -220,61 +228,82 @@ export class MtnMomoProvider extends BaseProvider {
     const startTime = Date.now();
     const endpoint = "/collection/v1_0/requesttopay";
     const externalId = randomUUID();
-    try {
-      const response = await axios.post(
-        `${this.baseUrl}${endpoint}`,
-        {
-          amount,
-          currency: "EUR",
-          externalId,
-          payer: { partyIdType: "MSISDN", partyId: phoneNumber },
-          payerMessage: "Payment for Stellar deposit",
-          payeeNote: "Deposit",
-        },
-        {
-          headers: {
-            "Ocp-Apim-Subscription-Key": this.subscriptionKey,
-            "X-Target-Environment": "sandbox",
-          },
-          timeout: this.timeoutMs,
-        },
-      );
 
-      const durationMs = Date.now() - startTime;
-      recordTelecomLatency({
-        provider: this.providerName,
-        operation: "requestPayment",
-        durationMs,
-        success: true,
-        statusCode: response.status,
-        endpoint,
-      });
+    return executeWithCircuitBreaker({
+      provider: this.providerName,
+      operation: "requestPayment",
+      execute: async () => {
+        try {
+          const response = await axios.post(
+            `${this.baseUrl}${endpoint}`,
+            {
+              amount,
+              currency: "EUR",
+              externalId,
+              payer: { partyIdType: "MSISDN", partyId: phoneNumber },
+              payerMessage: "Payment for Stellar deposit",
+              payeeNote: "Deposit",
+            },
+            {
+              headers: {
+                "Ocp-Apim-Subscription-Key": this.subscriptionKey,
+                "X-Target-Environment": "sandbox",
+              },
+              timeout: this.timeoutMs,
+            },
+          );
 
-      return { success: true, data: response.data };
-    } catch (error: unknown) {
-      const durationMs = Date.now() - startTime;
-      const isTimeout = isTimeoutError(error);
-      const axiosError = error as AxiosError;
-      recordTelecomLatency({
-        provider: this.providerName,
-        operation: "requestPayment",
-        durationMs,
-        success: isTimeout ? true : false,
-        statusCode: isTimeout ? undefined : axiosError?.response?.status,
-        endpoint,
-      });
+          const durationMs = Date.now() - startTime;
+          recordTelecomLatency({
+            provider: this.providerName,
+            operation: "requestPayment",
+            durationMs,
+            success: true,
+            statusCode: response.status,
+            endpoint,
+          });
 
-      if (isTimeout) {
+          return { success: true, data: response.data };
+        } catch (error: unknown) {
+          const durationMs = Date.now() - startTime;
+          const isTimeout = isTimeoutError(error);
+          const axiosError = error as AxiosError;
+          recordTelecomLatency({
+            provider: this.providerName,
+            operation: "requestPayment",
+            durationMs,
+            success: false,
+            statusCode: isTimeout ? undefined : axiosError?.response?.status,
+            endpoint,
+          });
+
+          if (isTimeout) {
+            logger.warn(
+              { externalId, phoneNumber, amount, durationMs },
+              "MTN requestPayment timed out, scheduling status poll",
+            );
+            enqueuePoll(externalId, this);
+            // Throw so the circuit breaker counts this as a failure
+            throw error;
+          }
+
+          return { success: false, error };
+        }
+      },
+      fallback: async (_error) => {
+        // OPEN state: fail fast without calling the API
         logger.warn(
-          { externalId, phoneNumber, amount, durationMs },
-          "MTN requestPayment timed out, scheduling status poll",
+          { phoneNumber, amount },
+          "MTN circuit breaker OPEN — returning cached fallback for requestPayment",
         );
-        enqueuePoll(externalId, this);
-        return { success: true, data: { externalId, status: "pending" } };
-      }
-
-      return { success: false, error };
-    }
+        return {
+          success: false,
+          error: new Error(
+            "MTN MoMo collection is temporarily unavailable (circuit breaker open). Please retry shortly.",
+          ),
+        };
+      },
+    });
   }
 
   /** Disburse funds to a phone number. */
@@ -410,6 +439,128 @@ export class MtnMomoProvider extends BaseProvider {
       });
 
       return { success: false, error };
+    }
+  }
+
+  /**
+   * Query MTN MoMo disbursement float via
+   * GET /disbursement/v1_0/account/balance.
+   *
+   * Required by #1967: pre-flight balance inquiry before bulk payouts.
+   * Delegates to getOperationalBalance so both entry points share one
+   * implementation, response shape, and latency instrumentation.
+   */
+  async getAccountBalance() {
+    return this.getOperationalBalance();
+  }
+
+  /**
+   * MTN MoMo Batch Payout - submits multiple payout items in a single request
+   */
+  async sendBatchPayout(
+    items: BatchPayoutItem[],
+    requestId?: string,
+  ): Promise<{
+    success: boolean;
+    results: BatchPayoutResult[];
+    error?: unknown;
+  }> {
+    const log = requestId ? logger.child({ requestId }) : logger;
+    const MAX_BATCH_SIZE = 100;
+
+    if (items.length === 0) {
+      return { success: true, results: [] };
+    }
+
+    if (items.length > MAX_BATCH_SIZE) {
+      return {
+        success: false,
+        results: items.map((item) => ({
+          referenceId: item.referenceId,
+          success: false,
+          error: `Batch size exceeds maximum of ${MAX_BATCH_SIZE}`,
+        })),
+        error: new Error(
+          `Batch size ${items.length} exceeds maximum of ${MAX_BATCH_SIZE}`,
+        ),
+      };
+    }
+
+    log.info(
+      { itemCount: items.length },
+      "MTN MoMo: Starting batch payout",
+    );
+    const startTime = Date.now();
+
+    try {
+      const token = await this.getAccessToken();
+      const batchReference = `BATCH-${randomUUID()}`;
+
+      const response = await axios.post(
+        `${this.baseUrl}/disbursement/v2_0/batch-payout`,
+        {
+          batchReference,
+          items: items.map((item) => ({
+            referenceId: item.referenceId,
+            amount: item.amount,
+            currency: process.env.MTN_CURRENCY || "XAF",
+            payee: {
+              partyIdType: "MSISDN",
+              partyId: item.phoneNumber,
+            },
+          })),
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Ocp-Apim-Subscription-Key": this.subscriptionKey,
+            "X-Target-Environment": this.targetEnvironment,
+            "Content-Type": "application/json",
+          },
+        },
+      );
+
+      const durationMs = Date.now() - startTime;
+      recordTelecomLatency({
+        provider: this.providerName,
+        operation: "sendBatchPayout",
+        durationMs,
+        success: true,
+        statusCode: response.status,
+        endpoint: "/disbursement/v2_0/batch-payout",
+      });
+
+      const results: BatchPayoutResult[] = items.map((item) => ({
+        referenceId: item.referenceId,
+        success: true,
+        providerReference: batchReference,
+      }));
+
+      return { success: true, results };
+    } catch (error: any) {
+      const durationMs = Date.now() - startTime;
+      const axiosError = error as AxiosError;
+      recordTelecomLatency({
+        provider: this.providerName,
+        operation: "sendBatchPayout",
+        durationMs,
+        success: false,
+        statusCode: axiosError?.response?.status,
+        endpoint: "/disbursement/v2_0/batch-payout",
+      });
+
+      log.error(
+        { error: error?.message },
+        "MTN MoMo: Batch payout request failed",
+      );
+
+      const results: BatchPayoutResult[] = items.map((item) => ({
+        referenceId: item.referenceId,
+        success: false,
+        error: error?.message || "Batch payout submission failed",
+      }));
+
+      return { success: false, results, error };
     }
   }
 }

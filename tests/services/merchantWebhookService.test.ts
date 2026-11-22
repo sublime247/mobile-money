@@ -10,6 +10,7 @@ jest.mock("../../src/services/cacheAside", () => ({
 
 import { MerchantWebhookModel } from "../../src/models/merchantWebhook";
 import { MerchantWebhookService } from "../../src/services/merchantWebhookService";
+import { WebhookCacheInvalidation } from "../../src/services/cacheAside";
 
 const mockFindById = MerchantWebhookModel.prototype.findById as jest.Mock;
 const mockFindByUserId = MerchantWebhookModel.prototype
@@ -122,6 +123,75 @@ describe("MerchantWebhookService", () => {
   });
 
   describe("delivery result handling", () => {
+    it("retries transient failures with exponential backoff and logs each attempt", async () => {
+      mockFindByUserId.mockResolvedValue([WEBHOOK]);
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 503,
+          text: jest.fn().mockResolvedValue("unavailable"),
+        })
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 502,
+          text: jest.fn().mockResolvedValue("bad gateway"),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          text: jest.fn().mockResolvedValue("ok"),
+        });
+      const sleep = jest.fn().mockResolvedValue(undefined);
+      const logger = { log: jest.fn(), warn: jest.fn(), error: jest.fn() };
+      service = new MerchantWebhookService(
+        mockFetch as unknown as typeof fetch,
+        { maxAttempts: 3, baseDelayMs: 100, sleep, logger },
+      );
+
+      await service.dispatchEvent(WEBHOOK.userId, "transaction.completed", {
+        id: "txn-1",
+      });
+
+      expect(mockFetch).toHaveBeenCalledTimes(3);
+      expect(sleep).toHaveBeenNthCalledWith(1, 100);
+      expect(sleep).toHaveBeenNthCalledWith(2, 200);
+      expect(mockInsertDeliveryLog).toHaveBeenCalledTimes(3);
+      expect(mockInsertDeliveryLog).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ status: "failed", httpStatus: 503 }),
+      );
+      expect(mockInsertDeliveryLog).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ status: "failed", httpStatus: 502 }),
+      );
+      expect(mockInsertDeliveryLog).toHaveBeenNthCalledWith(
+        3,
+        expect.objectContaining({ status: "delivered", httpStatus: 200 }),
+      );
+      expect(
+        WebhookCacheInvalidation.invalidateOnWebhookRecovery,
+      ).toHaveBeenCalledTimes(1);
+      expect(logger.log).toHaveBeenCalledWith(
+        expect.stringContaining("attempt=3"),
+      );
+    });
+
+    it("does not retry permanent HTTP failures", async () => {
+      mockFindByUserId.mockResolvedValue([WEBHOOK]);
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 400,
+        text: jest.fn().mockResolvedValue("bad request"),
+      });
+
+      await service.dispatchEvent(WEBHOOK.userId, "transaction.completed", {
+        id: "txn-1",
+      });
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(mockInsertDeliveryLog).toHaveBeenCalledTimes(1);
+    });
+
     it("records a failed delivery log on non-2xx response", async () => {
       mockFindById.mockResolvedValue(WEBHOOK);
       mockFetch.mockResolvedValueOnce({

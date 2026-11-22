@@ -8,7 +8,7 @@ export interface ProviderBalanceAlertJobData {
   triggeredBy: "scheduler";
 }
 
-const DEFAULT_INTERVAL_MS = 10 * 60 * 1000;
+const DEFAULT_INTERVAL_MS = 15 * 60 * 1000;
 const MIN_INTERVAL_MS = 60 * 1000;
 
 export const providerBalanceAlertQueue = new Queue<ProviderBalanceAlertJobData>(

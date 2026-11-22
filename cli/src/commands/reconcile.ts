@@ -12,24 +12,40 @@ export function registerReconcileCommand(program: Command): void {
   program
     .command("reconcile")
     .description(
-      "Scan pending MTN MoMo transactions and sync statuses from provider logs",
+      "Compare internal transaction records against provider statement exports",
     )
+    .option("--provider <provider>", "Provider to reconcile (mtn, airtel, orange, etc.)")
+    .option("--date <YYYY-MM-DD>", "Date to reconcile transactions for")
     .option("--dry-run", "Show what would be updated without writing changes")
     .option("--verbose", "Print every transaction, not just updated ones")
-    .action(async (opts: { dryRun?: boolean; verbose?: boolean }) => {
+    .action(async (opts: { provider?: string; date?: string; dryRun?: boolean; verbose?: boolean }) => {
       try {
         console.log(
-          formatInfo("Fetching pending transactions and querying provider…"),
+          formatInfo("Fetching transactions and querying provider…"),
         );
 
-        const data = await triggerReconcile(opts.dryRun ?? false);
+        const data = await triggerReconcile(opts.dryRun ?? false, opts.provider, opts.date);
         const { total, updated, results } = data;
 
-        console.log(
-          `\n${chalk.bold("Reconciliation complete")}\n` +
-            `  ${chalk.bold("Pending scanned:")} ${total}\n` +
-            `  ${chalk.bold("Statuses updated:")} ${updated}\n`,
-        );
+        // Summary table
+        const matched = results.filter((r) => !r.updated && r.providerStatus === r.previousStatus).length;
+        const unmatched = results.filter((r) => r.updated).length;
+        const disputed = results.filter((r) => r.providerStatus === "failed" && r.previousStatus !== "failed").length;
+        
+        const totalAmount = results.reduce((sum, r) => sum + parseFloat(r.amount || "0"), 0);
+        const matchedAmount = results
+          .filter((r) => !r.updated && r.providerStatus === r.previousStatus)
+          .reduce((sum, r) => sum + parseFloat(r.amount || "0"), 0);
+        const unmatchedAmount = totalAmount - matchedAmount;
+
+        console.log(`\n${chalk.bold("Reconciliation Summary")}`);
+        console.log("─".repeat(60));
+        console.log(`${chalk.bold("Matched:")}     ${chalk.green(matched.toString().padStart(5))} txns   ${chalk.green(matchedAmount.toFixed(2).padStart(12))} XAF`);
+        console.log(`${chalk.bold("Unmatched:")}   ${chalk.yellow(unmatched.toString().padStart(5))} txns   ${chalk.yellow(unmatchedAmount.toFixed(2).padStart(12))} XAF`);
+        console.log(`${chalk.bold("Disputed:")}    ${chalk.red(disputed.toString().padStart(5))} txns`);
+        console.log("─".repeat(60));
+        console.log(`${chalk.bold("Total:")}       ${total.toString().padStart(5)} txns   ${totalAmount.toFixed(2).padStart(12)} XAF`);
+        console.log();
 
         if (opts.dryRun) {
           console.log(
@@ -41,7 +57,7 @@ export function registerReconcileCommand(program: Command): void {
           ? results
           : results.filter((r) => r.updated);
 
-        if (toShow.length > 0) {
+        if (toShow.length > 0 && opts.verbose) {
           console.log(
             chalk.bold(
               `${opts.verbose ? "All" : "Updated"} transactions:\n`,

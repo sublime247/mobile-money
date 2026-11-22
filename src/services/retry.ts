@@ -3,6 +3,8 @@
  * Permanent errors (validation, insufficient funds, etc.) are not retried.
  */
 
+import { isRetryableDatabaseError } from "../config/databaseErrors";
+
 const TRANSIENT_HINTS =
   /econnreset|etimedout|econnrefused|enotfound|network|socket|timeout|temporar|unavailable|429|502|503|504|fetch failed|aborted/i;
 
@@ -50,6 +52,7 @@ export function isTransientError(error: unknown, provider?: string): boolean {
       : String(error);
 
   if (PERMANENT_HINTS.test(msg)) return false;
+  if (isRetryableDatabaseError(error)) return true;
   return TRANSIENT_HINTS.test(msg);
 }
 

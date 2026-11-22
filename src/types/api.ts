@@ -1,5 +1,6 @@
 import { Transaction, TransactionStatus } from "../models/transaction";
 import { KYCLevel } from "../config/limits";
+import type { PoolStarvationState } from "../middleware/dbConnectionLeakDetector";
 
 // ---------------------------------------------------------------------------
 // Transaction
@@ -176,6 +177,9 @@ export interface HealthCheckResponse {
   status: "ok";
   timestamp: string;
   gitHash?: string;
+  database?: {
+    pool: PoolStarvationState | null;
+  };
 }
 
 export interface ReadinessCheckResponse {

@@ -23,14 +23,30 @@ export const CURRENT_VERSION = "v1";
 export const SUPPORTED_VERSIONS: string[] = ["v1"];
 export const DEPRECATED_VERSIONS: string[] = [];
 
+/**
+ * Header name used for explicit API version routing (issue #2285).
+ * Clients send `X-API-Version: v1` to pin a specific version.
+ */
+export const X_API_VERSION_HEADER = "x-api-version";
+
 const normalizeApiVersion = (version: string): string | undefined => {
   const match = version.trim().match(/^v?(\d+)$/i);
   return match ? `v${match[1]}` : undefined;
 };
 
 /**
- * Middleware: Extract API version from URL or request headers
- * Priority: URL path > Accept-Version header > Accept header > default (v1)
+ * Middleware: Extract API version from URL or request headers.
+ *
+ * Resolution priority (highest → lowest):
+ *   1. URL path           e.g. /api/v1/transactions
+ *   2. X-API-Version      e.g. X-API-Version: v1          (issue #2285)
+ *   3. Accept-Version     e.g. Accept-Version: v1
+ *   4. Accept             e.g. Accept: application/vnd.api+json;version=v1
+ *   5. Default            CURRENT_VERSION ("v1")
+ *
+ * When a deprecated version is requested via X-API-Version the middleware
+ * attaches a `Deprecation: true` response header so clients can detect and
+ * migrate without a breaking change.
  */
 export const apiVersionMiddleware: RequestHandler = (req, res, next) => {
   const versionedReq = req as VersionedRequest;
@@ -38,29 +54,41 @@ export const apiVersionMiddleware: RequestHandler = (req, res, next) => {
   try {
     let version = CURRENT_VERSION;
 
-    // 1. Check URL path for version (e.g., /api/v1/transactions)
+    // 1. URL path (e.g. /api/v1/transactions)
     const pathMatch = versionedReq.path.match(/^\/api\/(v\d+)(?:\/|$)/i);
     if (pathMatch) {
       version = normalizeApiVersion(pathMatch[1]) || CURRENT_VERSION;
     } else {
-      // 2. Check Accept-Version header (e.g., Accept-Version: v1)
-      const acceptVersionHeader = versionedReq.get("accept-version");
-      const headerVersion = acceptVersionHeader
-        ? normalizeApiVersion(acceptVersionHeader)
+      // 2. X-API-Version header (issue #2285)
+      const xApiVersion = versionedReq.get(X_API_VERSION_HEADER);
+      const xVersion = xApiVersion
+        ? normalizeApiVersion(xApiVersion)
         : undefined;
 
-      if (headerVersion) {
-        version = headerVersion;
+      if (xVersion) {
+        version = xVersion;
       } else {
-        // 3. Check Accept header (e.g., Accept: application/vnd.api+json;version=v1)
-        const acceptHeader = versionedReq.get("accept");
-        const versionMatch = acceptHeader?.match(/(?:^|[;\s])version=(v?\d+)/i);
-        const acceptVersion = versionMatch
-          ? normalizeApiVersion(versionMatch[1])
+        // 3. Accept-Version header
+        const acceptVersionHeader = versionedReq.get("accept-version");
+        const headerVersion = acceptVersionHeader
+          ? normalizeApiVersion(acceptVersionHeader)
           : undefined;
 
-        if (acceptVersion) {
-          version = acceptVersion;
+        if (headerVersion) {
+          version = headerVersion;
+        } else {
+          // 4. Accept header content negotiation
+          const acceptHeader = versionedReq.get("accept");
+          const versionMatch = acceptHeader?.match(
+            /(?:^|[;\s])version=(v?\d+)/i,
+          );
+          const acceptVersion = versionMatch
+            ? normalizeApiVersion(versionMatch[1])
+            : undefined;
+
+          if (acceptVersion) {
+            version = acceptVersion;
+          }
         }
       }
     }
@@ -73,6 +101,21 @@ export const apiVersionMiddleware: RequestHandler = (req, res, next) => {
     res.setHeader("API-Version", version);
     res.vary("Accept");
     res.vary("Accept-Version");
+    res.vary(X_API_VERSION_HEADER);
+
+    // Attach deprecation warning when the resolved version is deprecated
+    // (applies regardless of which source provided the version — issue #2285)
+    if (DEPRECATED_VERSIONS.includes(version)) {
+      res.setHeader("Deprecation", "true");
+      res.setHeader(
+        "Sunset",
+        new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toUTCString(),
+      );
+      res.setHeader(
+        "Link",
+        `<https://docs.example.com/api/${CURRENT_VERSION}>; rel="latest-version"`,
+      );
+    }
 
     // Log version information in development
     if (process.env.NODE_ENV === "development") {
@@ -87,7 +130,11 @@ export const apiVersionMiddleware: RequestHandler = (req, res, next) => {
 };
 
 /**
- * Middleware: Validate requested API version is supported
+ * Middleware: Validate requested API version is supported.
+ *
+ * Returns 400 for unrecognised versions.  Deprecation headers are attached
+ * upstream in apiVersionMiddleware so they appear even on unsupported-version
+ * rejections that still pass through here.
  */
 export const validateVersionMiddleware: RequestHandler = (req, res, next) => {
   const versionedReq = req as VersionedRequest;
@@ -100,19 +147,6 @@ export const validateVersionMiddleware: RequestHandler = (req, res, next) => {
       supportedVersions: SUPPORTED_VERSIONS,
     });
     return;
-  }
-
-  // Check if version is deprecated
-  if (DEPRECATED_VERSIONS.includes(apiVersion)) {
-    res.setHeader("Deprecation", "true");
-    res.setHeader(
-      "Sunset",
-      new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toUTCString(),
-    );
-    res.setHeader(
-      "Link",
-      `<https://docs.example.com/api/${CURRENT_VERSION}>; rel="latest-version"`,
-    );
   }
 
   next();

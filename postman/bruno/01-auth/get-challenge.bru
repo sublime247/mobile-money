@@ -1,0 +1,48 @@
+meta {
+  name: "SEP-10 Get Challenge"
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{base_url}}/sep10?account={{stellar_public_key}}&home_domain={{home_domain}}
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+}
+
+script:post-response {
+  // Sign the challenge immediately so every other request can rely on
+  // {{signed_challenge_xdr}} without needing bru.sendRequest.
+  const sep10 = require("./scripts/sep10");
+  const challenge = res.getBody();
+
+  if (res.getStatus() === 200 && challenge && challenge.transaction) {
+    bru.setEnvVar("challenge_xdr", challenge.transaction);
+    bru.setEnvVar("network_passphrase", challenge.network_passphrase);
+    bru.setEnvVar(
+      "signed_challenge_xdr",
+      sep10.signChallenge(challenge, bru.getEnvVar("stellar_secret_key"))
+    );
+    console.log("SEP-10 challenge signed for " + bru.getEnvVar("stellar_public_key"));
+  }
+}
+
+tests {
+  test("returns 200 with a challenge transaction", function() {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.transaction).to.be.a("string");
+    expect(body.network_passphrase).to.be.a("string");
+  });
+  test("the challenge was signed and stored", function() {
+    expect(bru.getEnvVar("signed_challenge_xdr")).to.be.a("string");
+  });
+}
+
+docs {
+  GET /sep10 returns the server-signed challenge XDR plus the network passphrase.
+}

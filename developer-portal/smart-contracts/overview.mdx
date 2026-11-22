@@ -1,0 +1,29 @@
+---
+title: 'Smart Contracts Overview'
+description: 'Soroban smart contracts powering trustless settlement'
+---
+
+Mobile Money utilizes Soroban smart contracts on the Stellar network to ensure secure, trustless, and atomic operations.
+
+## Why Soroban?
+Soroban is a developer-friendly, Rust-based smart contract platform that natively integrates with Stellar's high-throughput network, providing low fees and fast finality.
+
+## Core Contracts
+
+<CardGroup cols={2}>
+  <Card title="Escrow Contract" icon="lock">
+    Manages secure multi-sig locking and release of funds.
+  </Card>
+  <Card title="HTLC Contract" icon="clock">
+    Enables atomic cross-chain swaps using hash time-locks.
+  </Card>
+  <Card title="Oracle Contract" icon="chart-line">
+    Provides trusted on-chain price feeds for exchange rates.
+  </Card>
+  <Card title="Vault Contract" icon="vault">
+    Manages on-chain liquidity and yield.
+  </Card>
+</CardGroup>
+
+## Deployment Status
+Our contracts are currently deployed on **Testnet**. Mainnet deployment is scheduled for Q4.
