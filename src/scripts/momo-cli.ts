@@ -190,6 +190,7 @@ Commands:
                            Flags: --queue <name> --error-match <text|/regex/> --limit <n> (default 50) --dry-run
   provider:test-connectivity Test outbound HTTPS connectivity and auth for MTN, Orange, Airtel, M-Pesa, Moov.
                            Exits non-zero if a primary provider is DOWN (MOMO_PRIMARY_PROVIDERS, default: mtn,airtel).
+  float:check              Display real-time float account balances across all telecom partners (MTN, Orange, Airtel, M-Pesa, EcoCash).
 
 Options:
   --help, -h             Show this help information.
@@ -532,6 +533,21 @@ export async function runCli(args: string[]): Promise<void> {
         err,
         CLI_ERROR_CODES.ExecutionFailed,
       );
+      process.exitCode = 1;
+    }
+    return;
+  }
+
+  if (command === "float:check") {
+    try {
+      const { executeFloatCheck } = await import(
+        "../../cli/src/commands/floatCheck"
+      );
+      const isJson = args.includes("--json");
+      await executeFloatCheck({ json: isJson });
+      process.exitCode = 0;
+    } catch (error) {
+      printError("Unable to execute float:check", error);
       process.exitCode = 1;
     }
     return;

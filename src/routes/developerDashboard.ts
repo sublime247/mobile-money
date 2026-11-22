@@ -58,7 +58,36 @@ developerDashboardRoutes.post(
   DeveloperDashboardController.simulateTransaction,
 );
 
+/**
+ * @route   POST /api/developer/webhooks/simulate
+ * @desc    Simulate payment callback (MTN, Orange, M-Pesa) sending signed payload to targetUrl
+ * @access  Public / Developer portal test utility
+ */
+developerDashboardRoutes.post(
+  "/webhooks/simulate",
+  DeveloperDashboardController.simulateWebhook,
+);
+
+/**
+ * @route   POST /api/developer/webhook-simulator/send
+ * @desc    Alias for webhook simulator endpoint
+ * @access  Public / Developer portal test utility
+ */
+developerDashboardRoutes.post(
+  "/webhook-simulator/send",
+  DeveloperDashboardController.simulateWebhook,
+);
+
 export const sandboxRouter = Router();
+
+/**
+ * @route   POST /api/v1/sandbox/webhooks/simulate
+ * @desc    Simulate payment callback in sandbox environment
+ */
+sandboxRouter.post(
+  "/webhooks/simulate",
+  DeveloperDashboardController.simulateWebhook,
+);
 
 /**
  * @route   POST /api/v1/sandbox/transactions/:id/simulate
