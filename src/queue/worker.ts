@@ -36,7 +36,16 @@ import subscriptionModel from "../models/subscription";
 import logger from "../utils/logger";
 import { amlScreeningService } from "../services/amlScreening";
 
-import { queueOptions, getWorkerConcurrency } from "./config";
+import { queueOptions } from "./config";
+import {
+  getTransactionWorkerOptions,
+  recordJobPickup,
+} from "../workers/transactionWorker";
+import {
+  startMemoryWatchdog,
+  type DrainableWorker,
+  type MemoryWatchdog,
+} from "../workers/memoryWatchdog";
 import { providerQueueControl } from "./providerQueueControl";
 import { WorkerAutoscaler, isAutoscalerEnabled } from "./workerAutoscaler";
 import { transactionQueue } from "./transactionQueue";
@@ -53,7 +62,7 @@ const emailService = new EmailService();
 const pushService = pushNotificationService;
 const webhookService = new WebhookService();
 
-const CONCURRENCY = getWorkerConcurrency();
+const CONCURRENCY = getTransactionWorkerOptions().concurrency;
 
 export async function handleSubscriptionFailure(
   subscriptionId: string,
@@ -767,6 +776,9 @@ async function handleTransactionJob(
   job: Parameters<Parameters<typeof createProviderWorker>[1]>[0],
   queueName: string,
 ) {
+  // Time-to-pickup per priority tier (#2446).
+  recordJobPickup(job, queueName);
+
   // Provider paused for maintenance (#2282): divert the job to the
   // provider's hold queue before any provider I/O. It is re-queued
   // here automatically when the provider is resumed.
@@ -841,9 +853,41 @@ const providerWorkers: Array<Worker<TransactionJobData, TransactionJobResult>> =
 
 export async function closeWorker(): Promise<void> {
   workerAutoscaler?.stop();
+  memoryWatchdog?.stop();
   await transactionWorker.close();
   await Promise.all(providerWorkers.map((w) => w.close()));
   if (NATS_QUEUE_ENABLED) {
     await natsManager.close();
   }
 }
+
+/**
+ * Memory watchdog (#2447). When this file is the process entry point
+ * (`node dist/src/queue/worker.js`, see k8s/helm/values.yaml), sample RSS
+ * every 60s and, above 1.5GB, pause pickup, let active jobs finish (max 30s)
+ * and exit(0) so the orchestrator restarts a fresh worker. Set
+ * WORKER_MEMORY_WATCHDOG_ENABLED=true/false to force it on or off.
+ */
+export function getDrainableWorkers(): DrainableWorker[] {
+  const workers: DrainableWorker[] = [...providerWorkers];
+  if (transactionWorker instanceof Worker) {
+    workers.push(transactionWorker);
+  } else if (NATS_QUEUE_ENABLED) {
+    workers.push({ pause: () => natsManager.close() });
+  }
+  return workers;
+}
+
+function shouldStartMemoryWatchdog(): boolean {
+  const flag = process.env.WORKER_MEMORY_WATCHDOG_ENABLED;
+  if (flag === "true") return true;
+  if (flag === "false" || process.env.NODE_ENV === "test") return false;
+  return typeof require !== "undefined" && require.main === module;
+}
+
+export const memoryWatchdog: MemoryWatchdog | null = shouldStartMemoryWatchdog()
+  ? startMemoryWatchdog({
+      name: "transaction-worker",
+      workers: getDrainableWorkers,
+    })
+  : null;

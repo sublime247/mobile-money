@@ -33,10 +33,23 @@ import {
 import { closeReceivingAnchorWebhookQueue } from "../services/webhookService";
 import { stopRedisBackpressureMonitor } from "./redisBackpressure";
 import { stopTransactionOutboxRelay } from "./transactionOutbox";
+import { Worker } from "bullmq";
+import { BatchSyncThrottle } from "../workers/transactionWorker";
+
+// Tiered priorities (#2446): hold back the batch-sync worker whenever
+// refunds or payments are waiting on the transaction queue.
+const batchSyncThrottle =
+  syncWorker instanceof Worker &&
+  process.env.NODE_ENV !== "test" &&
+  process.env.TRANSACTION_PRIORITY_SYNC_THROTTLE !== "false"
+    ? new BatchSyncThrottle(transactionQueue, syncWorker)
+    : null;
+batchSyncThrottle?.start();
 
 export async function shutdownQueue(): Promise<void> {
   stopRedisBackpressureMonitor();
   stopTransactionOutboxRelay();
+  batchSyncThrottle?.stop();
   await Promise.all([
     closeWorker().catch(() => undefined),
     closeSyncWorker().catch(() => undefined),
