@@ -1,4 +1,8 @@
 process.env.NODE_ENV = "test";
+// OpenTelemetry: keep the SDK out of the way in unit tests (no OTLP exporter,
+// no global HTTP/DB/Redis patching, no log noise). Suites that need trace
+// propagation register their own provider — see tests/tracing/.
+process.env.OTEL_ENABLED ??= "false";
 process.env.DATABASE_URL ??=
   "postgresql://test_user:test_password@localhost:5432/test_db";
 process.env.REDIS_URL ??= "redis://localhost:6379";
@@ -46,6 +50,12 @@ process.env.DB_ENCRYPTION_KEY ??= "development-encryption-key-32-chars-long";
 process.env.KEY_VAULT_MASTER_SECRET ??=
   "test-key-vault-master-secret-32-chars-long";
 process.env.GEOLOCATION_API_KEY ??= "";
+// Outgoing webhook destinations are SSRF-checked (src/security/ssrf.ts).
+// Resolution is off in tests because suites use unresolvable fixture hosts
+// (example.com subdomains, .example) with mocked HTTP clients; the
+// synchronous scheme/host/IP-literal checks always apply. Tests that need
+// the DNS layer inject a resolver or flip this flag back on.
+process.env.WEBHOOK_SSRF_RESOLVE_DNS ??= "false";
 process.env.SMS_PROVIDER ??= "none";
 process.env.WHATSAPP_ENABLED ??= "false";
 process.env.TWILIO_ACCOUNT_SID ??= "";

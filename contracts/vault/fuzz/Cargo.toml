@@ -1,0 +1,17 @@
+[package]
+name = "vault-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata.cargo-fuzz]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+arbitrary = { version = "1.3", features = ["derive"] }
+soroban-sdk = { version = "26.0.1", features = ["testutils"] }
+vault = { path = ".." }
+
+# Isolate fuzz crate from workspace to avoid dependency conflicts or build speed degradation
+[workspace]

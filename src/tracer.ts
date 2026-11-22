@@ -1,13 +1,14 @@
 /**
  * OpenTelemetry SDK initialisation — must be imported before any other module.
  *
- * Features delivered (issue #346):
+ * Features delivered (issues #346, observability):
  *   ✓ W3C TraceContext + Baggage propagation (traceparent / tracestate headers)
- *   ✓ Auto-instrumentation: HTTP → SQL (pg) → Redis → BullMQ / cron job spans
+ *   ✓ Auto-instrumentation: HTTP/undici/axios → SQL (pg) → Redis → BullMQ / cron job spans
  *   ✓ Log/trace correlation — trace_id / span_id injected into every JSON log line
  *   ✓ RED metrics (rate, errors, duration) per route with Prometheus exemplars
  *   ✓ OTLP gRPC exporter to Jaeger/Tempo; falls back to no-op when unconfigured
  *   ✓ Sampling rate configurable via OTEL_SAMPLING_RATE env (default: 0.1 = 10%)
+ *   ✓ SDK initialised only when OTEL_EXPORTER_OTLP_ENDPOINT is configured
  *   ✓ <5% overhead at default sampling — confirmed by benchmarks/tracing-overhead.js
  */
 
@@ -24,16 +25,21 @@ import {
   TraceIdRatioBasedSampler,
   ParentBasedSampler,
   AlwaysOffSampler,
+  BatchSpanProcessor,
 } from "@opentelemetry/sdk-trace-base";
+import { RedactingSpanProcessor } from "./utils/spanRedaction";
 import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
 import { trace, context, SpanStatusCode } from "@opentelemetry/api";
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 
-const OTEL_ENABLED    = process.env.OTEL_ENABLED !== "false";
+// SDK is active only when the OTLP endpoint is explicitly configured, ensuring
+// zero-cost operation in environments that don't ship traces (e.g. local dev
+// without a collector). OTEL_ENABLED=false overrides this for explicit opt-out.
+const OTLP_ENDPOINT   = process.env.OTEL_EXPORTER_OTLP_ENDPOINT; // e.g. "http://otel-collector:4317"
+const OTEL_ENABLED    = process.env.OTEL_ENABLED !== "false" && Boolean(OTLP_ENDPOINT);
 const SERVICE_NAME    = process.env.OTEL_SERVICE_NAME    ?? "mobile-money";
 const SERVICE_VERSION = process.env.OTEL_SERVICE_VERSION ?? "1.0.0";
-const OTLP_ENDPOINT   = process.env.OTEL_EXPORTER_OTLP_ENDPOINT; // e.g. "http://jaeger:4317"
 const SAMPLING_RATE   = Math.min(1, Math.max(0, parseFloat(process.env.OTEL_SAMPLING_RATE ?? "0.1")));
 
 // ─── Resource ─────────────────────────────────────────────────────────────────
@@ -77,7 +83,12 @@ if (OTEL_ENABLED) {
   sdk = new NodeSDK({
     resource,
     sampler,
-    traceExporter,
+    // Redact auth tokens / phone numbers from every span before export.
+    // (spanProcessors replaces the default BatchSpanProcessor(traceExporter).)
+    spanProcessors: [
+      new RedactingSpanProcessor(),
+      ...(traceExporter ? [new BatchSpanProcessor(traceExporter)] : []),
+    ],
     metricReader,
     // W3C TraceContext + Baggage propagation
     textMapPropagator: new CompositePropagator({
@@ -89,6 +100,7 @@ if (OTEL_ENABLED) {
     instrumentations: [
       getNodeAutoInstrumentations({
         // HTTP spans — captures method, route, status, duration
+        // Also covers undici (the underlying transport for node native fetch)
         "@opentelemetry/instrumentation-http": {
           enabled: true,
           ignoreIncomingRequestHook: (req) => {
@@ -109,8 +121,11 @@ if (OTEL_ENABLED) {
           enabled: true,
           enhancedDatabaseReporting: true,
         },
-        // Redis — adds db.statement to Redis commands
+        // Redis (redis v4 / node:redis) — adds db.statement to Redis commands
         "@opentelemetry/instrumentation-redis-4": { enabled: true },
+        // undici — instruments native fetch and undici HTTP client calls
+        // (covers axios when it uses the http adapter, and Node 18+ fetch)
+        "@opentelemetry/instrumentation-undici": { enabled: true },
         // DNS, Net, FS — disable to keep overhead low
         "@opentelemetry/instrumentation-dns":  { enabled: false },
         "@opentelemetry/instrumentation-net":  { enabled: false },
@@ -121,12 +136,16 @@ if (OTEL_ENABLED) {
 
   sdk.start();
   console.log(
-    `[Tracer] OpenTelemetry SDK initialized for service '${SERVICE_NAME}'`,
+    `[Tracer] OpenTelemetry SDK initialized — service: '${SERVICE_NAME}', endpoint: '${OTLP_ENDPOINT}'`,
   );
 
   // ─── Graceful shutdown ───────────────────────────────────────────────────
   process.once("SIGTERM", () => sdk!.shutdown().catch(console.error));
   process.once("SIGINT",  () => sdk!.shutdown().catch(console.error));
+} else if (!OTLP_ENDPOINT) {
+  console.log(
+    "[Tracer] OTEL_EXPORTER_OTLP_ENDPOINT not set — OpenTelemetry tracing disabled",
+  );
 }
 
 // ─── Log / Trace correlation helper ──────────────────────────────────────────

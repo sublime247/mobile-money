@@ -91,7 +91,7 @@ export function createAdminSep10Router(): Router {
    *
    * Generate a SEP-10 challenge transaction for admin authentication
    */
-  router.get("/challenge", (req: Request, res: Response) => {
+  router.get("/challenge", async (req: Request, res: Response) => {
     try {
       const { account } = req.query;
 
@@ -107,7 +107,7 @@ export function createAdminSep10Router(): Router {
 
       // Generate the challenge transaction
       const challenge: Sep10ChallengeResponse =
-        service.generateChallenge(account);
+        await service.generateChallenge(account);
 
       return res.json(challenge);
     } catch (error) {

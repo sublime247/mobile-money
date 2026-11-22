@@ -9,6 +9,7 @@ export enum TransactionStatus {
   Failed = "failed",
   Cancelled = "cancelled",
   Review = "review",
+  PendingReview = "pending_review",
   Dispute = "dispute",
   Reversed = "reversed",
   ClawedBack = "clawed_back",
@@ -106,9 +107,17 @@ export const validateTransactionFilters = (
       limit = 50,
       offset = 0,
       reference,
+      referenceNumber,
+      reference_number,
       startDate,
       endDate,
     } = req.query;
+
+    const refParam = referenceNumber || reference || reference_number;
+    const cleanRef =
+      typeof refParam === "string" && refParam.trim()
+        ? refParam.trim()
+        : undefined;
 
     // Validate limit
     const limitNum = parseInt(limit as string, 10);
@@ -176,7 +185,7 @@ export const validateTransactionFilters = (
       statuses,
       limit: cappedLimit,
       offset: offsetNum,
-      reference: reference as string | undefined,
+      reference: cleanRef,
       startDate: startDate as string | undefined,
       endDate: endDate as string | undefined,
     };

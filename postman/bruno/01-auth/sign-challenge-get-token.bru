@@ -1,0 +1,96 @@
+meta {
+  name: "SEP-10 Sign Challenge & Get Token"
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{base_url}}/sep10
+  body: json
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "transaction": "{{signed_challenge_xdr}}"
+  }
+}
+
+script:pre-request {
+  // ─── Automated SEP-10 challenge signing ────────────────────────────────
+  // 1. fetch a FRESH challenge from the server
+  // 2. sign it locally with stellar_secret_key (TransactionBuilder + Keypair)
+  // 3. POST the signed XDR so the server exchanges it for a JWT
+  const sep10 = require("./scripts/sep10");
+
+  const baseUrl = bru.getEnvVar("base_url");
+  const publicKey = bru.getEnvVar("stellar_public_key");
+  const secretKey = bru.getEnvVar("stellar_secret_key");
+  const homeDomain = bru.getEnvVar("home_domain");
+
+  if (!publicKey || !secretKey) {
+    throw new Error(
+      "stellar_public_key and stellar_secret_key must be set in the Local environment."
+    );
+  }
+
+  let signedXdr = bru.getEnvVar("signed_challenge_xdr");
+
+  if (typeof bru.sendRequest === "function") {
+    const challenge = await sep10.fetchChallenge({
+      bru: bru,
+      baseUrl: baseUrl,
+      publicKey: publicKey,
+      homeDomain: homeDomain,
+    });
+    signedXdr = sep10.signChallenge(challenge, secretKey);
+    bru.setEnvVar("challenge_xdr", challenge.transaction);
+    bru.setEnvVar("network_passphrase", challenge.network_passphrase);
+  }
+
+  if (!signedXdr) {
+    throw new Error(
+      "No signed challenge available. Run 'SEP-10 Get Challenge' first."
+    );
+  }
+
+  bru.setEnvVar("signed_challenge_xdr", signedXdr);
+  req.setBody({ transaction: signedXdr });
+  console.log("Signed SEP-10 challenge for " + publicKey);
+}
+
+script:post-response {
+  const body = res.getBody();
+
+  if (res.getStatus() === 200 && body && body.token) {
+    bru.setEnvVar("jwt_token", body.token);
+    console.log("SEP-10 token stored in jwt_token");
+  }
+}
+
+tests {
+  test("exchanges the signed challenge for a JWT", function() {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.token).to.be.a("string");
+    expect(body.token.split(".")).to.have.lengthOf(3);
+  });
+  test("token subject matches the Stellar public key", function() {
+    const sep10 = require("./scripts/sep10");
+    const claims = sep10.decodeJwtPayload(bru.getEnvVar("jwt_token"));
+    expect(claims).to.be.an("object");
+    expect(claims.sub).to.equal(bru.getEnvVar("stellar_public_key"));
+  });
+  test("token was stored for subsequent requests", function() {
+    expect(bru.getEnvVar("jwt_token")).to.be.a("string");
+  });
+}
+
+docs {
+  Turnkey flow: fetches, signs and verifies the SEP-10 challenge in one click.
+}

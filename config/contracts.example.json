@@ -1,0 +1,87 @@
+{
+  "$comment": "Copy to config/contracts.json and adjust. Placeholders: {{admin}} = admin public key, {{contracts.<name>}} = ID of a contract deployed earlier in this run (or recorded in contracts.json), {{asset:native}} / {{asset:CODE:ISSUER}} = Stellar Asset Contract ID, {{env.VAR}} = environment variable. Contracts are deployed in the order listed.",
+  "contractsDir": "contracts",
+  "wasmOutDir": "contracts/target/deploy",
+  "outputFile": "contracts.json",
+  "networks": {
+    "testnet": {
+      "rpcUrl": "https://soroban-testnet.stellar.org",
+      "networkPassphrase": "Test SDF Network ; September 2015",
+      "source": "{{env.STELLAR_ADMIN_SOURCE}}"
+    },
+    "mainnet": {
+      "rpcUrl": "{{env.STELLAR_MAINNET_RPC_URL}}",
+      "networkPassphrase": "Public Global Stellar Network ; September 2015",
+      "source": "{{env.STELLAR_ADMIN_SOURCE}}"
+    }
+  },
+  "contracts": [
+    {
+      "name": "blacklist",
+      "init": {
+        "fn": "initialize",
+        "args": { "admin": "{{admin}}" }
+      }
+    },
+    {
+      "name": "fee_tier",
+      "init": {
+        "fn": "initialize",
+        "args": {
+          "admin": "{{admin}}",
+          "staking_contract": "{{env.STAKING_CONTRACT_ID}}",
+          "decimals": "7"
+        }
+      }
+    },
+    {
+      "name": "bridge",
+      "init": {
+        "fn": "initialize",
+        "args": {
+          "admin": "{{admin}}",
+          "token": "{{asset:native}}",
+          "fee_recipient": "{{admin}}",
+          "fee_bps": "100"
+        }
+      },
+      "setup": [
+        {
+          "fn": "set_blacklist",
+          "args": { "blacklist": "{{contracts.blacklist}}" }
+        },
+        {
+          "fn": "set_fee_tier",
+          "args": { "fee_tier": "{{contracts.fee_tier}}" }
+        }
+      ]
+    },
+    {
+      "name": "vault",
+      "init": {
+        "fn": "initialize",
+        "args": { "admin": "{{admin}}", "token": "{{asset:native}}" }
+      }
+    },
+    {
+      "name": "router",
+      "init": {
+        "fn": "initialize",
+        "args": {
+          "owner": "{{admin}}",
+          "max_slippage_bps": "100",
+          "min_liquidity_depth": "10000000"
+        }
+      }
+    },
+    {
+      "$comment": "Escrow and HTLC are initialised per deal, so only their WASM is uploaded.",
+      "name": "escrow",
+      "installOnly": true
+    },
+    {
+      "name": "htlc",
+      "installOnly": true
+    }
+  ]
+}

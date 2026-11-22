@@ -145,6 +145,65 @@ GET /api/webhooks/sample
 
 Returns a sample webhook payload that you can use for testing in Make.com.
 
+## Webhook signature verification
+
+Every outbound merchant webhook includes two headers:
+
+| Header | Value |
+| --- | --- |
+| `X-Momo-Timestamp` | UNIX timestamp (seconds) when the request was signed |
+| `X-Momo-Signature` | Hex HMAC-SHA256 of `<timestamp>.<raw request body>` using your webhook secret |
+
+To verify a request:
+
+1. Read the **raw** request body exactly as received (before JSON parsing).
+2. Reject the request if `X-Momo-Timestamp` is more than 5 minutes from your
+   current time. This blocks replayed requests.
+3. Compute `HMAC-SHA256(secret, timestamp + "." + rawBody)` and compare it
+   with `X-Momo-Signature` using a constant-time comparison.
+
+Because the timestamp is part of the signed content, a captured request
+cannot be replayed with a new timestamp.
+
+```js
+const crypto = require("crypto");
+const express = require("express");
+
+const TOLERANCE_SECONDS = 300;
+
+function verifyMomoWebhook(rawBody, signature, timestamp, secret) {
+  if (!/^\d+$/.test(timestamp || "") || !/^[0-9a-f]{64}$/i.test(signature || "")) {
+    return false;
+  }
+  const age = Math.abs(Math.floor(Date.now() / 1000) - Number(timestamp));
+  if (age > TOLERANCE_SECONDS) return false;
+
+  const expected = crypto
+    .createHmac("sha256", secret)
+    .update(`${timestamp}.${rawBody}`, "utf8")
+    .digest();
+  return crypto.timingSafeEqual(expected, Buffer.from(signature, "hex"));
+}
+
+const app = express();
+app.post("/momo/webhook", express.raw({ type: "application/json" }), (req, res) => {
+  const ok = verifyMomoWebhook(
+    req.body.toString("utf8"),
+    req.get("X-Momo-Signature"),
+    req.get("X-Momo-Timestamp"),
+    process.env.MOMO_WEBHOOK_SECRET,
+  );
+  if (!ok) return res.status(401).send("invalid signature");
+
+  const event = JSON.parse(req.body.toString("utf8"));
+  // ... handle event
+  res.sendStatus(200);
+});
+```
+
+Server-side code in this repository can reuse `verifyWebhookSignature` from
+`src/utils/webhookSigner.ts`.
+
 ## Common Make.com Integrations
 
 ### 1. Send SMS via Twilio

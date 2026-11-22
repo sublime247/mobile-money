@@ -197,6 +197,65 @@ travelRuleRoutes.get(
  * GET /api/v1/compliance/travel-rule/:transactionId
  * Fetch a single Travel Rule record by transaction ID.
  */
+travelRuleRoutes.post(
+  "/ivms101",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const { buildIvms101Payload, isTravelRuleRequired } = await import(
+        "../compliance/ivms101"
+      );
+
+      const {
+        originatorName,
+        originatorAccount,
+        originatorAddress,
+        originatorDob,
+        originatorIdNumber,
+        beneficiaryName,
+        beneficiaryAccount,
+        beneficiaryAddress,
+        originatingVaspName,
+        beneficiaryVaspName,
+        amount,
+        currency,
+      } = req.body;
+
+      if (!originatorName || !originatorAccount || !beneficiaryName || !beneficiaryAccount) {
+        return res.status(400).json({ error: "Missing required originator or beneficiary details" });
+      }
+
+      const required = isTravelRuleRequired(Number(amount) || 0);
+      const payload = buildIvms101Payload({
+        originatorName,
+        originatorAccount,
+        originatorAddress,
+        originatorDob,
+        originatorIdNumber,
+        beneficiaryName,
+        beneficiaryAccount,
+        beneficiaryAddress,
+        originatingVaspName,
+        beneficiaryVaspName,
+        amount: Number(amount) || 0,
+        currency: currency || "USD",
+      });
+
+      return res.status(200).json({
+        travelRuleRequired: required,
+        ivms101: payload,
+      });
+    } catch (err: any) {
+      logger.error("[travel-rule] ivms101 error:", err.message);
+      return res.status(400).json({ error: err.message || "Failed to generate IVMS 101 payload" });
+    }
+  },
+);
+
+/**
+ * GET /api/v1/compliance/travel-rule/:transactionId
+ * Fetch a single Travel Rule record by transaction ID.
+ */
 travelRuleRoutes.get(
   "/:transactionId",
   requireAuth,
@@ -224,3 +283,5 @@ travelRuleRoutes.get(
     }
   },
 );
+
+

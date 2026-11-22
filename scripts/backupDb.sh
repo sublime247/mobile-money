@@ -47,7 +47,7 @@ fi
 
 # 2. Perform Safe Database Dump
 log "📦 Step 1: Exporting database schema and data safely..."
-if "${DUMP_CMD[@]}" --schema-only --no-owner --no-acl --verbose 2>> "${LOG_FILE}" | gzip > "${DUMP_FILE}"; then
+if "${DUMP_CMD[@]}" --no-owner --no-acl --verbose 2>> "${LOG_FILE}" | gzip > "${DUMP_FILE}"; then
     log "✅ Database dump completed successfully: ${DUMP_FILE}"
 else
     log "❌ ERROR: Database dump failed!"
@@ -66,7 +66,8 @@ if command -v aws &> /dev/null; then
 
     log "✅ Upload to AWS S3 completed successfully."
 else
-    log "⚠️ WARNING: 'aws' CLI tool is not installed or not in PATH. Skipping S3 upload."
+    log "❌ ERROR: 'aws' CLI tool is required for a durable backup but is not installed or not in PATH."
+    exit 1
 fi
 
 # 4. Clean-up Schedule: Delete Local Backups and Logs Older Than Retention Period (7 days)

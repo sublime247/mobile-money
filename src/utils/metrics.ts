@@ -1,5 +1,6 @@
 import {
   Registry,
+  RegistryContentType,
   Counter,
   Histogram,
   Gauge,
@@ -8,6 +9,17 @@ import {
 } from "prom-client";
 
 const register = new Registry();
+
+// Exemplars (trace_id / span_id attached to latency histograms) are only
+// serialized in the OpenMetrics exposition format. Opt-in because it changes
+// the /metrics content type from text/plain 0.0.4 to application/openmetrics-text.
+if (process.env.METRICS_OPENMETRICS === "true") {
+  // prom-client types `Registry` as Prometheus-text by default; the runtime
+  // accepts either content type.
+  (register as unknown as Registry<RegistryContentType>).setContentType(
+    Registry.OPENMETRICS_CONTENT_TYPE,
+  );
+}
 
 // Add default metrics (CPU, Memory, etc.)
 collectDefaultMetrics({ register });
@@ -24,17 +36,57 @@ export const httpRequestDurationSeconds = new Histogram({
   name: "http_request_duration_seconds",
   help: "Duration of HTTP requests in seconds",
   labelNames: ["method", "route", "status_code"],
-  buckets: [0.1, 0.3, 0.5, 0.7, 1, 3, 5, 7, 10], // standard buckets
+  buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10], // standard latency buckets
+  registers: [register],
+});
+
+export const httpRequestDurationSummary = new Summary({
+  name: "http_request_duration_summary_seconds",
+  help: "Summary of HTTP request durations with p50, p95, and p99 percentiles",
+  labelNames: ["method", "route", "status_code"],
+  percentiles: [0.5, 0.95, 0.99],
   registers: [register],
 });
 
 // Business Logic Metrics
+export const transactionsTotal = new Counter({
+  name: "transactions_total",
+  help: "Total number of transactions processed",
+  labelNames: ["provider", "status", "currency"],
+  registers: [register],
+});
+
 export const transactionTotal = new Counter({
   name: "transaction_total",
   help: "Total number of transactions processed",
   labelNames: ["type", "provider", "status"], // type: payment/payout
   registers: [register],
 });
+
+export const activeTransactions = new Gauge({
+  name: "active_transactions",
+  help: "Current number of active transactions being processed",
+  labelNames: ["provider"],
+  registers: [register],
+});
+
+export interface RecordTransactionParams {
+  provider: string;
+  status: string;
+  currency: string;
+  count?: number;
+}
+
+export function recordTransactionMetrics({
+  provider,
+  status,
+  currency,
+  count = 1,
+}: RecordTransactionParams): void {
+  transactionsTotal.inc({ provider, status, currency }, count);
+  // Also keep backward-compatible transactionTotal updated
+  transactionTotal.inc({ type: "payment", provider, status }, count);
+}
 
 export const transactionErrorsTotal = new Counter({
   name: "transaction_errors_total",
@@ -225,3 +277,133 @@ export const kycRequestsTotal = new Counter({
   labelNames: ["provider", "status"],
   registers: [register],
 });
+
+// ---------------------------------------------------------------------------
+// Provider HTTP response tracking (issue #2357)
+// ---------------------------------------------------------------------------
+// Labelled counter used by the ProviderHighErrorRate Prometheus alert rule in
+// monitoring/alerts.yml.  Increment this in any service layer that makes
+// outbound HTTP calls to an external mobile money provider.
+//
+// Usage:
+//   import { providerHttpRequestsTotal } from "../utils/metrics";
+//   providerHttpRequestsTotal.inc({ provider: "mpesa", status_code: "200" });
+//
+// The alert expression is:
+//   rate(provider_http_requests_total{status_code=~"5.."}[5m])
+//   / rate(provider_http_requests_total[5m]) > 0.05
+export const providerHttpRequestsTotal = new Counter({
+  name: "provider_http_requests_total",
+  help: "Total number of outbound HTTP requests made to external mobile money providers, labelled by provider name and HTTP status code",
+  labelNames: ["provider", "status_code"],
+  registers: [register],
+});
+// Database Connection Pool Health Metrics
+export const dbPoolActiveConnections = new Gauge({
+  name: "db_pool_active_connections",
+  help: "Number of active connections checked out from the database pool",
+  labelNames: ["pool"],
+  registers: [register],
+});
+
+export const dbPoolIdleConnections = new Gauge({
+  name: "db_pool_idle_connections",
+  help: "Number of idle connections available in the database pool",
+  labelNames: ["pool"],
+  registers: [register],
+});
+
+export const dbPoolWaitingClients = new Gauge({
+  name: "db_pool_waiting_clients",
+  help: "Number of clients waiting for a database pool connection",
+  labelNames: ["pool"],
+  registers: [register],
+});
+
+export interface PoolMetricsSource {
+  totalCount?: number;
+  idleCount?: number;
+  waitingCount?: number;
+}
+
+export function emitPoolMetrics(
+  poolInstance?: PoolMetricsSource | null,
+  poolName = "primary",
+): void {
+  if (!poolInstance) return;
+  const total = poolInstance.totalCount ?? 0;
+  const idle = poolInstance.idleCount ?? 0;
+  const waiting = poolInstance.waitingCount ?? 0;
+  const active = Math.max(0, total - idle);
+
+  dbPoolActiveConnections.labels(poolName).set(active);
+  dbPoolIdleConnections.labels(poolName).set(idle);
+  dbPoolWaitingClients.labels(poolName).set(waiting);
+}
+
+// Provider Liquidity Pool Float Balance Metric
+export const momoProviderFloatBalance = new Gauge({
+  name: "momo_provider_float_balance",
+  help: "Current operational float balance for mobile money providers",
+  labelNames: ["provider", "currency"],
+  registers: [register],
+});
+
+// Remittance Funnel Observability Metrics (Issue #2355)
+export const remittanceFunnelStageTotal = new Counter({
+  name: "remittance_funnel_stage_total",
+  help: "Total transactions entering or completing a remittance funnel stage",
+  labelNames: ["stage", "status", "provider", "currency"],
+  registers: [register],
+});
+
+export const remittanceFunnelDurationSeconds = new Histogram({
+  name: "remittance_funnel_duration_seconds",
+  help: "Latency of remittance funnel stages in seconds",
+  labelNames: ["stage", "provider"],
+  buckets: [0.1, 0.5, 1, 2, 5, 10, 30, 60, 120, 300],
+  registers: [register],
+});
+
+export const remittanceDropOffTotal = new Counter({
+  name: "remittance_drop_off_total",
+  help: "Total dropped transactions per remittance funnel stage",
+  labelNames: ["stage", "reason", "provider"],
+  registers: [register],
+});
+
+// ─── Provider latency & error-rate percentiles (Issue #2357) ─────────────────
+
+/**
+ * Fine-grained histogram of outbound provider HTTP request durations.
+ *
+ * Labels:
+ *   provider  – mtn_momo, airtel, orange, etc.
+ *   operation – requestPayment, sendPayout, getTransactionStatus, etc.
+ *
+ * Usage:
+ *   momoProviderRequestDurationSeconds.observe({ provider, operation }, durationSeconds);
+ */
+export const momoProviderRequestDurationSeconds = new Histogram({
+  name: "momo_provider_request_duration_seconds",
+  help: "HTTP request duration in seconds for each mobile money provider operation",
+  labelNames: ["provider", "operation"],
+  buckets: [0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30],
+  registers: [register],
+});
+
+/**
+ * Counter of provider errors broken down by error type.
+ *
+ * Labels:
+ *   provider   – mtn_momo, airtel, orange, etc.
+ *   error_type – timeout, http_4xx, http_5xx, network, unknown
+ */
+export const momoProviderErrorsTotal = new Counter({
+  name: "momo_provider_errors_total",
+  help: "Total number of errors returned by mobile money provider operations",
+  labelNames: ["provider", "error_type"],
+  registers: [register],
+});
+
+

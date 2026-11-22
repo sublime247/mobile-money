@@ -1,0 +1,45 @@
+meta {
+  name: "Login (Phone / OTP)"
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{base_url}}/api/auth/login
+  body: json
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "phone_number": "{{login_phone}}"
+  }
+}
+
+script:post-response {
+  const body = res.getBody();
+  if ((res.getStatus() === 200 || res.getStatus() === 201) && body && body.token) {
+    bru.setEnvVar("jwt_token", body.token);
+  }
+}
+
+tests {
+  test("login accepted", function() {
+    expect([200, 201]).to.include(res.getStatus());
+  });
+  test("token captured when returned", function() {
+    const body = res.getBody();
+    if (body && body.token) {
+      expect(bru.getEnvVar("jwt_token")).to.equal(body.token);
+    }
+  });
+}
+
+docs {
+  Alternative to SEP-10 for first-party clients using phone/OTP login.
+}

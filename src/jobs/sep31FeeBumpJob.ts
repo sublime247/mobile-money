@@ -9,6 +9,7 @@ import {
 import { getStellarServer, getNetworkPassphrase } from "../config/stellar";
 import * as StellarSdk from "@stellar/stellar-sdk";
 import { getConfiguredPaymentAsset } from "../services/stellar/assetService";
+import { notifyReceivingAnchorStatus } from "../services/webhookService";
 
 /**
  * SEP-31 Fee Bump Job
@@ -24,7 +25,7 @@ export async function runSep31FeeBumpJob(): Promise<void> {
     const sixtySecondsAgo = new Date(Date.now() - 60 * 1000).toISOString();
     const result = await pool.query(
       `
-      SELECT id, metadata, stellar_address, amount, status
+      SELECT id, metadata, stellar_address, amount, status, created_at
       FROM transactions
       WHERE status = 'pending'
         AND provider = 'stellar-sep31'
@@ -60,6 +61,11 @@ export async function runSep31FeeBumpJob(): Promise<void> {
             Sep31Status.PendingReceiver,
             metadata,
           );
+          await notifyReceivingAnchorStatus(
+            row,
+            Sep31Status.PendingReceiver,
+            metadata,
+          );
           continue;
         }
 
@@ -71,6 +77,7 @@ export async function runSep31FeeBumpJob(): Promise<void> {
             `[sep31-fee-bump] Transaction ${row.id} reached max fee bumps, marking as error`,
           );
           await updateSep31Status(row.id, Sep31Status.Error, metadata);
+          await notifyReceivingAnchorStatus(row, Sep31Status.Error, metadata);
           continue;
         }
 
@@ -138,7 +145,9 @@ async function performSep31FeeBump(
     // Fetch current network base fee and adjust dynamically
     const baseFee = await server
       .feeStats()
-      .then((res) => Number(res.last_ledger_base_fee));
+      .then((res) =>
+        Number(res.fee_charged?.p90 || res.last_ledger_base_fee || 100),
+      );
     const previousFee =
       sep31Meta.feeBumps?.length > 0
         ? sep31Meta.feeBumps[sep31Meta.feeBumps.length - 1].fee

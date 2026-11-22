@@ -142,6 +142,21 @@ export interface BinaryDocumentUploadInput {
   fileBuffer: Buffer;
 }
 
+export type FaceMatchStatus = "pending" | "clear" | "consider" | "rejected";
+
+export interface FaceMatchRequest {
+  applicantId: string;
+  biometricPayload: string;
+  filename?: string;
+}
+
+export interface FaceMatchRecord {
+  status: FaceMatchStatus;
+  checkId: string | null;
+  livePhotoId: string | null;
+  updatedAt: string;
+}
+
 const CreateApplicantSchema = z.object({
   first_name: z.string().min(1),
   last_name: z.string().min(1),
@@ -183,6 +198,7 @@ const TRANSIENT_RETRY_OPTIONS = {
 
 const IDENTITY_REPORT_HINTS = /document|identity|proof|id/i;
 const ADVANCED_REPORT_HINTS = /facial|face|selfie|biometric|address|enhanced/i;
+const FACE_MATCH_HINTS = /facial|face|selfie|biometric/i;
 const APPROVED_HINTS = /approve|approved|clear|pass|passed|success|successful/i;
 const REVIEW_HINTS = /review|consider|caution|suspect|pending|manual/i;
 const REJECTED_HINTS =
@@ -395,6 +411,54 @@ export class KYCService {
         `Failed to get verification status: ${error instanceof Error ? error.message : "Unknown error"}`,
       );
     }
+  }
+
+  /**
+   * Send a customer biometric to Onfido and request a facial similarity check
+   * against the photo ID already uploaded for the applicant.
+   */
+  async submitFaceMatch(input: FaceMatchRequest): Promise<FaceMatchRecord> {
+    if (!input.applicantId) {
+      throw new Error("applicantId is required for face-match verification");
+    }
+
+    const fileBuffer = this.decodeBase64Document(input.biometricPayload);
+    const mimeType = this.inferMimeFromDataUrl(input.biometricPayload);
+    const formData = new FormData();
+    formData.append("applicant_id", input.applicantId);
+    formData.append(
+      "file",
+      new Blob([fileBuffer as any], { type: mimeType }),
+      input.filename || "biometric.jpg",
+    );
+
+    const livePhoto = await this.requestWithRetry(() =>
+      this.api
+        .post("/live_photos", formData, { timeout: 45000 })
+        .then((response) => response.data as { id?: string }),
+    );
+
+    const check = await this.requestWithRetry(() =>
+      this.api
+        .post("/checks", {
+          applicant_id: input.applicantId,
+          report_names: ["facial_similarity_photo"],
+        })
+        .then(
+          (response) =>
+            response.data as { id?: string; status?: string; result?: string },
+        ),
+    );
+
+    const record: FaceMatchRecord = {
+      status: this.mapProviderFaceResult(check.result, check.status),
+      checkId: check.id ?? null,
+      livePhotoId: livePhoto.id ?? null,
+      updatedAt: new Date().toISOString(),
+    };
+
+    await this.persistFaceMatchRecord(input.applicantId, record);
+    return record;
   }
 
   async handleWebhook(event: WebhookEvent): Promise<void> {
@@ -717,6 +781,7 @@ export class KYCService {
     verification: VerificationStatusResponse,
     eventAction: string,
   ): Promise<void> {
+    const faceMatch = this.resolveFaceMatchStatus(verification.reports);
     const updateResult = await this.db.query<{
       user_id: string | null;
       kyc_level: string | null;
@@ -738,6 +803,7 @@ export class KYCService {
         JSON.stringify({
           last_event_action: eventAction,
           last_verified_at: new Date().toISOString(),
+          ...(faceMatch ? { face_match: faceMatch } : {}),
           last_verification_snapshot: {
             status: verification.status,
             level: verification.level,
@@ -758,7 +824,108 @@ export class KYCService {
     const userId = updateResult.rows[0]?.user_id;
     if (userId && verification.status === KYCStatus.APPROVED) {
       await this.updateUserKYCLevel(userId, verification.level);
+    } else if (
+      userId &&
+      faceMatch &&
+      (faceMatch.status === "rejected" || faceMatch.status === "consider")
+    ) {
+      await this.updateUserKYCLevel(userId, KYCLevel.UNVERIFIED);
     }
+  }
+
+  private async persistFaceMatchRecord(
+    applicantId: string,
+    record: FaceMatchRecord,
+  ): Promise<void> {
+    const failed = record.status === "rejected" || record.status === "consider";
+    const complianceStatus =
+      record.status === "rejected"
+        ? KYCStatus.REJECTED
+        : record.status === "consider"
+          ? KYCStatus.REVIEW
+          : null;
+
+    const updateResult = await this.db.query<{ user_id: string | null }>(
+      `
+        UPDATE kyc_applicants
+        SET applicant_data = COALESCE(applicant_data, '{}'::jsonb) || $1::jsonb,
+            verification_status = CASE
+              WHEN $2::text IS NULL THEN verification_status
+              ELSE $2
+            END,
+            rejection_reason = CASE
+              WHEN $3::text IS NULL THEN rejection_reason
+              ELSE $3
+            END,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE applicant_id = $4
+        RETURNING user_id
+      `,
+      [
+        JSON.stringify({ face_match: record }),
+        complianceStatus,
+        failed ? "Selfie Mismatch" : null,
+        applicantId,
+      ],
+    );
+
+    const userId = updateResult.rows[0]?.user_id;
+    if (userId && failed) {
+      await this.updateUserKYCLevel(userId, KYCLevel.UNVERIFIED);
+    }
+  }
+
+  private mapProviderFaceResult(
+    result?: string | null,
+    status?: string | null,
+  ): FaceMatchStatus {
+    const value = `${result || ""} ${status || ""}`.toLowerCase();
+    if (/reject|fail|unidentified|mismatch|unsuccess/.test(value)) {
+      return "rejected";
+    }
+    if (/consider|review|caution|suspect/.test(value)) {
+      return "consider";
+    }
+    if (/\b(clear|passed|pass|approved|successful|success)\b/.test(value)) {
+      return "clear";
+    }
+    return "pending";
+  }
+
+  private resolveFaceMatchStatus(
+    reports: KYCReport[],
+  ): FaceMatchRecord | null {
+    const facial = reports.find((report) =>
+      FACE_MATCH_HINTS.test(report.name || ""),
+    );
+    if (!facial) {
+      return null;
+    }
+
+    const evidence = this.getReportEvidence(facial);
+    let status: FaceMatchStatus = "pending";
+    if (
+      this.isRejectedLike(evidence) ||
+      /mismatch|unidentified/.test(evidence)
+    ) {
+      status = "rejected";
+    } else if (this.isReviewLike(evidence)) {
+      status = "consider";
+    } else if (this.isApprovedLike(evidence)) {
+      status = "clear";
+    }
+
+    return {
+      status,
+      checkId: facial.check_id || null,
+      livePhotoId: null,
+      updatedAt: facial.created_at || new Date().toISOString(),
+    };
+  }
+
+  private inferMimeFromDataUrl(data: string): string {
+    const match = data.match(/^data:([^;]+);base64,/i);
+    return match?.[1] || "image/jpeg";
   }
 
   private decodeBase64Document(data: string): Buffer {

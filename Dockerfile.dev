@@ -25,4 +25,4 @@ EXPOSE 3000
 # --respawn      — restart on crash
 # --transpile-only — skip type checking for faster restarts
 # --ignore-watch node_modules — don't watch node_modules
-CMD ["npx", "ts-node-dev", "--respawn", "--transpile-only", "--ignore-watch", "node_modules", "src/index.ts"]
+CMD ["npx", "tsx", "watch", "src/index.ts"]

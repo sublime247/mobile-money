@@ -1,0 +1,14 @@
+---
+title: 'Get Transaction Status'
+api: 'GET /v1/transactions/{transactionId}'
+description: 'Check the current status of a transaction'
+---
+
+Retrieves the current status and details of a specific transaction.
+
+<ParamField path="transactionId" type="string" required>
+  The ID of the transaction to retrieve.
+</ParamField>
+
+### Response
+Returns the full transaction object including status, timestamps, and fees.

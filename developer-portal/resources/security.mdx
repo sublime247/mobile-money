@@ -1,0 +1,24 @@
+---
+title: 'Security'
+description: 'Security overview and practices'
+---
+
+Security is our top priority.
+
+<CardGroup cols={2}>
+  <Card title="Encryption" icon="shield-halved">
+    All data is encrypted at rest and in transit. PII is field-level encrypted.
+  </Card>
+  <Card title="RBAC" icon="users">
+    Strict Role-Based Access Control across all internal systems.
+  </Card>
+  <Card title="Rate Limiting" icon="stopwatch">
+    Protects against DDoS and brute-force attacks.
+  </Card>
+  <Card title="Audit Logging" icon="list">
+    Immutable audit logs for all administrative actions.
+  </Card>
+</CardGroup>
+
+## Webhook Verification
+All webhooks are signed using HMAC-SHA256. Ensure you verify signatures before processing events.

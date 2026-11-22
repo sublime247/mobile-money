@@ -29,6 +29,7 @@ beforeEach(() => {
   delete process.env.STELLAR_SIGNING_KEY;
   delete process.env.STELLAR_EXTRA_ASSETS;
   delete process.env.ORG_NAME;
+  delete process.env.ANCHOR_QUOTES_URL;
 
   assetModel.findAll = jest.fn().mockResolvedValue([]);
 });
@@ -141,6 +142,21 @@ describe("generateToml()", () => {
     it("includes DIRECT_PAYMENT_SERVER line", async () => {
       const toml = await generateToml();
       expect(toml).toMatch(/DIRECT_PAYMENT_SERVER=/);
+    });
+
+    it("includes ANCHOR_QUOTES_SERVER line with a default fallback", async () => {
+      delete process.env.ANCHOR_QUOTES_URL;
+      const toml = await generateToml();
+      expect(toml).toMatch(/ANCHOR_QUOTES_SERVER=/);
+      expect(toml).toContain("/sep38");
+    });
+
+    it("uses ANCHOR_QUOTES_URL env var when set", async () => {
+      process.env.ANCHOR_QUOTES_URL = "https://quotes.example.com/sep38";
+      const toml = await generateToml();
+      expect(toml).toContain(
+        'ANCHOR_QUOTES_SERVER="https://quotes.example.com/sep38"',
+      );
     });
 
     it("includes SIGNING_KEY when set", async () => {

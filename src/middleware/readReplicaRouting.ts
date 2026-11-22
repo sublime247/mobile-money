@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "async_hooks";
 import { Request, Response, NextFunction } from "express";
 
 /**
@@ -16,6 +17,10 @@ import { Request, Response, NextFunction } from "express";
  *
  * The middleware attaches metadata to the request object that services
  * and data access layers can use to select the appropriate database pool.
+ * It also runs the rest of the request inside an AsyncLocalStorage context,
+ * which `pool.query` in src/config/database.ts reads to send read-only
+ * statements to a replica automatically (#2290). Statements on a checked-out
+ * client (`pool.connect()`, i.e. transactions) always stay on the primary.
  */
 export interface DatabaseRoutingContext {
   /** Whether this request should use the replica pool */
@@ -24,6 +29,13 @@ export interface DatabaseRoutingContext {
   method: string;
   /** Route path */
   path: string;
+}
+
+const dbRoutingStorage = new AsyncLocalStorage<DatabaseRoutingContext>();
+
+/** Routing context of the HTTP request currently being handled, if any. */
+export function getDbRoutingContext(): DatabaseRoutingContext | undefined {
+  return dbRoutingStorage.getStore();
 }
 
 declare module "express" {
@@ -41,11 +53,12 @@ export function readReplicaRoutingMiddleware(
   const useReplicaPool = isReadOperation(req.method);
 
   // Attach routing context to request
-  req.dbRouting = {
+  const context: DatabaseRoutingContext = {
     useReplicaPool,
     method: req.method,
     path: req.path,
   };
+  req.dbRouting = context;
 
   // Log routing decision in development
   if (
@@ -57,7 +70,7 @@ export function readReplicaRoutingMiddleware(
     );
   }
 
-  next();
+  dbRoutingStorage.run(context, next);
 }
 
 /**

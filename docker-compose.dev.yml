@@ -23,6 +23,8 @@ services:
       - SMTP_PORT=1025
       - STELLAR_HORIZON_URL=http://stellar:8000
       - STELLAR_NETWORK=local
+      - MTN_HEALTH_URL=http://provider-mock:4010/health
+      - AIRTEL_HEALTH_URL=http://provider-mock:4010/health
     env_file:
       - path: .env
         required: false
@@ -34,6 +36,8 @@ services:
       maildev:
         condition: service_healthy
       stellar:
+        condition: service_healthy
+      provider-mock:
         condition: service_healthy
 
   db:
@@ -96,6 +100,38 @@ services:
       retries: 10
       start_period: 30s
 
+  provider-mock:
+    image: node:20-alpine
+    container_name: mobilemoney_provider_mock_dev
+    working_dir: /app
+    restart: unless-stopped
+    command:
+      [
+        "sh",
+        "-c",
+        "npm ci --ignore-scripts && npx tsx scripts/provider-mock-server.ts",
+      ]
+    volumes:
+      - .:/app
+      - provider_mock_dev_node_modules:/app/node_modules
+    environment:
+      PROVIDER_MOCK_PORT: ${PROVIDER_MOCK_PORT:-4010}
+    ports:
+      - "4010:4010"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:4010/health').then(response => { if (!response.ok) process.exit(1); }).catch(() => process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
 volumes:
   postgres_dev_data:
   redis_dev_data:
+  provider_mock_dev_node_modules:

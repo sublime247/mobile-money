@@ -313,3 +313,53 @@ registry.registerPath({
     },
   },
 });
+
+// ─── Sandbox Simulation ───────────────────────────────────────────────────────
+
+registry.registerPath({
+  method: "post",
+  path: "/api/v1/sandbox/transactions/{id}/simulate",
+  tags: [TAG],
+  summary: "Simulate advancing a sandbox transaction status and dispatch webhook",
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: z.object({ id: z.string() }),
+    body: {
+      content: {
+        "application/json": {
+          schema: z.object({
+            status: z.enum(["SUCCESS", "FAILED", "completed", "failed"]).optional(),
+            reason: z.string().optional(),
+          }),
+        },
+      },
+      required: false,
+    },
+  },
+  responses: {
+    200: {
+      description: "Transaction simulation completed",
+      content: {
+        "application/json": {
+          schema: z.object({
+            success: z.boolean(),
+            transactionId: z.string(),
+            status: z.string(),
+            previousStatus: z.string(),
+            webhookDispatched: z.boolean(),
+            event: z.string(),
+            payload: z.record(z.any()),
+          }),
+        },
+      },
+    },
+    401: {
+      description: "Unauthorized",
+      content: { "application/json": { schema: ErrorResponseSchema } },
+    },
+    403: {
+      description: "Forbidden - Production API key rejected for sandbox simulation",
+      content: { "application/json": { schema: ErrorResponseSchema } },
+    },
+  },
+});

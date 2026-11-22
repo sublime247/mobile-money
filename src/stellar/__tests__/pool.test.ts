@@ -128,17 +128,11 @@ describe("ChannelAccountPool", () => {
       updateBalance: jest.fn().mockResolvedValue(undefined),
     } as unknown as ChannelAccountModel;
 
-    // Call 1: initialize() startup verification pass
-    // Call 2: submitWithChannel() internal resync sequence pass
-    mockServer.loadAccount
-      .mockResolvedValueOnce({
-        sequenceNumber: () => "100",
-        balances: [{ asset_type: "native", balance: "10" }],
-      })
-      .mockResolvedValueOnce({
-        sequenceNumber: () => "150",
-        balances: [{ asset_type: "native", balance: "10" }],
-      });
+    // Call 1: submitWithChannel() internal resync sequence pass
+    mockServer.loadAccount.mockResolvedValueOnce({
+      sequenceNumber: () => "150",
+      balances: [{ asset_type: "native", balance: "10" }],
+    });
 
     mockServer.submitTransaction
       .mockRejectedValueOnce({
@@ -167,7 +161,7 @@ describe("ChannelAccountPool", () => {
     expect(result).toEqual({ hash: "ok-hash" });
     expect(sequences).toEqual(["100", "150"]);
     expect(mockServer.submitTransaction).toHaveBeenCalledTimes(2);
-    expect(mockServer.loadAccount).toHaveBeenCalledTimes(2); // Initial boot + emergency sync
+    expect(mockServer.loadAccount).toHaveBeenCalledTimes(1); // Emergency sync
     expect(mockModel.updateSequence).toHaveBeenCalledWith(channel.id, "150");
 
     await pool.shutdown();

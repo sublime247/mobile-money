@@ -15,6 +15,7 @@ import {
 } from "@opentelemetry/sdk-trace-base";
 import { W3CTraceContextPropagator } from "@opentelemetry/core";
 import { CompositePropagator, W3CBaggagePropagator } from "@opentelemetry/core";
+import { AsyncLocalStorageContextManager } from "@opentelemetry/context-async-hooks";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -22,6 +23,9 @@ function buildTestProvider() {
   const exporter = new InMemorySpanExporter();
   const provider = new BasicTracerProvider();
   provider.addSpanProcessor(new SimpleSpanProcessor(exporter));
+  // Without a context manager `context.with()` is a no-op and
+  // `trace.getActiveSpan()` returns undefined inside a span.
+  context.setGlobalContextManager(new AsyncLocalStorageContextManager());
   provider.register({
     propagator: new CompositePropagator({
       propagators: [
@@ -143,12 +147,14 @@ describe("Job-boundary span linkage", () => {
       kind: SpanKind.INTERNAL,
       links: [
         {
-          context: trace.wrapSpanContext({
-            traceId:    httpTraceId,
-            spanId:     httpSpanId,
+          // `trace.wrapSpanContext()` returns a NonRecordingSpan (a Span), not
+          // a SpanContext — link contexts must be the raw context object.
+          context: {
+            traceId: httpTraceId,
+            spanId: httpSpanId,
             traceFlags: 1,
-            isRemote:   true,
-          }),
+            isRemote: true,
+          },
           attributes: { "link.type": "enqueued-by" },
         },
       ],

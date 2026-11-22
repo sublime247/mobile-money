@@ -2,7 +2,7 @@
 
 ## Overview
 
-The project uses Jest for testing and Codecov for coverage tracking and reporting. Coverage badges are automatically updated on every push to main.
+The project uses Jest for testing and coverage tracking. Local HTML and LCOV coverage reports are generated during test runs.
 
 ## Coverage Requirements
 
@@ -13,26 +13,18 @@ The project uses Jest for testing and Codecov for coverage tracking and reportin
 - **Lines**: 70%
 - **Statements**: 70%
 
-These thresholds are enforced in CI/CD pipeline and will fail builds that don't meet requirements.
+These thresholds are enforced by Jest and will fail builds that don't meet requirements.
 
 ## Viewing Coverage
 
-### Badge
+Run coverage locally:
+```bash
+npm run test:coverage
+```
 
-The README displays the current coverage percentage:
-
-[![codecov](https://codecov.io/gh/sublime247/mobile-money/branch/main/graph/badge.svg)](https://codecov.io/gh/sublime247/mobile-money)
-
-### Codecov Dashboard
-
-Visit: https://codecov.io/gh/sublime247/mobile-money
-
-Features:
-
-- Line-by-line coverage visualization
-- Coverage trends over time
-- Pull request coverage diff
-- File and directory coverage breakdown
+Coverage reports are generated in the `coverage/` directory:
+- HTML report: `coverage/index.html` (open in browser for line-by-line visualization)
+- Summary: `coverage/coverage-summary.json`
 
 ### Local Coverage Report
 
@@ -125,64 +117,16 @@ coverageThreshold: {
 
 ### Codecov Configuration
 
-Settings in `codecov.yml`:
-
-- Target coverage: 70%
-- Threshold: 2% (allows small decreases)
-- Comments on PRs with coverage diff
-- Ignores test files and examples
-
 ## CI/CD Integration
 
-### Automatic Coverage Upload
-
-On every push and PR:
-
-1. Tests run with coverage collection
-2. Coverage report generated (lcov format)
-3. Report uploaded to Codecov
-4. Badge updated automatically
-5. PR comment added with coverage diff
-
-### GitHub Actions Workflow
-
-See `.github/workflows/ci.yml` and `.github/workflows/coverage.yml`
-
-## Setup Instructions
-
-### 1. Sign Up for Codecov
-
-1. Go to https://codecov.io
-2. Sign in with GitHub
-3. Add repository: sublime247/mobile-money
-
-### 2. Get Codecov Token
-
-1. Go to repository settings on Codecov
-2. Copy the upload token
-3. Add to GitHub repository secrets as `CODECOV_TOKEN`
-
-### 3. Add GitHub Secret
-
-1. Go to GitHub repository settings
-2. Navigate to Secrets and variables → Actions
-3. Click "New repository secret"
-4. Name: `CODECOV_TOKEN`
-5. Value: [paste token from Codecov]
-
-### 4. Verify Setup
-
-1. Push code to main branch
-2. Check GitHub Actions tab for workflow run
-3. Verify coverage uploaded to Codecov
-4. Check badge displays in README
+Coverage reports are generated during Jest test runs in the CI/CD pipeline:
+- See `.github/workflows/ci.yml` and `.github/workflows/coverage.yml`
 
 ## Coverage Best Practices
 
 ### 1. Test Critical Paths
 
 Focus on:
-
 - Business logic
 - Data transformations
 - Error handling
@@ -191,7 +135,6 @@ Focus on:
 ### 2. Don't Test Everything
 
 Skip:
-
 - Type definitions
 - Simple getters/setters
 - Configuration files
@@ -211,18 +154,6 @@ Skip:
 
 ## Troubleshooting
 
-### Coverage Not Uploading
-
-- Check `CODECOV_TOKEN` is set in GitHub secrets
-- Verify workflow has `secrets.CODECOV_TOKEN` in codecov action
-- Check coverage file exists: `./coverage/lcov.info`
-
-### Badge Not Updating
-
-- Wait 5-10 minutes after push
-- Clear browser cache
-- Check Codecov dashboard for latest data
-
 ### Tests Failing in CI
 
 - Ensure all dependencies in package.json
@@ -236,25 +167,6 @@ Skip:
 - Add tests for uncovered code
 - Consider adjusting thresholds if unrealistic
 
-## Monitoring Coverage
-
-### Pull Request Checks
-
-Codecov automatically:
-
-- Comments on PRs with coverage changes
-- Shows coverage diff (lines added/removed)
-- Fails PR if coverage drops significantly
-
-### Coverage Trends
-
-Monitor in Codecov dashboard:
-
-- Coverage over time
-- Per-file coverage
-- Commit-by-commit changes
-- Branch comparisons
-
 ## Excluded from Coverage
 
 - Test files (`*.test.ts`, `*.spec.ts`)
@@ -262,5 +174,3 @@ Monitor in Codecov dashboard:
 - Type definitions (`*.d.ts`)
 - Entry point (`src/index.ts`)
 - Build output (`dist/**/*`)
-
-See `codecov.yml` for full exclusion list.

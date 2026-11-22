@@ -1,21 +1,29 @@
 import { Router, Request, Response } from "express";
 import { register } from "../utils/metrics";
+import {
+  createMetricsAuthMiddleware,
+  MetricsAuthOptions,
+} from "../middleware/metricsAuth";
 
-const createMetricsRouter = () => {
+export interface MetricsRouterOptions extends MetricsAuthOptions {}
+
+const createMetricsRouter = (options?: MetricsRouterOptions) => {
   const router = Router();
+
+  // Protect /metrics with Basic Auth and/or internal network IP restrictions (#1994)
+  router.use(createMetricsAuthMiddleware(options));
 
   /**
    * GET /metrics
    *
-   * Exposes all registered Prometheus metrics (default process metrics,
-   * HTTP request counters, transaction counters, queue depth, etc.)
-   * in the plain-text Prometheus exposition format.
+   * Exposes all registered Prometheus metrics in the standard plain-text
+   * Prometheus exposition format (text/plain; version=0.0.4).
    *
-   * The output already includes:
-   *   - CPU latency  – process_cpu_user_seconds_total,
-   *                    process_cpu_system_seconds_total, etc.
-   *   - Transaction count – transaction_total{type,provider,status}
-   *   - Queue depth  – via queue_depth / metrics/queue_depth
+   * Includes:
+   *   - transactions_total{provider, status, currency}
+   *   - http_request_duration_seconds (histogram buckets for p50, p95, p99)
+   *   - http_request_duration_summary_seconds (percentiles p50, p95, p99)
+   *   - CPU, memory, event loop, and queue depth metrics
    */
   router.get("/", async (_req: Request, res: Response) => {
     try {

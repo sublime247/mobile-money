@@ -3,7 +3,6 @@
 
 DROP TRIGGER IF EXISTS key_recovery_sessions_updated_at ON key_recovery_sessions;
 DROP TRIGGER IF EXISTS managed_keys_updated_at ON managed_keys;
-DROP FUNCTION IF EXISTS update_updated_at_column();
 DROP INDEX IF EXISTS idx_kra_occurred_at;
 DROP INDEX IF EXISTS idx_kra_session_id;
 DROP TABLE IF EXISTS key_recovery_audit_log;

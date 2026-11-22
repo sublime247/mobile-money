@@ -99,6 +99,92 @@ export function getSep10Config(): Sep10Config {
   };
 }
 
+const clientDomainCache = new Map<string, { signingKey: string; fetchedAt: number }>();
+const CACHE_TTL_MS = 15 * 60 * 1000;
+
+/**
+ * Read raw signature bytes from a decorated signature.
+ * SDK 17's XDR `Signature` stringifies to hex; `.value` is the raw bytes.
+ */
+function readDecoratedSignature(
+  sig: StellarSdk.xdr.DecoratedSignature,
+): Buffer {
+  const signature = sig.signature as unknown;
+
+  if (typeof signature === "function") {
+    const raw = (signature as () => unknown).call(sig);
+    if (Buffer.isBuffer(raw) || raw instanceof Uint8Array) {
+      return Buffer.from(raw);
+    }
+  }
+
+  const rendered =
+    signature && typeof (signature as { toString?: () => string }).toString === "function"
+      ? String(signature)
+      : "";
+  if (/^[0-9a-f]+$/i.test(rendered) && rendered.length % 2 === 0) {
+    return Buffer.from(rendered, "hex");
+  }
+
+  const value = (signature as { value?: Uint8Array } | null)?.value;
+  if (value && (Buffer.isBuffer(value) || value instanceof Uint8Array)) {
+    return Buffer.from(value);
+  }
+
+  throw new Error("Unreadable signature");
+}
+
+export async function fetchClientDomainSigningKey(
+  clientDomain: string,
+  fetchFn?: typeof fetch,
+): Promise<string> {
+  const normalizedDomain = clientDomain.toLowerCase().trim();
+  const cached = clientDomainCache.get(normalizedDomain);
+  if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
+    return cached.signingKey;
+  }
+
+  const protocol =
+    normalizedDomain.startsWith("localhost") || normalizedDomain.includes("127.0.0.1")
+      ? "http"
+      : "https";
+  const url = `${protocol}://${normalizedDomain}/.well-known/stellar.toml`;
+
+  try {
+    const customFetch = fetchFn || globalThis.fetch;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+
+    const response = await customFetch(url, { signal: controller.signal });
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status} fetching stellar.toml`);
+    }
+
+    const text = await response.text();
+    const match =
+      text.match(/SIGNING_KEY\s*=\s*["']?([G][A-Z0-9]{55})["']?/i) ||
+      text.match(/URI_REQUEST_SIGNER\s*=\s*["']?([G][A-Z0-9]{55})["']?/i);
+
+    if (!match || !match[1]) {
+      throw new Error(`No SIGNING_KEY found in ${normalizedDomain}/.well-known/stellar.toml`);
+    }
+
+    const signingKey = match[1];
+    clientDomainCache.set(normalizedDomain, { signingKey, fetchedAt: Date.now() });
+    return signingKey;
+  } catch (error: any) {
+    logger.warn(
+      { clientDomain: normalizedDomain, err: error.message },
+      "[SEP-10] Failed to fetch or parse client domain stellar.toml",
+    );
+    throw new Error(
+      `Client domain verification failed: ${error.message || "Unable to fetch SIGNING_KEY"}`,
+    );
+  }
+}
+
 // ============================================================================
 // SEP-10 Service
 // ============================================================================
@@ -150,37 +236,61 @@ export class Sep10Service {
     try {
       const server = this.getStellarServer();
       const account = await server.loadAccount(accountId);
+      const thresholdsRaw = (account as any).thresholds ?? {};
+      const rawSigners = Array.isArray((account as any).signers)
+        ? (account as any).signers
+        : [];
 
-      // Get master key weight
-      const masterWeight = (account as any).thresholds?.master_weight ?? 1;
-
-      // Extract all signers
+      // Horizon's signers array is the source of truth. It already includes the
+      // master key. `thresholds.master_weight` is not part of the Horizon
+      // response, so defaulting it to 1 counts a disabled master key.
       const signers: SignerInfo[] = [];
+      const seen = new Set<string>();
 
-      // Add master key as a signer
-      if (masterWeight > 0) {
+      for (const signer of rawSigners) {
+        const signerType = signer.type as string | undefined;
+        if (signerType && signerType !== "ed25519_public_key") {
+          continue;
+        }
+
+        const publicKey = String(signer.key || "");
+        const weight = Number(signer.weight ?? 0);
+        if (
+          !publicKey ||
+          !Sep10Service.isValidPublicKey(publicKey) ||
+          !Number.isFinite(weight) ||
+          weight <= 0 ||
+          seen.has(publicKey)
+        ) {
+          continue;
+        }
+
+        seen.add(publicKey);
+        signers.push({ publicKey, weight });
+      }
+
+      const explicitMasterWeight = Number(thresholdsRaw.master_weight);
+      if (
+        !seen.has(accountId) &&
+        Number.isFinite(explicitMasterWeight) &&
+        explicitMasterWeight > 0
+      ) {
         signers.push({
           publicKey: accountId,
-          weight: masterWeight,
+          weight: explicitMasterWeight,
         });
+        seen.add(accountId);
       }
 
-      // Add other signers
-      if ((account as any).signers) {
-        for (const signer of (account as any).signers) {
-          if (signer.type === "ed25519_public_key") {
-            signers.push({
-              publicKey: signer.key,
-              weight: signer.weight,
-            });
-          }
-        }
-      }
+      const masterWeight = seen.has(accountId)
+        ? (signers.find((signer) => signer.publicKey === accountId)?.weight ??
+          0)
+        : 0;
 
       const thresholds: AccountThresholds = {
-        lowThreshold: (account as any).thresholds?.low_threshold ?? 0,
-        mediumThreshold: (account as any).thresholds?.med_threshold ?? 0,
-        highThreshold: (account as any).thresholds?.high_threshold ?? 0,
+        lowThreshold: Number(thresholdsRaw.low_threshold ?? 0),
+        mediumThreshold: Number(thresholdsRaw.med_threshold ?? 0),
+        highThreshold: Number(thresholdsRaw.high_threshold ?? 0),
       };
 
       return { signers, thresholds, masterWeight };
@@ -217,7 +327,12 @@ export class Sep10Service {
 
     // Check each signature in the transaction
     for (const sig of transaction.signatures) {
-      const signatureBuffer = Buffer.from(sig.signature.toString(), "hex");
+      let signatureBuffer: Buffer;
+      try {
+        signatureBuffer = readDecoratedSignature(sig);
+      } catch {
+        continue;
+      }
 
       // Try to verify this signature against each signer
       for (const signer of signers) {
@@ -273,10 +388,14 @@ export class Sep10Service {
       this.serverKeypair.publicKey(),
     );
 
-    console.log(
-      `[SEP-10] Account: ${clientAccountId}, ` +
-        `Required weight: ${thresholds.mediumThreshold}, ` +
-        `Actual weight: ${clientSignatureWeight}`,
+    logger.info(
+      {
+        account: clientAccountId,
+        requiredWeight: thresholds.mediumThreshold,
+        actualWeight: clientSignatureWeight,
+        masterWeight,
+      },
+      "[SEP-10] Evaluated multisig signer weights",
     );
 
     return clientSignatureWeight >= thresholds.mediumThreshold;
@@ -287,15 +406,24 @@ export class Sep10Service {
    *
    * @param clientPublicKey - The client's Stellar public key
    * @param homeDomain - Optional home domain (defaults to config)
+   * @param clientDomain - Optional client domain to verify against stellar.toml (#1946)
    * @returns Challenge response with transaction XDR and network passphrase
    */
-  generateChallenge(
+  async generateChallenge(
     clientPublicKey: string,
     homeDomain?: string,
-  ): Sep10ChallengeResponse {
+    clientDomain?: string,
+    fetchFn?: typeof fetch,
+  ): Promise<Sep10ChallengeResponse> {
     // Validate account address
     if (!Sep10Service.isValidPublicKey(clientPublicKey)) {
       throw new Error("Invalid Stellar public key");
+    }
+
+    // Verify client domain against its stellar.toml if provided (#1946)
+    let clientDomainSigningKey: string | null = null;
+    if (clientDomain) {
+      clientDomainSigningKey = await fetchClientDomainSigningKey(clientDomain, fetchFn);
     }
 
     const domain = homeDomain || this.config.homeDomain;
@@ -306,7 +434,7 @@ export class Sep10Service {
     const timebounds =
       this.config.challengeExpiresIn < 0
         ? {
-            minTime: String(now - 60),
+            minTime: String(now + this.config.challengeExpiresIn - 60),
             maxTime: String(now + this.config.challengeExpiresIn),
           }
         : {
@@ -348,6 +476,17 @@ export class Sep10Service {
       }),
     );
 
+    // Add client_domain operation if requested (#1946)
+    if (clientDomain) {
+      builder = builder.addOperation(
+        StellarSdk.Operation.manageData({
+          name: "client_domain",
+          value: clientDomain,
+          source: clientPublicKey,
+        }),
+      );
+    }
+
     // Add web_auth_domain operation from server
     builder = builder.addOperation(
       StellarSdk.Operation.manageData({
@@ -377,6 +516,7 @@ export class Sep10Service {
   async verifyChallenge(
     transactionXDR: string,
     clientAccountID?: string,
+    fetchFn?: typeof fetch,
   ): Promise<Sep10TokenResponse> {
     // Parse the transaction from XDR
     let transaction: StellarSdk.Transaction;
@@ -394,15 +534,19 @@ export class Sep10Service {
       throw new Error("Transaction sequence number must be 0");
     }
 
-    // Verify timebounds
+    // Verify timebounds (#1942)
     const timeBounds = transaction.timeBounds;
-    if (!timeBounds) {
+    if (!timeBounds || !timeBounds.minTime || !timeBounds.maxTime) {
       throw new Error("Transaction must have timebounds");
     }
 
     const now = Math.floor(Date.now() / 1000);
     const minTime = parseInt(timeBounds.minTime, 10);
     const maxTime = parseInt(timeBounds.maxTime, 10);
+
+    if (isNaN(minTime) || isNaN(maxTime) || (maxTime === 0 && minTime === 0)) {
+      throw new Error("Invalid challenge timebounds");
+    }
 
     if (now < minTime) {
       throw new Error("Transaction is not yet valid");
@@ -433,7 +577,7 @@ export class Sep10Service {
       try {
         return this.serverKeypair.verify(
           Buffer.from(txHash),
-          Buffer.from(sig.signature.toString(), "hex"),
+          readDecoratedSignature(sig),
         );
       } catch {
         return false;
@@ -466,6 +610,31 @@ export class Sep10Service {
       throw new Error(
         `Failed to verify signing threshold: ${error instanceof Error ? error.message : String(error)}`,
       );
+    }
+
+    // Verify client domain signature if client_domain operation is present (#1946)
+    const clientDomainOp = transaction.operations.find(
+      (op: any) => op.type === "manageData" && op.name === "client_domain",
+    ) as any;
+    if (clientDomainOp && clientDomainOp.value) {
+      const clientDomainStr = clientDomainOp.value.toString("utf8");
+      const clientDomainSigningKey = await fetchClientDomainSigningKey(clientDomainStr, fetchFn);
+      const clientDomainKeypair = StellarSdk.Keypair.fromPublicKey(clientDomainSigningKey);
+      const domainSigned = transaction.signatures.some((sig) => {
+        try {
+          return clientDomainKeypair.verify(
+            Buffer.from(txHash),
+            readDecoratedSignature(sig),
+          );
+        } catch {
+          return false;
+        }
+      });
+      if (!domainSigned) {
+        throw new Error(
+          `Transaction is not signed by client domain SIGNING_KEY (${clientDomainSigningKey})`,
+        );
+      }
     }
 
     // Issue a JWT token
@@ -547,7 +716,7 @@ export function createSep10Router(service?: Sep10Service): Router {
    * SEP-10 challenge endpoint
    * Returns a challenge transaction for the client to sign
    */
-  router.get("/", (req: Request, res: Response) => {
+  router.get("/", async (req: Request, res: Response) => {
     if (!sep10Service) {
       throw createError(
         ERROR_CODES.SERVICE_UNAVAILABLE,
@@ -559,7 +728,7 @@ export function createSep10Router(service?: Sep10Service): Router {
     }
 
     try {
-      const { account, home_domain } = req.query;
+      const { account, home_domain, client_domain } = req.query;
 
       // Validate required parameters
       if (!account || typeof account !== "string") {
@@ -573,9 +742,10 @@ export function createSep10Router(service?: Sep10Service): Router {
       }
 
       // Generate the challenge transaction
-      const challenge = sep10Service.generateChallenge(
+      const challenge = await sep10Service.generateChallenge(
         account,
         home_domain as string | undefined,
+        client_domain as string | undefined,
       );
 
       return res.json(challenge);

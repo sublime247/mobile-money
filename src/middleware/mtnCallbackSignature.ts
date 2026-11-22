@@ -31,16 +31,8 @@ function getSignatureHeader(req: Request): string | undefined {
   return req.headers[ALT_SIGNATURE_HEADER] as string | undefined;
 }
 
-function computeExpectedSignature(
-  rawBody: Buffer,
-  secret: string,
-  headerValue: string,
-): string {
-  const hasPrefix = headerValue.startsWith("sha256=");
-  if (hasPrefix) {
-    return createHmac("sha256", secret).update(rawBody).digest("hex");
-  }
-  return createHmac("sha256", secret).update(rawBody).digest("base64");
+function computeExpectedSignature(rawBody: Buffer, secret: string): string {
+  return createHmac("sha256", secret).update(rawBody).digest("hex");
 }
 
 function verifySignature(
@@ -48,7 +40,13 @@ function verifySignature(
   headerValue: string,
   secret: string,
 ): boolean {
-  const expected = computeExpectedSignature(rawBody, secret, headerValue);
+  // The digest encoding MTN signs with (hex) is fixed by MTN's callback
+  // contract, not by whatever format the caller happens to send. Deriving
+  // the expected encoding from the incoming header (as this used to do)
+  // let a caller pick hex or base64 just by including/omitting the
+  // "sha256=" prefix, which means two structurally different values could
+  // both be treated as "the" expected signature for the same body/secret.
+  const expected = computeExpectedSignature(rawBody, secret);
   const incoming = headerValue.startsWith("sha256=")
     ? headerValue.substring(7)
     : headerValue;

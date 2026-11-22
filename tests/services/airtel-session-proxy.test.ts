@@ -70,7 +70,7 @@ describe("AirtelService - Session Proxy Wrapper", () => {
       expect(result.success).toBe(true);
       expect(mockClient.post).toHaveBeenCalledWith(
         "/auth/oauth2/token",
-        undefined,
+        {},
         expect.objectContaining({
           headers: expect.objectContaining({
             Authorization: expect.stringMatching(/^Basic /),
@@ -282,8 +282,10 @@ describe("AirtelService - Session Proxy Wrapper", () => {
 
     it("should refresh session when approaching expiry", async () => {
       const mockClient = { post: jest.fn(), get: jest.fn() };
-      const mockNow = 1000000;
+      let now = 1000000;
       const refreshSkew = 60000;
+      const sessionTtlMs = 20 * 60 * 1000;
+      const originalAuthenticatedAt = now - 500000;
 
       mockedFs.existsSync.mockReturnValue(true);
       mockedFs.mkdirSync.mockImplementation(() => {});
@@ -292,8 +294,8 @@ describe("AirtelService - Session Proxy Wrapper", () => {
         return JSON.stringify({
           cookies: { sessionid: { value: "old-session" } },
           csrfToken: "old-csrf",
-          expiresAt: mockNow + refreshSkew / 2, // Within refresh skew window
-          authenticatedAt: mockNow - 500000,
+          expiresAt: now + refreshSkew / 2, // Within refresh skew window
+          authenticatedAt: originalAuthenticatedAt,
         });
       });
 
@@ -302,7 +304,8 @@ describe("AirtelService - Session Proxy Wrapper", () => {
         httpClient: mockClient,
         sessionStorePath: ".airtel-session/session.json",
         refreshSkewMs: refreshSkew,
-        clock: () => mockNow,
+        sessionTtlMs,
+        clock: () => now,
         username: "test-user",
         password: "test-password",
       });
@@ -329,10 +332,13 @@ describe("AirtelService - Session Proxy Wrapper", () => {
       // Mock refresh endpoint and payout endpoint
       mockClient.post = jest
         .fn()
-        .mockResolvedValueOnce({
-          status: 200,
-          data: { success: true },
-          headers: { "set-cookie": ["sessionid=refreshed; Path=/"] },
+        .mockImplementationOnce(async () => {
+          now += 5000;
+          return {
+            status: 200,
+            data: { success: true },
+            headers: { "set-cookie": ["sessionid=refreshed; Path=/"] },
+          };
         })
         .mockResolvedValueOnce({
           status: 200,
@@ -349,6 +355,14 @@ describe("AirtelService - Session Proxy Wrapper", () => {
         undefined,
         expect.anything(),
       );
+      expect(service["session"]).toEqual(
+        expect.objectContaining({
+          expiresAt: now + sessionTtlMs,
+          authenticatedAt: now,
+        }),
+      );
+      expect(service["session"]?.expiresAt).toBeGreaterThan(1000000 + refreshSkew / 2);
+      expect(service["session"]?.authenticatedAt).toBeGreaterThan(originalAuthenticatedAt);
     });
 
     it("should login again on session expiration response (401)", async () => {
@@ -555,6 +569,28 @@ describe("AirtelService - Session Proxy Wrapper", () => {
 
       expect(result.success).toBe(true);
       expect(result.data?.availableBalance).toBe(100000);
+    });
+
+    it("should return a controlled error when proxy balance body is null", async () => {
+      const mockClient = { get: jest.fn() };
+
+      const service = new AirtelService({
+        mode: "proxy",
+        proxyHttpClient: mockClient,
+      });
+
+      mockClient.get = jest.fn().mockResolvedValueOnce({
+        status: 200,
+        data: null,
+        headers: {},
+      });
+
+      const result = await service.getOperationalBalance();
+
+      expect(result.success).toBe(false);
+      expect((result.error as Error).message).toBe(
+        "Airtel balance response body was empty",
+      );
     });
 
     it("should work without proxy secret if not configured", async () => {

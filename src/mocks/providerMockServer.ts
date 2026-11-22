@@ -67,6 +67,12 @@ function getAirtelStatus(scenario: MockScenario): "TS" | "TF" | "TP" {
   return "TS";
 }
 
+function getOrangeStatus(scenario: MockScenario): "SUCCESSFUL" | "FAILED" | "PENDING" | "IN_PROGRESS" {
+  if (scenario === "failed" || scenario === "crash") return "FAILED";
+  if (scenario === "pending") return "PENDING";
+  return "SUCCESSFUL";
+}
+
 function shouldInjectError(): boolean {
   if (activeChaos.errorRate > 0 && Math.random() < activeChaos.errorRate) return true;
   return false;
@@ -114,7 +120,34 @@ export function createMockServerApp(): express.Application {
   app.use(express.json());
 
   app.get("/health", (_req: express.Request, res: express.Response) => {
-    res.json({ status: "ok", providers: ["mtn", "airtel", "vodacom", "tigo"] });
+    res.json({ status: "ok", providers: ["mtn", "airtel", "vodacom", "tigo", "orange"] });
+  });
+
+  app.post("/mock/orange/callback", async (req: express.Request, res: express.Response) => {
+    try {
+      await applyChaos(req);
+      const scenario = getScenario(req);
+      const reference = req.body?.reference || req.body?.referenceId || "orange-ref-001";
+      const status = getOrangeStatus(scenario);
+
+      if (scenario === "failed" || scenario === "crash") {
+        res.status(400).json({
+          status: "FAILED",
+          reference,
+          failureReason: req.body?.failureReason || "Simulated Orange callback failure",
+        });
+        return;
+      }
+
+      res.status(200).json({
+        status: "accepted",
+        reference,
+        transactionStatus: status,
+        timestamp: new Date().toISOString(),
+      });
+    } catch {
+      res.status(500).json({ error: "Simulated chaos error" });
+    }
   });
 
   app.post("/mtn/collection/token/", async (req: express.Request, res: express.Response) => {
@@ -156,87 +189,14 @@ export function createMockServerApp(): express.Application {
   app.get("/mtn/collection/v1_0/requesttopay/:referenceId", async (req: express.Request, res: express.Response) => {
     try {
       await applyChaos(req);
-      const stored = transactions.get(req.params.referenceId);
-      const scenario = stored?.scenario || getScenario(req);
-      res.json({ referenceId: req.params.referenceId, status: getMtnStatus(scenario) });
-    } catch {
-      res.status(500).json({ error: "Simulated chaos error" });
-    }
-  });
+      const referenceId = req.params.referenceId;
+      const stored = transactions.get(referenceId);
+      const scenario = stored ? stored.scenario : getScenario(req);
 
-  app.get("/mtn/disbursement/v1_0/account/balance", async (req: express.Request, res: express.Response) => {
-    try {
-      await applyChaos(req);
-      const scenario = getScenario(req);
-      if (scenario === "failed" || scenario === "crash") {
-        res.status(503).json({ message: "Chaos mock unavailable" });
-        return;
-      }
-      res.json({ availableBalance: "100000", currency: "XAF" });
-    } catch {
-      res.status(500).json({ error: "Simulated chaos error" });
-    }
-  });
-
-  app.post("/airtel/auth/oauth2/token", async (req: express.Request, res: express.Response) => {
-    try {
-      await applyChaos(req);
-      res.json({ access_token: "mock-airtel-access-token", token_type: "Bearer", expires_in: 3600 });
-    } catch {
-      res.status(500).json({ error: "Simulated chaos error" });
-    }
-  });
-
-  app.post("/airtel/merchant/v1/payments/", async (req: express.Request, res: express.Response) => {
-    try {
-      await applyChaos(req);
-      const scenario = getScenario(req);
-      const referenceId = getReferenceId(req, "airtel-pay");
-
-      transactions.set(referenceId, { provider: "airtel", scenario, createdAt: new Date().toISOString() });
-
-      if (scenario === "failed" || scenario === "crash") {
-        res.status(400).json({
-          status: { success: false, code: "DP_REQUEST_FAILED" },
-          data: { transaction: { id: referenceId, status: getAirtelStatus(scenario) } },
-        });
-        return;
-      }
-
-      res.status(200).json({
-        status: { success: true, code: scenario === "pending" ? "DP_PENDING" : "DP_SUCCESS" },
-        data: { transaction: { id: referenceId, status: getAirtelStatus(scenario) } },
-      });
-    } catch {
-      res.status(500).json({ error: "Simulated chaos error" });
-    }
-  });
-
-  app.get("/airtel/standard/v1/payments/:reference", async (req: express.Request, res: express.Response) => {
-    try {
-      await applyChaos(req);
-      const stored = transactions.get(req.params.reference);
-      const scenario = stored?.scenario || getScenario(req);
       res.json({
-        status: { success: scenario !== "failed", code: scenario === "failed" ? "DP_STATUS_FAILED" : "DP_STATUS_OK" },
-        data: { transaction: { id: req.params.reference, status: getAirtelStatus(scenario) } },
-      });
-    } catch {
-      res.status(500).json({ error: "Simulated chaos error" });
-    }
-  });
-
-  app.get("/airtel/standard/v1/users/balance", async (req: express.Request, res: express.Response) => {
-    try {
-      await applyChaos(req);
-      const scenario = getScenario(req);
-      if (scenario === "failed" || scenario === "crash") {
-        res.status(503).json({ status: { success: false, code: "BALANCE_UNAVAILABLE" } });
-        return;
-      }
-      res.json({
-        status: { success: true, code: "BALANCE_OK" },
-        data: { availableBalance: "100000", currency: "NGN" },
+        referenceId,
+        status: getMtnStatus(scenario),
+        financialTransactionId: "mock-fin-id-123",
       });
     } catch {
       res.status(500).json({ error: "Simulated chaos error" });
@@ -244,12 +204,4 @@ export function createMockServerApp(): express.Application {
   });
 
   return app;
-}
-
-export function startMockServer(port = 0): Promise<Server> {
-  return new Promise((resolve, reject) => {
-    const app = createMockServerApp();
-    const server = app.listen(port, () => resolve(server));
-    server.on("error", reject);
-  });
 }

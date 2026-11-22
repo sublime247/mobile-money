@@ -61,7 +61,11 @@ class FakeProvider {
 }
 
 describe("MobileMoneyService failover", () => {
+  const originalNodeEnv = process.env.NODE_ENV;
+
   beforeEach(() => {
+    // Exercise the injected providers instead of automatic test-mode routing.
+    process.env.NODE_ENV = "development";
     process.env.PROVIDER_FAILOVER_ENABLED = "true";
     process.env.PROVIDER_BACKUP_MTN = "airtel";
     process.env.PROVIDER_CIRCUIT_BREAKER_VOLUME_THRESHOLD = "3";
@@ -71,6 +75,8 @@ describe("MobileMoneyService failover", () => {
   });
 
   afterEach(() => {
+    if (originalNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = originalNodeEnv;
     resetCircuitBreakers();
     delete process.env.PROVIDER_BACKUP_MTN;
     delete process.env.PROVIDER_FAILOVER_CHAIN_MTN;

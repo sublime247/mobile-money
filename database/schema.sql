@@ -94,6 +94,12 @@ CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON transactions(user_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_user_created ON transactions(user_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_transactions_user_created_id ON transactions(user_id, created_at DESC, id DESC);
 
+-- Covering indexes for the dashboard aggregation queries (StatsService):
+-- totals/active users scan the date range, the volume breakdown scans the
+-- completed slice and groups by provider and period.
+CREATE INDEX IF NOT EXISTS idx_transactions_stats_overview ON transactions(created_at) INCLUDE (status, amount, user_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_stats_breakdown ON transactions(status, created_at) INCLUDE (amount, provider);
+
 ALTER TABLE transactions
 ADD COLUMN IF NOT EXISTS webhook_delivery_status VARCHAR(20) NOT NULL DEFAULT 'pending'
 CHECK (webhook_delivery_status IN ('pending', 'delivered', 'failed', 'skipped'));

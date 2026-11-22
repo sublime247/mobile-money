@@ -16,7 +16,7 @@ export interface LimitConfig {
  * Get transaction limits by KYC level from centralized configuration.
  */
 export function getTransactionLimitsConfig(): LimitConfig {
-  const limits = getConfigValue("transactionLimits");
+  const limits = getConfigValue("transactionLimits") as any;
   return {
     [KYCLevel.Unverified]: limits.unverified,
     [KYCLevel.Basic]: limits.basic,
@@ -27,8 +27,8 @@ export function getTransactionLimitsConfig(): LimitConfig {
 export const TRANSACTION_LIMITS: LimitConfig = getTransactionLimitsConfig();
 
 // Per-transaction amount limits from config
-export const MIN_TRANSACTION_AMOUNT = getConfigValue("transactions.minAmount");
-export const MAX_TRANSACTION_AMOUNT = getConfigValue("transactions.maxAmount");
+export const MIN_TRANSACTION_AMOUNT = getConfigValue("transactions.minAmount") as number;
+export const MAX_TRANSACTION_AMOUNT = getConfigValue("transactions.maxAmount") as number;
 
 // Validation on module load
 function validateLimits(limits: LimitConfig): void {

@@ -1,0 +1,29 @@
+---
+title: 'Escrow Contract'
+description: 'Multi-sig upgradeable escrow for secure fund locking'
+---
+
+The Escrow contract securely locks funds until specified conditions are met by multiple parties.
+
+## Key Functions
+
+- `initialize`: Sets up the escrow with admins and parameters.
+- `release`: Releases funds to the designated recipient upon signature threshold met.
+- `refund`: Returns funds to the depositor if conditions fail.
+- `emergency_refund`: Admin override for dispute resolution.
+- `upgrade`: Allows contract logic upgrades via multi-sig.
+
+## Fee Splits
+The contract automatically handles fee deduction and routing to protocol treasuries on successful release.
+
+## Interaction Example
+
+```bash
+soroban contract invoke \
+  --id C... \
+  --source admin \
+  --network testnet \
+  -- \
+  release \
+  --escrow_id 1234
+```

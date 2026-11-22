@@ -1,0 +1,12 @@
+---
+title: 'HTLC Contract'
+description: 'Hash Time-Locked Contracts for trustless atomic swaps'
+---
+
+Hash Time-Locked Contracts (HTLCs) enable trustless atomic swaps between Mobile Money agents and Stellar users.
+
+## Mechanism
+1. **Hashlock**: Funds are locked with a cryptographic hash. The exact preimage is required to unlock them.
+2. **Timelock**: If the preimage is not revealed before the expiry time, funds are safely returned to the sender.
+
+This ensures neither party can run away with funds midway through a swap.

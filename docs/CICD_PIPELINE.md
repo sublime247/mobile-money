@@ -48,7 +48,6 @@ The CI workflow (`.github/workflows/ci.yml`) executes the following jobs:
 - Install dependencies using `npm ci`
 - Run ESLint for code quality validation
 - Execute Jest test suite with coverage
-- Upload coverage report to Codecov
 
 **Services**:
 
@@ -227,7 +226,6 @@ The following secrets must be configured in your repository settings:
 
 | Secret Name         | Description                                 | Example                                |
 | ------------------- | ------------------------------------------- | -------------------------------------- |
-| `CODECOV_TOKEN`     | Codecov upload token for coverage reporting | `a1b2c3d4-e5f6-7890-abcd-ef1234567890` |
 | `REGISTRY_USERNAME` | Container registry username                 | `myusername`                           |
 | `REGISTRY_PASSWORD` | Container registry password/token           | `ghp_abc123...`                        |
 | `SNYK_TOKEN`        | Snyk API token for dependency scanning      | `12345678-90ab-cdef-1234-567890abcdef` |
@@ -668,16 +666,6 @@ Shows the current status of the CI workflow:
 - Green "passing" - All checks passed
 - Red "failing" - One or more checks failed
 
-### Coverage Badge
-
-```markdown
-![Coverage](https://codecov.io/gh/sublime247/mobile-money/branch/main/graph/badge.svg)
-```
-
-Shows the current code coverage percentage from Codecov.
-
-Both badges link to their respective services for detailed information.
-
 ## Best Practices
 
 ### For Developers
@@ -723,7 +711,6 @@ Both badges link to their respective services for detailed information.
 
 - [GitHub Actions Documentation](https://docs.github.com/en/actions)
 - [Docker Documentation](https://docs.docker.com/)
-- [Codecov Documentation](https://docs.codecov.com/)
 - [Jest Documentation](https://jestjs.io/docs/getting-started)
 - [ESLint Documentation](https://eslint.org/docs/latest/)
 

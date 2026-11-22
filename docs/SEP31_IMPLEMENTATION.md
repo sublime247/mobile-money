@@ -38,6 +38,8 @@ SEP31_MIN_AMOUNT=0.1
 SEP31_MAX_AMOUNT=1000000
 SEP31_FEE_FIXED=1.00
 SEP31_FEE_PERCENT=0.5
+# Base network fee in the transaction asset (rounded to 7 decimal places)
+SEP31_BASE_NETWORK_FEE=0.00001
 SEP31_STATUS_ETA=600
 STELLAR_RECEIVING_ACCOUNT=G...
 
@@ -72,6 +74,21 @@ Content-Type: application/json
 
 ```bash
 GET /sep31/transactions/:id
+```
+
+SEP-31 transaction responses include an itemized `fee_details` array. The
+amounts are rounded to seven decimal places and sum exactly to `amount_fee`:
+
+```json
+{
+  "amount_fee": "1.50001",
+  "amount_fee_asset": "stellar:native",
+  "fee_details": [
+    { "description": "Base network fee", "amount": "0.00001" },
+    { "description": "Provider processing fee", "amount": "1" },
+    { "description": "FX conversion margin", "amount": "0.5" }
+  ]
+}
 ```
 
 ## Monitoring & Jobs

@@ -1,0 +1,29 @@
+meta {
+  name: "Health Check"
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{base_url}}/health
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+}
+
+tests {
+  test("service reports healthy", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("status payload is present", function() {
+    const body = res.getBody();
+    expect(body).to.be.an("object");
+  });
+}
+
+docs {
+  Unauthenticated liveness probe. Also used by the docker-compose healthcheck.
+}

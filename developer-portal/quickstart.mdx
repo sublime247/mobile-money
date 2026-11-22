@@ -1,0 +1,149 @@
+---
+title: 'Quickstart'
+description: 'Start integrating with Mobile Money in 5 minutes'
+---
+
+<Steps>
+  <Step title="Get your API key">
+    Sign up on the developer dashboard and generate your sandbox API keys. You'll need the `X-API-Key` header for authentication.
+  </Step>
+  
+  <Step title="Get a quote">
+    Fetch a real-time exchange rate quote before initiating a transaction.
+
+    <CodeGroup>
+      ```bash cURL
+      curl --request GET \
+        --url 'https://api.mobilemoney.dev/v1/quotes?source_asset=XAF&dest_asset=USDC&amount=10000' \
+        --header 'X-API-Key: YOUR_API_KEY'
+      ```
+      ```typescript TypeScript
+      import { MobileMoneyClient } from '@sublime247/mobile-money';
+
+      const client = new MobileMoneyClient('YOUR_API_KEY');
+      const quote = await client.quotes.get({
+        sourceAsset: 'XAF',
+        destAsset: 'USDC',
+        amount: 10000
+      });
+      ```
+      ```python Python
+      from mobile_money import Client
+
+      client = Client(api_key="YOUR_API_KEY")
+      quote = client.quotes.get(
+          source_asset="XAF",
+          dest_asset="USDC",
+          amount=10000
+      )
+      ```
+    </CodeGroup>
+
+    **Response:**
+    ```json
+    {
+      "id": "quote_123456",
+      "price": "0.0016",
+      "total_fee": "150.00",
+      "expires_at": "2026-05-20T10:30:00Z"
+    }
+    ```
+  </Step>
+
+  <Step title="Initiate a deposit">
+    Start a deposit using MTN MoMo Cameroon with XAF.
+
+    <CodeGroup>
+      ```bash cURL
+      curl --request POST \
+        --url https://api.mobilemoney.dev/v1/transactions/deposit \
+        --header 'Content-Type: application/json' \
+        --header 'X-API-Key: YOUR_API_KEY' \
+        --data '{
+          "amount": "10000",
+          "asset": "XAF",
+          "provider": "MTN",
+          "country": "CM",
+          "phone_number": "+237670000000",
+          "quote_id": "quote_123456"
+        }'
+      ```
+      ```typescript TypeScript
+      const transaction = await client.transactions.deposit({
+        amount: "10000",
+        asset: "XAF",
+        provider: "MTN",
+        country: "CM",
+        phoneNumber: "+237670000000",
+        quoteId: "quote_123456"
+      });
+      ```
+      ```python Python
+      transaction = client.transactions.deposit(
+          amount="10000",
+          asset="XAF",
+          provider="MTN",
+          country="CM",
+          phone_number="+237670000000",
+          quote_id="quote_123456"
+      )
+      ```
+    </CodeGroup>
+    
+    **Response:**
+    ```json
+    {
+      "id": "txn_789012",
+      "status": "pending_user_approval",
+      "message": "Prompt sent to user's phone for USSD PIN entry."
+    }
+    ```
+  </Step>
+
+  <Step title="Check transaction status">
+    Poll the status of your transaction.
+
+    <CodeGroup>
+      ```bash cURL
+      curl --request GET \
+        --url https://api.mobilemoney.dev/v1/transactions/txn_789012 \
+        --header 'X-API-Key: YOUR_API_KEY'
+      ```
+      ```typescript TypeScript
+      const status = await client.transactions.getStatus('txn_789012');
+      ```
+      ```python Python
+      status = client.transactions.get_status('txn_789012')
+      ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Set up webhooks">
+    Instead of polling, configure webhooks to receive real-time updates when transaction states change.
+
+    <CodeGroup>
+      ```bash cURL
+      curl --request POST \
+        --url https://api.mobilemoney.dev/v1/webhooks \
+        --header 'Content-Type: application/json' \
+        --header 'X-API-Key: YOUR_API_KEY' \
+        --data '{
+          "url": "https://your-server.com/webhooks/mobile-money",
+          "events": ["transaction.completed", "transaction.failed"]
+        }'
+      ```
+      ```typescript TypeScript
+      const webhook = await client.webhooks.create({
+        url: "https://your-server.com/webhooks/mobile-money",
+        events: ["transaction.completed", "transaction.failed"]
+      });
+      ```
+      ```python Python
+      webhook = client.webhooks.create(
+          url="https://your-server.com/webhooks/mobile-money",
+          events=["transaction.completed", "transaction.failed"]
+      )
+      ```
+    </CodeGroup>
+  </Step>
+</Steps>

@@ -13,6 +13,7 @@ import {
   getNetworkPassphrase,
   getStellarServer,
 } from "../config/stellar";
+import { hasTrustline } from "./trustlines";
 
 type StellarOperation = Parameters<TransactionBuilder["addOperation"]>[0];
 type StellarTimebounds = { minTime: string; maxTime: string };
@@ -101,8 +102,16 @@ function getFeePayerKeypair(): Keypair {
 
 async function getTransactionBaseFee(): Promise<number> {
   const server = getStellarServer();
-  const fetchedBaseFee = await server.fetchBaseFee();
-  return getConfiguredBaseFee(Number(fetchedBaseFee));
+  try {
+    const feeStats = await server.feeStats();
+    const dynamicBaseFee = Number(
+      feeStats.fee_charged?.p90 || feeStats.last_ledger_base_fee || 100
+    );
+    return getConfiguredBaseFee(dynamicBaseFee);
+  } catch (error) {
+    const fetchedBaseFee = await server.fetchBaseFee();
+    return getConfiguredBaseFee(Number(fetchedBaseFee));
+  }
 }
 
 async function buildInnerTransaction(
@@ -335,15 +344,33 @@ export const createSimplePaymentWithFeeBump = async (
   const stellarAsset =
     asset === "native" ? Asset.native() : new Asset(asset.code, asset.issuer);
 
+  const operations: StellarOperation[] = [];
+
+  // Auto-inject changeTrust operation if trustline is missing for non-native assets
+  if (!stellarAsset.isNative()) {
+    const trustlineExists = await hasTrustline(destination, stellarAsset);
+    if (!trustlineExists) {
+      operations.push(
+        Operation.changeTrust({
+          asset: stellarAsset,
+          limit: amount,
+          source: destination,
+        }) as StellarOperation,
+      );
+    }
+  }
+
+  operations.push(
+    Operation.payment({
+      destination,
+      asset: stellarAsset,
+      amount,
+    }) as StellarOperation,
+  );
+
   return buildTransactionWithFeeBump({
     sourceAccount,
-    operations: [
-      Operation.payment({
-        destination,
-        asset: stellarAsset,
-        amount,
-      }) as StellarOperation,
-    ],
+    operations,
     memo: memo ? Memo.text(memo) : undefined,
   });
 };

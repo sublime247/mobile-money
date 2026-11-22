@@ -3,6 +3,8 @@ import {
   MpesaProvider,
   MPESA_CALLBACK_ACK,
   MpesaStkCallbackBody,
+  MpesaB2CResultBody,
+  MpesaB2CTimeoutBody,
 } from "../mpesaService";
 
 jest.mock("axios");
@@ -256,6 +258,118 @@ describe("MpesaProvider", () => {
         ResultCode: 0,
         ResultDesc: "Success",
       });
+    });
+  });
+
+  describe("processB2CResult", () => {
+    it("parses a successful B2C result and extracts ResultParameters fields", () => {
+      const body: MpesaB2CResultBody = {
+        Result: {
+          ResultType: 0,
+          ResultCode: 0,
+          ResultDesc: "The service request is processed successfully.",
+          OriginatorConversationID: "orig-conv-1",
+          ConversationID: "AG_20260928_1234567890",
+          TransactionID: "NLJ7RT61SV",
+          ResultParameters: {
+            ResultParameter: [
+              { Key: "TransactionAmount", Value: 1000 },
+              { Key: "TransactionReceipt", Value: "NLJ7RT61SV" },
+              {
+                Key: "TransactionCompletedDateTime",
+                Value: "28.09.2026 10:00:00",
+              },
+              { Key: "ReceiverPartyPublicName", Value: "254712345678 - John Doe" },
+              { Key: "B2CUtilityAccountAvailableFunds", Value: 500000 },
+              { Key: "B2CWorkingAccountAvailableFunds", Value: 250000 },
+            ],
+          },
+        },
+      };
+
+      const outcome = MpesaProvider.processB2CResult(body);
+
+      expect(outcome.status).toBe("completed");
+      expect(outcome.conversationId).toBe("AG_20260928_1234567890");
+      expect(outcome.originatorConversationId).toBe("orig-conv-1");
+      expect(outcome.transactionId).toBe("NLJ7RT61SV");
+      expect(outcome.transactionAmount).toBe(1000);
+      expect(outcome.transactionReceipt).toBe("NLJ7RT61SV");
+      expect(outcome.receiverPartyPublicName).toBe(
+        "254712345678 - John Doe",
+      );
+      expect(outcome.b2cUtilityAccountAvailableFunds).toBe(500000);
+      expect(outcome.b2cWorkingAccountAvailableFunds).toBe(250000);
+    });
+
+    it("parses a failed B2C result without ResultParameters", () => {
+      const body: MpesaB2CResultBody = {
+        Result: {
+          ResultType: 0,
+          ResultCode: 2001,
+          ResultDesc: "The initiator information is invalid.",
+          OriginatorConversationID: "orig-conv-2",
+          ConversationID: "AG_20260928_0987654321",
+        },
+      };
+
+      const outcome = MpesaProvider.processB2CResult(body);
+
+      expect(outcome.status).toBe("failed");
+      expect(outcome.resultCode).toBe(2001);
+      expect(outcome.transactionAmount).toBeUndefined();
+      expect(outcome.transactionReceipt).toBeUndefined();
+    });
+
+    it("treats any non-zero result code as failed, not just documented codes", () => {
+      const body: MpesaB2CResultBody = {
+        Result: {
+          ResultType: 0,
+          ResultCode: 9999,
+          ResultDesc: "Unexpected error.",
+          OriginatorConversationID: "orig-conv-3",
+          ConversationID: "AG_conv-3",
+        },
+      };
+
+      expect(MpesaProvider.processB2CResult(body).status).toBe("failed");
+    });
+  });
+
+  describe("processB2CTimeout", () => {
+    it("normalizes a queue timeout callback to a failed outcome", () => {
+      const body: MpesaB2CTimeoutBody = {
+        Result: {
+          ResultType: 1,
+          ResultCode: 1,
+          ResultDesc: "The service request timed out.",
+          OriginatorConversationID: "orig-conv-timeout",
+          ConversationID: "AG_conv-timeout",
+        },
+      };
+
+      const outcome = MpesaProvider.processB2CTimeout(body);
+
+      expect(outcome.status).toBe("failed");
+      expect(outcome.originatorConversationId).toBe("orig-conv-timeout");
+      expect(outcome.conversationId).toBe("AG_conv-timeout");
+      expect(outcome.resultDesc).toBe("The service request timed out.");
+    });
+
+    it("falls back to a default message when ResultDesc is empty", () => {
+      const body: MpesaB2CTimeoutBody = {
+        Result: {
+          ResultType: 1,
+          ResultCode: 1,
+          ResultDesc: "",
+          OriginatorConversationID: "orig-conv-empty",
+          ConversationID: "AG_conv-empty",
+        },
+      };
+
+      expect(MpesaProvider.processB2CTimeout(body).resultDesc).toBe(
+        "B2C request timed out in queue",
+      );
     });
   });
 });

@@ -92,4 +92,17 @@ describe("AuditLogModel", () => {
       ["admin-1", "compliance_document", "document-1", 25, 5],
     );
   });
+
+  it("counts audit logs using the same parameterized filters", async () => {
+    mockPoolQuery.mockResolvedValueOnce({ rows: [{ count: "42" }] });
+
+    await expect(
+      model.count({ action: "COMPLIANCE_STATUS_CHANGED", resource: "compliance_document" }),
+    ).resolves.toBe(42);
+
+    expect(mockPoolQuery).toHaveBeenCalledWith(
+      expect.stringMatching(/action = \$1[\s\S]+resource = \$2/),
+      ["COMPLIANCE_STATUS_CHANGED", "compliance_document"],
+    );
+  });
 });

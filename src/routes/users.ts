@@ -15,6 +15,11 @@ import {
 } from "../controllers/twoFactorWithdrawalController";
 import { ERROR_CODES } from "../constants/errorCodes";
 import { createError } from "../middleware/errorHandler";
+import {
+  cleanMoMoBackupNumber,
+  detectProvider,
+  type CountryCode,
+} from "../utils/phoneUtils";
 
 const router = Router();
 const userModel = new UserModel();
@@ -128,5 +133,137 @@ router.post("/2fa/withdrawals/verify", requireAuth, verifyWithdrawal2FA);
 // Backup code generation routes
 router.post("/2fa/backup-codes", requireAuth, generateBackupCodesForUser);
 router.get("/2fa/backup-codes/status", requireAuth, getBackupCodeStatus);
+
+const updateBackupPhoneSchema = z.object({
+  backupPhoneNumber: z.string().trim().min(1, "backupPhoneNumber is required"),
+  provider: z.string().trim().optional(),
+  region: z.string().trim().optional(),
+});
+
+// MoMo Backup Phone Number Routes (#2085)
+router.put(
+  "/backup-phone",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        throw createError(ERROR_CODES.UNAUTHORIZED, "User not authenticated", {
+          error: "User not authenticated",
+        });
+      }
+
+      const parsed = updateBackupPhoneSchema.safeParse(req.body);
+      if (!parsed.success) {
+        throw createError(ERROR_CODES.INVALID_INPUT, "Validation failed", {
+          error: "Validation failed",
+          details: parsed.error.issues,
+        });
+      }
+
+      const user = await userModel.findById(userId);
+      if (!user) {
+        throw createError(ERROR_CODES.NOT_FOUND, "User not found", {
+          error: "User not found",
+        });
+      }
+
+      const cleanResult = cleanMoMoBackupNumber(
+        parsed.data.backupPhoneNumber,
+        user.phoneNumber,
+        {
+          expectedProvider: parsed.data.provider,
+          defaultRegion: (parsed.data.region as CountryCode) || undefined,
+        },
+      );
+
+      if (!cleanResult.valid || !cleanResult.cleanPhoneNumber) {
+        throw createError(
+          ERROR_CODES.INVALID_INPUT,
+          cleanResult.error || "Invalid backup phone number",
+          {
+            error: cleanResult.error || "Invalid backup phone number",
+          },
+        );
+      }
+
+      await userModel.updateBackupPhoneNumber(
+        userId,
+        cleanResult.cleanPhoneNumber,
+      );
+
+      return res.status(200).json({
+        message: "Backup phone number updated successfully",
+        data: {
+          backupPhoneNumber: cleanResult.cleanPhoneNumber,
+          provider: cleanResult.provider,
+          country: cleanResult.country,
+        },
+      });
+    } catch (error) {
+      logger.error("Controller backup-phone update error:", error);
+      throw error;
+    }
+  },
+);
+
+router.get(
+  "/backup-phone",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        throw createError(ERROR_CODES.UNAUTHORIZED, "User not authenticated", {
+          error: "User not authenticated",
+        });
+      }
+
+      const user = await userModel.findById(userId);
+      if (!user) {
+        throw createError(ERROR_CODES.NOT_FOUND, "User not found", {
+          error: "User not found",
+        });
+      }
+
+      const backupPhone = user.backupPhoneNumber || null;
+      const provider = backupPhone ? detectProvider(backupPhone) : null;
+
+      return res.status(200).json({
+        data: {
+          backupPhoneNumber: backupPhone,
+          provider,
+        },
+      });
+    } catch (error) {
+      logger.error("Controller backup-phone get error:", error);
+      throw error;
+    }
+  },
+);
+
+router.delete(
+  "/backup-phone",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        throw createError(ERROR_CODES.UNAUTHORIZED, "User not authenticated", {
+          error: "User not authenticated",
+        });
+      }
+
+      await userModel.updateBackupPhoneNumber(userId, null);
+
+      return res.status(200).json({
+        message: "Backup phone number removed successfully",
+      });
+    } catch (error) {
+      logger.error("Controller backup-phone delete error:", error);
+      throw error;
+    }
+  },
+);
 
 export { router as userRoutes };

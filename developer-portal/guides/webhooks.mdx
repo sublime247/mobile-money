@@ -1,0 +1,97 @@
+---
+title: 'Webhooks'
+description: 'Receive real-time notifications for transaction events'
+---
+
+Webhooks provide real-time updates about the state of your deposits, withdrawals, and other asynchronous events. Since mobile money networks and blockchains take time to settle, webhooks are the recommended way to handle state changes.
+
+## Event Types
+
+The Bridge emits several event types:
+
+- `transaction.completed`: A deposit or withdrawal has successfully finalized.
+- `transaction.failed`: A transaction failed (e.g., insufficient funds, user cancelled).
+- `deposit.confirmed`: A deposit has been received but token minting is in progress.
+- `withdrawal.sent`: Funds have been dispatched to the mobile money network.
+- `kyc.approved`: A user's KYC verification succeeded.
+
+## Registering Webhooks
+
+Register your webhook endpoints in the Developer Dashboard or via the `/v1/webhooks` API. Your endpoint must be HTTPS and publicly accessible.
+
+## Signature Verification
+
+To ensure webhooks are genuinely from the Bridge, verify the HMAC-SHA256 signature included in the `X-Bridge-Signature` header.
+
+<CodeGroup>
+```javascript Node.js
+import crypto from 'crypto';
+import express from 'express';
+
+const app = express();
+const WEBHOOK_SECRET = 'whsec_your_secret_key';
+
+app.post('/webhook', express.raw({ type: 'application/json' }), (req, res) => {
+  const signature = req.headers['x-bridge-signature'];
+  const payload = req.body.toString();
+
+  const expectedSignature = crypto
+    .createHmac('sha256', WEBHOOK_SECRET)
+    .update(payload)
+    .digest('hex');
+
+  if (signature === expectedSignature) {
+    // Verified
+    const event = JSON.parse(payload);
+    handleEvent(event);
+    res.status(200).send('Webhook received');
+  } else {
+    res.status(401).send('Invalid signature');
+  }
+});
+```
+
+```python Python
+import hmac
+import hashlib
+from flask import Flask, request, abort
+
+app = Flask(__name__)
+WEBHOOK_SECRET = b'whsec_your_secret_key'
+
+@app.route('/webhook', methods=['POST'])
+def webhook():
+    signature = request.headers.get('X-Bridge-Signature')
+    payload = request.get_data()
+
+    expected_signature = hmac.new(
+        WEBHOOK_SECRET, 
+        payload, 
+        hashlib.sha256
+    ).hexdigest()
+
+    if hmac.compare_digest(expected_signature, signature):
+        event = request.json
+        handle_event(event)
+        return 'Webhook received', 200
+    else:
+        abort(401)
+```
+</CodeGroup>
+
+## Retry Policy
+
+If your server fails to respond with a `200 OK` or `201 Created` status code, or times out (after 10 seconds), the Bridge will retry the webhook.
+
+We use an exponential backoff strategy:
+- 1st retry: 1 minute
+- 2nd retry: 5 minutes
+- 3rd retry: 30 minutes
+- 4th retry: 2 hours
+- 5th retry: 12 hours
+
+## Best Practices
+
+1. **Idempotency**: Webhooks may occasionally be delivered more than once. Store processed event IDs and ensure your logic is idempotent.
+2. **Acknowledge Quickly**: Always return a `200` status as quickly as possible. Perform heavy processing asynchronously.
+3. **Validate Signatures**: Never process a webhook without validating the signature.

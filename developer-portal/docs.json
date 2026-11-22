@@ -1,0 +1,151 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "Mobile Money",
+  "logo": {
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg"
+  },
+  "favicon": "/favicon.svg",
+  "colors": {
+    "primary": "#6366F1",
+    "light": "#818CF8",
+    "dark": "#4F46E5"
+  },
+  "topbarLinks": [
+    {
+      "name": "GitHub",
+      "url": "https://github.com/sublime247/mobile-money"
+    }
+  ],
+  "topbarCtaButton": {
+    "name": "Get API Key",
+    "url": "/quickstart"
+  },
+  "api": {
+    "baseUrl": [
+      "https://api.mobilemoney.dev/v1",
+      "https://sandbox-api.mobilemoney.dev/v1"
+    ],
+    "auth": {
+      "method": "bearer"
+    },
+    "playground": {
+      "display": "interactive"
+    }
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "icon": "book-open",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "authentication",
+              "supported-corridors"
+            ]
+          },
+          {
+            "group": "Core Guides",
+            "pages": [
+              "guides/deposits",
+              "guides/withdrawals",
+              "guides/webhooks",
+              "guides/error-handling",
+              "guides/testing"
+            ]
+          },
+          {
+            "group": "Smart Contracts",
+            "pages": [
+              "smart-contracts/overview",
+              "smart-contracts/escrow",
+              "smart-contracts/htlc",
+              "smart-contracts/oracle",
+              "smart-contracts/vault"
+            ]
+          },
+          {
+            "group": "Stellar SEPs",
+            "pages": [
+              "stellar-seps/overview",
+              "stellar-seps/sep10-auth",
+              "stellar-seps/sep12-kyc",
+              "stellar-seps/sep24-interactive",
+              "stellar-seps/sep31-remittance",
+              "stellar-seps/sep38-quotes"
+            ]
+          },
+          {
+            "group": "SDKs & Tools",
+            "pages": [
+              "sdks/typescript",
+              "sdks/kotlin",
+              "sdks/cli"
+            ]
+          },
+          {
+            "group": "Resources",
+            "pages": [
+              "resources/architecture",
+              "resources/security",
+              "resources/changelog"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "icon": "code",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "api-reference/overview"
+            ]
+          },
+          {
+            "group": "Transactions",
+            "pages": [
+              "api-reference/transactions/initiate-deposit",
+              "api-reference/transactions/initiate-withdrawal",
+              "api-reference/transactions/get-status",
+              "api-reference/transactions/list-transactions",
+              "api-reference/transactions/cancel"
+            ]
+          },
+          {
+            "group": "KYC & Compliance",
+            "pages": [
+              "api-reference/kyc/get-status",
+              "api-reference/kyc/submit-documents",
+              "api-reference/kyc/tier-upgrade"
+            ]
+          },
+          {
+            "group": "Quotes & Fees",
+            "pages": [
+              "api-reference/quotes/get-quote",
+              "api-reference/quotes/fee-schedule"
+            ]
+          },
+          {
+            "group": "Vaults & Liquidity",
+            "pages": [
+              "api-reference/vaults/get-balance",
+              "api-reference/vaults/deposit",
+              "api-reference/vaults/withdraw"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "footerSocials": {
+    "github": "https://github.com/sublime247/mobile-money"
+  }
+}

@@ -368,3 +368,207 @@ export function decrypt(
   }
   return encryptedData;
 }
+
+// ---------------------------------------------------------------------------
+// Envelope encryption for provider API keys and Stellar secrets (#2295)
+// ---------------------------------------------------------------------------
+//
+// Each secret is encrypted with its own random 256-bit data key (DEK) under
+// AES-256-GCM with a fresh 96-bit IV. The DEK is then wrapped (AES-256-GCM,
+// separate IV) by the master key-encryption key (KEK) from the environment, so
+// a database backup holds only ciphertext and wrapped DEKs. Rotating the KEK
+// means re-wrapping DEKs, not re-encrypting every secret.
+//
+// `context` is bound to both layers as GCM additional authenticated data: a
+// ciphertext copied onto another row (different provider/credential) fails to
+// decrypt instead of silently yielding the wrong secret.
+//
+// Environment:
+//   PROVIDER_SECRETS_MASTER_KEY          32-byte key, hex (64 chars) or base64
+//   PROVIDER_SECRETS_MASTER_KEY_VERSION  label stored with each record (default "v1")
+//   PROVIDER_SECRETS_PREVIOUS_KEYS       optional JSON {"<version>": "<key>"} of
+//                                        retired KEKs still needed for decryption
+
+export interface EnvelopeEncryptedSecret {
+  ciphertext: Buffer;
+  iv: Buffer;
+  authTag: Buffer;
+  encryptedDek: Buffer;
+  dekIv: Buffer;
+  dekAuthTag: Buffer;
+  keyVersion: string;
+}
+
+export interface SecretsMasterKey {
+  version: string;
+  key: Buffer;
+}
+
+const DEK_LENGTH = 32;
+
+/** Parses a 32-byte key given as 64 hex chars or base64. */
+export function parseMasterKey(raw: string, name: string): Buffer {
+  const value = raw.trim();
+  const key = /^[0-9a-fA-F]{64}$/.test(value)
+    ? Buffer.from(value, "hex")
+    : Buffer.from(value, "base64");
+  if (key.length !== 32) {
+    throw new Error(
+      `${name} must be a 32-byte key encoded as 64 hex characters or base64`,
+    );
+  }
+  return key;
+}
+
+/** The KEK used for new encryptions. */
+export function getSecretsMasterKey(): SecretsMasterKey {
+  const raw = process.env.PROVIDER_SECRETS_MASTER_KEY;
+  if (!raw) {
+    throw new Error(
+      "PROVIDER_SECRETS_MASTER_KEY is not set; cannot encrypt or decrypt provider secrets",
+    );
+  }
+  return {
+    version: process.env.PROVIDER_SECRETS_MASTER_KEY_VERSION || "v1",
+    key: parseMasterKey(raw, "PROVIDER_SECRETS_MASTER_KEY"),
+  };
+}
+
+/** Every KEK that may have wrapped a stored DEK, keyed by version. */
+export function getSecretsKeyring(): Map<string, Buffer> {
+  const keyring = new Map<string, Buffer>();
+  if (process.env.PROVIDER_SECRETS_PREVIOUS_KEYS) {
+    let previous: Record<string, string>;
+    try {
+      previous = JSON.parse(process.env.PROVIDER_SECRETS_PREVIOUS_KEYS);
+    } catch {
+      throw new Error("PROVIDER_SECRETS_PREVIOUS_KEYS must be a JSON object");
+    }
+    for (const [version, raw] of Object.entries(previous)) {
+      keyring.set(
+        version,
+        parseMasterKey(raw, `PROVIDER_SECRETS_PREVIOUS_KEYS.${version}`),
+      );
+    }
+  }
+  const current = getSecretsMasterKey();
+  keyring.set(current.version, current.key);
+  return keyring;
+}
+
+function gcmEncrypt(
+  plaintext: Buffer,
+  key: Buffer,
+  aad: Buffer,
+): { ciphertext: Buffer; iv: Buffer; authTag: Buffer } {
+  const iv = crypto.randomBytes(IV_LENGTH);
+  const cipher = crypto.createCipheriv(ALGORITHM, key, iv, {
+    authTagLength: AUTH_TAG_LENGTH,
+  });
+  cipher.setAAD(aad);
+  const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
+  return { ciphertext, iv, authTag: cipher.getAuthTag() };
+}
+
+function gcmDecrypt(
+  ciphertext: Buffer,
+  key: Buffer,
+  iv: Buffer,
+  authTag: Buffer,
+  aad: Buffer,
+): Buffer {
+  if (iv.length !== IV_LENGTH || authTag.length !== AUTH_TAG_LENGTH) {
+    throw new Error("invalid IV or auth tag length");
+  }
+  const decipher = crypto.createDecipheriv(ALGORITHM, key, iv, {
+    authTagLength: AUTH_TAG_LENGTH,
+  });
+  decipher.setAAD(aad);
+  decipher.setAuthTag(authTag);
+  return Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+}
+
+function envelopeAad(
+  context: string,
+  keyVersion: string,
+  layer: string,
+): Buffer {
+  return Buffer.from(`${layer}|${keyVersion}|${context}`, "utf8");
+}
+
+/**
+ * Envelope-encrypts `plaintext`. `context` should uniquely identify the record
+ * (e.g. "provider_credentials:mtn:api_key") and be passed again to decrypt.
+ */
+export function encryptSecret(
+  plaintext: string,
+  context: string,
+  masterKey: SecretsMasterKey = getSecretsMasterKey(),
+): EnvelopeEncryptedSecret {
+  const dek = crypto.randomBytes(DEK_LENGTH);
+  try {
+    const data = gcmEncrypt(
+      Buffer.from(plaintext, "utf8"),
+      dek,
+      envelopeAad(context, masterKey.version, "data"),
+    );
+    const wrapped = gcmEncrypt(
+      dek,
+      masterKey.key,
+      envelopeAad(context, masterKey.version, "dek"),
+    );
+    return {
+      ciphertext: data.ciphertext,
+      iv: data.iv,
+      authTag: data.authTag,
+      encryptedDek: wrapped.ciphertext,
+      dekIv: wrapped.iv,
+      dekAuthTag: wrapped.authTag,
+      keyVersion: masterKey.version,
+    };
+  } finally {
+    dek.fill(0);
+  }
+}
+
+/**
+ * Reverses encryptSecret(). Throws on a wrong master key, a different
+ * `context`, or any tampered field — never returns unauthenticated data.
+ */
+export function decryptSecret(
+  payload: EnvelopeEncryptedSecret,
+  context: string,
+  keyring: Map<string, Buffer> = getSecretsKeyring(),
+): string {
+  const kek = keyring.get(payload.keyVersion);
+  if (!kek) {
+    throw new Error(
+      `No provider secrets master key configured for version "${payload.keyVersion}"`,
+    );
+  }
+
+  let dek: Buffer | null = null;
+  try {
+    dek = gcmDecrypt(
+      payload.encryptedDek,
+      kek,
+      payload.dekIv,
+      payload.dekAuthTag,
+      envelopeAad(context, payload.keyVersion, "dek"),
+    );
+    return gcmDecrypt(
+      payload.ciphertext,
+      dek,
+      payload.iv,
+      payload.authTag,
+      envelopeAad(context, payload.keyVersion, "data"),
+    ).toString("utf8");
+  } catch {
+    // Never surface key material or ciphertext in the error.
+    throw new Error(
+      "Provider secret decryption failed: wrong master key or tampered data",
+    );
+  } finally {
+    dek?.fill(0);
+  }
+}

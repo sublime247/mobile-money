@@ -54,6 +54,21 @@ describe("SMS service", () => {
       expect(body).toContain("Votre depot");
       expect(body).toContain("TXN-3");
     });
+
+    it("localizes failed transaction messages", () => {
+      const body = buildTransactionSmsBody({
+        referenceNumber: "TXN-4",
+        type: "withdraw",
+        amount: "80",
+        provider: "mtn",
+        kind: "transaction_failed",
+        errorMessage: "timeout",
+        locale: "fr",
+      });
+
+      expect(body).toContain("Votre retrait");
+      expect(body).toContain("TXN-4");
+    });
   });
 
   describe("SmsRateLimiter", () => {

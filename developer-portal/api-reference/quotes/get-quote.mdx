@@ -1,0 +1,17 @@
+---
+title: 'Get Quote'
+api: 'GET /v1/quotes'
+description: 'Get exchange rate quote for a transfer'
+---
+
+Get a firm exchange rate quote valid for a specific duration.
+
+<ParamField query="sourceAsset" type="string" required>
+  Asset to send (e.g., `iso4217:UGX`).
+</ParamField>
+<ParamField query="destinationAsset" type="string" required>
+  Asset to receive (e.g., `stellar:USDC:IssuerAddress`).
+</ParamField>
+<ParamField query="amount" type="number" required>
+  Amount of source asset.
+</ParamField>

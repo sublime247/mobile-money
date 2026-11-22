@@ -4,6 +4,7 @@ import { encrypt, decrypt } from "../utils/encryption";
 import { WebSocketManager } from "../websocket";
 import { getRedisPubSub } from "../graphql/redisPubSub";
 import { CachedTransactionInvalidation } from "../services/cachedTransactionService";
+import { publishTransactionEvent } from "../services/transactionEventStream";
 import {
   SubscriptionChannels,
   transactionChannel,
@@ -19,9 +20,25 @@ export enum TransactionStatus {
   Failed = "failed",
   Cancelled = "cancelled",
   Review = "review",
+  /**
+   * Held before provider dispatch by AML velocity monitoring until a
+   * compliance officer releases (back to Pending) or rejects (Cancelled) it.
+   */
+  PendingReview = "pending_review",
   Dispute = "dispute",
   Reversed = "reversed",
   ClawedBack = "clawed_back",
+  /**
+   * A deposit/withdrawal that timed out waiting on an external party (the
+   * mobile money provider, or an anchor's SEP-24 interactive flow) without
+   * ever reaching a terminal completed/failed state at the source. Distinct
+   * from `Failed`: a failure means the provider/anchor actively rejected or
+   * errored the transaction; `Expired` means it never got an answer at all.
+   * See staleTransactionWatchdog.ts (#1793) — a stuck transaction whose
+   * provider status check comes back "pending"/"unknown" (not an actual
+   * failure report) is expired, not failed.
+   */
+  Expired = "expired",
 }
 
 export interface Transaction {
@@ -253,6 +270,68 @@ export interface StatusUpdateRow {
   updated_at?: Date | string | null;
 }
 
+export const ALLOWED_STATUS_TRANSITIONS: Record<
+  TransactionStatus,
+  TransactionStatus[]
+> = {
+  [TransactionStatus.Pending]: [
+    TransactionStatus.Pending,
+    TransactionStatus.Processing,
+    TransactionStatus.Completed,
+    TransactionStatus.Failed,
+    TransactionStatus.Cancelled,
+    TransactionStatus.Review,
+    TransactionStatus.PendingReview,
+    TransactionStatus.Expired,
+  ],
+  [TransactionStatus.PendingReview]: [
+    TransactionStatus.PendingReview,
+    TransactionStatus.Pending,
+    TransactionStatus.Cancelled,
+    TransactionStatus.Failed,
+  ],
+  [TransactionStatus.Processing]: [
+    TransactionStatus.Processing,
+    TransactionStatus.Completed,
+    TransactionStatus.Failed,
+    TransactionStatus.Cancelled,
+    TransactionStatus.Review,
+    TransactionStatus.Pending,
+    TransactionStatus.Expired,
+  ],
+  [TransactionStatus.Review]: [
+    TransactionStatus.Review,
+    TransactionStatus.Processing,
+    TransactionStatus.Completed,
+    TransactionStatus.Failed,
+    TransactionStatus.Cancelled,
+  ],
+  [TransactionStatus.Completed]: [
+    TransactionStatus.Completed,
+    TransactionStatus.Dispute,
+    TransactionStatus.Reversed,
+    TransactionStatus.ClawedBack,
+  ],
+  [TransactionStatus.Failed]: [
+    TransactionStatus.Failed,
+    TransactionStatus.Review,
+  ],
+  [TransactionStatus.Cancelled]: [TransactionStatus.Cancelled],
+  [TransactionStatus.Dispute]: [
+    TransactionStatus.Dispute,
+    TransactionStatus.Completed,
+    TransactionStatus.Reversed,
+    TransactionStatus.ClawedBack,
+    TransactionStatus.Failed,
+  ],
+  [TransactionStatus.Reversed]: [TransactionStatus.Reversed],
+  [TransactionStatus.ClawedBack]: [TransactionStatus.ClawedBack],
+  [TransactionStatus.Expired]: [
+    TransactionStatus.Expired,
+    TransactionStatus.Failed,
+  ],
+};
+
 export class TransactionModel {
   private buildListWhere(
     startDate?: string,
@@ -291,8 +370,12 @@ export class TransactionModel {
       addCondition("provider = ?", filters.provider);
     }
 
-    if (filters.referenceNumber) {
-      addCondition("reference_number = ?", filters.referenceNumber);
+    if (
+      filters.referenceNumber &&
+      typeof filters.referenceNumber === "string" &&
+      filters.referenceNumber.trim()
+    ) {
+      addCondition("reference_number = ?", filters.referenceNumber.trim());
     }
 
     if (filters.statuses?.length) {
@@ -347,6 +430,14 @@ export class TransactionModel {
 
     const transaction = mapTransactionRow(result.rows[0]);
 
+    // Initial status event for SSE subscribers watching the transaction.
+    publishTransactionEvent({
+      transactionId: transaction.id,
+      userId: data.userId ?? undefined,
+      status: transaction.status,
+      timestamp: new Date(transaction.createdAt).getTime(),
+    });
+
     // Invalidate caches after successful transaction creation.
     if (data.userId) {
       await Promise.resolve(
@@ -395,19 +486,56 @@ export class TransactionModel {
     return mapTransactionRow(res.rows[0]);
   }
 
-  async updateStatus(id: string, status: TransactionStatus, userId?: string) {
-    let q = `UPDATE transactions SET status=$1, updated_at=NOW() WHERE id=$2`;
-    const params: (string | TransactionStatus)[] = [status, id];
+  /**
+   * Fetch multiple transactions by ID in a single query, for callers
+   * reconciling a batch of transactions (e.g. `POST
+   * /transactions/batch-status`) without issuing one round trip per ID.
+   * IDs with no matching transaction are simply absent from the result —
+   * callers that need a per-ID outcome diff the input against the result.
+   */
+  async findByIds(ids: string[], userId?: string): Promise<Transaction[]> {
+    if (!ids.length) return [];
+
+    let q = `SELECT ${TRANSACTION_SELECT_COLUMNS} FROM transactions WHERE id = ANY($1)`;
+    const params: (string[] | string)[] = [ids];
 
     if (userId) {
-      q += ` AND user_id=$3`;
+      q += ` AND user_id=$2`;
+      params.push(userId);
+    }
+
+    const res = await queryRead<TransactionRow>(q, params);
+    return res.rows.map(mapTransactionRow).filter((t): t is Transaction => t !== null);
+  }
+
+  async updateStatus(
+    id: string,
+    status: TransactionStatus,
+    userId?: string,
+    expectedPreviousStatuses?: TransactionStatus[],
+  ): Promise<boolean> {
+    const validPreviousStatuses =
+      expectedPreviousStatuses ??
+      (Object.keys(ALLOWED_STATUS_TRANSITIONS) as TransactionStatus[]).filter(
+        (prev) => ALLOWED_STATUS_TRANSITIONS[prev]?.includes(status),
+      );
+
+    let q = `UPDATE transactions SET status=$1, updated_at=NOW() WHERE id=$2 AND (status = $1 OR status = ANY($3::varchar[]))`;
+    const params: (string | TransactionStatus | TransactionStatus[])[] = [
+      status,
+      id,
+      validPreviousStatuses,
+    ];
+
+    if (userId) {
+      q += ` AND user_id=$4`;
       params.push(userId);
     }
 
     q += ` RETURNING user_id, provider, reference_number, updated_at`;
 
     const res = await queryWrite<StatusUpdateRow>(q, params);
-    if (!res.rowCount) return;
+    if (!res.rowCount) return false;
 
     const row = res.rows[0];
 
@@ -443,27 +571,46 @@ export class TransactionModel {
       });
     }
 
+    // ── Publish to the SSE transaction stream ───────────────────────────
+    // Buffered in the replay ring buffer so clients reconnecting with
+    // Last-Event-ID still receive status changes made while offline.
+    publishTransactionEvent({
+      transactionId: id,
+      userId: row.user_id ?? undefined,
+      status,
+      timestamp: new Date(row.updated_at ?? Date.now()).getTime(),
+    });
+
     // ── Publish GraphQL subscription event ──────────────────────────────
     // Publish to both the per-transaction channel (targeted) and the
     // broadcast channel (for clients watching all transactions).
-    const pubsub = getRedisPubSub();
+    try {
+      const pubsub = getRedisPubSub();
 
-    const payload: TransactionUpdatedPayload = {
-      id,
-      referenceNumber: row.reference_number,
-      status,
-      updatedAt: new Date(row.updated_at).toISOString(),
-    };
+      const payload: TransactionUpdatedPayload = {
+        id,
+        referenceNumber: row.reference_number,
+        status,
+        updatedAt: new Date(row.updated_at).toISOString(),
+      };
 
-    await pubsub.publish(transactionChannel(id), payload);
-    await pubsub.publish(SubscriptionChannels.TRANSACTION_UPDATED, payload);
+      await pubsub.publish(transactionChannel(id), payload);
+      await pubsub.publish(SubscriptionChannels.TRANSACTION_UPDATED, payload);
 
-    const ws = WebSocketManager.getInstance();
-    await ws?.broadcastTransactionUpdate({
-      id,
-      status,
-      userId: row.user_id,
-    });
+      const ws = WebSocketManager.getInstance();
+      await ws?.broadcastTransactionUpdate({
+        id,
+        status,
+        userId: row.user_id,
+      });
+    } catch (pubsubErr) {
+      console.warn(
+        "[transaction] Failed to publish status update events",
+        pubsubErr,
+      );
+    }
+
+    return true;
   }
 
   async searchByNotes(query: string): Promise<Transaction[]> {
@@ -669,12 +816,50 @@ export class TransactionModel {
   async findByReferenceNumber(
     referenceNumber: string,
   ): Promise<Transaction | null> {
+    if (
+      !referenceNumber ||
+      typeof referenceNumber !== "string" ||
+      !referenceNumber.trim()
+    ) {
+      return null;
+    }
+
+    const trimmed = referenceNumber.trim();
     const result = await queryRead<TransactionRow>(
       `SELECT ${TRANSACTION_SELECT_COLUMNS}
        FROM transactions
        WHERE reference_number = $1
        LIMIT 1`,
-      [referenceNumber],
+      [trimmed],
+    );
+
+    return mapTransactionRow(result.rows[0]);
+  }
+
+  /**
+   * Looks up a transaction by the provider's own reference (e.g. an M-Pesa
+   * B2C `ConversationID`/`OriginatorConversationID`, stored on initiation as
+   * `providerReference`). Used by provider result-webhook routes that only
+   * receive the provider's identifiers, not our internal transaction id.
+   */
+  async findByProviderReference(
+    providerReference: string,
+  ): Promise<Transaction | null> {
+    if (
+      !providerReference ||
+      typeof providerReference !== "string" ||
+      !providerReference.trim()
+    ) {
+      return null;
+    }
+
+    const trimmed = providerReference.trim();
+    const result = await queryRead<TransactionRow>(
+      `SELECT ${TRANSACTION_SELECT_COLUMNS}
+       FROM transactions
+       WHERE provider_reference = $1
+       LIMIT 1`,
+      [trimmed],
     );
 
     return mapTransactionRow(result.rows[0]);

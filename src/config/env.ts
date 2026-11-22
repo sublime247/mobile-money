@@ -33,7 +33,7 @@ export const env = cleanEnv(process.env, {
   }),
   DB_MAX_CONNECTIONS: num({
     desc: "Maximum number of connections in each database pool",
-    default: 50,
+    default: 30,
   }),
   DB_POOL_MAX_USES: num({
     desc: "Maximum number of uses for a pool connection before it is closed and replaced (0 = unlimited)",
@@ -45,7 +45,7 @@ export const env = cleanEnv(process.env, {
   }),
   DB_POOL_IDLE_TIMEOUT_MS: num({
     desc: "Idle timeout in milliseconds for primary pool connections",
-    default: 15000,
+    default: 30000,
   }),
   DB_POOL_CONNECTION_TIMEOUT_MS: num({
     desc: "Connection timeout in milliseconds for primary pool connections",
@@ -191,6 +191,10 @@ export const env = cleanEnv(process.env, {
     default: 1,
     desc: "Provider balance alert worker concurrency limit (default 1 – sequential to prevent duplicate alerts)",
   }),
+  MINIMUM_FLOAT_BALANCE: num({
+    default: 500,
+    desc: "Minimum float balance threshold in smallest currency unit (e.g. XAF kobo). Payouts will be held if balance falls below this amount",
+  }),
 });
 
 // Re-export specific values for convenience
@@ -226,4 +230,5 @@ export const {
   ACCOUNTING_RETRY_WORKER_CONCURRENCY,
   ACCOUNTING_TOKEN_REFRESH_WORKER_CONCURRENCY,
   PROVIDER_BALANCE_ALERT_WORKER_CONCURRENCY,
+  MINIMUM_FLOAT_BALANCE,
 } = env;

@@ -216,11 +216,6 @@ jest.mock("multer", () => {
   return multerMock;
 });
 
-jest.mock("stellar-sdk", () => ({
-  Keypair: { fromSecret: jest.fn() },
-  Horizon: { Server: jest.fn() },
-}));
-
 const mockSystemConfigService = {
   getAll: jest.fn(),
   get: jest.fn(),
@@ -234,13 +229,17 @@ jest.mock("../../src/services/systemConfigService", () => ({
   systemConfigService: mockSystemConfigService,
 }));
 
-import adminRouter from "../../src/routes/admin";
+import { adminRoutes as adminRouter } from "../../src/routes/admin";
 
 let app: express.Express;
 
 beforeAll(() => {
   app = express();
   app.use(express.json());
+  app.use((req, _res, next) => {
+    Object.assign(req, { user: { id: "admin-1", role: "admin" } });
+    next();
+  });
   app.use("/api/admin", adminRouter);
 
   app.use((err: any, _req: any, res: any, _next: any) => {

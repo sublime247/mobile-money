@@ -334,12 +334,35 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2af50177e190e07a26ab74f8b1efbfe2ef87da2116221318cb1c2e82baf7de06"
 
 [[package]]
+name = "batch_payout"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk 26.0.1",
+]
+
+[[package]]
+name = "blacklist"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk 26.0.1",
+]
+
+[[package]]
 name = "block-buffer"
 version = "0.10.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3078c7629b62d3f0439517fa394996acacc5cbc91c5a20d8c658e77abd503a71"
 dependencies = [
  "generic-array",
+]
+
+[[package]]
+name = "bridge"
+version = "0.1.0"
+dependencies = [
+ "blacklist",
+ "fee_tier",
+ "soroban-sdk 26.0.1",
 ]
 
 [[package]]
@@ -632,6 +655,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "dispute"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk 26.0.1",
+]
+
+[[package]]
 name = "downcast-rs"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -776,6 +806,20 @@ name = "ethnum"
 version = "1.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40404c3f5f511ec4da6fe866ddf6a717c309fdbb69fbbad7b0f3edab8f2e835f"
+
+[[package]]
+name = "fee_pool"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk 26.0.1",
+]
+
+[[package]]
+name = "fee_tier"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk 26.0.1",
+]
 
 [[package]]
 name = "ff"
@@ -1205,6 +1249,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "proof_of_reserve"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk 26.0.1",
+]
+
+[[package]]
 name = "quicklendx-contracts"
 version = "0.1.0"
 dependencies = [
@@ -1251,6 +1302,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "rebalancer"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk 26.0.1",
+]
+
+[[package]]
 name = "ref-cast"
 version = "1.0.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1278,6 +1336,13 @@ checksum = "f8dd2a808d456c4a54e300a23e9f5a67e122c3024119acbfd73e3bf664491cb2"
 dependencies = [
  "hmac",
  "subtle",
+]
+
+[[package]]
+name = "router"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk 26.0.1",
 ]
 
 [[package]]
@@ -1940,6 +2005,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 
 [[package]]
+name = "swap_router"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk 26.0.1",
+]
+
+[[package]]
 name = "syn"
 version = "1.0.109"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2013,6 +2085,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "timelock"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk 26.0.1",
+]
+
+[[package]]
 name = "typenum"
 version = "1.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2023,6 +2102,13 @@ name = "unicode-ident"
 version = "1.0.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75"
+
+[[package]]
+name = "vault"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk 26.0.1",
+]
 
 [[package]]
 name = "version_check"

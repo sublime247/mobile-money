@@ -180,6 +180,110 @@ describe("KYCService", () => {
       ["full", "user-1"],
     );
   });
+
+  it("sends the biometric payload to Onfido and stores face-match status", async () => {
+    const postMock = jest
+      .spyOn((kycService as any).api, "post")
+      .mockResolvedValueOnce({ data: { id: "live-photo-1" } } as any)
+      .mockResolvedValueOnce({
+        data: { id: "check-1", status: "in_progress", result: null },
+      } as any);
+
+    mockPool.query.mockResolvedValueOnce({
+      rows: [{ user_id: "user-1" }],
+    } as any);
+
+    const result = await kycService.submitFaceMatch({
+      applicantId: "applicant-1",
+      biometricPayload: Buffer.from("face-image").toString("base64"),
+    });
+
+    expect(postMock).toHaveBeenNthCalledWith(
+      1,
+      "/live_photos",
+      expect.any(FormData),
+      expect.objectContaining({ timeout: 45000 }),
+    );
+    expect(postMock).toHaveBeenNthCalledWith(2, "/checks", {
+      applicant_id: "applicant-1",
+      report_names: ["facial_similarity_photo"],
+    });
+    expect(result.status).toBe("pending");
+    expect(result.livePhotoId).toBe("live-photo-1");
+    expect(result.checkId).toBe("check-1");
+    expect(mockPool.query).toHaveBeenCalledWith(
+      expect.stringContaining("UPDATE kyc_applicants"),
+      expect.arrayContaining([
+        expect.stringContaining('"status":"pending"'),
+        null,
+        null,
+        "applicant-1",
+      ]),
+    );
+  });
+
+  it("marks the client unverified when a face-match callback fails", async () => {
+    jest
+      .spyOn((kycService as any).api, "get")
+      .mockResolvedValueOnce({
+        data: { applicant_id: "applicant-1", applicant: { id: "applicant-1" } },
+      } as any)
+      .mockResolvedValueOnce({
+        data: { checks: [{ id: "check-1", applicant_id: "applicant-1" }] },
+      } as any)
+      .mockResolvedValueOnce({
+        data: {
+          reports: [
+            {
+              id: "report-1",
+              name: "document",
+              status: "complete",
+              result: "clear",
+            },
+            {
+              id: "report-2",
+              name: "facial_similarity",
+              status: "complete",
+              result: "consider",
+              breakdown: [
+                { name: "face_comparison", result: "selfie mismatch" },
+              ],
+            },
+          ],
+        },
+      } as any);
+
+    mockPool.query
+      .mockResolvedValueOnce({ rows: [{ applicant_data: null }] } as any)
+      .mockResolvedValueOnce({
+        rows: [{ user_id: "user-1", kyc_level: "none" }],
+      } as any)
+      .mockResolvedValueOnce({ rows: [] } as any);
+
+    await kycService.handleWebhook({
+      payload: {
+        action: "check.completed",
+        object: { id: "workflow-run-1", type: "workflow_run" },
+      },
+    });
+
+    expect(mockPool.query).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining("UPDATE kyc_applicants"),
+      expect.arrayContaining([
+        KYCStatus.REJECTED,
+        KYCLevel.UNVERIFIED,
+        "Selfie Mismatch",
+        expect.stringContaining('"status":"rejected"'),
+        "applicant-1",
+      ]),
+    );
+    expect(mockPool.query).toHaveBeenNthCalledWith(
+      3,
+      expect.stringContaining("UPDATE users"),
+      ["unverified", "user-1"],
+    );
+  });
 });
 
 describe("Database Schema", () => {

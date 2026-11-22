@@ -1,0 +1,11 @@
+{
+  "acme": {
+    "email": ""
+  },
+  "provider": "certbot",
+  "renewal": {
+    "threshold_days": 30,
+    "dry_run_by_default": true
+  },
+  "domains": []
+}

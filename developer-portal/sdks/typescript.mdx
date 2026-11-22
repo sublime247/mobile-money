@@ -1,0 +1,43 @@
+---
+title: 'TypeScript SDK'
+description: 'Client library for Node.js and Browser environments'
+---
+
+## Installation
+
+```bash
+npm install @momo-bridge/sdk
+```
+
+## Usage
+
+```typescript
+import { BridgeClient } from '@momo-bridge/sdk';
+
+const client = new BridgeClient({
+  apiKey: 'YOUR_API_KEY',
+  environment: 'testnet'
+});
+
+const quote = await client.quotes.getQuote({
+  sourceAsset: 'iso4217:UGX',
+  destinationAsset: 'stellar:USDC',
+  amount: 50000
+});
+```
+
+## Auto-paginating transaction history
+
+`listTransactions()` is an async generator that follows the server's cursor
+(`next_cursor` / `next_token`) for you, fetching the next page only when the
+current one is exhausted.
+
+```typescript
+for await (const tx of client.listTransactions({
+  limit: 50,        // items per page
+  maxItems: 500,    // stop after 500 items in total
+  startDate: '2026-01-01',
+})) {
+  console.log(tx.id);
+}
+```

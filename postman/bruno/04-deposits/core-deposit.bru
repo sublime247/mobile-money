@@ -1,0 +1,60 @@
+meta {
+  name: "Core Direct Mobile Money Collection"
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{base_url}}/api/transactions/deposit
+  body: json
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  Authorization: Bearer {{jwt_token}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "provider": "mtn",
+    "amount": 10000,
+    "phoneNumber": "{{login_phone}}",
+    "currency": "XAF"
+  }
+}
+
+script:pre-request {
+  // Guard: authenticated requests need a SEP-10 (or login) token.
+  const token = bru.getEnvVar("jwt_token");
+  if (!token) {
+    throw new Error(
+      "jwt_token is empty — run 'SEP-10 Sign Challenge & Get Token' (01-auth) first."
+    );
+  }
+  // Idempotency key: unique per run so retries never double-collect.
+  req.setHeader(
+    "Idempotency-Key",
+    "idemp-dep-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8)
+  );
+}
+
+script:post-response {
+  const body = res.getBody();
+  if (body && (body.id || body.reference)) {
+    bru.setEnvVar("transaction_id", body.id || body.reference);
+  }
+}
+
+tests {
+  test("deposit submitted", function() {
+    expect([200, 201, 202]).to.include(res.getStatus());
+  });
+  test("transaction reference captured", function() {
+    const body = res.getBody();
+    if (body && (body.id || body.reference)) {
+      expect(bru.getEnvVar("transaction_id")).to.be.a("string");
+    }
+  });
+}

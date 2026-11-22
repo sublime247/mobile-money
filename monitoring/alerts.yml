@@ -1,0 +1,47 @@
+---
+# Prometheus Alerting Rules — Mobile Money Provider Observability
+# Issue #2357: Alert on spike in provider 5xx HTTP response codes
+#
+# Validate with:  promtool check rules monitoring/alerts.yml
+# CI script:      scripts/validate-alert-rules.sh
+groups:
+  - name: provider_errors
+    interval: 60s
+    rules:
+      - alert: ProviderHighErrorRate
+        # Fire when provider 5xx responses exceed 5 % of all provider
+        # requests over a rolling 5-minute window.
+        #
+        # Numerator:   rate of HTTP responses with status 5xx from
+        #              external mobile money provider calls
+        # Denominator: rate of ALL HTTP responses from provider calls
+        #              (guarded with > 0 to avoid division-by-zero)
+        expr: |
+          (
+            sum by (provider) (
+              rate(provider_http_requests_total{status_code=~"5.."}[5m])
+            )
+            /
+            sum by (provider) (
+              rate(provider_http_requests_total[5m])
+            )
+          ) > 0.05
+        # Only page once the ratio has been above the threshold for 2
+        # consecutive minutes to suppress transient spikes.
+        for: 2m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: >-
+            High 5xx error rate from provider {{ $labels.provider }}
+          description: >-
+            Provider {{ $labels.provider }} is returning 5xx HTTP errors on
+            {{ printf "%.1f" (mul $value 100) }}% of requests over the last
+            5 minutes (threshold: 5%). This may indicate a provider outage
+            or misconfiguration.
+          runbook_url: >-
+            https://runbooks.internal/mobile-money/provider-high-error-rate
+          provider: "{{ $labels.provider }}"
+          dashboard_url: >-
+            https://grafana.internal/d/provider-errors?var-provider={{ $labels.provider }}

@@ -1,0 +1,41 @@
+---
+title: 'API Reference Overview'
+description: 'Complete reference for the Mobile Money REST API'
+---
+
+Welcome to the Mobile Money API. Our REST API allows you to programmatically manage transactions, KYC, quotes, and liquidity vaults.
+
+## Base URL
+All API requests should be made to the base URL:
+```bash
+https://api.mobilemoney.dev/v1
+```
+
+## Versioning
+The current API version is `v1`. The version is included in the URL path.
+
+## Content Type
+All requests and responses use `application/json`.
+Ensure you include the `Content-Type: application/json` header in your requests.
+
+## Pagination
+List endpoints support pagination using `limit` and `cursor` parameters.
+Responses include a `next_cursor` field when more records are available.
+
+## Rate Limits
+The API is rate-limited to:
+- 100 requests per minute per IP address
+- 1000 requests per hour per API key
+
+<Info>Rate limit status is returned in the `X-RateLimit-*` headers of every response.</Info>
+
+## Common Headers
+<ParamField header="Authorization" type="string" required>
+  Bearer token for authentication (`Bearer <API_KEY>`)
+</ParamField>
+<ParamField header="Content-Type" type="string" required>
+  Must be `application/json`
+</ParamField>
+<ParamField header="Idempotency-Key" type="string">
+  Unique key for retryable POST requests
+</ParamField>

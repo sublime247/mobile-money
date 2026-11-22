@@ -1,5 +1,9 @@
 import { executeWithCircuitBreaker } from "../../utils/circuitBreaker";
 import {
+  buildProviderCircuitOpenResponse,
+  isCircuitBreakerOpenError,
+} from "../providerCircuitBreaker";
+import {
   providerFailoverAlerts,
   providerFailoverTotal,
   transactionErrorsTotal,
@@ -9,12 +13,19 @@ import logger from "../../utils/logger";
 import { providerSettingsService } from "../providerSettingsService";
 import { createError } from "../../middleware/errorHandler";
 import { ERROR_CODES } from "../../constants/errorCodes";
+import axios from "axios";
+import {
+  attachTelcoTracingInterceptor,
+  withTelcoSpan,
+} from "../../utils/telcoTracing";
+
+// Providers that use the default axios export report the telco HTTP status to
+// the active telco span through this interceptor (client instances attach it
+// themselves).
+attachTelcoTracingInterceptor(axios);
 
 export type ProviderTransactionStatus =
-  | "completed"
-  | "failed"
-  | "pending"
-  | "unknown";
+  "completed" | "failed" | "pending" | "unknown";
 
 export interface BatchPayoutItem {
   referenceId: string;
@@ -142,6 +153,48 @@ function assertSupportedPhoneNumberFormat(phoneNumber: string): void {
   }
 }
 
+/**
+ * Whether a rejection from `super.initiatePayment`/`sendPayout` is an
+ * unrecovered circuit-breaker-open failure (#1962): every provider in the
+ * failover chain had an open breaker, so `executeProviderOperation` in the
+ * compiled dispatcher rethrew as a `MobileMoneyError` wrapping the original
+ * `EOPENBREAKER` error. Checks both the wrapper and its `originalError`,
+ * since the dispatcher always wraps the underlying cause.
+ */
+function isUnrecoveredCircuitBreakerFailure(error: unknown): boolean {
+  if (isCircuitBreakerOpenError(error)) {
+    return true;
+  }
+  const originalError = (error as { originalError?: unknown } | undefined)
+    ?.originalError;
+  return isCircuitBreakerOpenError(originalError);
+}
+
+/**
+ * Environments in which the mock sandbox provider (#2274) is activated
+ * automatically, regardless of which real provider the caller requested.
+ * This lets integration tests and staging smoke tests exercise the full
+ * deposit/payout code path without needing live MTN/Orange/Airtel
+ * credentials, matching how `IS_SANDBOX=true` already auto-routes to
+ * `"mock"` in the compiled dispatcher (mobileMoneyService_impl.js) when the
+ * CALLER already passes `provider: "mock"` explicitly - this extends that
+ * same mock routing to also trigger automatically from NODE_ENV, without
+ * requiring every call site to know to pass "mock" itself.
+ */
+const MOCK_PROVIDER_ACTIVATION_ENVS = new Set(["test", "sandbox"]);
+
+/**
+ * Resolves the provider key actually used for a request. Returns `"mock"`
+ * when `NODE_ENV` is one of `MOCK_PROVIDER_ACTIVATION_ENVS`, otherwise
+ * returns the requested provider unchanged.
+ */
+function resolveSandboxProviderOverride(requestedProvider: string): string {
+  if (MOCK_PROVIDER_ACTIVATION_ENVS.has(process.env.NODE_ENV ?? "")) {
+    return "mock";
+  }
+  return requestedProvider;
+}
+
 class MobileMoneyService extends MobileMoneyServiceImpl {
   private async resolveProviderForMaintenance(provider: string) {
     const providerKey = provider.toLowerCase();
@@ -194,7 +247,9 @@ class MobileMoneyService extends MobileMoneyServiceImpl {
 
   async initiatePayment(provider: string, phoneNumber: string, amount: string) {
     assertSupportedPhoneNumberFormat(phoneNumber);
-    const routing = await this.resolveProviderForMaintenance(provider);
+    const routing = await this.resolveProviderForMaintenance(
+      resolveSandboxProviderOverride(provider),
+    );
 
     if (routing.maintenance?.action === "abort") {
       return {
@@ -207,11 +262,25 @@ class MobileMoneyService extends MobileMoneyServiceImpl {
       };
     }
 
-    const result = await super.initiatePayment(
-      routing.providerKey,
-      phoneNumber,
-      amount,
-    );
+    let result;
+    try {
+      result = await withTelcoSpan(
+        {
+          provider: routing.providerKey,
+          operation: "initiatePayment",
+          phoneNumber,
+        },
+        () => super.initiatePayment(routing.providerKey, phoneNumber, amount),
+      );
+    } catch (error) {
+      if (isUnrecoveredCircuitBreakerFailure(error)) {
+        return buildProviderCircuitOpenResponse(
+          routing.providerKey,
+          "requestPayment",
+        );
+      }
+      throw error;
+    }
     return routing.maintenance
       ? { ...result, maintenance: routing.maintenance }
       : result;
@@ -219,7 +288,9 @@ class MobileMoneyService extends MobileMoneyServiceImpl {
 
   async sendPayout(provider: string, phoneNumber: string, amount: string) {
     assertSupportedPhoneNumberFormat(phoneNumber);
-    const routing = await this.resolveProviderForMaintenance(provider);
+    const routing = await this.resolveProviderForMaintenance(
+      resolveSandboxProviderOverride(provider),
+    );
 
     if (routing.maintenance?.action === "abort") {
       return {
@@ -232,11 +303,25 @@ class MobileMoneyService extends MobileMoneyServiceImpl {
       };
     }
 
-    const result = await super.sendPayout(
-      routing.providerKey,
-      phoneNumber,
-      amount,
-    );
+    let result;
+    try {
+      result = await withTelcoSpan(
+        {
+          provider: routing.providerKey,
+          operation: "sendPayout",
+          phoneNumber,
+        },
+        () => super.sendPayout(routing.providerKey, phoneNumber, amount),
+      );
+    } catch (error) {
+      if (isUnrecoveredCircuitBreakerFailure(error)) {
+        return buildProviderCircuitOpenResponse(
+          routing.providerKey,
+          "sendPayout",
+        );
+      }
+      throw error;
+    }
     return routing.maintenance
       ? { ...result, maintenance: routing.maintenance }
       : result;
@@ -247,7 +332,9 @@ class MobileMoneyService extends MobileMoneyServiceImpl {
       assertSupportedPhoneNumberFormat(item.phoneNumber);
     }
 
-    const routing = await this.resolveProviderForMaintenance(provider);
+    const routing = await this.resolveProviderForMaintenance(
+      resolveSandboxProviderOverride(provider),
+    );
 
     if (routing.maintenance?.action === "abort") {
       return {
@@ -267,11 +354,38 @@ class MobileMoneyService extends MobileMoneyServiceImpl {
       };
     }
 
-    const result = await super.sendBatchPayout(routing.providerKey, items);
+    let result;
+    try {
+      result = await withTelcoSpan(
+        {
+          provider: routing.providerKey,
+          operation: "sendBatchPayout",
+          phoneNumber: items[0]?.phoneNumber,
+        },
+        () => super.sendBatchPayout(routing.providerKey, items),
+      );
+    } catch (error) {
+      if (isUnrecoveredCircuitBreakerFailure(error)) {
+        const circuitResponse = buildProviderCircuitOpenResponse(
+          routing.providerKey,
+          "sendBatchPayout",
+        );
+        return {
+          success: false,
+          results: items.map((item) => ({
+            referenceId: item.referenceId,
+            success: false,
+            error: JSON.stringify(circuitResponse.error),
+          })),
+          error: circuitResponse.error,
+        };
+      }
+      throw error;
+    }
     return routing.maintenance
       ? { ...result, maintenance: routing.maintenance }
       : result;
   }
 }
 
-export { MobileMoneyService };
+export { MobileMoneyService, resolveSandboxProviderOverride };

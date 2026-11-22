@@ -153,7 +153,7 @@ describe("WebSocketManager", () => {
 
     client.send.mockClear();
 
-    const transactionModel = MockTransactionModel.mock.instances[0] as {
+    const transactionModel = MockTransactionModel.mock.results[0].value as {
       findById: jest.Mock;
     };
     transactionModel.findById.mockResolvedValue({
@@ -295,6 +295,8 @@ describe("WebSocketManager", () => {
 
     await manager.redisReady;
     connectClient(client);
+
+    client.send.mockClear();
 
     // Simulate receiving a message from another instance via Redis Pub/Sub
     if (subscriberCallback) {

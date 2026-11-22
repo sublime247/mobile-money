@@ -2,7 +2,7 @@ import axios from "axios";
 import { createHmac } from "crypto";
 import { OrangeMadagascarProvider } from "../orangeMadagascar";
 
-jest.mock("axios");
+jest.mock("axios", () => ({ create: jest.fn(), request: jest.fn() }));
 
 const axiosMock = axios as jest.Mocked<typeof axios>;
 
@@ -29,6 +29,7 @@ describe("OrangeMadagascarProvider", () => {
     process.env.ORANGE_MADAGASCAR_API_KEY = "test-api-key";
     process.env.ORANGE_MADAGASCAR_API_SECRET = "test-api-secret";
     process.env.ORANGE_MADAGASCAR_CALLBACK_SECRET = "test-callback-secret";
+    axiosMock.create.mockReturnValue({ request: axiosMock.request } as any);
     provider = new OrangeMadagascarProvider();
   });
 
@@ -432,9 +433,9 @@ describe("OrangeMadagascarProvider", () => {
       expect(provider.verifyCallbackSignature(rawBody, sig)).toBe(true);
     });
 
-    it("returns true for a valid base64 signature", () => {
+    it("rejects a base64 signature when the provider requires hex", () => {
       const sig = createHmac("sha256", secret).update(rawBody).digest("base64");
-      expect(provider.verifyCallbackSignature(rawBody, sig)).toBe(true);
+      expect(provider.verifyCallbackSignature(rawBody, sig)).toBe(false);
     });
 
     it("returns false for a tampered signature", () => {

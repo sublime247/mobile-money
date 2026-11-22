@@ -1,0 +1,11 @@
+---
+title: 'Cancel Transaction'
+api: 'DELETE /v1/transactions/{transactionId}'
+description: 'Cancel a pending transaction'
+---
+
+Cancels a transaction if it is in a cancellable state (e.g., waiting for user action).
+
+<ParamField path="transactionId" type="string" required>
+  The ID of the transaction to cancel.
+</ParamField>

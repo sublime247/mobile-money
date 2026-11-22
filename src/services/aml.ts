@@ -19,7 +19,8 @@ export type AMLRule =
   | "rapid_structuring"
   | "sanction_match"
   | "dynamic_profile_score"
-  | "threshold_structuring";
+  | "threshold_structuring"
+  | "velocity_threshold";
 
 export interface AMLTransactionLocation {
   lat: number;
@@ -672,6 +673,33 @@ export class AMLService {
     };
   }
 
+  /**
+   * Persists an alert raised by an external rule engine (e.g. velocity
+   * monitoring) through the same pipeline as built-in rules: DB persistence,
+   * admin notification, SAR auto-prepare for high severity, and logging.
+   */
+  async raiseAlert(
+    transaction: AMLTransactionRecord,
+    ruleHits: AMLRuleHit[],
+    severity: AMLAlertSeverity,
+  ): Promise<AMLAlert> {
+    const nowIso = new Date().toISOString();
+    const alert: AMLAlert = {
+      id: crypto.randomUUID(),
+      transactionId: transaction.id,
+      userId: transaction.userId,
+      severity,
+      status: "pending_review",
+      ruleHits,
+      reasons: ruleHits.map((hit) => hit.message),
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    };
+    await this.recordAlert(alert);
+    this.logAlert(alert, transaction);
+    return alert;
+  }
+
   async monitorTransaction(
     transaction: AMLTransactionRecord,
   ): Promise<AMLMonitoringResult> {
@@ -784,6 +812,7 @@ export class AMLService {
       sanction_match: 0,
       dynamic_profile_score: 0,
       threshold_structuring: 0,
+      velocity_threshold: 0,
     };
 
     const dailyMap = new Map<string, number>();

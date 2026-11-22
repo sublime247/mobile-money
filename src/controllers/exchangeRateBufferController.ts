@@ -188,11 +188,11 @@ export class ExchangeRateBufferController {
         data: {
           originalAmount: result.originalAmount,
           convertedAmount: result.convertedAmount,
-          rawRate: result.buffer.rawRate,
+          rawRate: (result.buffer as any)?.rawRate ?? result.rate,
           bufferedRate: result.rate,
-          bufferPercent: result.buffer.bufferApplied,
-          mode: result.buffer.mode,
-          providerUsed: result.buffer.providerUsed,
+          bufferPercent: (result.buffer as any)?.bufferApplied ?? 0,
+          mode: (result.buffer as any)?.mode ?? "default",
+          providerUsed: (result.buffer as any)?.providerUsed ?? provider,
         },
       });
     } catch (err) {

@@ -1,3 +1,4 @@
-use soroban_sdk::BytesN;
+use soroban_sdk::{symbol_short, Symbol};
 
-pub const DISPUTE: BytesN<1> = BytesN([0u8]);
+#[allow(dead_code)]
+pub const DISPUTE: Symbol = symbol_short!("DISPUTE");
