@@ -242,17 +242,27 @@ async function migrateDown(options?: { all?: boolean; count?: number }): Promise
     const sql = fs.readFileSync(migration.downPath, "utf-8");
     console.log(`Rolling back migration ${migration.version}: ${migration.name}`);
 
+    const hasConcurrentIndex = /CREATE\s+INDEX\s+CONCURRENTLY|DROP\s+INDEX\s+CONCURRENTLY/i.test(sql);
     const client = await pool.connect();
     try {
-      await client.query("BEGIN");
-      await client.query(sql);
-      await client.query("DELETE FROM schema_migrations WHERE version = $1", [
-        migration.version,
-      ]);
-      await client.query("COMMIT");
+      if (hasConcurrentIndex) {
+        await client.query(sql);
+        await client.query("DELETE FROM schema_migrations WHERE version = $1", [
+          migration.version,
+        ]);
+      } else {
+        await client.query("BEGIN");
+        await client.query(sql);
+        await client.query("DELETE FROM schema_migrations WHERE version = $1", [
+          migration.version,
+        ]);
+        await client.query("COMMIT");
+      }
       console.log(`  Rolled back: ${migration.name}`);
     } catch (err) {
-      await client.query("ROLLBACK");
+      if (!hasConcurrentIndex) {
+        await client.query("ROLLBACK");
+      }
       printError(`  Failed to roll back ${migration.name}:`, err);
       throw err;
     } finally {
@@ -278,19 +288,30 @@ async function migrateDryRun(): Promise<void> {
 
   for (const migration of pending) {
     const sql = fs.readFileSync(migration.upPath, "utf-8");
+    const hasConcurrentIndex = /CREATE\s+INDEX\s+CONCURRENTLY|DROP\s+INDEX\s+CONCURRENTLY/i.test(sql);
     const client = await pool.connect();
     try {
-      await client.query("BEGIN");
-      await client.query(sql);
-      await client.query(
-        "INSERT INTO schema_migrations (version) VALUES ($1)",
-        [migration.version],
-      );
-      await client.query("COMMIT");
+      if (hasConcurrentIndex) {
+        await client.query(sql);
+        await client.query(
+          "INSERT INTO schema_migrations (version) VALUES ($1)",
+          [migration.version],
+        );
+      } else {
+        await client.query("BEGIN");
+        await client.query(sql);
+        await client.query(
+          "INSERT INTO schema_migrations (version) VALUES ($1)",
+          [migration.version],
+        );
+        await client.query("COMMIT");
+      }
       appliedInDryRun.push(migration);
       console.log(`  [VALID] ${migration.name}`);
     } catch (err) {
-      await client.query("ROLLBACK");
+      if (!hasConcurrentIndex) {
+        await client.query("ROLLBACK");
+      }
       printError(`  [INVALID] ${migration.name}:`, err);
       errors++;
       client.release();
@@ -306,15 +327,26 @@ async function migrateDryRun(): Promise<void> {
       const client = await pool.connect();
       try {
         const sql = fs.readFileSync(migration.downPath, "utf-8");
-        await client.query("BEGIN");
-        await client.query(sql);
-        await client.query(
-          "DELETE FROM schema_migrations WHERE version = $1",
-          [migration.version],
-        );
-        await client.query("COMMIT");
+        const hasConcurrentIndex = /CREATE\s+INDEX\s+CONCURRENTLY|DROP\s+INDEX\s+CONCURRENTLY/i.test(sql);
+        if (hasConcurrentIndex) {
+          await client.query(sql);
+          await client.query(
+            "DELETE FROM schema_migrations WHERE version = $1",
+            [migration.version],
+          );
+        } else {
+          await client.query("BEGIN");
+          await client.query(sql);
+          await client.query(
+            "DELETE FROM schema_migrations WHERE version = $1",
+            [migration.version],
+          );
+          await client.query("COMMIT");
+        }
       } catch (_) {
-        await client.query("ROLLBACK");
+        if (!/CREATE\s+INDEX\s+CONCURRENTLY|DROP\s+INDEX\s+CONCURRENTLY/i.test(fs.readFileSync(migration.downPath, "utf-8"))) {
+          await client.query("ROLLBACK");
+        }
       } finally {
         client.release();
       }
@@ -388,5 +420,8 @@ const command = process.argv[2];
     process.exit(1);
   } finally {
     await pool.end();
+  }
+})();
+d();
   }
 })();

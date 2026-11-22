@@ -15,6 +15,7 @@ import logger from "../../utils/logger";
 import {
   countDefaultPartitionRows,
   ensureAuditLogPartitions,
+  pruneAuditLogPartitions,
   runPartitionManagerJob,
 } from "../partitionManager";
 
@@ -59,10 +60,34 @@ describe("partitionManager", () => {
     });
   });
 
+  describe("pruneAuditLogPartitions", () => {
+    it("detaches and drops old monthly partitions", async () => {
+      mockQuery
+        .mockResolvedValueOnce({ rows: [{ cutoff: "2025-11-01" }] })
+        .mockResolvedValueOnce({ rows: [{ partition_name: "audit_logs_2025_10" }] })
+        .mockResolvedValueOnce({ rowCount: 1 })
+        .mockResolvedValueOnce({ rowCount: 1 });
+
+      const pruned = await pruneAuditLogPartitions(12);
+
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.stringContaining("ALTER TABLE audit_logs DETACH PARTITION"),
+      );
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.stringContaining("DROP TABLE IF EXISTS"),
+      );
+      expect(pruned).toEqual([
+        { partition: "audit_logs_2025_10", archivedRows: 0, dropped: true },
+      ]);
+    });
+  });
+
   describe("runPartitionManagerJob", () => {
     it("logs created partitions", async () => {
       mockQuery
         .mockResolvedValueOnce({ rows: [{ partition: "audit_logs_2027_01" }] })
+        .mockResolvedValueOnce({ rows: [{ cutoff: "2025-11-01" }] })
+        .mockResolvedValueOnce({ rows: [] })
         .mockResolvedValueOnce({ rows: [{ count: "0" }] });
 
       await runPartitionManagerJob();
@@ -76,6 +101,8 @@ describe("partitionManager", () => {
 
     it("warns when rows have landed in the DEFAULT partition", async () => {
       mockQuery
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [{ cutoff: "2025-11-01" }] })
         .mockResolvedValueOnce({ rows: [] })
         .mockResolvedValueOnce({ rows: [{ count: "5" }] });
 
