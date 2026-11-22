@@ -114,6 +114,7 @@ export interface PepScreener {
     firstName: string,
     lastName: string,
     country?: string,
+    userId?: string,
   ): Promise<{ matched: boolean; score: number; matches: PepMatchRecord[] }>;
 }
 
@@ -377,6 +378,7 @@ export class AmlScreeningService {
   async screenNameAgainstPep(
     name: string,
     party: AmlScreeningParty,
+    userId?: string,
   ): Promise<AmlScreeningMatch[]> {
     const normalized = normalizeName(name);
     if (!normalized) return [];
@@ -386,7 +388,12 @@ export class AmlScreeningService {
     const lastName = tokens.slice(1).join(" ") || tokens[0];
 
     try {
-      const result = await this.pepScreener.screenCustomer(firstName, lastName);
+      const result = await this.pepScreener.screenCustomer(
+        firstName,
+        lastName,
+        undefined,
+        userId,
+      );
       if (!result?.matched) return [];
 
       return result.matches.map((match) => ({
@@ -443,7 +450,11 @@ export class AmlScreeningService {
         party.name,
         party.role,
       );
-      const pep = await this.screenNameAgainstPep(party.name, party.role);
+      const pep = await this.screenNameAgainstPep(
+        party.name,
+        party.role,
+        input.userId,
+      );
       matches.push(...sanctions, ...pep);
     }
 
@@ -520,6 +531,7 @@ export class AmlScreeningService {
     const pepMatches = await this.screenNameAgainstPep(
       input.recipientName,
       "receiver",
+      input.userId,
     );
     const matches = [...sanctions, ...pepMatches].sort(
       (a, b) => b.score - a.score,

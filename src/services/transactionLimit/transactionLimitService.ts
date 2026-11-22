@@ -10,6 +10,26 @@ import {
   regionalProviderLimitService,
   RegionalLimitCheckResult,
 } from "../regionalProviderLimitService";
+import { queryRead } from "../../config/database";
+import { currencyService, SUPPORTED_CURRENCIES } from "../currency";
+import { getEffectiveDailyLimit } from "../../compliance/riskTier";
+
+const KYC_VOLUME_LIMITS_USD: Record<
+  KYCLevel,
+  { daily: number; monthly: number }
+> = {
+  [KYCLevel.Unverified]: { daily: 500, monthly: 15_000 },
+  [KYCLevel.Basic]: { daily: 3_000, monthly: 90_000 },
+  [KYCLevel.Full]: { daily: 25_000, monthly: 750_000 },
+};
+
+interface VolumeTotalsRow {
+  currency: string;
+  daily_usd_total: string;
+  monthly_usd_total: string;
+  daily_unconverted_total: string;
+  monthly_unconverted_total: string;
+}
 
 export interface LimitCheckResult {
   allowed: boolean;
@@ -19,6 +39,10 @@ export interface LimitCheckResult {
   remainingLimit: number;
   message?: string;
   upgradeAvailable?: boolean;
+  dailyLimitUsd?: number;
+  monthlyLimitUsd?: number;
+  currentDailyTotalUsd?: number;
+  currentMonthlyTotalUsd?: number;
 }
 
 export class TransactionLimitService {
@@ -37,6 +61,7 @@ export class TransactionLimitService {
     providerName: string,
     countryCode?: string,
     regionCode?: string,
+    currency = "USD",
   ): Promise<LimitCheckResult> {
     // Validate per-transaction amount limits first
     if (transactionAmount < MIN_TRANSACTION_AMOUNT) {
@@ -71,6 +96,13 @@ export class TransactionLimitService {
 
     // Get user's KYC level
     const kycLevel = await this.kycService.getUserKYCLevel(userId);
+    const volumeLimitCheck = await this.checkKycVolumeCaps(
+      userId,
+      transactionAmount,
+      currency,
+      kycLevel,
+    );
+    if (volumeLimitCheck) return volumeLimitCheck;
 
     // Determine which limits to use (regional takes precedence)
     let dailyLimit: number;
@@ -116,22 +148,26 @@ export class TransactionLimitService {
       (sum, tx) => sum + parseFloat(tx.amount),
       0,
     );
+    const effectiveDailyLimit = await getEffectiveDailyLimit(
+      userId,
+      dailyLimit,
+    );
 
     // Calculate new total
     const newTotal = currentDailyTotal + transactionAmount;
-    const remainingLimit = dailyLimit - currentDailyTotal;
+    const remainingLimit = effectiveDailyLimit - currentDailyTotal;
 
     // Return approval if newTotal ≤ dailyLimit
-    if (newTotal > dailyLimit) {
+    if (newTotal > effectiveDailyLimit) {
       return {
         allowed: false,
         kycLevel,
-        dailyLimit,
+        dailyLimit: effectiveDailyLimit,
         currentDailyTotal,
         remainingLimit,
         message: this.buildRegionalLimitErrorMessage(
           kycLevel,
-          dailyLimit,
+          effectiveDailyLimit,
           currentDailyTotal,
           transactionAmount,
           limitSource,
@@ -145,9 +181,9 @@ export class TransactionLimitService {
     return {
       allowed: true,
       kycLevel,
-      dailyLimit,
+      dailyLimit: effectiveDailyLimit,
       currentDailyTotal,
-      remainingLimit: dailyLimit - newTotal,
+      remainingLimit: effectiveDailyLimit - newTotal,
     };
   }
 
@@ -176,6 +212,7 @@ export class TransactionLimitService {
   async checkTransactionLimit(
     userId: string,
     transactionAmount: number,
+    currency = "USD",
   ): Promise<LimitCheckResult> {
     // Validate per-transaction amount limits first
     if (transactionAmount < MIN_TRANSACTION_AMOUNT) {
@@ -202,7 +239,19 @@ export class TransactionLimitService {
 
     // Get user's KYC level
     const kycLevel = await this.kycService.getUserKYCLevel(userId);
+    const volumeLimitCheck = await this.checkKycVolumeCaps(
+      userId,
+      transactionAmount,
+      currency,
+      kycLevel,
+    );
+    if (volumeLimitCheck) return volumeLimitCheck;
+
     const dailyLimit = TRANSACTION_LIMITS[kycLevel];
+    const effectiveDailyLimit = await getEffectiveDailyLimit(
+      userId,
+      dailyLimit,
+    );
 
     // Calculate 24-hour window start time (current time - 24 hours)
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -222,19 +271,19 @@ export class TransactionLimitService {
 
     // Calculate newTotal = currentDailyTotal + transactionAmount
     const newTotal = currentDailyTotal + transactionAmount;
-    const remainingLimit = dailyLimit - currentDailyTotal;
+    const remainingLimit = effectiveDailyLimit - currentDailyTotal;
 
     // Return approval if newTotal ≤ dailyLimit, rejection otherwise
-    if (newTotal > dailyLimit) {
+    if (newTotal > effectiveDailyLimit) {
       return {
         allowed: false,
         kycLevel,
-        dailyLimit,
+        dailyLimit: effectiveDailyLimit,
         currentDailyTotal,
         remainingLimit,
         message: this.buildErrorMessage(
           kycLevel,
-          dailyLimit,
+          effectiveDailyLimit,
           currentDailyTotal,
           transactionAmount,
         ),
@@ -245,10 +294,114 @@ export class TransactionLimitService {
     return {
       allowed: true,
       kycLevel,
-      dailyLimit,
+      dailyLimit: effectiveDailyLimit,
       currentDailyTotal,
-      remainingLimit: dailyLimit - newTotal,
+      remainingLimit: effectiveDailyLimit - newTotal,
     };
+  }
+
+  private async checkKycVolumeCaps(
+    userId: string,
+    transactionAmount: number,
+    currency: string,
+    kycLevel: KYCLevel,
+  ): Promise<LimitCheckResult | null> {
+    const normalizedCurrency = currency.toUpperCase();
+    if (
+      !(SUPPORTED_CURRENCIES as readonly string[]).includes(normalizedCurrency)
+    ) {
+      return {
+        allowed: false,
+        kycLevel,
+        dailyLimit: 0,
+        currentDailyTotal: 0,
+        remainingLimit: 0,
+        message: `Unsupported currency for transaction limit validation: ${currency}`,
+      };
+    }
+
+    const requestedUsd = currencyService.convertToBase(
+      transactionAmount,
+      normalizedCurrency as (typeof SUPPORTED_CURRENCIES)[number],
+    ).convertedAmount;
+    const result = await queryRead<VolumeTotalsRow>(
+      `SELECT
+         COALESCE(currency, 'USD') AS currency,
+         COALESCE(SUM(
+           CASE WHEN converted_amount IS NOT NULL THEN converted_amount
+                WHEN COALESCE(currency, 'USD') = 'USD' THEN amount
+                ELSE 0 END
+         ) FILTER (WHERE created_at >= NOW() - INTERVAL '24 hours'), 0)::text
+           AS daily_usd_total,
+         COALESCE(SUM(
+           CASE WHEN converted_amount IS NOT NULL THEN converted_amount
+                WHEN COALESCE(currency, 'USD') = 'USD' THEN amount
+                ELSE 0 END
+         ), 0)::text AS monthly_usd_total,
+         COALESCE(SUM(
+           CASE WHEN converted_amount IS NULL
+                     AND COALESCE(currency, 'USD') <> 'USD' THEN amount
+                ELSE 0 END
+         ) FILTER (WHERE created_at >= NOW() - INTERVAL '24 hours'), 0)::text
+           AS daily_unconverted_total,
+         COALESCE(SUM(
+           CASE WHEN converted_amount IS NULL
+                     AND COALESCE(currency, 'USD') <> 'USD' THEN amount
+                ELSE 0 END
+         ), 0)::text AS monthly_unconverted_total
+       FROM transactions
+       WHERE user_id = $1
+         AND created_at >= NOW() - INTERVAL '30 days'
+         AND status IN ('completed', 'processing', 'pending', 'review', 'pending_review')
+       GROUP BY COALESCE(currency, 'USD')`,
+      [userId],
+    );
+
+    let dailyTotalUsd = 0;
+    let monthlyTotalUsd = 0;
+    for (const row of result.rows) {
+      dailyTotalUsd += Number(row.daily_usd_total);
+      monthlyTotalUsd += Number(row.monthly_usd_total);
+      const rowCurrency = row.currency.toUpperCase();
+      const dailyUnconverted = Number(row.daily_unconverted_total);
+      const monthlyUnconverted = Number(row.monthly_unconverted_total);
+      if (dailyUnconverted > 0) {
+        dailyTotalUsd += currencyService.convertToBase(
+          dailyUnconverted,
+          rowCurrency as (typeof SUPPORTED_CURRENCIES)[number],
+        ).convertedAmount;
+      }
+      if (monthlyUnconverted > 0) {
+        monthlyTotalUsd += currencyService.convertToBase(
+          monthlyUnconverted,
+          rowCurrency as (typeof SUPPORTED_CURRENCIES)[number],
+        ).convertedAmount;
+      }
+    }
+
+    const caps = KYC_VOLUME_LIMITS_USD[kycLevel];
+    if (
+      dailyTotalUsd + requestedUsd > caps.daily ||
+      monthlyTotalUsd + requestedUsd > caps.monthly
+    ) {
+      const exceededWindow =
+        dailyTotalUsd + requestedUsd > caps.daily ? "24-hour" : "30-day";
+      return {
+        allowed: false,
+        kycLevel,
+        dailyLimit: TRANSACTION_LIMITS[kycLevel],
+        currentDailyTotal: 0,
+        remainingLimit: 0,
+        dailyLimitUsd: caps.daily,
+        monthlyLimitUsd: caps.monthly,
+        currentDailyTotalUsd: dailyTotalUsd,
+        currentMonthlyTotalUsd: monthlyTotalUsd,
+        message: `Transaction exceeds the ${exceededWindow} KYC volume limit. Your verified tier allows $${caps.daily.toLocaleString()} per day and $${caps.monthly.toLocaleString()} per 30 days. Upgrade your KYC level to increase your limits.`,
+        upgradeAvailable: kycLevel !== KYCLevel.Full,
+      };
+    }
+
+    return null;
   }
 
   private buildErrorMessage(

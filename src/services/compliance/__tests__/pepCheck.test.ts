@@ -1,12 +1,15 @@
-import { PepCheckService, getPepCheckService } from "../../services/compliance/pepCheck";
+import { PepCheckService, getPepCheckService } from "../pepCheck";
 
-jest.mock("../../config/database", () => ({
+jest.mock("../../../config/database", () => ({
   pool: {
     query: jest.fn(),
   },
 }));
+jest.mock("../../../compliance/riskTier", () => ({
+  evaluateCustomerRisk: jest.fn().mockResolvedValue({ tier: "high" }),
+}));
 
-import { pool } from "../../config/database";
+import { pool } from "../../../config/database";
 
 const mockQuery = pool.query as jest.Mock;
 
@@ -22,12 +25,12 @@ describe("PepCheckService", () => {
       if (query.includes("SELECT COUNT(*) as cnt")) {
         return { rows: [{ cnt: "10" }] };
       }
-      if (query.includes("SELECT * FROM pep_records")) {
+      if (query.includes("FROM pep_records")) {
         return {
           rows: [
-            { id: "1", full_name: "Maria Santos", first_name: "Maria", last_name: "Santos", country: "PHL", source: "WorldBank", category: "Head of State", position: "Former President", external_id: "WB-001" },
-            { id: "2", full_name: "Kwame Mensah", first_name: "Kwame", last_name: "Mensah", country: "GHA", source: "WorldBank", category: "Government Minister", position: "Minister of Finance", external_id: "WB-002" },
-            { id: "3", full_name: "Carlos Mendoza", first_name: "Carlos", last_name: "Mendoza", country: "MEX", source: "FATF", category: "Government Minister", position: "Secretary of Treasury", external_id: "FATF-002" },
+            { id: "1", fullName: "Maria Santos", firstName: "Maria", lastName: "Santos", country: "PHL", source: "WorldBank", category: "Head of State", position: "Former President", externalId: "WB-001" },
+            { id: "2", fullName: "Kwame Mensah", firstName: "Kwame", lastName: "Mensah", country: "GHA", source: "WorldBank", category: "Government Minister", position: "Minister of Finance", externalId: "WB-002" },
+            { id: "3", fullName: "Carlos Mendoza", firstName: "Carlos", lastName: "Mendoza", country: "MEX", source: "FATF", category: "Government Minister", position: "Secretary of Treasury", externalId: "FATF-002" },
           ],
         };
       }
@@ -70,7 +73,7 @@ describe("PepCheckService", () => {
     });
 
     it("creates an AML alert for matched PEP", async () => {
-      await service.screenCustomer("Maria", "Santos");
+      await service.screenCustomer("Maria", "Santos", undefined, "user-123");
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining("INSERT INTO aml_alerts"),
         expect.any(Array),
