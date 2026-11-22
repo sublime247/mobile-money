@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from "uuid";
 import { StrKey } from "@stellar/stellar-sdk";
 import { Pool } from "pg";
 import { Sep12Service, Sep12CustomerStatus } from "./sep12";
+import { PostgresSep24TransactionStore } from "./sep24Store";
 
 import { sep6InfoResponseSchema, Sep6InfoResponse } from "../schemas/sep6";
 
@@ -192,6 +193,24 @@ export const createSep6Router = (db: Pool): Router => {
         account,
         asset_code,
       });
+
+      // Persist so bank statement reconciliation can find the pending deposit
+      // and release it once the customer's wire arrives.
+      try {
+        const amount = req.query.amount ? String(req.query.amount) : undefined;
+        await new PostgresSep24TransactionStore().save({
+          id: transactionId,
+          kind: "deposit",
+          status: "pending_user_transfer_start",
+          account: account as string,
+          asset_in: asset_code as string,
+          amount_in: amount,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+      } catch (persistError) {
+        logger.error("[SEP-6 Deposit] Failed to persist deposit:", persistError);
+      }
 
       res.json({
         how: "Please wire funds to Bank XYZ, Account 123456789, Routing 987654321. Include the transaction ID in the memo.",

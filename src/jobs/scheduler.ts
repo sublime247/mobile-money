@@ -19,9 +19,12 @@ import { runKycTierUpgradeJob } from "./kycTierUpgradeJob";
 import { runLiquidityRebalanceJob } from "./liquidityRebalanceJob";
 import { runCrossChainMonitorJob } from "./crossChainMonitorJob";
 import { runDailySettlementJob } from "./dailySettlementJob";
+import { runPartnerCommissionJob } from "./partnerCommissionJob";
+import { runFxRevaluationJob } from "./fxRevaluationJob";
 import { runDailyProviderReconciliation } from "./providerReconciliationJob";
 import { runReconciliationJob } from "./reconciliationJob";
 import { runLedgerReconciliationJob } from "./ledgerReconciliationJob";
+import { runStellarDiscrepancyJob } from "./stellarDiscrepancyJob";
 import { runDatabaseBackupJob } from "./databaseBackupJob";
 import { runDatabaseBackupVerifyJob } from "./databaseBackupVerifyJob";
 import { INDEX_REINDEX_CRON, INDEX_REINDEX_JOB_ENABLED } from "../config/env";
@@ -142,6 +145,18 @@ const JOBS: JobConfig[] = [
     handler: runDailySettlementJob,
   },
   {
+    name: "partner-commission",
+    // 1st of every month at 02:00 UTC — accrues partner revenue share and queues payouts
+    schedule: process.env.PARTNER_COMMISSION_CRON || "0 2 1 * *",
+    handler: runPartnerCommissionJob,
+  },
+  {
+    name: "fx-revaluation",
+    // 1st of every month at 03:00 UTC — marks foreign float to market and posts unrealized FX gain/loss
+    schedule: process.env.FX_REVALUATION_CRON || "0 3 1 * *",
+    handler: runFxRevaluationJob,
+  },
+  {
     name: "provider-reconciliation",
     // Daily at 4:00 AM - runs automated reconciliation against provider CSV reports
     schedule: process.env.PROVIDER_RECONCILIATION_CRON || "0 4 * * *",
@@ -199,6 +214,12 @@ const JOBS: JobConfig[] = [
     // Every 10 minutes - reconciles on-chain payment hashes against internal DB records
     schedule: process.env.STELLAR_RECONCILIATION_CRON || "*/10 * * * *",
     handler: runStellarReconciliationJob,
+  },
+  {
+    name: "stellar-discrepancy",
+    // Daily at 4:00 AM - compares previous 24h of Horizon anchor payments with the local ledger
+    schedule: process.env.STELLAR_DISCREPANCY_CRON || "0 4 * * *",
+    handler: runStellarDiscrepancyJob,
   },
   {
     name: "database-backup",

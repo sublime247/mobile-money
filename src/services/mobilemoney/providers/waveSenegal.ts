@@ -1,6 +1,7 @@
 import axios, { AxiosInstance } from "axios";
 import { createHmac } from "crypto";
 import { attachCorrelationIdInterceptor } from "../../../utils/correlationIdInterceptor";
+import { attachTelcoTracingInterceptor } from "../../../utils/telcoTracing";
 
 interface WavePaymentResponse {
   id?: string;
@@ -43,6 +44,7 @@ export class WaveSenegalProvider {
       },
     });
     attachCorrelationIdInterceptor(this.client);
+    attachTelcoTracingInterceptor(this.client);
   }
 
   /**

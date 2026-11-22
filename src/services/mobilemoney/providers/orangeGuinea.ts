@@ -35,6 +35,7 @@ type OrangeGuineaResult = {
 };
 
 import { BaseProvider } from "../../providers/baseProvider";
+import { attachTelcoTracingInterceptor } from "../../../utils/telcoTracing";
 
 export class OrangeGuineaProvider extends BaseProvider {
   private readonly authPath: string;
@@ -81,6 +82,7 @@ export class OrangeGuineaProvider extends BaseProvider {
       timeout: this.timeoutMs,
       validateStatus: () => true,
     });
+    attachTelcoTracingInterceptor(this.httpClient);
   }
 
   async requestPayment(
