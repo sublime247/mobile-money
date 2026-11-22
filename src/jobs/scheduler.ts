@@ -25,7 +25,7 @@ import { runDailyProviderReconciliation } from "./providerReconciliationJob";
 import { runReconciliationJob } from "./reconciliationJob";
 import { runLedgerReconciliationJob } from "./ledgerReconciliationJob";
 import { runStellarDiscrepancyJob } from "./stellarDiscrepancyJob";
-import { runDatabaseBackupJob } from "./databaseBackupJob";
+import { runDatabaseBackupJob, runVacuumAnalyzeJob } from "./databaseBackupJob";
 import { runDatabaseBackupVerifyJob } from "./databaseBackupVerifyJob";
 import { INDEX_REINDEX_CRON, INDEX_REINDEX_JOB_ENABLED } from "../config/env";
 import { runIndexReindexJob } from "./indexReindexJob";
@@ -35,6 +35,7 @@ import { runRebalanceJobHandler } from "./rebalanceJob";
 import { startNotificationWorker } from "../workers/notificationWorker";
 import { runTravelRuleExportJob } from "../services/compliance/travelRuleExport";
 import { runDlqCleanupJob } from "../queue/dlq";
+import { purgeExpiredProviderErrorLogs } from "../services/providerErrorLogService";
 import { runHighValueComplianceReportJob } from "./highValueComplianceReportJob";
 import { runStellarReconciliationJob } from "../workers/stellarReconciliation";
 import { runAirtelReconciliationWorker } from "../workers/airtelReconciliation";
@@ -234,6 +235,13 @@ const JOBS: JobConfig[] = [
     handler: runDatabaseBackupVerifyJob,
   },
   {
+    name: "vacuum-analyze",
+    // Every 6 hours at UTC 00:00, 06:00, 12:00 and 18:00 (#2481).
+    schedule: process.env.VACUUM_ANALYZE_CRON || "0 */6 * * *",
+    timezone: "UTC",
+    handler: runVacuumAnalyzeJob,
+  },
+  {
     name: "jwt-key-rotation",
     // Monthly on the 1st at 3:00 AM — rotates JWT signing key,
     // old keys remain valid for 24-hour grace period
@@ -284,6 +292,16 @@ const JOBS: JobConfig[] = [
     // Daily at 3:30 AM — removes DLQ entries older than 90 days after overnight audit window
     schedule: process.env.DLQ_CLEANUP_CRON || "30 3 * * *",
     handler: runDlqCleanupJob,
+  },
+  {
+    name: "provider-error-log-purge",
+    // Daily at 03:45 UTC - deletes sanitized provider failure snapshots
+    // older than their 30-day retention window (#2445)
+    schedule: process.env.PROVIDER_ERROR_LOG_PURGE_CRON || "45 3 * * *",
+    timezone: "UTC",
+    handler: async () => {
+      await purgeExpiredProviderErrorLogs();
+    },
   },
   {
     name: "airtel-disbursement-reconciliation",

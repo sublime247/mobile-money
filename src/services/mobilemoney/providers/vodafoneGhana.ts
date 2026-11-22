@@ -12,7 +12,8 @@
 //! prompt, which this adapter's `requestPayment` accepts as an optional
 //! third parameter.
 
-import axios, { AxiosInstance } from "axios";
+import { AxiosInstance } from "axios";
+import { createProviderHttpClient } from "./providerHttpClient";
 import { createHmac, timingSafeEqual } from "crypto";
 import { attachTelcoTracingInterceptor } from "../../../utils/telcoTracing";
 
@@ -81,7 +82,7 @@ export class VodafoneGhanaProvider {
     this.callbackSecret = process.env.VODAFONE_GH_CALLBACK_SECRET || "";
     this.currency = process.env.VODAFONE_GH_CURRENCY || "GHS";
 
-    this.client = axios.create({
+    this.client = createProviderHttpClient("vodafone_ghana", {
       baseURL:
         process.env.VODAFONE_GH_BASE_URL || "https://sandbox.vodafone.com.gh",
       timeout: Number(process.env.VODAFONE_GH_TIMEOUT_MS || 30000),

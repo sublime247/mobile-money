@@ -9,3 +9,4 @@ export { transactionDisputeRoutesV1, disputeRoutesV1 } from "./disputes";
 export { statsRoutesV1 } from "./stats";
 export { vaultRoutesV1 } from "./vaults";
 export { institutionalRoutesV1 } from "./institutional";
+export { accountingRoutesV1 } from "./accounting";

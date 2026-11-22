@@ -128,7 +128,19 @@ variable "redis_num_cache_clusters" {
 
 # ── S3 ─────────────────────────────────────────────────────────────────────
 variable "s3_bucket_name" {
-  description = "S3 bucket for KYC document uploads"
+  description = "Legacy S3 bucket for KYC document uploads"
   type        = string
   default     = "mobile-money-kyc-documents"
+}
+
+variable "kyc_s3_primary_bucket_name" {
+  description = "Primary S3 bucket name for KYC/dispute documents"
+  type        = string
+  default     = ""
+}
+
+variable "kyc_s3_replica_bucket_name" {
+  description = "Replica S3 bucket name for KYC/dispute documents (failover region)"
+  type        = string
+  default     = ""
 }

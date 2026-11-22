@@ -1,4 +1,5 @@
-import axios, { AxiosInstance, AxiosError, AxiosResponse } from "axios";
+import { AxiosInstance, AxiosError, AxiosResponse } from "axios";
+import { createProviderHttpClient } from "./providerHttpClient";
 import logger from "../../../utils/logger";
 import { maskPII } from "../../../utils/masking";
 import { formatPhoneForProvider } from "../../../utils/phoneUtils";
@@ -44,7 +45,7 @@ export class MTNRwandaProvider {
 
   constructor(config: MTNRwandaProviderConfig) {
     this.config = config;
-    this.client = axios.create({
+    this.client = createProviderHttpClient("mtn_rwanda", {
       baseURL: config.sandboxBaseUrl || config.baseUrl,
       timeout: config.requestTimeoutMs || 30000,
       headers: {

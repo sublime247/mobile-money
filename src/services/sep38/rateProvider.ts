@@ -1,5 +1,6 @@
 import { currencyService, SupportedCurrency } from "../currency";
 import { exchangeRateBufferService } from "../exchangeRateBufferService";
+import { fxVolatilitySpreadService } from "../fxVolatilitySpreadService";
 import * as StellarSdk from "@stellar/stellar-sdk";
 import { getStellarServer } from "../../config/stellar";
 import { getConfigValue } from "../../config/appConfig";
@@ -271,6 +272,16 @@ export class StellarPathPaymentRateProvider implements IRateProvider {
         "sell",
       );
 
+      // Volatility surcharge: extra spread (0 in calm markets) layered on top
+      // of the configured buffer/spread, so firm and indicative quotes both
+      // protect against FX moves before settlement.
+      const dynamicSpread = await fxVolatilitySpreadService.getDynamicSpread(
+        sellCode,
+        buyCode,
+      );
+      const volatilityAdjustedRate =
+        buffered.bufferedRate / (1 + dynamicSpread.bufferPct / 100);
+
       let price: number;
       if (indicative) {
         const pairSpreadBps = getSpreadMarginBpsForPair(sellCode, buyCode);
@@ -278,9 +289,9 @@ export class StellarPathPaymentRateProvider implements IRateProvider {
           pairSpreadBps !== null ? pairSpreadBps : this.spreadBps;
         const spread =
           (effectiveSpreadBps / 10000) * (Math.random() < 0.5 ? -1 : 1);
-        price = buffered.bufferedRate * (1 + spread);
+        price = volatilityAdjustedRate * (1 + spread);
       } else {
-        price = buffered.bufferedRate;
+        price = volatilityAdjustedRate;
       }
 
       return {

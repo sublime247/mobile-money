@@ -7,6 +7,7 @@ import {
   pool,
 } from "../config/database";
 import { redisClient } from "../config/redis";
+import { getReplicationLagReport } from "../services/databaseHealth";
 import { checkMobileMoneyHealth } from "../services/mobilemoney/providers/healthCheck";
 
 const router = Router();
@@ -157,6 +158,21 @@ async function readinessProbe(
 
 router.get("/health/liveness", (_req: Request, res: Response) => {
   res.status(200).json({ status: "ok" });
+});
+
+/**
+ * GET /health/database (#2484)
+ *
+ * Reports replication lag in milliseconds and the last replayed WAL LSN for
+ * every configured replica. By default this reads the snapshot cached by the
+ * existing lag monitor (no DB round trip); `?fresh=true` triggers an on-demand
+ * probe. Returns HTTP 200 always so monitoring can alert on the `alert` flag
+ * without this endpoint doubling as a liveness probe.
+ */
+router.get("/health/database", async (req: Request, res: Response) => {
+  const fresh = req.query.fresh === "true";
+  const report = await getReplicationLagReport({ fresh });
+  res.status(200).json(report);
 });
 
 router.get("/health/readiness", async (_req: Request, res: Response) => {

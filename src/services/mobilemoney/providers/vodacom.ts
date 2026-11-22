@@ -1,4 +1,5 @@
-import axios, { AxiosInstance } from "axios";
+import { AxiosInstance } from "axios";
+import { createProviderHttpClient } from "./providerHttpClient";
 import crypto from "crypto";
 import logger from "../../../utils/logger";
 import { maskPII } from "../../../utils/masking";
@@ -49,7 +50,7 @@ export class VodacomProvider {
     this.market = process.env.VODACOM_MARKET || "vodacomTZN";
     this.currency = process.env.VODACOM_CURRENCY || "TZS";
 
-    this.client = axios.create({
+    this.client = createProviderHttpClient("vodacom", {
       baseURL: this.baseUrl,
       timeout: 10000,
       headers: {

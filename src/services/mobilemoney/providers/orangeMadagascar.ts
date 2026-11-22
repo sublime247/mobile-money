@@ -1,4 +1,5 @@
-import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from "axios";
+import { AxiosInstance, AxiosRequestConfig, AxiosResponse } from "axios";
+import { createProviderHttpClient } from "./providerHttpClient";
 import { createHmac, randomUUID } from "crypto";
 import logger from "../../../utils/logger";
 import { maskPII } from "../../../utils/masking";
@@ -77,7 +78,7 @@ export class OrangeMadagascarProvider extends BaseProvider {
     this.callbackSecret = process.env.ORANGE_MADAGASCAR_CALLBACK_SECRET ?? "";
     this.callbackSignatureHeader = process.env.ORANGE_MADAGASCAR_CALLBACK_SIGNATURE_HEADER ?? "X-Oapi-Signature";
 
-    this.httpClient = axios.create({
+    this.httpClient = createProviderHttpClient("orange_madagascar", {
       baseURL: this.baseUrl,
       timeout: this.timeoutMs,
       validateStatus: () => true,

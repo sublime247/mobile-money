@@ -9,10 +9,21 @@
  */
 import { startFloatReconciliationWorker } from "./floatReconciliationWorker";
 import { scheduleFloatReconciliationJob } from "./floatReconciliationQueue";
+import { startDailyBalanceSnapshotWorker } from "./dailyBalanceSnapshotWorker";
+import { scheduleDailyBalanceSnapshotJob } from "./dailyBalanceSnapshotQueue";
 
 export async function startScheduledJobs(): Promise<void> {
   startFloatReconciliationWorker();
   await scheduleFloatReconciliationJob();
+
+  // End-of-day immutable balance snapshots at 23:59:59 UTC.
+  startDailyBalanceSnapshotWorker();
+  await scheduleDailyBalanceSnapshotJob();
 }
 
-export { startFloatReconciliationWorker, scheduleFloatReconciliationJob };
+export {
+  startFloatReconciliationWorker,
+  scheduleFloatReconciliationJob,
+  startDailyBalanceSnapshotWorker,
+  scheduleDailyBalanceSnapshotJob,
+};

@@ -27,6 +27,7 @@ import {
   bulkRoutesV1,
   disputeRoutesV1,
   statsRoutesV1,
+  accountingRoutesV1,
   transactionDisputeRoutesV1,
   transactionRoutesV1,
   vaultRoutesV1,
@@ -93,6 +94,7 @@ import { tracingMetricsMiddleware } from "./middleware/tracingMetrics";
 import { validateStellarNetwork, logStellarNetwork } from "./config/stellar";
 import { sessionAnomalyLogger } from "./services/logger";
 import { HealthCheckResponse, ReadinessCheckResponse } from "./types/api";
+import { getReplicationLagReport } from "./services/databaseHealth";
 import { privacyRoutes } from "./routes/privacy";
 import { developerDashboardRoutes } from "./routes/developerDashboard";
 import { travelRuleRoutes } from "./routes/travelRule";
@@ -286,12 +288,19 @@ app.use(sessionAnomalyLogger);
 // sustained starvation (#2293). The getter follows pool replacement on reconnect.
 const poolStarvationMonitor = new PoolStarvationMonitor(() => pool);
 
-app.get("/health", (_req: Request, res: Response) => {
+app.get("/health", async (_req: Request, res: Response) => {
+  // #2484: cached replica snapshot only, so this liveness hot path performs no
+  // database round trip. Replication lag is reported in milliseconds along
+  // with an explicit alert flag for a replica more than 10s behind primary.
+  const replicationLag = await getReplicationLagReport();
   const body: HealthCheckResponse = {
     status: "ok",
     timestamp: new Date().toISOString(),
     gitHash: process.env.BUILD_HASH,
-    database: { pool: poolStarvationMonitor.getState() },
+    database: {
+      pool: poolStarvationMonitor.getState(),
+      replicationLag,
+    },
   };
   res.json(body);
 });
@@ -455,6 +464,7 @@ app.use("/api/v1/transactions", transactionDisputeRoutesV1);
 app.use("/api/v1/transactions/bulk", bulkRoutesV1);
 app.use("/api/v1/disputes", disputeRoutesV1);
 app.use("/api/v1/stats", statsRoutesV1);
+app.use("/api/v1/accounting", accountingRoutesV1);
 app.use("/api/v1/vaults", vaultRoutesV1);
 app.use("/api/v1/compliance/travel-rule", travelRuleRoutes);
 app.use("/api/v1/compliance", complianceRoutes);

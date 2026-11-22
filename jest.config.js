@@ -12,7 +12,7 @@ module.exports = {
         "<rootDir>/src",
         "<rootDir>/tests",
         "<rootDir>/scripts/__tests__",
-        "<rootDir>/developer-portal/tests",
+        "<rootDir>/cli/tests",
       ],
       testMatch: ["**/__tests__/**/*.ts", "**/?(*.)+(spec|test).ts"],
       // Exclude frontend JS, Playwright E2E, and Pact tests from backend Jest run

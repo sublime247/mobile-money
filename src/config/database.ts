@@ -591,6 +591,92 @@ export function stopPoolHealthCheck(): void {
   }
 }
 
+export const DB_POOL_WAIT_ALERT_MS = parseInt(
+  process.env.DB_POOL_WAIT_ALERT_MS || "2000",
+  10,
+);
+
+const poolWaitStartedAt = new WeakMap<object, number>();
+const instrumentedPools = new WeakSet<object>();
+
+export const attachPoolSaturationListeners = (
+  poolInstance: Pool,
+  poolName = "primary",
+) => {
+  if (instrumentedPools.has(poolInstance as object)) return;
+  instrumentedPools.add(poolInstance as object);
+
+  const emit = () => emitPoolMetrics(poolInstance, poolName);
+  const pendingStarts: number[] = [];
+
+  const onAcquire = (client: unknown) => {
+    if (client && typeof client === "object") {
+      const started =
+        poolWaitStartedAt.get(client as object) ?? pendingStarts.shift();
+      if (started !== undefined) {
+        poolWaitStartedAt.delete(client as object);
+        const waitMs = Date.now() - started;
+        if (waitMs > DB_POOL_WAIT_ALERT_MS) {
+          const total = (poolInstance as any).totalCount ?? 0;
+          const idle = (poolInstance as any).idleCount ?? 0;
+          logger.warn(
+            {
+              pool: poolName,
+              waitMs,
+              thresholdMs: DB_POOL_WAIT_ALERT_MS,
+              waiting: (poolInstance as any).waitingCount ?? 0,
+              active: Math.max(0, total - idle),
+            },
+            "db_pool_wait_exceeded",
+          );
+        }
+      }
+    }
+    emit();
+  };
+
+  poolInstance.on("acquire", onAcquire);
+  poolInstance.on("release", emit);
+  poolInstance.on("connect", emit);
+  poolInstance.on("remove", emit);
+  poolInstance.on("error", emit);
+
+  const originalConnect = poolInstance.connect.bind(poolInstance) as any;
+  (poolInstance as any).connect = (...args: any[]) => {
+    const start = Date.now();
+    pendingStarts.push(start);
+    const markClient = (client: any) => {
+      if (client && typeof client === "object") poolWaitStartedAt.set(client, start);
+      return client;
+    };
+    if (args.length > 0 && typeof args[0] === "function") {
+      const cb = args[0];
+      args[0] = (err: unknown, client: any, release: any) => {
+        if (err) {
+          const idx = pendingStarts.indexOf(start);
+          if (idx >= 0) pendingStarts.splice(idx, 1);
+        } else {
+          markClient(client);
+        }
+        cb(err, client, release);
+      };
+      return originalConnect(...args);
+    }
+    const maybePromise = originalConnect(...args);
+    if (maybePromise && typeof maybePromise.then === "function") {
+      return maybePromise.then(
+        (client: any) => markClient(client),
+        (err: unknown) => {
+          const idx = pendingStarts.indexOf(start);
+          if (idx >= 0) pendingStarts.splice(idx, 1);
+          throw err;
+        },
+      );
+    }
+    return maybePromise;
+  };
+};
+
 async function reconnectPrimaryPool(): Promise<void> {
   try {
     const previousPool = pool;
@@ -600,6 +686,7 @@ async function reconnectPrimaryPool(): Promise<void> {
       handlePoolError(err, client);
     });
 
+    attachPoolSaturationListeners(nextPool, "primary");
     attachPrimaryPoolRecovery(nextPool);
     const isHealthy = await pingDatabasePool(nextPool);
     if (!isHealthy) {
@@ -678,6 +765,7 @@ function createPrimaryPool(): Pool {
     handlePoolError(err, client);
   });
 
+  attachPoolSaturationListeners(newPool, "primary");
   currentPoolMax = POOL_DEFAULT_MAX;
   attachPrimaryPoolRecovery(newPool);
 
@@ -739,6 +827,8 @@ type ReplicaStatus = {
   enabled: boolean;
   healthy: boolean;
   lagSeconds: number | null;
+  /** pg_last_wal_replay_lsn() from the last successful probe (#2484). */
+  walReplayLsn: string | null;
 };
 
 /** Replica URLs with any password masked, for logs, metrics and APIs. */
@@ -759,6 +849,7 @@ const replicaStatuses: ReplicaStatus[] = replicaLabels.map((url) => ({
   enabled: true,
   healthy: true,
   lagSeconds: null,
+  walReplayLsn: null,
 }));
 
 // Build an individual Pool for each replica URL
@@ -852,6 +943,29 @@ async function queryReplica(args: any[]): Promise<any | null> {
   }
 }
 
+/**
+ * Acquire a dedicated client for a read-only transaction (#2483).
+ *
+ * Prefers a healthy replica and falls back to the primary when none is
+ * configured or reachable. The caller owns the client and must always release
+ * it; `withReadOnlyTransaction()` does that in a `finally` block.
+ */
+export async function getReadClient(): Promise<PoolClient> {
+  const idx = getNextReplicaIndex();
+  if (idx !== null) {
+    try {
+      return await replicaPools[idx].connect();
+    } catch (err) {
+      markReplicaUnavailable(idx);
+      logger.warn(
+        `[Database] Replica client acquisition failed for ${replicaLabels[idx]}; using primary for read-only transaction`,
+        err,
+      );
+    }
+  }
+  return pool.connect();
+}
+
 /** Whether a `pool.query` call should be served by a replica. */
 function shouldRouteToReplica(queryString: string, args: any[]): boolean {
   if (!REPLICA_ROUTE_GET_REQUESTS || replicaPools.length === 0) return false;
@@ -865,22 +979,36 @@ async function refreshReplicaStatus(idx: number): Promise<void> {
   const url = replicaLabels[idx];
   let healthy = false;
   let lagSeconds: number | null = null;
+  let walReplayLsn: string | null = null;
   let client: PoolClient | null = null;
 
   try {
     client = await replicaPools[idx].connect();
+    // #2484: the existing lag probe now also reports the last replayed LSN,
+    // so health endpoints can expose both time- and position-based progress
+    // without opening a second connection per request.
     const query = `
-      SELECT CASE
-        WHEN pg_is_in_recovery() THEN EXTRACT(EPOCH FROM (now() - pg_last_xact_replay_timestamp()))
-        ELSE 0
-      END AS lag_seconds
+      SELECT
+        CASE
+          WHEN pg_is_in_recovery()
+          THEN EXTRACT(EPOCH FROM (now() - pg_last_xact_replay_timestamp()))
+          ELSE 0
+        END AS lag_seconds,
+        CASE
+          WHEN pg_is_in_recovery() THEN pg_last_wal_replay_lsn()::text
+        END AS wal_replay_lsn
     `;
-    const result = await client.query<{ lag_seconds: number | null }>(query);
+    const result = await client.query<{
+      lag_seconds: number | null;
+      wal_replay_lsn: string | null;
+    }>(query);
     lagSeconds = result.rows?.[0]?.lag_seconds ?? null;
+    walReplayLsn = result.rows?.[0]?.wal_replay_lsn ?? null;
     healthy = true;
   } catch (error) {
     healthy = false;
     lagSeconds = null;
+    walReplayLsn = null;
     logger.warn(`[Database] Replica health check failed for ${url}:`, error);
   } finally {
     client?.release(healthy ? undefined : true);
@@ -890,7 +1018,7 @@ async function refreshReplicaStatus(idx: number): Promise<void> {
     healthy &&
     lagSeconds !== null &&
     lagSeconds <= REPLICA_SYNC_LAG_THRESHOLD_SECONDS;
-  replicaStatuses[idx] = { url, enabled, healthy, lagSeconds };
+  replicaStatuses[idx] = { url, enabled, healthy, lagSeconds, walReplayLsn };
 
   dbReplicaLagSeconds.labels(url).set(lagSeconds ?? 0);
   dbReplicaReadEnabled.labels(url).set(enabled ? 1 : 0);
@@ -1020,6 +1148,7 @@ export interface ReplicaPoolStatus {
   healthy: boolean;
   enabled: boolean;
   lagSeconds: number | null;
+  walReplayLsn: string | null;
   totalConnections: number;
   idleConnections: number;
   waitingClients: number;

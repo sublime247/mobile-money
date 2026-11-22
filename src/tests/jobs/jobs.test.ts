@@ -34,6 +34,14 @@ jest.mock("../../workers/notificationWorker", () => ({
   startNotificationWorker: jest.fn().mockResolvedValue(undefined),
 }));
 
+// #2483: report reads go through a read-only client. Route it back to the
+// existing pool mock so these job tests keep asserting the same queries.
+jest.mock("../../database/readOnlyClient", () => ({
+  withReadOnlyTransaction: jest.fn((run: (c: unknown) => unknown) =>
+    run({ query: (...args: unknown[]) => mockQuery(...args) }),
+  ),
+}));
+
 jest.mock("../../models/amlAlert", () => ({
   AMLAlertModel: jest.fn().mockImplementation(() => ({
     getAlertsByTransaction: jest.fn().mockResolvedValue([]),
