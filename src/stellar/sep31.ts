@@ -4,6 +4,7 @@ import {
   validateSenderKycApproved,
   validateSep31KycFields,
 } from "../validators/sep31";
+import { validateSep31NationalIds } from "../validators/nationalIdValidator";
 import { ipReputationService } from "../services/ipReputation";
 import logger from "../utils/logger";
 import { Router, Request, Response } from "express";
@@ -506,6 +507,23 @@ router.post(
           },
         },
       );
+    }
+
+    // National ID format validation for supported corridors (#2429).
+    // Only enforced when a supported country is declared and an ID is
+    // supplied, so corridors without these fields are unaffected.
+    const nationalIdValidation = validateSep31NationalIds(
+      fields,
+      destinationCountryCode,
+    );
+    if (!nationalIdValidation.valid) {
+      const message =
+        nationalIdValidation.error || "Invalid sender or receiver national ID";
+      throw createError(ERROR_CODES.INVALID_INPUT, message, {
+        error: "invalid_request",
+        message,
+        details: { invalidFields: nationalIdValidation.invalidFields },
+      });
     }
 
     // Receiver phone / destination country-code format validation (#2263)
