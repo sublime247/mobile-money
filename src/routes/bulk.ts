@@ -1,3 +1,4 @@
+import { geoIpFilter } from "../middleware/geoIpFilter";
 import logger from "../utils/logger";
 import { Router, Request, Response, NextFunction } from "express";
 import { authenticateToken } from "../middleware/auth";
@@ -253,6 +254,7 @@ export const bulkRoutes = Router();
 bulkRoutes.post(
   "/",
   authenticateToken,
+  geoIpFilter,
   checkAccountStatusStrict,
   upload.single("file"),
   optionalIdempotency,

@@ -1,6 +1,8 @@
+import { getCurrentCorrelationId } from "../middleware/correlationId";
 import { queryRead, queryWrite } from "../config/database";
 import { generateReferenceNumber } from "../utils/referenceGenerator";
 import { encrypt, decrypt } from "../utils/encryption";
+import logger from "../utils/logger";
 import { WebSocketManager } from "../websocket";
 import { getRedisPubSub } from "../graphql/redisPubSub";
 import { CachedTransactionInvalidation } from "../services/cachedTransactionService";
@@ -264,6 +266,7 @@ export interface BalanceStatisticsRow {
 }
 
 export interface StatusUpdateRow {
+  correlation_id?: string | null;
   user_id?: string | null;
   provider?: string | null;
   reference_number?: string | null;
@@ -396,15 +399,16 @@ export class TransactionModel {
     validateTags(data.tags ?? []);
     const metadata = validateMetadata(data.metadata);
     const ref = await generateReferenceNumber();
+    const correlationId = getCurrentCorrelationId() ?? null;
 
     const result = await queryWrite<TransactionRow>(
       `INSERT INTO transactions (
         reference_number, provider_reference, type, amount, currency,
         original_amount, converted_amount, phone_number, provider,
         stellar_address, status, tags, notes, user_id,
-        idempotency_key, idempotency_expires_at, metadata, location_metadata
+        idempotency_key, idempotency_expires_at, metadata, location_metadata, correlation_id
       ) VALUES (
-        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18
+        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19
       ) RETURNING *`,
       [
         ref,
@@ -425,6 +429,7 @@ export class TransactionModel {
         data.idempotencyExpiresAt ?? null,
         JSON.stringify(metadata),
         data.locationMetadata ? JSON.stringify(data.locationMetadata) : null,
+        correlationId,
       ],
     );
 
@@ -435,6 +440,7 @@ export class TransactionModel {
       transactionId: transaction.id,
       userId: data.userId ?? undefined,
       status: transaction.status,
+      correlation_id: correlationId,
       timestamp: new Date(transaction.createdAt).getTime(),
     });
 
@@ -532,7 +538,7 @@ export class TransactionModel {
       params.push(userId);
     }
 
-    q += ` RETURNING user_id, provider, reference_number, updated_at`;
+    q += ` RETURNING user_id, provider, reference_number, updated_at, correlation_id`;
 
     const res = await queryWrite<StatusUpdateRow>(q, params);
     if (!res.rowCount) return false;
@@ -578,6 +584,7 @@ export class TransactionModel {
       transactionId: id,
       userId: row.user_id ?? undefined,
       status,
+      correlation_id: row.correlation_id ?? null,
       timestamp: new Date(row.updated_at ?? Date.now()).getTime(),
     });
 
@@ -596,18 +603,26 @@ export class TransactionModel {
 
       await pubsub.publish(transactionChannel(id), payload);
       await pubsub.publish(SubscriptionChannels.TRANSACTION_UPDATED, payload);
+    } catch (pubsubErr) {
+      logger.warn("Failed to publish GraphQL status update", {
+        transactionId: id,
+        error: pubsubErr,
+      });
+    }
 
+    try {
       const ws = WebSocketManager.getInstance();
       await ws?.broadcastTransactionUpdate({
         id,
         status,
         userId: row.user_id,
+        correlationId: row.correlation_id,
       });
-    } catch (pubsubErr) {
-      console.warn(
-        "[transaction] Failed to publish status update events",
-        pubsubErr,
-      );
+    } catch (error) {
+      logger.warn("Failed to publish WebSocket status update", {
+        transactionId: id,
+        error,
+      });
     }
 
     return true;

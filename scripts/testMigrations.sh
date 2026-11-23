@@ -12,11 +12,12 @@ DATABASE_URL="${DATABASE_URL:-}"
 
 schema_dump() {
   local out="$1"
+  # The runner keeps its migration ledger even after all migrations are reversed.
+  local args=(--schema-only --no-owner --no-privileges --exclude-table=public.schema_migrations)
   if [[ -n "$DATABASE_URL" ]]; then
-    "$PG_DUMP_BIN" "$DATABASE_URL" --schema-only --no-owner --no-privileges > "$out"
-  else
-    "$PG_DUMP_BIN" --schema-only --no-owner --no-privileges > "$out"
+    args=("$DATABASE_URL" "${args[@]}")
   fi
+  "$PG_DUMP_BIN" "${args[@]}" > "$out"
 }
 
 normalize_dump() {

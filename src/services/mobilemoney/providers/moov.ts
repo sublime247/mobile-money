@@ -5,7 +5,9 @@ import {
 import crypto from "crypto";
 import logger from "../../../utils/logger";
 import { maskPII } from "../../../utils/masking";
-import axios from "axios";
+import { providerHttp } from "../../providerStatus";
+
+const http = providerHttp("moov");
 
 export class MoovProvider implements MobileMoneyProvider {
   private privateKey: string;
@@ -110,7 +112,7 @@ export class MoovProvider implements MobileMoneyProvider {
         signature,
       );
 
-      const response = await axios.post(this.baseUrl, requestXml, {
+      const response = await http.post(this.baseUrl, requestXml, {
         headers: {
           "Content-Type": "text/xml; charset=utf-8",
           Accept: "text/xml",
@@ -193,7 +195,7 @@ export class MoovProvider implements MobileMoneyProvider {
         signature,
       );
 
-      const response = await axios.post(this.baseUrl, requestXml, {
+      const response = await http.post(this.baseUrl, requestXml, {
         headers: {
           "Content-Type": "text/xml; charset=utf-8",
           Accept: "text/xml",
@@ -269,7 +271,7 @@ export class MoovProvider implements MobileMoneyProvider {
         signature,
       );
 
-      const response = await axios.post(this.baseUrl, requestXml, {
+      const response = await http.post(this.baseUrl, requestXml, {
         headers: {
           "Content-Type": "text/xml; charset=utf-8",
           Accept: "text/xml",

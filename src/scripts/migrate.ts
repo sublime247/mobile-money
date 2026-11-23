@@ -422,6 +422,3 @@ const command = process.argv[2];
     await pool.end();
   }
 })();
-d();
-  }
-})();

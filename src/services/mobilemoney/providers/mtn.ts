@@ -9,13 +9,13 @@
  * `MTNProvider` from this path continue to work unchanged.
  */
 
+import { providerHttp } from "../../providerStatus";
 import {
   mtnPushCountry,
   mtnPushOutcome,
   recordUssdPushDispatch,
   recordUssdPushOutcome,
 } from "../../../monitoring/metrics";
-import axios from "axios";
 import { randomUUID } from "crypto";
 import { BaseProvider, ProviderAuthConfig } from "../../providers/baseProvider";
 import { MomoAuthManager } from "../../../providers/mtn/momoAuth";
@@ -29,6 +29,8 @@ interface MtnTokenResponse {
 }
 import logger from "../../../utils/logger";
 import { maskPII } from "../../../utils/masking";
+
+const http = providerHttp("mtn");
 
 interface MtnBalanceResponse {
   availableBalance?: string | number;
@@ -135,7 +137,7 @@ export class MTNProvider extends BaseProvider {
 
   /** Raw token exchange; only called by the auth manager's refresh leader. */
   private async requestNewToken() {
-    const response = await axios.post<MtnTokenResponse>(
+    const response = await http.post<MtnTokenResponse>(
       `${this.baseUrl}/collection/token/`,
       undefined,
       {
@@ -162,7 +164,7 @@ export class MTNProvider extends BaseProvider {
   async getOperationalBalance() {
     try {
       const response = await this.withAuth((token) =>
-        axios.get<MtnBalanceResponse>(
+        http.get<MtnBalanceResponse>(
           `${this.baseUrl}/disbursement/v1_0/account/balance`,
           {
             headers: {
@@ -222,7 +224,7 @@ export class MTNProvider extends BaseProvider {
 
     try {
       const response = await this.withAuth((token) =>
-        axios.post(
+        http.post(
           `${this.baseUrl}/collection/v1_0/requesttopay`,
           {
             amount,
@@ -327,7 +329,7 @@ export class MTNProvider extends BaseProvider {
 
       // MTN disbursement batch API endpoint
       const response = await this.withAuth((token) =>
-        axios.post(
+        http.post(
           `${this.baseUrl}/disbursement/v2_0/batch-payout`,
           {
             batchReference,
@@ -519,7 +521,7 @@ export class MTNProvider extends BaseProvider {
       let pollResponse;
       try {
         pollResponse = await this.withAuth((token) =>
-          axios.get(
+          http.get(
             `${this.baseUrl}/disbursement/v2_0/batch-payout/${encodeURIComponent(
               batchReference,
             )}`,
@@ -555,7 +557,7 @@ export class MTNProvider extends BaseProvider {
   }> {
     try {
       const response = await this.withAuth((token) =>
-        axios.get(
+        http.get(
           `${this.baseUrl}/collection/v1_0/requesttopay/${encodeURIComponent(referenceId)}`,
           {
             headers: {

@@ -1,4 +1,5 @@
-import axios, { AxiosError } from "axios";
+import { AxiosError } from "axios";
+import { providerHttp } from "../providerStatus";
 import { BaseProvider, ProviderAuthConfig } from "./baseProvider";
 import { recordTelecomLatency } from "../../utils/logger";
 import logger from "../../utils/logger";
@@ -6,6 +7,8 @@ import CircuitBreaker from "opossum";
 import fs from "fs";
 import path from "path";
 import { sendAlert } from "../alertService";
+
+const http = providerHttp("airtel");
 
 interface AirtelTokenResponse {
   access_token: string;
@@ -189,7 +192,7 @@ export class AirtelService extends BaseProvider {
     const endpoint = "/auth/oauth2/token";
     try {
       const response = await this.executeWithBreaker(async () =>
-        axios.post<AirtelTokenResponse>(
+        http.post<AirtelTokenResponse>(
           `${this.baseUrl}${endpoint}`,
           undefined,
           {
@@ -253,7 +256,7 @@ export class AirtelService extends BaseProvider {
       };
 
       const response = await this.executeWithBreaker(async () =>
-        axios.post(
+        http.post(
           `${this.baseUrl}${endpoint}`,
           payload,
           {
@@ -309,7 +312,7 @@ export class AirtelService extends BaseProvider {
     try {
       const token = await this.getAccessToken();
       const response = await this.executeWithBreaker(async () =>
-        axios.get<AirtelStatusResponse>(
+        http.get<AirtelStatusResponse>(
           `${this.baseUrl}${endpoint}`,
           {
             headers: {
@@ -351,7 +354,7 @@ export class AirtelService extends BaseProvider {
     try {
       const token = await this.getAccessToken();
       const response = await this.executeWithBreaker(async () =>
-        axios.get(
+        http.get(
           `${this.baseUrl}${endpoint}`,
           {
             headers: {

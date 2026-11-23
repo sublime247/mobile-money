@@ -1,8 +1,10 @@
-import axios from 'axios';
+import { providerHttp } from "../providerStatus";
 import { v4 as uuidv4 } from 'uuid';
 import { configSchema } from '../../config/appConfig';
 import { BaseProvider } from './baseProvider';
 import { pool } from '../../config/database'; 
+
+const http = providerHttp("mtn-uganda");
 
 export class MtnUgandaProvider extends BaseProvider {
   private token: string | null = null;
@@ -35,7 +37,7 @@ export class MtnUgandaProvider extends BaseProvider {
     const authString = Buffer.from(`${apiUser}:${apiKey}`).toString('base64');
 
     try {
-      const response = await axios.post(
+      const response = await http.post(
         `${baseUrl}/disbursement/token/`,
         {},
         {
@@ -89,7 +91,7 @@ export class MtnUgandaProvider extends BaseProvider {
     };
 
     try {
-      await axios.post(
+      await http.post(
         `${mtnConfig.baseUrl}/disbursement/v1_0/transfer`,
         payload,
         {
@@ -123,7 +125,7 @@ export class MtnUgandaProvider extends BaseProvider {
     const mtnConfig = this.getMtnConfig();
 
     try {
-      const response = await axios.get(
+      const response = await http.get(
         `${mtnConfig.baseUrl}/disbursement/v1_0/transfer/${referenceId}`,
         {
           headers: {

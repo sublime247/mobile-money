@@ -153,7 +153,7 @@ var __generator =
   };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.OrangeProvider = void 0;
-var axios_1 = require("axios");
+var http = require("../../providerStatus").providerHttp("orange");
 var fs = require("fs");
 var path = require("path");
 var DEFAULT_SESSION_TTL_MS = 20 * 60 * 1000;
@@ -174,7 +174,7 @@ var OrangeProvider = /** @class */ (function () {
     this.client =
       (_b = options.httpClient) !== null && _b !== void 0
         ? _b
-        : axios_1.default.create({
+        : http.create({
             baseURL: this.config.webBaseUrl,
             timeout: this.config.requestTimeoutMs,
             maxRedirects: 0,
@@ -185,7 +185,7 @@ var OrangeProvider = /** @class */ (function () {
     this.directClient =
       (_c = options.directHttpClient) !== null && _c !== void 0
         ? _c
-        : axios_1.default.create({
+        : http.create({
             baseURL: this.config.directBaseUrl,
             timeout: this.config.requestTimeoutMs,
             validateStatus: function () {
@@ -196,7 +196,7 @@ var OrangeProvider = /** @class */ (function () {
       this.proxyClient =
         (_d = options.proxyHttpClient) !== null && _d !== void 0
           ? _d
-          : axios_1.default.create({
+          : http.create({
               baseURL: this.config.proxyBaseUrl,
               timeout: this.config.requestTimeoutMs,
               validateStatus: function () {

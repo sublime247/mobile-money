@@ -31,7 +31,7 @@ import {
   ProviderCSVRow,
 } from "./csvReconciliation";
 import logger from "../utils/logger";
-import axios from "axios";
+import { providerHttp } from "./providerStatus";
 import { withReconciliationDbRetry } from "./reconciliationDbRetry";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -643,7 +643,7 @@ export class ProviderReconciliationService {
     const dateStr = reportDate.toISOString().split("T")[0];
     const url = config.api_endpoint.replace("{date}", dateStr);
 
-    const response = await axios.get(url, {
+    const response = await providerHttp(config.provider).get(url, {
       headers: {
         Authorization: `Bearer ${config.api_key}`,
         "X-API-Key": config.api_key,

@@ -1,3 +1,4 @@
+import { geoIpFilter } from "../middleware/geoIpFilter";
 import logger from "../utils/logger";
 import { redisBackpressureGuard } from "../queue/redisBackpressure";
 import { Router, Request, Response } from "express";
@@ -254,6 +255,7 @@ transactionRoutes.patch(
 transactionRoutes.post(
   "/deposit",
   authenticateToken,
+  geoIpFilter,
   redisBackpressureGuard,
   strictIdempotency,
   TimeoutPresets.long,
@@ -267,6 +269,7 @@ transactionRoutes.post(
 transactionRoutes.post(
   "/withdraw",
   authenticateToken,
+  geoIpFilter,
   redisBackpressureGuard,
   strictIdempotency,
   TimeoutPresets.long,

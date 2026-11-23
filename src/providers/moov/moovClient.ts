@@ -1,9 +1,12 @@
-import axios, { AxiosError } from "axios";
+import { AxiosError } from "axios";
+import { providerHttp } from "../../services/providerStatus";
 import { randomUUID } from "crypto";
 import { executeWithCircuitBreaker } from "../../utils/circuitBreaker";
 import { resolveMoovErrorFromResponse } from "../../services/providers/errors/moovErrorMatrix";
 import logger from "../../utils/logger";
 import { maskPII } from "../../utils/masking";
+
+const http = providerHttp("moov-ci");
 
 /**
  * Moov Africa USSD push collection client (Benin, Togo, Côte d'Ivoire) --
@@ -152,7 +155,7 @@ export class MoovClient {
         operation: "ussd_collection",
         execute: async () => {
           try {
-            const response = await axios.post(
+            const response = await http.post(
               this.joinUrl(this.collectionPath),
               {
                 msisdn,

@@ -5,8 +5,11 @@
  * Handles OAuth token acquisition, push payments, and webhook verification.
  */
 
-import axios, { AxiosInstance } from "axios";
+import type { AxiosInstance } from "axios";
+import { providerHttp } from "../providerStatus";
 import logger from "../../utils/logger";
+
+const http = providerHttp("orange");
 
 export class OrangeCameroonProvider {
   private readonly apiKey: string;
@@ -19,7 +22,7 @@ export class OrangeCameroonProvider {
     this.apiSecret = process.env.ORANGE_CAMEROON_API_SECRET || "";
     this.baseUrl = process.env.ORANGE_CAMEROON_BASE_URL || "https://api.orange.com";
     
-    this.httpClient = axios.create({
+    this.httpClient = http.create({
       baseURL: this.baseUrl,
       timeout: 30000,
     });

@@ -22,6 +22,8 @@ import "./schemas/sep30";
 
 // ── Path registrations ────────────────────────────────────────────────────────
 import "./paths/auth";
+import "./paths/accounting";
+import "./paths/sandbox";
 import "./paths/transactions";
 import "./paths/vaults";
 import "./paths/contacts";

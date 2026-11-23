@@ -1,4 +1,5 @@
-import axios, { AxiosError } from "axios";
+import { AxiosError } from "axios";
+import { providerHttp } from "../../services/providerStatus";
 import crypto from "crypto";
 import logger from "../../utils/logger";
 import { maskPII } from "../../utils/masking";
@@ -9,6 +10,8 @@ import {
 import { resolveEcoCashErrorFromResponse } from "../../services/providers/errors/ecocashErrorMatrix";
 import { scheduleEcoCashStatusPoll } from "../../queue/ecocashStatusPollingQueue";
 import { retryWithJitter } from "../../utils/retryWithJitter";
+
+const http = providerHttp("ecocash");
 
 /**
  * Econet EcoCash disbursement adapter for Zimbabwe (USD / ZWL wallets) --
@@ -181,7 +184,7 @@ export class EcoCashAdapter implements MobileMoneyProvider {
     );
 
     try {
-      const response = await axios.post(
+      const response = await http.post(
         this.joinUrl(this.disbursePath),
         {
           merchantCode: this.merchantCode,
@@ -309,7 +312,7 @@ export class EcoCashAdapter implements MobileMoneyProvider {
       // unlike disburse() above, there is no risk of double-submitting a
       // payment.
       const response = await retryWithJitter(() =>
-        axios.get(this.joinUrl(this.statusPath), {
+        http.get(this.joinUrl(this.statusPath), {
           params: { merchantCode: this.merchantCode, reference: referenceId },
           headers: { "Content-Type": "application/json" },
           timeout: this.timeoutMs,

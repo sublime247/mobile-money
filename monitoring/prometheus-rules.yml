@@ -1,0 +1,21 @@
+groups:
+  - name: mobile-money-float-runway
+    interval: 30s
+    rules:
+      - record: mobile_money_provider_float_runway_hours
+        expr: |
+          mobile_money_provider_float_balance{provider=~"mtn|orange|airtel|mpesa"}
+          / on (provider, currency)
+          ((3600 * sum by (provider, currency) (
+            rate(mobile_money_provider_float_debits_total{provider=~"mtn|orange|airtel|mpesa"}[1h])
+          )) > 0)
+      - alert: MobileMoneyProviderFloatDepletion
+        expr: |
+          (mobile_money_provider_float_runway_hours < 24)
+          or on (provider, currency)
+          (mobile_money_provider_float_balance{provider=~"mtn|orange|airtel|mpesa"} <= 0)
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low float for {{ $labels.provider }} ({{ $labels.currency }})"
+          description: "Provider float is empty or projected to last less than 24 hours at the recent debit rate."

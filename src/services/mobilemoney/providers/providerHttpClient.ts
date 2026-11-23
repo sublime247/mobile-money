@@ -27,6 +27,7 @@ import {
   recordProviderErrorLog,
   type ProviderErrorSnapshot,
 } from "../../providerErrorLogService";
+import { monitorProviderClient } from "../../providerStatus";
 import { getCurrentCorrelationId } from "../../../middleware/correlationId";
 
 type ErrorRecorder = (snapshot: ProviderErrorSnapshot) => Promise<void>;
@@ -141,5 +142,5 @@ export function createProviderHttpClient(
   const client = axios.create(config);
   attachCorrelationIdInterceptor(client);
   attachProviderErrorInterceptor(client, provider, options);
-  return client;
+  return monitorProviderClient(provider, client);
 }

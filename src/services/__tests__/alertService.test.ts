@@ -1,3 +1,10 @@
+import { redisClient } from "../../config/redis";
+import { providerHttp, recordProviderAuthStatus } from "../providerStatus";
+
+jest.mock("../../config/redis", () => ({
+  redisClient: { isReady: true, incr: jest.fn(), eval: jest.fn() },
+}));
+
 import axios from "axios";
 import {
   dispatchWebhookBacklogAlert,
@@ -208,6 +215,81 @@ describe("alertService", () => {
       expect(text).toContain("UGX");
     });
   });
+});
+
+describe("consecutive provider authentication failures", () => {
+  const counts = new Map<string, number>();
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    counts.clear();
+    process.env = {
+      ...originalEnv,
+      SLACK_ALERT_WEBHOOK_URL: "https://hooks.slack.com/services/test",
+      DISCORD_ALERT_WEBHOOK_URL: "https://discord.com/api/webhooks/test",
+    };
+    mockedAxios.post.mockResolvedValue({ status: 200 });
+    jest.mocked(redisClient.incr).mockImplementation(async (key: string) => {
+      const count = (counts.get(key) ?? 0) + 1;
+      counts.set(key, count);
+      return count;
+    });
+    jest.mocked(redisClient.eval).mockImplementation(async (_script, options) => {
+      const key = options?.keys?.[0];
+      return key && counts.delete(key) ? 1 : 0;
+    });
+  });
+
+  afterAll(() => {
+    process.env = originalEnv;
+  });
+
+  it("sends one Slack alert on the third 401/403 for a provider", async () => {
+    await recordProviderAuthStatus("mtn", 401);
+    await recordProviderAuthStatus("orange", 403);
+    await recordProviderAuthStatus("mtn", 403);
+    expect(mockedAxios.post).not.toHaveBeenCalled();
+
+    await Promise.all([
+      recordProviderAuthStatus("mtn", 401),
+      recordProviderAuthStatus("mtn", 403),
+    ]);
+
+    expect(mockedAxios.post).toHaveBeenCalledTimes(1);
+    expect(mockedAxios.post).toHaveBeenCalledWith(
+      process.env.SLACK_ALERT_WEBHOOK_URL,
+      expect.objectContaining({ text: expect.stringContaining("mtn") }),
+      expect.any(Object),
+    );
+  });
+
+  it("resets on success and immediately alerts for a new streak", async () => {
+    for (const status of [401, 403, 200, 401, 401]) {
+      await recordProviderAuthStatus("airtel", status);
+    }
+    expect(mockedAxios.post).not.toHaveBeenCalled();
+
+    for (const status of [403, 204, 403, 403, 401]) {
+      await recordProviderAuthStatus("airtel", status);
+    }
+    expect(mockedAxios.post).toHaveBeenCalledTimes(2);
+  });
+
+  it("observes both Axios responses and rejected HTTP errors", async () => {
+    const error = { response: { status: 401 } };
+    mockedAxios.get
+      .mockRejectedValueOnce(error)
+      .mockResolvedValueOnce({ status: 403 })
+      .mockRejectedValueOnce(error);
+    const client = providerHttp("mpesa");
+
+    await expect(client.get("/test")).rejects.toBe(error);
+    await expect(client.get("/test")).resolves.toEqual({ status: 403 });
+    await expect(client.get("/test")).rejects.toBe(error);
+    await Promise.resolve();
+
+    expect(mockedAxios.post).toHaveBeenCalledTimes(1);
 });
 
 describe("webhook backlog alerts", () => {

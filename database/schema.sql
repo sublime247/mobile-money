@@ -104,6 +104,8 @@ ALTER TABLE transactions
 ADD COLUMN IF NOT EXISTS webhook_delivery_status VARCHAR(20) NOT NULL DEFAULT 'pending'
 CHECK (webhook_delivery_status IN ('pending', 'delivered', 'failed', 'skipped'));
 
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS correlation_id TEXT;
+
 -- Metadata: arbitrary JSON key-value data attached to a transaction
 ALTER TABLE transactions ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}';
 CREATE INDEX IF NOT EXISTS idx_transactions_metadata ON transactions USING GIN (metadata);

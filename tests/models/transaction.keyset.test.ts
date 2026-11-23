@@ -44,6 +44,8 @@ jest.mock("../../src/websocket", () => ({
   },
 }));
 
+import { requestContext } from "../../src/utils/logger";
+import { getReplayEvents, getTransactionStreamStats } from "../../src/services/transactionEventStream";
 import { queryWrite } from "../../src/config/database";
 import { CachedTransactionInvalidation } from "../../src/services/cachedTransactionService";
 import {
@@ -158,6 +160,47 @@ describe("TransactionModel keyset pagination", () => {
       "AND (created_at, id) < (SELECT created_at, id FROM anchor)",
     );
     expect(params).toEqual([[TransactionStatus.Completed], 4999, 50]);
+  });
+
+  it("persists the creation request's correlation ID for later status events", async () => {
+    const tx = row("correlated-tx", "2026-05-01T00:00:00.000Z");
+    const lastEventId = getTransactionStreamStats().nextEventId - 1;
+    jest.mocked(queryWrite)
+      .mockResolvedValueOnce({ rows: [tx] })
+      .mockResolvedValueOnce({
+        rowCount: 1,
+        rows: [{
+          user_id: tx.userId,
+          provider: tx.provider,
+          reference_number: tx.referenceNumber,
+          updated_at: tx.updatedAt,
+          correlation_id: "payment-request",
+        }],
+      });
+
+    const model = new TransactionModel();
+    await requestContext.run(
+      { trace_id: "payment-trace", correlation_id: "payment-request" },
+      () => model.create({
+        type: "deposit",
+        amount: "100",
+        provider: tx.provider,
+        userId: tx.userId,
+      }),
+    );
+    expect(mockQueryWrite).toHaveBeenCalledWith(
+      expect.stringContaining("correlation_id"),
+      expect.arrayContaining(["payment-request"]),
+    );
+
+    await requestContext.run(
+      { trace_id: "callback-trace", correlation_id: "callback-request" },
+      () => model.updateStatus(tx.id, TransactionStatus.Completed),
+    );
+    expect(getReplayEvents(lastEventId).events).toEqual([
+      expect.objectContaining({ transactionId: tx.id, correlation_id: "payment-request" }),
+      expect.objectContaining({ transactionId: tx.id, correlation_id: "payment-request" }),
+    ]);
   });
 
   it("invalidates caches after transaction create", async () => {
