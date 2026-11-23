@@ -14,4 +14,5 @@ crate-type = ["cdylib"]
 soroban-sdk = { version = "26.0.1", features = ["alloc"] }
 
 [dev-dependencies]
-soroban-sdk = { version = "26.0.1", features = ["testutils"] }
+soroban-sdk = { version = "26.0.1", features = ["testutils", "alloc"] }
+ed25519-dalek = "2"

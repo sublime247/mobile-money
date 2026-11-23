@@ -1252,6 +1252,7 @@ dependencies = [
 name = "proof_of_reserve"
 version = "0.1.0"
 dependencies = [
+ "ed25519-dalek",
  "soroban-sdk 26.0.1",
 ]
 
