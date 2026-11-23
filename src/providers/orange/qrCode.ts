@@ -276,15 +276,15 @@ export function renderOrangeMoneyQrSection(qr: {
 
   return `
     <section class="section orange-qr-section" id="orange-money-qr">
-      <div class="container" style="text-align:center;">
+      <div class="container text-center">
         <h2 class="section-title">Pay with Orange Money</h2>
         <p class="section-subtitle">Scan the QR code with the Orange Money app to complete your deposit.</p>
-        <div class="orange-qr-card" style="display:inline-block;background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:1.5rem;">
+        <div class="orange-qr-card">
           <img src="${qr.dataUrl}" alt="Orange Money payment QR code" width="224" height="224" />
-          <p class="orange-qr-amount" style="font-size:1.25rem;font-weight:700;margin-top:0.75rem;">${escapeHtml(
+          <p class="orange-qr-amount">${escapeHtml(
             qr.amount,
           )} ${escapeHtml(qr.currency)}</p>
-          <p class="orange-qr-merchant" style="color:#6b7280;font-size:0.9rem;">Merchant ${escapeHtml(
+          <p class="orange-qr-merchant">Merchant ${escapeHtml(
             qr.merchantId,
           )}</p>
           ${reference}

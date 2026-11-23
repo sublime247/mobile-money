@@ -1,4 +1,8 @@
 process.env.NODE_ENV = "test";
+// OpenTelemetry: keep the SDK out of the way in unit tests (no OTLP exporter,
+// no global HTTP/DB/Redis patching, no log noise). Suites that need trace
+// propagation register their own provider — see tests/tracing/.
+process.env.OTEL_ENABLED ??= "false";
 process.env.DATABASE_URL ??=
   "postgresql://test_user:test_password@localhost:5432/test_db";
 process.env.REDIS_URL ??= "redis://localhost:6379";

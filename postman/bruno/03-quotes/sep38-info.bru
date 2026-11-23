@@ -1,0 +1,25 @@
+meta {
+  name: "SEP-38 Get Info & Asset Pairs"
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{base_url}}/sep38/info
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+}
+
+tests {
+  test("info returned", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("supported assets declared", function() {
+    const body = res.getBody();
+    expect(body.assets).to.be.an("array");
+  });
+}

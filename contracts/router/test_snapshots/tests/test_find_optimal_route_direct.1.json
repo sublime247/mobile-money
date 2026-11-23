@@ -155,6 +155,31 @@
                   "storage": [
                     {
                       "key": {
+                        "string": "PAUSE_STATE"
+                      },
+                      "val": {
+                        "map": [
+                          {
+                            "key": {
+                              "symbol": "emergency_admin"
+                            },
+                            "val": {
+                              "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"
+                            }
+                          },
+                          {
+                            "key": {
+                              "symbol": "paused"
+                            },
+                            "val": {
+                              "bool": false
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "key": {
                         "string": "ROUTER_STATE"
                       },
                       "val": {

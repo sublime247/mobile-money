@@ -808,7 +808,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40404c3f5f511ec4da6fe866ddf6a717c309fdbb69fbbad7b0f3edab8f2e835f"
 
 [[package]]
-name = "faucet"
+name = "fee_pool"
 version = "0.1.0"
 dependencies = [
  "soroban-sdk 26.0.1",
@@ -2003,6 +2003,13 @@ name = "subtle"
 version = "2.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
+
+[[package]]
+name = "swap_router"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk 26.0.1",
+]
 
 [[package]]
 name = "syn"

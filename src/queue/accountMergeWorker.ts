@@ -9,6 +9,7 @@ import {
 } from "./accountMergeQueue";
 import { getNetworkPassphrase, getStellarServer } from "../config/stellar";
 import { capturePersistentFailure } from "./dlq";
+import { notifyDlqRetryLimitExceeded } from "./dlqNotifier";
 
 const ACCOUNT_MERGE_PREFIX = "[account-merge]";
 const STROOPS_PER_XLM = 10_000_000n;
@@ -313,6 +314,8 @@ accountMergeWorker.on("failed", (job, error) => {
     capturePersistentFailure(job).catch((err) =>
       logger.error("[DLQ] Error capturing failure:", err),
     );
+
+    notifyDlqRetryLimitExceeded(job, error, { queueName: job.queueName });
   }
 });
 

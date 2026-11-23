@@ -179,3 +179,31 @@ test("ESM and CommonJS build artifacts can be imported and executed", async () =
   assert.strictEqual(typeof cjsClient.getQuote, "function");
   assert.strictEqual(typeof cjsClient.initiateDeposit, "function");
 });
+
+test("listTransactions follows next_cursor and honours maxItems", async () => {
+  const { StellarBridgeClient } = await import("../ts/client.ts");
+  const client = new StellarBridgeClient({ baseUrl: "https://api.example.com" });
+  const calls = [];
+  const pages = [
+    { data: [{ id: "1" }, { id: "2" }], pagination: { next_cursor: "c1", has_next: true } },
+    { data: [{ id: "3" }, { id: "4" }], pagination: { next_cursor: "c2", has_next: true } },
+    { data: [{ id: "5" }], pagination: { next_cursor: null, has_next: false } },
+  ];
+  client.transport = {
+    request: async (opts) => {
+      calls.push(opts.params);
+      return { status: 200, data: pages[calls.length - 1], headers: {} };
+    },
+  };
+
+  const all = [];
+  for await (const tx of client.listTransactions({ limit: 2 })) all.push(tx.id);
+  assert.deepEqual(all, ["1", "2", "3", "4", "5"]);
+  assert.equal(calls[1].after, "c1");
+
+  calls.length = 0;
+  const capped = [];
+  for await (const tx of client.listTransactions({ limit: 2, maxItems: 3 })) capped.push(tx.id);
+  assert.deepEqual(capped, ["1", "2", "3"]);
+  assert.equal(calls.length, 2);
+});

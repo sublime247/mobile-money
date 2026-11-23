@@ -74,6 +74,33 @@ export const Sep38PricesQuerySchema = z.object({
   }),
 });
 
+export const Sep38FeeDetailSchema = z
+  .object({
+    name: z.string().openapi({ example: "percentage_fee" }),
+    amount: z.string().openapi({ example: "0.0025000" }),
+    description: z.string().optional().openapi({
+      example: "0.50% conversion fee, in sell_asset units.",
+    }),
+  })
+  .openapi("Sep38FeeDetail");
+
+export const Sep38FeeSchema = z
+  .object({
+    total: z.string().openapi({
+      example: "0.0025000",
+      description: "Total fee, in sell_asset units.",
+    }),
+    asset: Sep38AssetSchema.openapi({
+      description: "The asset the fee is denominated in (sell_asset).",
+    }),
+    details: z.array(Sep38FeeDetailSchema).openapi({
+      description: "Itemized breakdown of the fee total.",
+    }),
+  })
+  .openapi("Sep38Fee", {
+    description: "SEP-38 fee breakdown for a price or quote.",
+  });
+
 export const Sep38PriceItemSchema = z
   .object({
     asset: Sep38AssetSchema,
@@ -118,6 +145,7 @@ export const Sep38PriceResponseSchema = registry.register(
         example: "0.0000000",
         description: "Fixed fee in sell_asset units.",
       }),
+      fee: Sep38FeeSchema,
     })
     .openapi("Sep38PriceResponse", {
       description: "Indicative or firm price for an asset pair.",
@@ -182,6 +210,7 @@ export const Sep38QuoteSchema = registry.register(
       price: z.string().openapi({ example: "650.1234567" }),
       fee_percent: z.string().openapi({ example: "0.50" }),
       fee_fixed: z.string().openapi({ example: "0.0000000" }),
+      fee: Sep38FeeSchema,
       created_at: z
         .string()
         .datetime()

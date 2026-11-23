@@ -17,9 +17,37 @@ The k6 suite benchmarks high-throughput callback ingestion services (`ingest-nod
 | Script | Purpose |
 | ------ | ------- |
 | `k6-bench.js` | Baseline constant-arrival-rate throughput (1k/5k/10k RPS) |
+| `k6-quote-load.js` | Quote calculation under high concurrency (200 VUs, 60s) |
 | `scenarios/smoke.js` | Quick 5-VU sanity check before full runs |
 | `scenarios/peak-day-spike.js` | 30-min realistic peak-day traffic curve |
 | `scenarios/stress.js` | Breaking-point ramp beyond peak load |
+
+---
+
+## k6 Quote Calculation Load Test — `k6-quote-load.js` (#2168)
+
+Benchmarks real-time FX rate calculation and quote generation across multiple currency pairs under high concurrency.
+
+### Profile
+* **Concurrency:** 200 virtual users (VUs)
+* **Duration:** 60 seconds
+* **Endpoints:**
+  * `GET /sep38/prices` (discovery / cached quotes)
+  * `POST /sep38/quote` (firm quotes)
+
+### Acceptance Thresholds
+* `p95` latency < **150 ms** for cached quote lookups
+* `p99` latency < **500 ms** across all quote requests
+* Error rate < **0.5%** (`rate < 0.005`)
+
+### Running the test
+```bash
+# Default local run against http://localhost:3000
+k6 run benchmarks/k6-quote-load.js
+
+# Target custom host
+k6 run -e TARGET_URL=https://api.example.com benchmarks/k6-quote-load.js
+```
 
 ---
 

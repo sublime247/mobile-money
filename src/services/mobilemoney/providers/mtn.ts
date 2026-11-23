@@ -10,9 +10,16 @@
  */
 
 import { providerHttp } from "../../providerStatus";
+import {
+  mtnPushCountry,
+  mtnPushOutcome,
+  recordUssdPushDispatch,
+  recordUssdPushOutcome,
+} from "../../../monitoring/metrics";
 import { randomUUID } from "crypto";
 import { BaseProvider, ProviderAuthConfig } from "../../providers/baseProvider";
 import { MomoAuthManager } from "../../../providers/mtn/momoAuth";
+import type { BatchPayoutItem, BatchPayoutResult } from "../mobileMoneyService";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -92,19 +99,6 @@ function buildConfig(): ProviderAuthConfig & {
 }
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
-
-export interface BatchPayoutItem {
-  referenceId: string;
-  phoneNumber: string;
-  amount: string;
-}
-
-export interface BatchPayoutResult {
-  referenceId: string;
-  success: boolean;
-  error?: string;
-  providerReference?: string;
-}
 
 export class MTNProvider extends BaseProvider {
   protected readonly subscriptionKey: string;
@@ -251,6 +245,7 @@ export class MTNProvider extends BaseProvider {
         ),
       );
 
+      recordUssdPushDispatch("mtn", mtnPushCountry(phoneNumber), referenceId);
       const duration = Date.now() - startTime;
       log.info(
         maskPII({ duration, status: response.status }),
@@ -556,7 +551,10 @@ export class MTNProvider extends BaseProvider {
 
   async getTransactionStatus(
     referenceId: string,
-  ): Promise<{ status: "completed" | "failed" | "pending" | "unknown" }> {
+  ): Promise<{
+    status: "completed" | "failed" | "pending" | "unknown";
+    operatorCode?: string;
+  }> {
     try {
       const response = await this.withAuth((token) =>
         http.get(
@@ -572,12 +570,31 @@ export class MTNProvider extends BaseProvider {
       );
 
       const providerStatus = String(response.data?.status ?? "").toUpperCase();
-      if (providerStatus === "SUCCESSFUL") return { status: "completed" };
-      if (providerStatus === "FAILED") return { status: "failed" };
-      if (providerStatus === "PENDING") return { status: "pending" };
-      return { status: "unknown" };
-    } catch {
-      return { status: "unknown" };
+      const outcome = mtnPushOutcome(providerStatus, response.data?.reason);
+      if (outcome) {
+        recordUssdPushOutcome("mtn", "unknown", referenceId, outcome, true);
+      }
+      const operatorCode =
+        response.data?.status ?? response.data?.reason ?? "STATUS_QUERY_OK";
+
+      if (providerStatus === "SUCCESSFUL" || providerStatus === "SUCCESS") {
+        return { status: "completed", operatorCode };
+      }
+      if (providerStatus === "FAILED" || providerStatus === "REJECTED") {
+        return {
+          status: "failed",
+          operatorCode: response.data?.reason || providerStatus,
+        };
+      }
+      if (providerStatus === "PENDING") {
+        return { status: "pending", operatorCode };
+      }
+      return { status: "unknown", operatorCode: providerStatus || "UNKNOWN" };
+    } catch (err: any) {
+      const operatorCode = err.response?.status
+        ? `HTTP_${err.response.status}`
+        : "NETWORK_ERROR";
+      return { status: "unknown", operatorCode };
     }
   }
 }

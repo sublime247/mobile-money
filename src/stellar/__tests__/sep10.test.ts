@@ -243,9 +243,9 @@ function createChallengeTransaction(
 describe("SEP-10 Stellar Authentication", () => {
   describe("Sep10Service", () => {
     describe("generateChallenge", () => {
-      it("should generate a valid challenge transaction", () => {
+      it("should generate a valid challenge transaction", async () => {
         const service = createTestService();
-        const challenge = service.generateChallenge(clientKeypair.publicKey());
+        const challenge = await service.generateChallenge(clientKeypair.publicKey());
 
         expect(challenge.transaction).toBeDefined();
         expect(challenge.network_passphrase).toBe(TEST_NETWORK_PASSPHRASE);
@@ -263,9 +263,9 @@ describe("SEP-10 Stellar Authentication", () => {
         expect(tx.operations[0].type).toBe("manageData");
       });
 
-      it("should include web_auth_domain operation from server", () => {
+      it("should include web_auth_domain operation from server", async () => {
         const service = createTestService();
-        const challenge = service.generateChallenge(clientKeypair.publicKey());
+        const challenge = await service.generateChallenge(clientKeypair.publicKey());
 
         const tx = TransactionBuilder.fromXDR(
           challenge.transaction,
@@ -279,9 +279,9 @@ describe("SEP-10 Stellar Authentication", () => {
         expect((secondOp as any).source).toBe(serverKeypair.publicKey());
       });
 
-      it("should sign the transaction with the server key", () => {
+      it("should sign the transaction with the server key", async () => {
         const service = createTestService();
-        const challenge = service.generateChallenge(clientKeypair.publicKey());
+        const challenge = await service.generateChallenge(clientKeypair.publicKey());
 
         const tx = TransactionBuilder.fromXDR(
           challenge.transaction,
@@ -291,10 +291,10 @@ describe("SEP-10 Stellar Authentication", () => {
         expect(tx.signatures.length).toBeGreaterThanOrEqual(1);
       });
 
-      it("should set timebounds based on configured expiry", () => {
+      it("should set timebounds based on configured expiry", async () => {
         const service = createTestService({ challengeExpiresIn: 600 });
         const before = Math.floor(Date.now() / 1000);
-        const challenge = service.generateChallenge(clientKeypair.publicKey());
+        const challenge = await service.generateChallenge(clientKeypair.publicKey());
         const after = Math.floor(Date.now() / 1000);
 
         const tx = TransactionBuilder.fromXDR(
@@ -310,16 +310,16 @@ describe("SEP-10 Stellar Authentication", () => {
         expect(maxTime - minTime).toBe(600);
       });
 
-      it("should throw for invalid public key", () => {
+      it("should throw for invalid public key", async () => {
         const service = createTestService();
-        expect(() => service.generateChallenge("INVALID_KEY")).toThrow(
+        await expect(service.generateChallenge("INVALID_KEY")).rejects.toThrow(
           "Invalid Stellar public key",
         );
       });
 
-      it("should use homeDomain in manageData key when provided", () => {
+      it("should use homeDomain in manageData key when provided", async () => {
         const service = createTestService();
-        const challenge = service.generateChallenge(
+        const challenge = await service.generateChallenge(
           clientKeypair.publicKey(),
           "custom.domain.com",
         );
@@ -332,10 +332,10 @@ describe("SEP-10 Stellar Authentication", () => {
         expect((tx.operations[0] as any).name).toBe("custom.domain.com auth");
       });
 
-      it("should produce different nonces for repeated calls", () => {
+      it("should produce different nonces for repeated calls", async () => {
         const service = createTestService();
-        const challenge1 = service.generateChallenge(clientKeypair.publicKey());
-        const challenge2 = service.generateChallenge(clientKeypair.publicKey());
+        const challenge1 = await service.generateChallenge(clientKeypair.publicKey());
+        const challenge2 = await service.generateChallenge(clientKeypair.publicKey());
 
         expect(challenge1.transaction).not.toBe(challenge2.transaction);
       });
@@ -349,7 +349,7 @@ describe("SEP-10 Stellar Authentication", () => {
         const mockServer = createMockHorizonServer(mockAccount);
         const service = createTestServiceWithMockedServer(mockServer);
 
-        const challenge = service.generateChallenge(clientKeypair.publicKey());
+        const challenge = await service.generateChallenge(clientKeypair.publicKey());
 
         // Client signs the transaction
         const tx = TransactionBuilder.fromXDR(
@@ -380,7 +380,7 @@ describe("SEP-10 Stellar Authentication", () => {
         const mockServer = createMockHorizonServer(mockAccount);
         const service = createTestServiceWithMockedServer(mockServer);
 
-        const challenge = service.generateChallenge(clientKeypair.publicKey());
+        const challenge = await service.generateChallenge(clientKeypair.publicKey());
 
         const tx = TransactionBuilder.fromXDR(
           challenge.transaction,
@@ -515,7 +515,7 @@ describe("SEP-10 Stellar Authentication", () => {
         const mockServer = createMockHorizonServer(mockAccount);
         const service = createTestServiceWithMockedServer(mockServer);
 
-        const challenge = service.generateChallenge(clientKeypair.publicKey());
+        const challenge = await service.generateChallenge(clientKeypair.publicKey());
 
         // Server signed, but client did NOT sign
         await expect(
@@ -592,7 +592,7 @@ describe("SEP-10 Stellar Authentication", () => {
         const mockServer = createMockHorizonServer(mockAccount);
         const service = createTestServiceWithMockedServer(mockServer);
 
-        const challenge = service.generateChallenge(clientKeypair.publicKey());
+        const challenge = await service.generateChallenge(clientKeypair.publicKey());
 
         const tx = TransactionBuilder.fromXDR(
           challenge.transaction,
@@ -619,7 +619,7 @@ describe("SEP-10 Stellar Authentication", () => {
         const mockServer = createMockHorizonServer(mockAccount);
         const service = createTestServiceWithMockedServer(mockServer);
 
-        const challenge = service.generateChallenge(clientKeypair.publicKey());
+        const challenge = await service.generateChallenge(clientKeypair.publicKey());
 
         const tx = TransactionBuilder.fromXDR(
           challenge.transaction,
@@ -650,7 +650,7 @@ describe("SEP-10 Stellar Authentication", () => {
         const service = createTestServiceWithMockedServer(mockServer, {
           jwtExpiresIn: "1s",
         });
-        const challenge = service.generateChallenge(clientKeypair.publicKey());
+        const challenge = await service.generateChallenge(clientKeypair.publicKey());
 
         const tx = TransactionBuilder.fromXDR(
           challenge.transaction,
@@ -684,7 +684,7 @@ describe("SEP-10 Stellar Authentication", () => {
           jwtSecret: "other-secret",
         });
 
-        const challenge = otherService.generateChallenge(
+        const challenge = await otherService.generateChallenge(
           clientKeypair.publicKey(),
         );
         const tx = TransactionBuilder.fromXDR(
@@ -711,7 +711,7 @@ describe("SEP-10 Stellar Authentication", () => {
         const mockServer = createMockHorizonServer(mockAccount);
         const service = createTestServiceWithMockedServer(mockServer);
 
-        const challenge = service.generateChallenge(masterPublicKey);
+        const challenge = await service.generateChallenge(masterPublicKey);
         const tx = TransactionBuilder.fromXDR(
           challenge.transaction,
           TEST_NETWORK_PASSPHRASE,
@@ -741,7 +741,7 @@ describe("SEP-10 Stellar Authentication", () => {
         const mockServer = createMockHorizonServer(mockAccount);
         const service = createTestServiceWithMockedServer(mockServer);
 
-        const challenge = service.generateChallenge(masterPublicKey);
+        const challenge = await service.generateChallenge(masterPublicKey);
         const tx = TransactionBuilder.fromXDR(
           challenge.transaction,
           TEST_NETWORK_PASSPHRASE,
@@ -764,7 +764,7 @@ describe("SEP-10 Stellar Authentication", () => {
         const mockServer = createMockHorizonServer(mockAccount);
         const service = createTestServiceWithMockedServer(mockServer);
 
-        const challenge = service.generateChallenge(masterPublicKey);
+        const challenge = await service.generateChallenge(masterPublicKey);
         const tx = TransactionBuilder.fromXDR(
           challenge.transaction,
           TEST_NETWORK_PASSPHRASE,
@@ -813,7 +813,7 @@ describe("SEP-10 Stellar Authentication", () => {
         const mockServer = createMockHorizonServer(mockAccount);
         const service = createTestServiceWithMockedServer(mockServer);
 
-        const challenge = service.generateChallenge(masterPublicKey);
+        const challenge = await service.generateChallenge(masterPublicKey);
         const tx = TransactionBuilder.fromXDR(
           challenge.transaction,
           TEST_NETWORK_PASSPHRASE,
@@ -938,7 +938,7 @@ describe("SEP-10 Stellar Authentication", () => {
         const mockServer = createMockHorizonServer(mockAccount);
         const service = createTestServiceWithMockedServer(mockServer);
 
-        const challenge = service.generateChallenge(masterPublicKey);
+        const challenge = await service.generateChallenge(masterPublicKey);
         // Don't sign by client - threshold is 0, so no client signature needed
         const response = await service.verifyChallenge(
           challenge.transaction,
@@ -955,7 +955,7 @@ describe("SEP-10 Stellar Authentication", () => {
         };
         const service = createTestServiceWithMockedServer(mockServer);
 
-        const challenge = service.generateChallenge(clientKeypair.publicKey());
+        const challenge = await service.generateChallenge(clientKeypair.publicKey());
         const tx = TransactionBuilder.fromXDR(
           challenge.transaction,
           TEST_NETWORK_PASSPHRASE,

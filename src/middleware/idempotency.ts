@@ -2,7 +2,9 @@ import { Request, Response, NextFunction } from "express";
 import { queryWrite, queryRead, getPoolClient } from "../config/database";
 import { redisClient } from "../config/redis";
 import logger from "../utils/logger";
+import { lockManager, isLockAcquisitionError, LockKeys } from "../utils/lock";
 import crypto from "crypto";
+import type { Lock } from "redlock";
 
 // Ensure idempotency table exists
 async function ensureIdempotencyTable() {
@@ -126,12 +128,18 @@ function buildCacheKey(req: Request, key: string): string {
 
 /** Stable fingerprint of the request payload for replay validation. */
 function fingerprintRequest(req: Request, key: string): string {
+  // Multipart uploads (e.g. bulk CSV) carry their payload in req.file, not
+  // req.body, so hash the file contents too.
+  const file = (req as Request & { file?: { buffer?: Buffer } }).file;
   const payload = JSON.stringify({
     key,
     method: req.method,
     path: req.originalUrl,
     body: req.body ?? {},
     query: req.query ?? {},
+    file: file?.buffer
+      ? crypto.createHash("sha256").update(file.buffer).digest("hex")
+      : undefined,
   });
   return crypto.createHash("sha256").update(payload).digest("hex");
 }
@@ -148,11 +156,15 @@ function fingerprintRequest(req: Request, key: string): string {
  *   cached response without re-executing the handler.
  * - Duplicate request with a *different* payload under the same key:
  *   rejected with 422 to prevent accidental key reuse.
- * - Concurrent duplicate while the first is still executing: 409.
+ * - Concurrent duplicate while the first is still executing: 409. The
+ *   in-flight lock is a Redlock distributed lock (see `utils/lock`), and the
+ *   cache is re-checked once the lock is held so a duplicate that raced past
+ *   the first lookup replays instead of re-executing.
  *
- * Applied to POST /transactions (deposit/withdraw) and
- * POST /sep31/transactions — see `src/routes/transactions.ts`,
- * `src/routes/v1/transactions.ts`, and `src/stellar/sep31.ts`.
+ * Applied to POST /transactions (deposit/withdraw), POST /sep31/transactions
+ * and bulk payouts — see `src/routes/transactions.ts`,
+ * `src/routes/v1/transactions.ts`, `src/stellar/sep31.ts` and
+ * `src/routes/bulk.ts`. Provider webhooks use `optionalIdempotency`.
  */
 export async function strictIdempotency(
   req: Request,
@@ -173,17 +185,26 @@ export async function strictIdempotency(
 
   const cacheKey = buildCacheKey(req, key);
   const fingerprint = fingerprintRequest(req, key);
-  const lockKey = `${cacheKey}:lock`;
+  const lockResource = LockKeys.idempotency(
+    crypto.createHash("sha256").update(cacheKey).digest("hex"),
+  );
 
   try {
-    // 1. Return the cached response for an exact duplicate.
-    const cachedRaw = (await redisClient.get(cacheKey)) as string | null;
-    if (cachedRaw) {
+    // Replays the cached response (or rejects a mismatched payload) and
+    // reports whether the request was answered.
+    const replayIfCached = async (): Promise<boolean> => {
+      const cachedRaw = (await redisClient.get(cacheKey)) as string | null;
+      if (!cachedRaw) return false;
+
       let cached: CachedIdempotentResponse;
       try {
         cached = JSON.parse(cachedRaw) as CachedIdempotentResponse;
       } catch {
-        cached = { status: 500, body: { error: "Corrupt idempotency cache entry" }, fingerprint: "" };
+        cached = {
+          status: 500,
+          body: { error: "Corrupt idempotency cache entry" },
+          fingerprint: "",
+        };
       }
 
       if (cached.fingerprint && cached.fingerprint !== fingerprint) {
@@ -192,26 +213,43 @@ export async function strictIdempotency(
           message:
             "This Idempotency-Key was already used with a different request payload. Use a new key for a new operation.",
         });
-        return;
+        return true;
       }
 
       res.setHeader("Idempotency-Replayed", "true");
       res.status(cached.status).json(cached.body);
-      return;
-    }
+      return true;
+    };
+
+    // 1. Return the cached response for an exact duplicate.
+    if (await replayIfCached()) return;
 
     // 2. Guard against concurrent duplicates while the first executes.
-    const lockAcquired = await redisClient.set(lockKey, fingerprint, {
-      EX: LOCK_TTL_SECONDS,
-      NX: true,
-    });
-    if (!lockAcquired) {
-      res.status(409).json({
-        error: "idempotency_key_in_progress",
-        message:
-          "A request with this Idempotency-Key is currently in progress. Retry later — the original response will be returned once it completes.",
-      });
-      return;
+    let lock: Lock;
+    try {
+      lock = await lockManager.acquire(lockResource, LOCK_TTL_SECONDS * 1000);
+    } catch (lockError) {
+      if (isLockAcquisitionError(lockError) && lockError.isContention) {
+        res.status(409).json({
+          error: "idempotency_key_in_progress",
+          message:
+            "A request with this Idempotency-Key is currently in progress. Retry later — the original response will be returned once it completes.",
+        });
+        return;
+      }
+      throw lockError;
+    }
+
+    // 3. The first request may have finished between the lookup above and
+    // acquiring the lock; re-check so it is replayed, not executed twice.
+    try {
+      if (await replayIfCached()) {
+        await lockManager.release(lock).catch(() => {});
+        return;
+      }
+    } catch (recheckError) {
+      await lockManager.release(lock).catch(() => {});
+      throw recheckError;
     }
 
     let finished = false;
@@ -228,14 +266,14 @@ export async function strictIdempotency(
           logger.error("[idempotency] Failed to cache response", err),
         )
         .finally(() => {
-          void Promise.resolve(redisClient.del(lockKey)).catch(() => {});
+          void lockManager.release(lock).catch(() => {});
         });
     };
 
     const releaseLock = () => {
       if (finished) return;
       finished = true;
-      void Promise.resolve(redisClient.del(lockKey)).catch(() => {});
+      void lockManager.release(lock).catch(() => {});
     };
 
     // Capture both JSON and raw send paths so the exact response is cached.
@@ -269,4 +307,25 @@ export async function strictIdempotency(
   // outage. The in-flight lock is released by the finish/close listeners
   // registered above when the response cycle ends without a cached reply.
   next();
+}
+
+/**
+ * Idempotency for endpoints where the header is optional, such as provider
+ * webhooks and callbacks. Requests without an `Idempotency-Key` pass straight
+ * through; requests with one get the full `strictIdempotency` behaviour.
+ */
+export function optionalIdempotency(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> | void {
+  const rawKey = req.headers["idempotency-key"] as
+    string | string[] | undefined;
+  const key = Array.isArray(rawKey) ? rawKey[0] : rawKey;
+
+  if (!key || key.trim() === "") {
+    return next();
+  }
+
+  return strictIdempotency(req, res, next);
 }

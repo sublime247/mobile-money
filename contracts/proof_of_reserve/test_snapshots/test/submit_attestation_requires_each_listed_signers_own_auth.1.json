@@ -134,6 +134,14 @@
                     },
                     {
                       "key": {
+                        "symbol": "MAX_AGE"
+                      },
+                      "val": {
+                        "u64": "86400"
+                      }
+                    },
+                    {
+                      "key": {
                         "symbol": "REQ_SIGS"
                       },
                       "val": {

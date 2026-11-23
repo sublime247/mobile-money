@@ -23,6 +23,7 @@ const sidebars: SidebarsConfig = {
         "BRIDGE_DEPLOYMENT_RUNBOOK",
         "S3_SETUP_GUIDE",
         "DATABASE_BACKUPS",
+        "DISASTER_RECOVERY",
         "CENTRALIZED_CONFIG",
       ],
     },

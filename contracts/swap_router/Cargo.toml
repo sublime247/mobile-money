@@ -1,0 +1,18 @@
+[package]
+name = "swap_router"
+version = "0.1.0"
+edition = "2021"
+
+# Inherit workspace-level lint configuration.
+[lints]
+workspace = true
+
+[lib]
+path = "lib.rs"
+crate-type = ["cdylib"]
+
+[dependencies]
+soroban-sdk = { version = "26.0.1", features = ["alloc"] }
+
+[dev-dependencies]
+soroban-sdk = { version = "26.0.1", features = ["testutils"] }

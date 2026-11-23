@@ -8,6 +8,30 @@ const mockClaimForProcessing = jest.fn();
 const mockUpdateStatus = jest.fn();
 const mockPatchMetadata = jest.fn();
 
+const mockWaveRedisStore = new Map<string, string>();
+
+jest.mock("../../../config/redis", () => ({
+  redisClient: {
+    set: jest.fn(
+      async (
+        key: string,
+        value: string,
+        options?: { NX?: boolean; EX?: number },
+      ) => {
+        if (options?.NX && mockWaveRedisStore.has(key)) return null;
+        mockWaveRedisStore.set(key, value);
+        return "OK";
+      },
+    ),
+    get: jest.fn(async (key: string) => mockWaveRedisStore.get(key) ?? null),
+    del: jest.fn(async (key: string) => {
+      mockWaveRedisStore.delete(key);
+      return 1;
+    }),
+    isOpen: true,
+  },
+}));
+
 jest.mock("../../../models/transaction", () => {
   const actual = jest.requireActual("../../../models/transaction");
   return {
@@ -76,6 +100,7 @@ describe("Wave webhook routes", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockWaveRedisStore.clear();
     process.env.WAVE_WEBHOOK_SECRET = WEBHOOK_SECRET;
 
     app = express();
@@ -306,5 +331,82 @@ describe("Wave webhook routes", () => {
       "txn_wave_001",
       TransactionStatus.Completed,
     );
+  });
+
+  it("returns 200 for a duplicate checkout session without reprocessing", async () => {
+    mockFindByReferenceNumber.mockResolvedValue(baseTransaction);
+    mockClaimForProcessing.mockResolvedValue({
+      ...baseTransaction,
+      status: TransactionStatus.Processing,
+    });
+    mockSendPayment.mockResolvedValue({
+      hash: "stellar-hash-123",
+      submittedAt: new Date("2026-01-01T00:00:00.000Z"),
+    });
+    mockFindById.mockResolvedValue(baseTransaction);
+
+    await request(app)
+      .post("/api/webhooks/wave")
+      .set("Wave-Signature", sign(baseEvent))
+      .send(baseEvent)
+      .expect(200);
+
+    // Flush the idempotency status update scheduled on response finish.
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const duplicateResponse = await request(app)
+      .post("/api/webhooks/wave")
+      .set("Wave-Signature", sign(baseEvent))
+      .send(baseEvent)
+      .expect(200);
+
+    expect(duplicateResponse.body).toMatchObject({
+      received: true,
+      duplicate: true,
+    });
+    expect(mockSendPayment).toHaveBeenCalledTimes(1);
+    expect(mockClaimForProcessing).toHaveBeenCalledTimes(1);
+    expect(mockWaveRedisStore.has("wave:webhook:cs_wave_1")).toBe(true);
+  });
+
+  it("stores the idempotency claim with a 24-hour TTL", async () => {
+    mockFindByReferenceNumber.mockResolvedValue(baseTransaction);
+    mockClaimForProcessing.mockResolvedValue({
+      ...baseTransaction,
+      status: TransactionStatus.Processing,
+    });
+    mockSendPayment.mockResolvedValue({
+      hash: "stellar-hash-123",
+      submittedAt: new Date("2026-01-01T00:00:00.000Z"),
+    });
+    mockFindById.mockResolvedValue(baseTransaction);
+
+    await request(app)
+      .post("/api/webhooks/wave")
+      .set("Wave-Signature", sign(baseEvent))
+      .send(baseEvent)
+      .expect(200);
+
+    const redisSet = require("../../../config/redis").redisClient
+      .set as jest.Mock;
+    expect(redisSet).toHaveBeenCalledWith(
+      "wave:webhook:cs_wave_1",
+      expect.any(String),
+      expect.objectContaining({ NX: true, EX: 86_400 }),
+    );
+  });
+
+  it("releases the idempotency claim when processing fails so Wave can retry", async () => {
+    mockFindByReferenceNumber.mockRejectedValue(new Error("database down"));
+
+    await request(app)
+      .post("/api/webhooks/wave")
+      .set("Wave-Signature", sign(baseEvent))
+      .send(baseEvent)
+      .expect(500);
+
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(mockWaveRedisStore.has("wave:webhook:cs_wave_1")).toBe(false);
   });
 });

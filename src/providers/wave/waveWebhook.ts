@@ -1,4 +1,4 @@
-import { Router, Request, Response } from "express";
+import { Router, Request, Response, NextFunction } from "express";
 import { createHmac, timingSafeEqual } from "crypto";
 import { TransactionModel, TransactionStatus } from "../../models/transaction";
 import { StellarService } from "../../services/stellar/stellarService";
@@ -8,6 +8,7 @@ import {
   WebhookService,
 } from "../../services/webhook";
 import { ingestRateLimiter } from "../../middleware/ingestRateLimit";
+import { acquireWaveWebhookIdempotency } from "./waveWebhookIdempotency";
 import logger from "../../utils/logger";
 
 const router = Router();
@@ -89,6 +90,73 @@ export async function verifyWaveWebhookRequest(
 }
 
 /**
+ * Rejects duplicate deliveries atomically before any business logic runs.
+ * The checkout session id (`data.id`) is Wave's stable identifier for the
+ * payment; `event.id` changes when Wave retries a delivery.
+ */
+export async function waveWebhookIdempotency(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  const event = req.body as WaveCheckoutSessionCompletedEvent;
+
+  if (event?.type !== "checkout.session.completed") {
+    return next();
+  }
+
+  // `processing` is non-terminal and is acked without changing the ledger. It
+  // must not consume the checkpoint id's claim, otherwise the later
+  // `succeeded`/`cancelled` event would be rejected as a duplicate.
+  if (
+    event.data?.payment_status !== "succeeded" &&
+    event.data?.payment_status !== "cancelled"
+  ) {
+    return next();
+  }
+
+  const checkoutSessionId = event.data?.id?.trim();
+  if (!checkoutSessionId) {
+    res.status(400).json({ error: "Missing checkout session id" });
+    return;
+  }
+
+  const idempotency = await acquireWaveWebhookIdempotency(checkoutSessionId, {
+    eventId: event.id,
+    clientReference: event.data.client_reference,
+  });
+
+  if (!idempotency.acquired) {
+    logger.info(
+      {
+        checkoutSessionId,
+        eventId: event.id,
+        idempotencyStatus: idempotency.status,
+      },
+      "[webhook-wave] Duplicate delivery acknowledged without reprocessing",
+    );
+    res.status(200).json({
+      received: true,
+      duplicate: true,
+      status: idempotency.status,
+    });
+    return;
+  }
+
+  // Only acked deliveries stay cached; a failed delivery is released so Wave's
+  // retry can be processed once the transient failure clears.
+  res.on("finish", () => {
+    if (res.statusCode >= 200 && res.statusCode < 300) {
+      void idempotency.complete();
+    } else {
+      void idempotency.release();
+    }
+  });
+
+  next();
+}
+
+/**
  * Maps a Wave checkout session's terminal payment_status to the internal
  * TransactionStatus it should drive. `processing` is intentionally
  * excluded: it isn't a terminal state, so the handler acks it without
@@ -155,6 +223,7 @@ async function creditStellarForCompletedDeposit(
 router.post(
   "/",
   verifyWaveWebhookRequest,
+  waveWebhookIdempotency,
   async (req: Request, res: Response) => {
     try {
       const event = req.body as WaveCheckoutSessionCompletedEvent;

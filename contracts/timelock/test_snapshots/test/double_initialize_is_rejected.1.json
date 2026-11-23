@@ -183,6 +183,14 @@
                   "storage": [
                     {
                       "key": {
+                        "symbol": "CANCEL_V"
+                      },
+                      "val": {
+                        "map": []
+                      }
+                    },
+                    {
+                      "key": {
                         "symbol": "CONFIG"
                       },
                       "val": {
@@ -209,6 +217,35 @@
                             },
                             "val": {
                               "address": "CBUSYNQKASUYFWYC3M2GUEDMX4AIVWPALDBYJPNK6554BREHTGZ2IUNF"
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "GOVERN"
+                      },
+                      "val": {
+                        "map": [
+                          {
+                            "key": {
+                              "symbol": "admins"
+                            },
+                            "val": {
+                              "vec": [
+                                {
+                                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"
+                                }
+                              ]
+                            }
+                          },
+                          {
+                            "key": {
+                              "symbol": "cancellation_threshold"
+                            },
+                            "val": {
+                              "u32": 1
                             }
                           }
                         ]

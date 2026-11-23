@@ -1,11 +1,7 @@
 import { Keypair } from "@stellar/stellar-sdk";
 import request from "supertest";
+import express from "express";
 import crypto from "crypto";
-
-// Initialize valid Stellar keys in environment BEFORE loading the app to satisfy startup config checks
-const randomKeypair = Keypair.random();
-process.env.STELLAR_SIGNING_KEY = randomKeypair.secret();
-process.env.STELLAR_RECEIVING_ACCOUNT = randomKeypair.publicKey();
 
 // Declared mock functions before requiring index/app
 const mockSendPayout = jest.fn();
@@ -21,8 +17,6 @@ jest.mock("../../services/mobilemoney/mobileMoneyService", () => {
   };
 });
 
-// Require index dynamically so env keys are available at load time
-const app = require("../../index").default;
 import { pool } from "../../config/database";
 
 // Mock database pool
@@ -37,14 +31,6 @@ jest.mock("../../config/database", () => {
     queryWrite: jest.fn((text: any, params: any) => queryMock(text, params)),
   };
 });
-
-// Mock queue worker to prevent actual redis connection
-jest.mock("../../queue/transactionQueue", () => ({
-  addTransactionJob: jest.fn().mockResolvedValue({ id: "mock-job-id" }),
-}));
-jest.mock("../../queue/transactionQueue.js", () => ({
-  addTransactionJob: jest.fn().mockResolvedValue({ id: "mock-job-id" }),
-}));
 
 // Mock lockManager to bypass distributed lock acquisition/release and execute immediately
 jest.mock("../../utils/lock", () => ({
@@ -68,52 +54,9 @@ jest.mock("../../utils/lock", () => ({
   },
 }));
 
-// Mock authentication middleware to bypass login requirements
-jest.mock("../../middleware/auth", () => ({
-  authenticateToken: (req: any, res: any, next: any) => {
-    req.user = { id: "merchant-123", role: "merchant" };
-    next();
-  },
-  requireAuth: (req: any, res: any, next: any) => {
-    req.user = { id: "merchant-123", role: "merchant" };
-    next();
-  },
-}));
+import multisigCallbacksRouter from "../../routes/multisigCallbacks";
 
-// Mock Redis & PubSub to prevent connections during tests
-// Mock Redis & PubSub to prevent connections during tests
-jest.mock("../../config/redis", () => ({
-  connectRedis: jest.fn().mockResolvedValue(undefined),
-  disconnectRedis: jest.fn().mockResolvedValue(undefined),
-  redisClient: {
-    isOpen: false,
-    ping: jest.fn(),
-    on: jest.fn(),
-    connect: jest.fn(),
-    quit: jest.fn(),
-    disconnect: jest.fn(),
-  },
-  createRedisStore: jest.fn().mockReturnValue({
-    on: jest.fn(),
-    get: jest.fn((sid: any, cb: any) => {
-      if (cb) cb(null, {});
-    }),
-    set: jest.fn((sid: any, sess: any, cb: any) => {
-      if (cb) cb(null);
-    }),
-    destroy: jest.fn((sid: any, cb: any) => {
-      if (cb) cb(null);
-    }),
-  }),
-  SESSION_TTL_SECONDS: 86400,
-}));
-
-jest.mock("../../graphql/redisPubSub", () => ({
-  getRedisPubSub: jest.fn().mockReturnValue({
-    publish: jest.fn(),
-    subscribe: jest.fn(),
-  }),
-}));
+const app = express().use(express.json()).use("/api/multisig", multisigCallbacksRouter);
 
 describe("Multi-Sig Callbacks Integration Tests", () => {
   const mockedPool = pool as jest.Mocked<typeof pool>;

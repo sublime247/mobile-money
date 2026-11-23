@@ -247,4 +247,54 @@ describe("provider mock server", () => {
       await expect(requestPromise).rejects.toThrow();
     });
   });
+
+  describe("runtime fault injection via X-Mock-Status / X-Mock-Delay (#2360)", () => {
+    it("short-circuits any endpoint with the status given in X-Mock-Status", async () => {
+      const response = await request(app)
+        .get("/health")
+        .set("X-Mock-Status", "503");
+
+      expect(response.status).toBe(503);
+      expect(response.body).toMatchObject({ error: "mock_injected_fault" });
+    });
+
+    it("applies X-Mock-Status to POST endpoints identically to GET", async () => {
+      const response = await request(app)
+        .post("/mtn/collection/v1_0/requesttopay")
+        .set("X-Mock-Status", "500")
+        .send({ externalId: "mtn-fault-1" });
+
+      expect(response.status).toBe(500);
+      expect(response.body.error).toBe("mock_injected_fault");
+    });
+
+    it("delays the response by X-Mock-Delay before returning the normal result", async () => {
+      const start = Date.now();
+      const response = await request(app)
+        .get("/health")
+        .set("X-Mock-Delay", "150");
+      const elapsed = Date.now() - start;
+
+      expect(response.status).toBe(200);
+      expect(elapsed).toBeGreaterThanOrEqual(140);
+    });
+
+    it("applies X-Mock-Delay before an injected X-Mock-Status response", async () => {
+      const start = Date.now();
+      const response = await request(app)
+        .get("/health")
+        .set("X-Mock-Delay", "120")
+        .set("X-Mock-Status", "429");
+      const elapsed = Date.now() - start;
+
+      expect(response.status).toBe(429);
+      expect(elapsed).toBeGreaterThanOrEqual(110);
+    });
+
+    it("does not affect requests with no fault-injection headers", async () => {
+      const response = await request(app).get("/health");
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe("ok");
+    });
+  });
 });

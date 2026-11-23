@@ -22,6 +22,11 @@ export enum TransactionStatus {
   Failed = "failed",
   Cancelled = "cancelled",
   Review = "review",
+  /**
+   * Held before provider dispatch by AML velocity monitoring until a
+   * compliance officer releases (back to Pending) or rejects (Cancelled) it.
+   */
+  PendingReview = "pending_review",
   Dispute = "dispute",
   Reversed = "reversed",
   ClawedBack = "clawed_back",
@@ -279,7 +284,14 @@ export const ALLOWED_STATUS_TRANSITIONS: Record<
     TransactionStatus.Failed,
     TransactionStatus.Cancelled,
     TransactionStatus.Review,
+    TransactionStatus.PendingReview,
     TransactionStatus.Expired,
+  ],
+  [TransactionStatus.PendingReview]: [
+    TransactionStatus.PendingReview,
+    TransactionStatus.Pending,
+    TransactionStatus.Cancelled,
+    TransactionStatus.Failed,
   ],
   [TransactionStatus.Processing]: [
     TransactionStatus.Processing,
@@ -478,6 +490,28 @@ export class TransactionModel {
 
     const res = await queryRead<TransactionRow>(q, params);
     return mapTransactionRow(res.rows[0]);
+  }
+
+  /**
+   * Fetch multiple transactions by ID in a single query, for callers
+   * reconciling a batch of transactions (e.g. `POST
+   * /transactions/batch-status`) without issuing one round trip per ID.
+   * IDs with no matching transaction are simply absent from the result —
+   * callers that need a per-ID outcome diff the input against the result.
+   */
+  async findByIds(ids: string[], userId?: string): Promise<Transaction[]> {
+    if (!ids.length) return [];
+
+    let q = `SELECT ${TRANSACTION_SELECT_COLUMNS} FROM transactions WHERE id = ANY($1)`;
+    const params: (string[] | string)[] = [ids];
+
+    if (userId) {
+      q += ` AND user_id=$2`;
+      params.push(userId);
+    }
+
+    const res = await queryRead<TransactionRow>(q, params);
+    return res.rows.map(mapTransactionRow).filter((t): t is Transaction => t !== null);
   }
 
   async updateStatus(

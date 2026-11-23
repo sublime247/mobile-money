@@ -39,6 +39,11 @@ services:
       # Loki transport — optional, falls back to stdout when unset
       LOKI_HOST: ${LOKI_HOST:-http://loki:3100}
       SERVICE_NAME: ${SERVICE_NAME:-mobile-money-api}
+      # OpenTelemetry tracing — spans (HTTP + queue workers) go to Jaeger
+      OTEL_ENABLED: ${OTEL_ENABLED:-true}
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-mobile-money-api}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://jaeger:4317}
+      OTEL_SAMPLING_RATE: ${OTEL_SAMPLING_RATE:-0.1}
     ports:
       - "3000:3000"
     healthcheck:
@@ -182,6 +187,24 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./logging/promtail-config.yaml:/etc/promtail/config.yml
     command: -config.file=/etc/promtail/config.yml
+    networks:
+      - mobilemoney_net
+
+  # ---------------------------------------------------------------------------
+  # Jaeger all-in-one — OTLP gRPC collector + trace UI
+  # Traces are produced by the app and queue workers (see src/tracer.ts) and
+  # exported to http://jaeger:4317. Browse them at http://localhost:16686.
+  # ---------------------------------------------------------------------------
+  jaeger:
+    image: jaegertracing/all-in-one:1.57
+    container_name: mobilemoney_jaeger
+    restart: unless-stopped
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+      - "16686:16686" # Jaeger UI
     networks:
       - mobilemoney_net
 

@@ -5,6 +5,7 @@ import { TransactionModel } from "../models/transaction";
 import logger from "../utils/logger";
 import { queueOptions, getWebhookRetryWorkerConcurrency } from "./config";
 import { capturePersistentFailure } from "./dlq";
+import { notifyDlqRetryLimitExceeded } from "./dlqNotifier";
 
 let webhookRetryWorker: Worker<WebhookRetryJobData> | null = null;
 
@@ -113,6 +114,10 @@ export function startWebhookRetryWorker(): void {
           "[DLQ] Failed to capture exhausted webhook retry job",
         ),
       );
+
+      notifyDlqRetryLimitExceeded(job, error, {
+        queueName: "webhook-callback-retries",
+      });
     }
   });
 

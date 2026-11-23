@@ -9,6 +9,7 @@ import { Transaction, WebhookDeliveryUpdate } from "../models/transaction";
 import { enqueueWebhookRetry } from "../queue/webhookRetryQueue";
 import { signWebhookPayload } from "../crypto/webhookSigning";
 import { validateWebhookUrl } from "../security/ssrf";
+import { createWebhookSignature } from "../utils/webhookSigner";
 
 const gzipAsync = promisify(gzip);
 
@@ -356,6 +357,7 @@ export class WebhookService {
           headers: {
             "Content-Type": "application/json",
             "X-Webhook-Signature": signature,
+            ...createWebhookSignature(rawPayload, this.webhookSecret),
             ...extraHeaders,
           },
           body: body as any,
@@ -467,6 +469,7 @@ export class WebhookService {
           headers: {
             "Content-Type": "application/json",
             "X-Webhook-Signature": signature,
+            ...createWebhookSignature(rawPayload, this.webhookSecret),
             ...extraHeaders,
           },
           body: body as any,
@@ -537,6 +540,7 @@ export class WebhookService {
           headers: {
             "Content-Type": "application/json",
             "X-Webhook-Signature": signature,
+            ...createWebhookSignature(rawPayload, this.webhookSecret),
             ...extraHeaders,
           },
           body: body as any,

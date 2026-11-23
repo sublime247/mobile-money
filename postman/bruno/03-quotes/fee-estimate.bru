@@ -1,0 +1,33 @@
+meta {
+  name: "Pre-flight Fee Estimation"
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{base_url}}/api/fees/estimate
+  body: json
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "amount": 25000,
+    "transactionType": "deposit",
+    "senderPhone": "{{login_phone}}"
+  }
+}
+
+tests {
+  test("fee estimate returned", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("estimate is an object", function() {
+    expect(res.getBody()).to.be.an("object");
+  });
+}

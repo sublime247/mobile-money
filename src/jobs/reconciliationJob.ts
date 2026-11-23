@@ -1,5 +1,9 @@
 import { ProviderReconService } from "../services/providerReconService";
 import { reconcileTelecomAccountsAgainstLedger } from "../services/accounting/ledger";
+import {
+  mpesaReconciliationService,
+  parseMpesaStatement,
+} from "../services/mobilemoney/mpesaReconciliation";
 import logger from "../utils/logger";
 import nodemailer from "nodemailer";
 
@@ -18,7 +22,7 @@ export async function runReconciliationJob() {
   yesterday.setDate(yesterday.getDate() - 1);
 
   // List of providers to reconcile
-  const providers = ["MTN", "AIRTEL", "STELLAR"];
+  const providers = ["MTN", "AIRTEL", "STELLAR", "MPESA"];
   const discrepanciesFound: string[] = [];
 
   for (const provider of providers) {
@@ -39,12 +43,26 @@ export async function runReconciliationJob() {
       }
 
       // 2. Run reconciliation against provider files
-      await reconService.runReconciliation(
-        provider,
-        yesterday,
-        csvBuffer,
-        `${provider}_recon_${yesterday.toISOString().split("T")[0]}.csv`,
-      );
+      if (provider === "MPESA") {
+        const statementRecords = await parseMpesaStatement(csvBuffer);
+        const result = await mpesaReconciliationService.reconcile({
+          statementRecords,
+          reportDate: yesterday,
+          fileName: `mpesa_b2c_recon_${yesterday.toISOString().split("T")[0]}.csv`,
+        });
+        if (result.summary.totalDiscrepancies > 0) {
+          discrepanciesFound.push(
+            `Provider MPESA: ${result.summary.totalDiscrepancies} discrepancies detected (Amount: ${result.summary.amountDiscrepancies}, Missing callbacks: ${result.summary.missingCallbacks}, Duplicates: ${result.summary.duplicateDisbursements})`,
+          );
+        }
+      } else {
+        await reconService.runReconciliation(
+          provider,
+          yesterday,
+          csvBuffer,
+          `${provider}_recon_${yesterday.toISOString().split("T")[0]}.csv`,
+        );
+      }
 
       // 3. Match total values against internal double-entry journals
       const ledgerMatch = await reconcileTelecomAccountsAgainstLedger(provider, yesterday);

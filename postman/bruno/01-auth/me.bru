@@ -1,0 +1,46 @@
+meta {
+  name: "Get Current User Profile"
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{base_url}}/api/auth/me
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  Authorization: Bearer {{jwt_token}}
+}
+
+script:pre-request {
+  // Guard: authenticated requests need a SEP-10 (or login) token.
+  const token = bru.getEnvVar("jwt_token");
+  if (!token) {
+    throw new Error(
+      "jwt_token is empty — run 'SEP-10 Sign Challenge & Get Token' (01-auth) first."
+    );
+  }
+}
+
+script:post-response {
+  const body = res.getBody();
+  if (res.getStatus() === 200 && body) {
+    const id = body.id || body.userId;
+    if (id) bru.setEnvVar("user_id", id);
+  }
+}
+
+tests {
+  test("profile returned", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("user id captured", function() {
+    const body = res.getBody();
+    if (body && (body.id || body.userId)) {
+      expect(bru.getEnvVar("user_id")).to.be.a("string");
+    }
+  });
+}

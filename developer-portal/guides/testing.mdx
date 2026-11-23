@@ -48,3 +48,44 @@ The Sandbox environment operates exclusively on the **Stellar Testnet**.
 When providing a `stellar_address` for deposits, ensure it is a valid Testnet account. The Bridge will mint test tokens to this address.
 
 You can generate Testnet accounts and fund them with test XLM using the [Stellar Laboratory](https://laboratory.stellar.org/#account-creator?network=test).
+
+## Try It in the Interactive Playground
+
+Every endpoint in the [API Reference](/api-reference/overview) has a built-in
+"Try it" panel so you can send real requests against the Sandbox environment
+directly from your browser, with no setup required.
+
+<Steps>
+  <Step title="Switch the base URL to Sandbox">
+    In the playground panel, select **Sandbox** from the environment
+    dropdown (`https://sandbox-api.mobilemoney.dev/v1`) instead of
+    Production.
+  </Step>
+  <Step title="Paste a pre-generated sandbox token">
+    Use the mock bearer token below to authenticate playground requests. It
+    is scoped to the Sandbox environment only and carries no production
+    access.
+    ```text Sandbox bearer token
+    sandbox_jwt_eyJhbGciOiJIUzI1NiJ9.mock-playground-token.not-a-real-signature
+    ```
+  </Step>
+  <Step title="Use a pre-funded testnet account">
+    Use this Stellar Testnet account for `stellarAddress` fields. It is
+    pre-funded and already trusts the sandbox's test assets.
+    ```text Sandbox Stellar Testnet account
+    GCKFBEIYTKP6RCZX6LXZ3DFNEGQ4T3Z4EKZRXL6ESP7NJ5VQ6V7J6TQR
+    ```
+  </Step>
+  <Step title="Send a request">
+    Combine the token and account above with any of the magic phone numbers
+    from the table above to simulate deposits, withdrawals, and SEP-24/SEP-31
+    flows end to end without leaving the docs.
+  </Step>
+</Steps>
+
+<Warning>
+The sandbox bearer token above is a static, publicly-known placeholder meant
+only to populate the playground UI. It is rejected by every real backend
+environment and must never be used for anything beyond interactive API
+exploration on this page.
+</Warning>

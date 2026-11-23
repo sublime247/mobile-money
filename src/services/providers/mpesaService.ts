@@ -19,6 +19,7 @@
  */
 
 import { providerHttp } from "../providerStatus";
+import { recordUssdPushDispatch } from "../../monitoring/metrics";
 import { BaseProvider, ProviderAuthConfig } from "./baseProvider";
 
 const http = providerHttp("mpesa");
@@ -326,6 +327,14 @@ export class MpesaProvider extends BaseProvider {
           timeout: this.timeoutMs,
         },
       );
+
+      if (
+        String(response.data.ResponseCode) === "0" &&
+        typeof response.data.CheckoutRequestID === "string" &&
+        response.data.CheckoutRequestID
+      ) {
+        recordUssdPushDispatch("mpesa", "KE", response.data.CheckoutRequestID);
+      }
 
       return {
         success: true,

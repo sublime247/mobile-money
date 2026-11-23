@@ -2,8 +2,11 @@
   "version": "1",
   "name": "Mobile Money Bridge API",
   "type": "collection",
-  "ignore": [
-    "node_modules",
-    ".git"
-  ]
+  "ignore": ["node_modules", ".git", "package-lock.json", "mock"],
+  "scripts": {
+    "moduleSystem": "commonjs",
+    "filesystemAccess": {
+      "allow": false
+    }
+  }
 }

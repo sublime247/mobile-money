@@ -1,15 +1,32 @@
 import { Command } from "commander";
 import chalk from "chalk";
-import { getTransaction } from "../api";
+import { getSystemHealth, getTransaction } from "../api";
 import { printError } from "../dashboard";
 
 export function registerStatusCommand(program: Command): void {
   program
-    .command("status <transactionId>")
-    .description("Get transaction details")
-    .action(async (transactionId: string) => {
+    .command("status [transactionId]")
+    .description("Show bridge health or transaction details")
+    .option("--json", "Output machine-readable JSON")
+    .action(async (transactionId: string, options: { json?: boolean }) => {
       try {
+        if (!transactionId) {
+          const health = await getSystemHealth();
+          if (options.json) {
+            console.log(JSON.stringify(health, null, 2));
+            return;
+          }
+          console.log(`${chalk.bold("Database:")} ${health.database}`);
+          console.log(`${chalk.bold("Redis:   ")} ${health.redis}`);
+          console.log(`${chalk.bold("Stellar: ")} ${health.stellar}`);
+          console.log(`${chalk.bold("Latency: ")} ${health.responseTime ?? "-"} ms`);
+          return;
+        }
         const tx = await getTransaction(transactionId);
+        if (options.json) {
+          console.log(JSON.stringify(tx, null, 2));
+          return;
+        }
         const statusColor =
           tx.status === "completed"
             ? chalk.green

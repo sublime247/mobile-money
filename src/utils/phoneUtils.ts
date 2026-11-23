@@ -4,7 +4,10 @@ import {
   type PhoneNumber,
 } from "libphonenumber-js";
 
-export type MobileProvider = "mtn" | "airtel" | "orange" | "vodacom" | "tigo";
+export type { CountryCode };
+
+export type MobileProvider =
+  "mtn" | "airtel" | "orange" | "vodacom" | "tigo" | "moov";
 export type PhoneOutputFormat =
   "e164" | "national" | "international" | "rfc3966";
 
@@ -29,7 +32,19 @@ export interface ParsedPhoneInfo {
  * These are common prefixes for regions like Uganda/Rwanda/Cameroon/Ghana/Tanzania/Ivory Coast/Senegal.
  */
 export const PROVIDER_PREFIXES: Record<MobileProvider, string[]> = {
-  mtn: ["23767", "23768", "25677", "25678", "23324", "23354", "23355", "23359"],
+  mtn: [
+    "23767",
+    "23768",
+    "25677",
+    "25678",
+    "23324",
+    "23354",
+    "23355",
+    "23359",
+    // Côte d'Ivoire MTN (#2276): national prefixes 05/5, E.164 +225 0501...
+    "22505",
+    // Senegal MTN is not an operating carrier here; no +221 MTN prefix exists.
+  ],
   airtel: [
     "23766",
     "25670",
@@ -43,7 +58,15 @@ export const PROVIDER_PREFIXES: Record<MobileProvider, string[]> = {
     "25410",
     "25411",
   ],
-  orange: ["23765", "23769", "22507", "22177"],
+  orange: [
+    "23765",
+    "23769",
+    // Côte d'Ivoire Orange (#2276): national prefixes 07/7, E.164 +225 0707...
+    "22507",
+    // Senegal Orange (#2276): national prefixes 77 and 78, E.164 +221 77.../78...
+    "22177",
+    "22178",
+  ],
   vodacom: [
     "255740",
     "255762",
@@ -68,6 +91,9 @@ export const PROVIDER_PREFIXES: Record<MobileProvider, string[]> = {
     "255754",
     "255755",
   ],
+  // Moov Money (#2276): currently only verified for Côte d'Ivoire, national
+  // prefixes 01/1, E.164 +225 0101...
+  moov: ["22501"],
 };
 
 export const PROVIDER_PHONE_FORMATS: Record<
@@ -92,6 +118,10 @@ export const PROVIDER_PHONE_FORMATS: Record<
   },
   tigo: {
     defaultRegion: "TZ",
+    output: "e164",
+  },
+  moov: {
+    defaultRegion: "CI",
     output: "e164",
   },
 };
@@ -379,4 +409,87 @@ export function formatPhoneForProvider(
   }
 
   return config.output === "national" ? parsed.nationalNumber : parsed.number;
+}
+
+export interface CleanMoMoBackupResult {
+  valid: boolean;
+  cleanPhoneNumber?: string;
+  provider?: MobileProvider | null;
+  country?: CountryCode;
+  error?: string;
+}
+
+export interface CleanMoMoBackupOptions {
+  expectedProvider?: string;
+  defaultRegion?: CountryCode;
+  enforceProviderMatch?: boolean;
+}
+
+/**
+ * Validates, cleans, and normalizes a MoMo (Mobile Money) backup phone number.
+ * 
+ * Ensures:
+ * 1. Input is non-empty and well-formed.
+ * 2. Parses to valid E.164 standard.
+ * 3. Cannot be identical to the primary phone number (if primary is provided).
+ * 4. Detects or verifies that the phone number is tied to a supported MoMo provider.
+ */
+export function cleanMoMoBackupNumber(
+  backupPhoneNumber: string,
+  primaryPhoneNumber?: string,
+  options?: CleanMoMoBackupOptions,
+): CleanMoMoBackupResult {
+  if (typeof backupPhoneNumber !== "string" || !backupPhoneNumber.trim()) {
+    return { valid: false, error: "Backup phone number is required" };
+  }
+
+  const region = options?.defaultRegion || "CM";
+  const parsed = parseFlexiblePhoneNumber(backupPhoneNumber, region);
+  if (!parsed || !parsed.isValid()) {
+    return { valid: false, error: "Invalid backup phone number format" };
+  }
+
+  const cleanBackup = parsed.number;
+
+  if (
+    primaryPhoneNumber &&
+    typeof primaryPhoneNumber === "string" &&
+    primaryPhoneNumber.trim()
+  ) {
+    const parsedPrimary = parseFlexiblePhoneNumber(primaryPhoneNumber, region);
+    const cleanPrimary = parsedPrimary?.isValid()
+      ? parsedPrimary.number
+      : primaryPhoneNumber.trim().replace(/\s+/g, "");
+    if (cleanBackup === cleanPrimary) {
+      return {
+        valid: false,
+        error: "Backup phone number cannot be the same as primary phone number",
+      };
+    }
+  }
+
+  const detected = detectProvider(cleanBackup, parsed.country);
+
+  if (options?.expectedProvider) {
+    const match = validatePhoneProviderMatch(
+      cleanBackup,
+      options.expectedProvider,
+      parsed.country,
+    );
+    if (!match.valid && options.enforceProviderMatch) {
+      return {
+        valid: false,
+        error:
+          match.error ||
+          `Phone number does not match expected provider ${options.expectedProvider}`,
+      };
+    }
+  }
+
+  return {
+    valid: true,
+    cleanPhoneNumber: cleanBackup,
+    provider: detected,
+    country: parsed.country,
+  };
 }

@@ -16,6 +16,7 @@ export interface User {
   mcc?: string | null;
   two_factor_secret?: string | null;
   backup_codes?: string[] | null;
+  backupPhoneNumber?: string | null;
   status: "active" | "frozen" | "suspended";
   tokenVersion?: number;
   createdAt: Date;
@@ -32,6 +33,7 @@ export interface User {
   address?: string;
   dateOfBirth?: string;
   idNumber?: string;
+  deletedAt?: Date | null;
 }
 
 /**
@@ -48,6 +50,7 @@ export interface UsersTableRow {
   display_name?: string | null;
   two_factor_secret?: string | null;
   backup_codes?: string[] | null;
+  backup_phone_number?: string | null;
   status: string;
   token_version?: number | null;
   created_at: Date | string;
@@ -60,6 +63,7 @@ export interface UsersTableRow {
   address?: string | null;
   date_of_birth?: string | null;
   id_number?: string | null;
+  deleted_at?: Date | string | null;
 }
 
 export interface AuditHistoryEntry {
@@ -90,6 +94,10 @@ function mapUserRow(row: UsersTableRow): User {
           decrypt(row.two_factor_secret)) as string)
       : null,
     backup_codes: row.backup_codes ?? null,
+    backupPhoneNumber: row.backup_phone_number
+      ? ((decryptField(row.backup_phone_number) ||
+          decrypt(row.backup_phone_number)) as string)
+      : null,
     status: row.status as User["status"],
     tokenVersion: row.token_version ?? 0,
     createdAt: new Date(row.created_at),
@@ -110,16 +118,28 @@ function mapUserRow(row: UsersTableRow): User {
     idNumber: row.id_number
       ? (decryptField(row.id_number) as string)
       : undefined,
+    deletedAt: row.deleted_at ? new Date(row.deleted_at) : null,
   };
 }
 
 export class UserModel {
+  /**
+   * @param requester - existing authorization context (unchanged).
+   * @param options.includeDeleted - bypasses the default
+   * `deleted_at IS NULL` filter (#2376). Reserved for compliance/audit
+   * callers; the standard API surface must never pass this, so a
+   * soft-deleted user stays inaccessible through normal lookups.
+   */
   async findById(
     id: string,
     requester?: { id: string; role: string },
+    options?: { includeDeleted?: boolean },
   ): Promise<User | null> {
+    const deletedFilter = options?.includeDeleted
+      ? ""
+      : "AND deleted_at IS NULL";
     const result = await queryRead<UsersTableRow>(
-      "SELECT * FROM users WHERE id = $1",
+      `SELECT * FROM users WHERE id = $1 ${deletedFilter}`,
       [id],
     );
     if (result.rows.length === 0) return null;
@@ -139,6 +159,10 @@ export class UserModel {
       displayName: row.display_name ?? null,
       two_factor_secret: decrypt(row.two_factor_secret) ?? null,
       backup_codes: row.backup_codes ?? null,
+      backupPhoneNumber: row.backup_phone_number
+        ? ((decryptField(row.backup_phone_number) ||
+            decrypt(row.backup_phone_number)) as string)
+        : null,
       status: row.status as User["status"],
       tokenVersion: row.token_version ?? 0,
       createdAt: new Date(row.created_at),
@@ -161,7 +185,48 @@ export class UserModel {
       idNumber: isAuthorized
         ? ((decryptField(row.id_number) as string) ?? undefined)
         : (row.id_number ?? undefined),
+      deletedAt: row.deleted_at ? new Date(row.deleted_at) : null,
     };
+  }
+
+  /**
+   * Soft-deletes a user by setting deleted_at, honoring account closure
+   * requests without a hard DELETE (#2376). Related rows (customer_wallets,
+   * transactions, refresh_token_families, audit entries, etc.) are left
+   * untouched since this is an UPDATE, not a DELETE - none of their
+   * `REFERENCES users(id) ON DELETE CASCADE/RESTRICT/SET NULL` constraints
+   * fire. Those rows become unreachable through the user's own default
+   * (non-deleted) reads while remaining queryable by compliance/audit code
+   * that joins on user_id directly or passes `includeDeleted: true` here.
+   *
+   * Idempotent: deleting an already-deleted user is a no-op that returns
+   * the existing record rather than erroring.
+   */
+  async softDelete(id: string): Promise<User | null> {
+    const result = await queryWrite<UsersTableRow>(
+      `UPDATE users
+       SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1 AND deleted_at IS NULL
+       RETURNING *`,
+      [id],
+    );
+    if (result.rows.length > 0) {
+      return mapUserRow(result.rows[0]);
+    }
+    return this.findById(id, undefined, { includeDeleted: true });
+  }
+
+  /** Reverses a soft delete, e.g. after a successful account-closure appeal. */
+  async restore(id: string): Promise<User | null> {
+    const result = await queryWrite<UsersTableRow>(
+      `UPDATE users
+       SET deleted_at = NULL, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1 AND deleted_at IS NOT NULL
+       RETURNING *`,
+      [id],
+    );
+    if (result.rows.length === 0) return null;
+    return mapUserRow(result.rows[0]);
   }
 
   async create(data: {
@@ -384,6 +449,19 @@ export class UserModel {
     await queryWrite(
       "UPDATE users SET mandatory_2fa_withdrawals = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2",
       [enabled, id],
+    );
+  }
+
+  async updateBackupPhoneNumber(
+    id: string,
+    backupPhoneNumber: string | null,
+  ): Promise<void> {
+    const encryptedPhone = backupPhoneNumber
+      ? encryptField(backupPhoneNumber) || encrypt(backupPhoneNumber)
+      : null;
+    await queryWrite(
+      "UPDATE users SET backup_phone_number = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2",
+      [encryptedPhone, id],
     );
   }
 }

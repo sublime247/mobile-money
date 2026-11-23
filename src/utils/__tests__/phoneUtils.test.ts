@@ -356,9 +356,109 @@ describe("phoneUtils", () => {
       expect(PROVIDER_PREFIXES.orange).toBeDefined();
       expect(PROVIDER_PREFIXES.vodacom).toBeDefined();
       expect(PROVIDER_PREFIXES.tigo).toBeDefined();
+      expect(PROVIDER_PREFIXES.moov).toBeDefined();
 
       expect(PROVIDER_PHONE_FORMATS.mtn.output).toBe("e164");
       expect(PROVIDER_PHONE_FORMATS.airtel.output).toBe("national");
+    });
+  });
+
+  describe("Francophone West Africa (CI/SN) carrier detection (#2276)", () => {
+    describe("Côte d'Ivoire (+225) - 10-digit MSISDNs", () => {
+      it("detects Orange CI from the 07 prefix", () => {
+        expect(detectProvider("+2250707000000")).toBe("orange");
+        expect(detectProvider("2250707000000")).toBe("orange");
+      });
+
+      it("detects MTN CI from the 05 prefix", () => {
+        expect(detectProvider("+2250501000000")).toBe("mtn");
+      });
+
+      it("detects Moov CI from the 01 prefix", () => {
+        expect(detectProvider("+2250101000000")).toBe("moov");
+      });
+
+      it("detects carrier from a local 10-digit leading-zero CI number via countryOverride", () => {
+        expect(detectProvider("0707000000", "CI")).toBe("orange");
+        expect(detectProvider("0501000000", "CI")).toBe("mtn");
+        expect(detectProvider("0101000000", "CI")).toBe("moov");
+      });
+
+      it("normalizes a local CI leading-zero number to E.164 and still detects the carrier from the result", () => {
+        const e164 = normalizeCemacWaemuE164("0707000000", "CI");
+        expect(e164).toBe("+2250707000000");
+        expect(detectProvider(e164)).toBe("orange");
+      });
+
+      it("validatePhoneProviderMatch confirms CI Orange/MTN/Moov prefix ownership", () => {
+        expect(
+          validatePhoneProviderMatch("+2250707000000", "orange").valid,
+        ).toBe(true);
+        expect(
+          validatePhoneProviderMatch("+2250501000000", "mtn").valid,
+        ).toBe(true);
+        expect(
+          validatePhoneProviderMatch("+2250101000000", "moov").valid,
+        ).toBe(true);
+      });
+
+      it("returns invalid when a CI number is checked against the wrong carrier (negative case)", () => {
+        const res = validatePhoneProviderMatch("+2250707000000", "mtn");
+        expect(res.valid).toBe(false);
+        expect(res.error).toContain("does not belong to the MTN network");
+      });
+
+      it("returns null for an unrecognized CI prefix (negative case)", () => {
+        // 09 is not an allocated prefix in any PROVIDER_PREFIXES CI entry.
+        expect(detectProvider("+2250901000000")).toBeNull();
+      });
+    });
+
+    describe("Senegal (+221)", () => {
+      it("detects Orange SN from the 77 and 78 prefixes", () => {
+        expect(detectProvider("+221770000000")).toBe("orange");
+        expect(detectProvider("+221780000000")).toBe("orange");
+      });
+
+      it("detects carrier from a local SN number via countryOverride", () => {
+        expect(detectProvider("770000000", "SN")).toBe("orange");
+        expect(detectProvider("780000000", "SN")).toBe("orange");
+      });
+
+      it("validatePhoneProviderMatch confirms SN Orange prefix ownership", () => {
+        expect(
+          validatePhoneProviderMatch("+221770000000", "orange").valid,
+        ).toBe(true);
+        expect(
+          validatePhoneProviderMatch("+221780000000", "orange").valid,
+        ).toBe(true);
+      });
+
+      it("returns invalid when an SN number is checked against the wrong carrier (negative case)", () => {
+        const res = validatePhoneProviderMatch("+221770000000", "mtn");
+        expect(res.valid).toBe(false);
+        expect(res.error).toContain("does not belong to the MTN network");
+      });
+
+      it("returns null for an unrecognized SN prefix not yet modeled on the backend (negative case)", () => {
+        // 76 (Free) and 70 (Expresso) are real Senegalese carriers the
+        // frontend's CARRIER_PREFIX_MAP already models, but this backend
+        // module only integrates with Orange/MTN/Airtel/Vodacom/Tigo/Moov,
+        // so a 76-prefixed number correctly has no backend provider match.
+        expect(detectProvider("+221760000000")).toBeNull();
+      });
+    });
+
+    describe("existing Ghana (GH) and Kenya (KE) coverage is unaffected", () => {
+      it("still detects MTN Ghana and keeps CEMAC/WAEMU GH/KE normalization intact", () => {
+        expect(detectProvider("0240000000", "GH")).toBe("mtn");
+        expect(normalizeCemacWaemuE164("0712345678", "KE")).toBe(
+          "+254712345678",
+        );
+        expect(normalizeCemacWaemuE164("0240000000", "GH")).toBe(
+          "+233240000000",
+        );
+      });
     });
   });
 });

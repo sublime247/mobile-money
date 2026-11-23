@@ -15,6 +15,7 @@ jest.mock("../src/config/database", () => ({
   pool: {
     query: jest.fn(),
   },
+  getReplicaPoolStatus: jest.fn(() => []),
 }));
 
 jest.mock("../src/config/redis", () => ({

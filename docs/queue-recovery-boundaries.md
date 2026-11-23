@@ -1,0 +1,1 @@
+# Queue recovery boundaries`n`nQueue operations require network throttling, recoverable Redis lifecycle handling, stale-work reconciliation, and secure statement generation.

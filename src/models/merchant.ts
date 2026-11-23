@@ -1,6 +1,8 @@
 import { queryRead, queryWrite, pool } from "../config/database";
 import { v4 as uuidv4 } from "uuid";
 import crypto from "crypto";
+import { ConflictError } from "../utils/errors";
+import { ERROR_CODES } from "../constants/errorCodes";
 
 export interface Merchant {
   id: string;
@@ -21,6 +23,7 @@ export interface Merchant {
   metadata: Record<string, unknown>;
   createdAt: Date;
   updatedAt: Date;
+  deletedAt?: Date | null;
 }
 
 export interface MerchantRow {
@@ -42,6 +45,7 @@ export interface MerchantRow {
   metadata: Record<string, unknown> | null;
   created_at: Date | string;
   updated_at: Date | string;
+  deleted_at?: Date | string | null;
 }
 
 export interface CreateMerchantInput {
@@ -189,18 +193,37 @@ export class MerchantModel {
     return { created, errors };
   }
 
-  async findById(id: string): Promise<Merchant | null> {
+  /**
+   * @param options.includeDeleted - When true, bypasses the default
+   * `deleted_at IS NULL` filter so soft-deleted merchants are visible. This
+   * is reserved for compliance/audit callers (e.g. retention reporting,
+   * dispute investigation on a closed account) - the standard API surface
+   * must never pass this.
+   */
+  async findById(
+    id: string,
+    options?: { includeDeleted?: boolean },
+  ): Promise<Merchant | null> {
+    const deletedFilter = options?.includeDeleted
+      ? ""
+      : "AND deleted_at IS NULL";
     const result = await queryRead<MerchantRow>(
-      "SELECT * FROM merchants WHERE id = $1",
+      `SELECT * FROM merchants WHERE id = $1 ${deletedFilter}`,
       [id],
     );
     if (result.rows.length === 0) return null;
     return this.mapRowToMerchant(result.rows[0]);
   }
 
-  async findByEmail(email: string): Promise<Merchant | null> {
+  async findByEmail(
+    email: string,
+    options?: { includeDeleted?: boolean },
+  ): Promise<Merchant | null> {
+    const deletedFilter = options?.includeDeleted
+      ? ""
+      : "AND deleted_at IS NULL";
     const result = await queryRead<MerchantRow>(
-      "SELECT * FROM merchants WHERE email = $1",
+      `SELECT * FROM merchants WHERE email = $1 ${deletedFilter}`,
       [email.toLowerCase().trim()],
     );
     if (result.rows.length === 0) return null;
@@ -209,7 +232,7 @@ export class MerchantModel {
 
   async findByInvitationToken(token: string): Promise<Merchant | null> {
     const result = await queryRead<MerchantRow>(
-      "SELECT * FROM merchants WHERE invitation_token = $1",
+      "SELECT * FROM merchants WHERE invitation_token = $1 AND deleted_at IS NULL",
       [token],
     );
     if (result.rows.length === 0) return null;
@@ -279,6 +302,84 @@ export class MerchantModel {
     return this.mapRowToMerchant(result.rows[0]);
   }
 
+  /**
+   * Soft-deletes a merchant by setting deleted_at, honoring account closure
+   * requests without a hard DELETE (#2376). Related rows in other tables
+   * (merchant_webhooks, merchant_api_keys, transactions, etc.) are left
+   * untouched - this is an UPDATE, not a DELETE, so none of their FK
+   * constraints fire. Those rows simply become unreachable through the
+   * merchant's own default (non-deleted) reads, while still queryable by
+   * compliance/audit code paths that join on merchant_id directly or pass
+   * `includeDeleted: true` here.
+   *
+   * Idempotent: deleting an already-deleted merchant is a no-op that
+   * returns the existing record rather than erroring.
+   */
+  async softDelete(id: string): Promise<Merchant | null> {
+    const result = await queryWrite<MerchantRow>(
+      `UPDATE merchants
+       SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1 AND deleted_at IS NULL
+       RETURNING *`,
+      [id],
+    );
+    if (result.rows.length > 0) {
+      return this.mapRowToMerchant(result.rows[0]);
+    }
+    // Either not found, or already deleted - distinguish by re-reading with
+    // includeDeleted so a caller can tell "already closed" from "no such
+    // merchant" without a second round trip in the common case.
+    return this.findById(id, { includeDeleted: true });
+  }
+
+  /**
+   * #2485: hard deletion of a merchant is never permitted. Financial records
+   * (transactions and customer wallets in this schema) are retained for audit
+   * and must outlive the account, so callers must use `softDelete()` instead.
+   *
+   * A single indexed EXISTS probe determines whether active records exist so
+   * the error can be descriptive. Financial rows are keyed to the owning user
+   * account (this schema has no merchant_id FK on those tables), so the probe
+   * joins users by the merchant's email.
+   */
+  async hardDelete(id: string): Promise<never> {
+    const result = await queryRead<{ has_financial_records: boolean }>(
+      `SELECT EXISTS(
+         SELECT 1
+         FROM users u
+         WHERE u.email = (SELECT email FROM merchants WHERE id = $1)
+           AND (
+             EXISTS (SELECT 1 FROM transactions t WHERE t.user_id = u.id)
+             OR EXISTS (SELECT 1 FROM customer_wallets cw WHERE cw.user_id = u.id)
+           )
+       ) AS has_financial_records`,
+      [id],
+    );
+    const hasFinancialRecords =
+      result.rows?.[0]?.has_financial_records === true;
+
+    throw new ConflictError(
+      hasFinancialRecords
+        ? `Merchant ${id} cannot be hard deleted: active transactions or wallet balances exist. Use softDelete() to close the account.`
+        : `Merchant ${id} cannot be hard deleted. Use softDelete() to close the account while retaining audit history.`,
+      ERROR_CODES.CONFLICT,
+      { merchantId: id, hasFinancialRecords, useInstead: "softDelete" },
+    );
+  }
+
+  /** Reverses a soft delete, e.g. after a successful account-closure appeal. */
+  async restore(id: string): Promise<Merchant | null> {
+    const result = await queryWrite<MerchantRow>(
+      `UPDATE merchants
+       SET deleted_at = NULL, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1 AND deleted_at IS NOT NULL
+       RETURNING *`,
+      [id],
+    );
+    if (result.rows.length === 0) return null;
+    return this.mapRowToMerchant(result.rows[0]);
+  }
+
   async markInvitationSent(id: string): Promise<void> {
     await queryWrite(
       "UPDATE merchants SET invitation_sent_at = CURRENT_TIMESTAMP WHERE id = $1",
@@ -307,6 +408,8 @@ export class MerchantModel {
     limit?: number;
     status?: string;
     kycStatus?: string;
+    /** Compliance/audit escape hatch: include soft-deleted merchants. */
+    includeDeleted?: boolean;
   }): Promise<{ merchants: Merchant[]; total: number }> {
     const page = options?.page || 1;
     const limit = options?.limit || 50;
@@ -316,6 +419,9 @@ export class MerchantModel {
     const values: unknown[] = [];
     let paramIndex = 1;
 
+    if (!options?.includeDeleted) {
+      conditions.push("deleted_at IS NULL");
+    }
     if (options?.status) {
       conditions.push(`status = $${paramIndex++}`);
       values.push(options.status);
@@ -466,6 +572,7 @@ export class MerchantModel {
       metadata: row.metadata ?? {},
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at),
+      deletedAt: row.deleted_at ? new Date(row.deleted_at) : null,
     };
   }
 }

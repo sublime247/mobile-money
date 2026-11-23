@@ -1,7 +1,10 @@
+// Tracer must be imported before any other module (see src/tracer.ts).
+import "../tracer";
 import logger from "../utils/logger";
 import tracer from "../tracer";
 import { Worker, Job } from "bullmq";
 import { queueOptions, getTelecomProviderLimits } from "./config";
+import { withJobTrace } from "./jobTracing";
 import { SyncJobData, SyncJobResult, SYNC_QUEUE_NAME } from "./syncQueue";
 import {
   AccountingService,
@@ -523,7 +526,21 @@ const resolvedConcurrency = process.env.SYNC_WORKER_CONCURRENCY
 // Instantiate the BullMQ Worker dynamically restricted to provider API boundaries
 export const syncWorker = new Worker<SyncJobData, SyncJobResult>(
   SYNC_QUEUE_NAME,
-  processSyncJob,
+  async (job) =>
+    withJobTrace(
+      "queue.sync.process",
+      job.data,
+      () => processSyncJob(job),
+      {
+        "messaging.system": "bullmq",
+        "messaging.destination.name": SYNC_QUEUE_NAME,
+        "messaging.message.id": job.id ?? "",
+        "job.name": job.name,
+        "job.attempt": job.attemptsMade + 1,
+        "sync.id": job.data.syncId,
+        "transaction.id": job.data.transactionId,
+      },
+    ),
   {
     ...queueOptions,
     concurrency: resolvedConcurrency, // Dynamic concurrency limit set via telecom configs
@@ -546,7 +563,18 @@ if (process.env.NATS_QUEUE_ENABLED === "true" && natsManager) {
       NATS_SYNC_SUBJECT,
       NATS_SYNC_DURABLE_CONSUMER,
       NATS_SYNC_CONSUMER_GROUP,
-      processNatsSyncMessage,
+      (data, msg) =>
+        withJobTrace(
+          "queue.sync.process",
+          data,
+          () => processNatsSyncMessage(data, msg),
+          {
+            "messaging.system": "nats",
+            "messaging.destination.name": NATS_SYNC_SUBJECT,
+            "sync.id": data.syncId,
+            "transaction.id": data.transactionId,
+          },
+        ),
       resolvedConcurrency, // Synchronize NATS concurrency with telecom limits
     )
     .catch((err) =>

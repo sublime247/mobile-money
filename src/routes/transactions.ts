@@ -1,5 +1,6 @@
 import { geoIpFilter } from "../middleware/geoIpFilter";
 import logger from "../utils/logger";
+import { redisBackpressureGuard } from "../queue/redisBackpressure";
 import { Router, Request, Response } from "express";
 import {
   cancelTransactionHandler,
@@ -24,6 +25,7 @@ import { cancelTransactionRateLimiter } from "../middleware/rateLimit";
 import { validate2FAForWithdrawal } from "../services/twoFactorWithdrawalService";
 import { TransactionModel, TransactionStatus } from "../models/transaction";
 import { generateTransactionPdfBuffer } from "../services/pdfReceipt";
+import { getReceiptJsonHandler } from "../controllers/receiptController";
 import { generateShareToken, verifyShareToken } from "../utils/share";
 import { createExportRoutes } from "./export";
 import { ERROR_CODES } from "../constants/errorCodes";
@@ -138,6 +140,15 @@ transactionRoutes.get(
   },
 );
 
+// JSON receipt with itemised multi-currency fee breakdown
+transactionRoutes.get(
+  "/:id/receipt/json",
+  TimeoutPresets.quick,
+  haltOnTimedout,
+  authenticateToken,
+  getReceiptJsonHandler,
+);
+
 // Create a shareable URL (public or private) for a transaction receipt
 transactionRoutes.post(
   "/:id/receipt/share",
@@ -245,6 +256,7 @@ transactionRoutes.post(
   "/deposit",
   authenticateToken,
   geoIpFilter,
+  redisBackpressureGuard,
   strictIdempotency,
   TimeoutPresets.long,
   haltOnTimedout,
@@ -258,6 +270,7 @@ transactionRoutes.post(
   "/withdraw",
   authenticateToken,
   geoIpFilter,
+  redisBackpressureGuard,
   strictIdempotency,
   TimeoutPresets.long,
   haltOnTimedout,

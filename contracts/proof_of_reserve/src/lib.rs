@@ -35,12 +35,23 @@ const ADMIN: Symbol = symbol_short!("ADMIN");
 const AUDITORS: Symbol = symbol_short!("AUDITORS");
 const REQ_SIGS: Symbol = symbol_short!("REQ_SIGS");
 const LATEST: Symbol = symbol_short!("LATEST");
+const MAX_AGE: Symbol = symbol_short!("MAX_AGE");
+const PENDING_MAX_AGE: Symbol = symbol_short!("PEND_AGE");
 
 /// An attestation older than this many seconds is rejected by
 /// `is_fully_backed`/`latest_attestation` callers that care about
 /// freshness (the query itself still returns the stale record; staleness
 /// is a property of the record relative to "now", not the storage layer).
-pub const MAX_ATTESTATION_AGE_SECONDS: u64 = 24 * 60 * 60;
+pub const MAX_ATTESTATION_AGE_SECONDS: u64 = DEFAULT_MAX_ATTESTATION_AGE_SECONDS;
+
+/// Freshness window used until the admin updates it via
+/// `schedule_freshness_update` / `execute_freshness_update`.
+pub const DEFAULT_MAX_ATTESTATION_AGE_SECONDS: u64 = 24 * 60 * 60;
+
+/// Delay between scheduling and applying a freshness-window update. The
+/// delay gives auditors and integrators a chance to observe an upcoming
+/// change before it can affect whether attestations are considered stale.
+pub const FRESHNESS_UPDATE_TIMELOCK_SECONDS: u64 = 48 * 60 * 60;
 
 #[contracterror]
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -60,8 +71,14 @@ pub enum ProofOfReserveError {
     InvalidAmount = 6,
     /// No attestation has ever been submitted.
     NoAttestation = 7,
-    /// The latest attestation is older than `MAX_ATTESTATION_AGE_SECONDS`.
-    AttestationStale = 8,
+    /// The latest attestation is older than the configured freshness window.
+    StaleAttestation = 8,
+    /// The proposed freshness window was zero.
+    InvalidFreshnessWindow = 9,
+    /// No freshness-window update has been scheduled.
+    NoPendingFreshnessUpdate = 10,
+    /// The freshness-window update is still inside its timelock.
+    FreshnessUpdateTimelockActive = 11,
 }
 
 #[contracttype]
@@ -78,6 +95,14 @@ pub struct Attestation {
     pub signers: Vec<Address>,
 }
 
+/// A freshness-window change waiting out its timelock.
+#[contracttype]
+#[derive(Clone, Debug, PartialEq)]
+pub struct PendingFreshnessUpdate {
+    pub new_max_age_seconds: u64,
+    pub executable_at: u64,
+}
+
 #[contractevent(topics = ["proof_of_reserve", "attestation_submitted"])]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AttestationSubmitted {
@@ -86,6 +111,24 @@ pub struct AttestationSubmitted {
     pub on_chain_supply: i128,
     pub reserve_balance: i128,
     pub signer_count: u32,
+}
+
+#[contractevent(topics = ["proof_of_reserve", "freshness_update_scheduled"])]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FreshnessUpdateScheduled {
+    #[topic]
+    pub admin: Address,
+    pub new_max_age_seconds: u64,
+    pub executable_at: u64,
+}
+
+#[contractevent(topics = ["proof_of_reserve", "freshness_updated"])]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FreshnessUpdated {
+    #[topic]
+    pub admin: Address,
+    pub old_max_age_seconds: u64,
+    pub new_max_age_seconds: u64,
 }
 
 #[contract]
@@ -117,6 +160,9 @@ impl ProofOfReserveContract {
         env.storage()
             .instance()
             .set(&REQ_SIGS, &required_signatures);
+        env.storage()
+            .instance()
+            .set(&MAX_AGE, &MAX_ATTESTATION_AGE_SECONDS);
         env.storage().instance().extend_ttl(1000, 10000);
 
         Ok(())
@@ -204,11 +250,12 @@ impl ProofOfReserveContract {
             .ok_or(ProofOfReserveError::NoAttestation)
     }
 
-    /// Whether the most recent attestation is fresh (within
-    /// `MAX_ATTESTATION_AGE_SECONDS`) and reports `reserve_balance >=
-    /// on_chain_supply` (fully, or over-, collateralized).
+    /// Whether the most recent attestation is fresh (within the configured
+    /// freshness window, `max_attestation_age_seconds`) and reports
+    /// `reserve_balance >= on_chain_supply` (fully, or over-,
+    /// collateralized).
     ///
-    /// Errors `AttestationStale` rather than returning `false` for a stale
+    /// Errors `StaleAttestation` rather than returning `false` for a stale
     /// attestation: staleness means the anchor's backing status is
     /// currently *unknown*, not that it is known to be unbacked, and a
     /// caller (e.g. a wallet deciding whether to accept the anchor's
@@ -222,7 +269,7 @@ impl ProofOfReserveContract {
 
     /// The most recent attestation's reserve ratio in basis points
     /// (`reserve_balance * 10_000 / on_chain_supply`; `10_000` = exactly
-    /// 1:1). Errors `AttestationStale` under the same freshness rule as
+    /// 1:1). Errors `StaleAttestation` under the same freshness rule as
     /// `is_fully_backed`. Errors `InvalidAmount` if `on_chain_supply` is
     /// `0` (the ratio is undefined with no supply outstanding).
     pub fn reserve_ratio_bps(env: Env) -> Result<i128, ProofOfReserveError> {
@@ -239,18 +286,103 @@ impl ProofOfReserveContract {
     }
 
     pub fn admin(env: Env) -> Result<Address, ProofOfReserveError> {
+        Self::get_admin(&env)
+    }
+
+    pub fn auditors(env: Env) -> Result<Vec<Address>, ProofOfReserveError> {
+        Self::get_auditors(&env)
+    }
+
+    /// The freshness window currently used by `is_fully_backed` and
+    /// `reserve_ratio_bps`, in seconds.
+    pub fn max_attestation_age_seconds(env: Env) -> u64 {
+        Self::max_age(&env)
+    }
+
+    /// The freshness-window update waiting out its timelock, if any.
+    pub fn pending_freshness_update(env: Env) -> Option<PendingFreshnessUpdate> {
+        env.storage().instance().get(&PENDING_MAX_AGE)
+    }
+
+    /// Schedule an update to the maximum accepted attestation age.
+    /// Admin-only, and not applied until `FRESHNESS_UPDATE_TIMELOCK_SECONDS`
+    /// have elapsed (see `execute_freshness_update`).
+    pub fn schedule_freshness_update(
+        env: Env,
+        new_max_age_seconds: u64,
+    ) -> Result<(), ProofOfReserveError> {
+        let admin = Self::get_admin(&env)?;
+        admin.require_auth();
+
+        if new_max_age_seconds == 0 {
+            return Err(ProofOfReserveError::InvalidFreshnessWindow);
+        }
+
+        let executable_at = env
+            .ledger()
+            .timestamp()
+            .saturating_add(FRESHNESS_UPDATE_TIMELOCK_SECONDS);
+        env.storage().instance().set(
+            &PENDING_MAX_AGE,
+            &PendingFreshnessUpdate {
+                new_max_age_seconds,
+                executable_at,
+            },
+        );
+        env.storage().instance().extend_ttl(1000, 10000);
+
+        FreshnessUpdateScheduled {
+            admin,
+            new_max_age_seconds,
+            executable_at,
+        }
+        .publish(&env);
+
+        Ok(())
+    }
+
+    /// Apply the scheduled freshness-window update once its timelock has
+    /// elapsed. Admin-only.
+    pub fn execute_freshness_update(env: Env) -> Result<(), ProofOfReserveError> {
+        let admin = Self::get_admin(&env)?;
+        admin.require_auth();
+
+        let pending: PendingFreshnessUpdate = env
+            .storage()
+            .instance()
+            .get(&PENDING_MAX_AGE)
+            .ok_or(ProofOfReserveError::NoPendingFreshnessUpdate)?;
+
+        if env.ledger().timestamp() < pending.executable_at {
+            return Err(ProofOfReserveError::FreshnessUpdateTimelockActive);
+        }
+
+        let old_max_age_seconds = Self::max_age(&env);
+        env.storage()
+            .instance()
+            .set(&MAX_AGE, &pending.new_max_age_seconds);
+        env.storage().instance().remove(&PENDING_MAX_AGE);
+        env.storage().instance().extend_ttl(1000, 10000);
+
+        FreshnessUpdated {
+            admin,
+            old_max_age_seconds,
+            new_max_age_seconds: pending.new_max_age_seconds,
+        }
+        .publish(&env);
+
+        Ok(())
+    }
+}
+
+impl ProofOfReserveContract {
+    fn get_admin(env: &Env) -> Result<Address, ProofOfReserveError> {
         env.storage()
             .instance()
             .get(&ADMIN)
             .ok_or(ProofOfReserveError::NotInitialized)
     }
 
-    pub fn auditors(env: Env) -> Result<Vec<Address>, ProofOfReserveError> {
-        Self::get_auditors(&env)
-    }
-}
-
-impl ProofOfReserveContract {
     fn get_auditors(env: &Env) -> Result<Vec<Address>, ProofOfReserveError> {
         env.storage()
             .instance()
@@ -258,11 +390,18 @@ impl ProofOfReserveContract {
             .ok_or(ProofOfReserveError::NotInitialized)
     }
 
+    fn max_age(env: &Env) -> u64 {
+        env.storage()
+            .instance()
+            .get(&MAX_AGE)
+            .unwrap_or(MAX_ATTESTATION_AGE_SECONDS)
+    }
+
     fn require_fresh(env: &Env, attestation: &Attestation) -> Result<(), ProofOfReserveError> {
         let now = env.ledger().timestamp();
         let age = now.saturating_sub(attestation.attested_at);
-        if age > MAX_ATTESTATION_AGE_SECONDS {
-            return Err(ProofOfReserveError::AttestationStale);
+        if age > Self::max_age(env) {
+            return Err(ProofOfReserveError::StaleAttestation);
         }
         Ok(())
     }
@@ -411,7 +550,7 @@ mod test {
             .with_mut(|li| li.timestamp = 1_000 + MAX_ATTESTATION_AGE_SECONDS + 1);
 
         let result = client.try_is_fully_backed();
-        assert_eq!(result, Err(Ok(ProofOfReserveError::AttestationStale)));
+        assert_eq!(result, Err(Ok(ProofOfReserveError::StaleAttestation)));
     }
 
     #[test]
@@ -454,8 +593,98 @@ mod test {
 
         assert_eq!(
             client.try_reserve_ratio_bps(),
-            Err(Ok(ProofOfReserveError::AttestationStale))
+            Err(Ok(ProofOfReserveError::StaleAttestation))
         );
+    }
+
+    #[test]
+    fn freshness_update_cannot_execute_without_a_scheduled_update() {
+        let env = Env::default();
+        let (client, _admin, _auditors) = setup(&env, 1, 1);
+
+        assert_eq!(
+            client.try_execute_freshness_update(),
+            Err(Ok(ProofOfReserveError::NoPendingFreshnessUpdate))
+        );
+    }
+
+    #[test]
+    fn freshness_update_waits_for_the_timelock_and_is_then_enforced() {
+        let env = Env::default();
+        env.ledger().with_mut(|li| li.timestamp = 1_000);
+        let (client, _admin, auditors) = setup(&env, 1, 1);
+
+        assert_eq!(
+            client.max_attestation_age_seconds(),
+            DEFAULT_MAX_ATTESTATION_AGE_SECONDS
+        );
+
+        let new_window = 6 * 60 * 60;
+        client.schedule_freshness_update(&new_window);
+
+        let pending = client.pending_freshness_update().unwrap();
+        assert_eq!(pending.new_max_age_seconds, new_window);
+        assert_eq!(
+            pending.executable_at,
+            1_000 + FRESHNESS_UPDATE_TIMELOCK_SECONDS
+        );
+
+        // One second before the timelock elapses the update is not applied.
+        env.ledger()
+            .with_mut(|li| li.timestamp = 1_000 + FRESHNESS_UPDATE_TIMELOCK_SECONDS - 1);
+        assert_eq!(
+            client.try_execute_freshness_update(),
+            Err(Ok(ProofOfReserveError::FreshnessUpdateTimelockActive))
+        );
+        assert_eq!(
+            client.max_attestation_age_seconds(),
+            DEFAULT_MAX_ATTESTATION_AGE_SECONDS
+        );
+
+        env.ledger()
+            .with_mut(|li| li.timestamp = 1_000 + FRESHNESS_UPDATE_TIMELOCK_SECONDS);
+        client.execute_freshness_update();
+
+        assert_eq!(client.max_attestation_age_seconds(), new_window);
+        assert!(client.pending_freshness_update().is_none());
+
+        // The new six-hour window — not the old 24-hour default — is what
+        // the freshness check now applies.
+        let signers = svec![&env, auditors[0].clone()];
+        client.submit_attestation(&1_000_000i128, &1_000_000i128, &signers);
+
+        env.ledger()
+            .with_mut(|li| li.timestamp = 1_000 + FRESHNESS_UPDATE_TIMELOCK_SECONDS + new_window);
+        assert!(client.try_is_fully_backed().is_ok());
+
+        env.ledger().with_mut(|li| {
+            li.timestamp = 1_000 + FRESHNESS_UPDATE_TIMELOCK_SECONDS + new_window + 1
+        });
+        assert_eq!(
+            client.try_is_fully_backed(),
+            Err(Ok(ProofOfReserveError::StaleAttestation))
+        );
+    }
+
+    #[test]
+    fn freshness_update_rejects_a_zero_window() {
+        let env = Env::default();
+        let (client, _admin, _auditors) = setup(&env, 1, 1);
+
+        assert_eq!(
+            client.try_schedule_freshness_update(&0u64),
+            Err(Ok(ProofOfReserveError::InvalidFreshnessWindow))
+        );
+    }
+
+    #[test]
+    fn freshness_update_requires_admin_auth() {
+        let env = Env::default();
+        let (client, _admin, _auditors) = setup(&env, 1, 1);
+
+        env.set_auths(&[]);
+        assert!(client.try_schedule_freshness_update(&3_600u64).is_err());
+        assert!(client.try_execute_freshness_update().is_err());
     }
 
     #[test]

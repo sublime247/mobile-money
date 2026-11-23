@@ -1,5 +1,6 @@
 /**
- * Tests for the strict Redis-backed idempotency middleware (issue #1972).
+ * Tests for the strict Redis-backed idempotency middleware (issues #1972 and
+ * #2161).
  *
  * Verifies locally using a mock execution framework (in-memory Redis mock
  * and mock handlers) per the issue's verification guidance.
@@ -7,6 +8,7 @@
 
 process.env.NODE_ENV = "test";
 
+import crypto from "crypto";
 import type { Request, Response } from "express";
 
 const store = new Map<string, string>();
@@ -15,32 +17,43 @@ const locks = new Set<string>();
 jest.mock("../../config/redis", () => ({
   redisClient: {
     get: jest.fn(async (key: string) => store.get(key) ?? null),
-    set: jest.fn(
-      async (
-        key: string,
-        value: string,
-        opts?: { NX?: boolean },
-      ) => {
-        if (opts?.NX) {
-          if (locks.has(key)) return null;
-          locks.add(key);
-          store.set(key, value);
-          return "OK";
-        }
-        store.set(key, value);
-        return "OK";
-      },
-    ),
+    set: jest.fn(async (key: string, value: string) => {
+      store.set(key, value);
+      return "OK";
+    }),
     del: jest.fn(async (key: string) => {
       store.delete(key);
-      locks.delete(key);
       return 1;
     }),
     isOpen: true,
   },
 }));
 
-import { strictIdempotency } from "../idempotency";
+jest.mock("../../utils/lock", () => {
+  class MockLockError extends Error {
+    readonly isContention: boolean;
+    constructor(isContention: boolean) {
+      super("lock acquisition failed");
+      this.isContention = isContention;
+    }
+  }
+  return {
+    lockManager: {
+      acquire: jest.fn(async (resource: string) => {
+        if (locks.has(resource)) throw new MockLockError(true);
+        locks.add(resource);
+        return { resource };
+      }),
+      release: jest.fn(async (lock: { resource: string }) => {
+        locks.delete(lock.resource);
+      }),
+    },
+    isLockAcquisitionError: (e: unknown) => e instanceof MockLockError,
+    LockKeys: { idempotency: (key: string) => `idempotency:${key}` },
+  };
+});
+
+import { optionalIdempotency, strictIdempotency } from "../idempotency";
 
 type Res = Response & { statusCode: number; body: unknown };
 
@@ -134,6 +147,11 @@ beforeEach(async () => {
   await new Promise((r) => setImmediate(r));
 });
 
+/** Resource name the middleware locks for a given cache key. */
+function lockResourceFor(cacheKey: string): string {
+  return `idempotency:${crypto.createHash("sha256").update(cacheKey).digest("hex")}`;
+}
+
 describe("strictIdempotency (#1972)", () => {
   it("rejects requests missing the Idempotency-Key header with 400", async () => {
     const req = makeReq();
@@ -217,8 +235,8 @@ describe("strictIdempotency (#1972)", () => {
   });
 
   it("returns 409 for a concurrent duplicate while the first is executing", async () => {
-    const lockKey = "idempotency:user-1:POST:/deposit:key-4:lock";
-    locks.add(lockKey); // simulate in-flight request holding the lock
+    // simulate in-flight request holding the lock
+    locks.add(lockResourceFor("idempotency:user-1:POST:/deposit:key-4"));
 
     const res = makeRes();
     let executed = false;
@@ -270,9 +288,7 @@ describe("strictIdempotency (#1972)", () => {
     for (const [, cb] of finishCbs) (cb as () => void)();
 
     await new Promise((r) => setImmediate(r));
-    expect(store.has("idempotency:user-1:POST:/deposit:key-5:lock")).toBe(
-      false,
-    );
+    expect(locks.size).toBe(0);
 
     // A retry after the failure executes normally.
     const res2 = makeRes();
@@ -282,5 +298,144 @@ describe("strictIdempotency (#1972)", () => {
       res2.status(200).json({ ok: true });
     });
     expect(executed).toBe(true);
+  });
+});
+
+describe("strictIdempotency distributed locking (#2161)", () => {
+  it("lets only one of many parallel duplicates execute; the rest get 409", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let executions = 0;
+
+    const responses = Array.from({ length: 5 }, () => makeRes());
+    const runs = responses.map((res) =>
+      run(makeReq({ idempotencyKey: "parallel-1" }), res, async () => {
+        executions += 1;
+        await gate;
+        res.status(201).json({ id: "txn-parallel" });
+      }),
+    );
+
+    // Duplicates are rejected immediately while the first is still running.
+    await new Promise((r) => setTimeout(r, 50));
+    release();
+    await Promise.all(runs);
+
+    expect(executions).toBe(1);
+    const statuses = responses.map((r) => r.statusCode).sort();
+    expect(statuses).toEqual([201, 409, 409, 409, 409]);
+  });
+
+  it("serves a retry after completion from the cache and frees the lock", async () => {
+    const res1 = makeRes();
+    await run(makeReq({ idempotencyKey: "parallel-2" }), res1, () => {
+      res1.status(201).json({ id: "txn-2" });
+    });
+    await new Promise((r) => setImmediate(r));
+    expect(locks.size).toBe(0);
+
+    let executions = 0;
+    const res2 = makeRes();
+    await run(makeReq({ idempotencyKey: "parallel-2" }), res2, () => {
+      executions += 1;
+    });
+
+    expect(executions).toBe(0);
+    expect(res2.statusCode).toBe(201);
+    expect(res2.body).toEqual({ id: "txn-2" });
+  });
+
+  it("replays instead of re-executing when the first request finishes before the lock is taken", async () => {
+    const res1 = makeRes();
+    await run(makeReq({ idempotencyKey: "race-1" }), res1, () => {
+      res1.status(201).json({ id: "txn-race" });
+    });
+    await new Promise((r) => setImmediate(r));
+
+    // The duplicate's first cache lookup misses (it ran before the first
+    // request cached its response); only the post-lock re-check sees it.
+    (
+      require("../../config/redis").redisClient.get as jest.Mock
+    ).mockImplementationOnce(async () => null);
+
+    let executions = 0;
+    const res2 = makeRes();
+    await run(makeReq({ idempotencyKey: "race-1" }), res2, () => {
+      executions += 1;
+    });
+
+    expect(executions).toBe(0);
+    expect(res2.statusCode).toBe(201);
+    expect(res2.body).toEqual({ id: "txn-race" });
+    expect(locks.size).toBe(0);
+  });
+
+  it("fails open without a 409 when the lock backend is unavailable", async () => {
+    (
+      require("../../utils/lock").lockManager.acquire as jest.Mock
+    ).mockRejectedValueOnce(new Error("redis down"));
+
+    let executed = false;
+    const res = makeRes();
+    await run(makeReq({ idempotencyKey: "outage-1" }), res, () => {
+      executed = true;
+      res.status(200).json({ ok: true });
+    });
+
+    expect(executed).toBe(true);
+    expect(res.statusCode).toBe(200);
+  });
+});
+
+describe("optionalIdempotency (#2161)", () => {
+  it("passes through without touching Redis when no key is supplied", async () => {
+    const next = jest.fn();
+    await optionalIdempotency(makeReq(), makeRes(), next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(
+      require("../../config/redis").redisClient.get as jest.Mock,
+    ).not.toHaveBeenCalled();
+    expect(locks.size).toBe(0);
+  });
+
+  it("passes through when the key header is blank", async () => {
+    const req = makeReq();
+    (req as any).headers = { "idempotency-key": "   " };
+    const next = jest.fn();
+    await optionalIdempotency(req, makeRes(), next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+  });
+
+  it("applies full idempotency when a key is supplied", async () => {
+    const res1 = makeRes();
+    await new Promise<void>((resolve) => {
+      const out = optionalIdempotency(
+        makeReq({ idempotencyKey: "hook-1" }),
+        res1,
+        () => {
+          res1.status(200).json({ received: true });
+          resolve();
+        },
+      );
+      void out;
+    });
+    await new Promise((r) => setImmediate(r));
+
+    let executions = 0;
+    const res2 = makeRes();
+    await optionalIdempotency(
+      makeReq({ idempotencyKey: "hook-1" }),
+      res2,
+      () => {
+        executions += 1;
+      },
+    );
+
+    expect(executions).toBe(0);
+    expect(res2.body).toEqual({ received: true });
   });
 });

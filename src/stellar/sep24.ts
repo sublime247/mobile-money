@@ -1,4 +1,3 @@
-import { ipReputationService } from "../services/ipReputation";
 import logger from "../utils/logger";
 import { Router, Request, Response, NextFunction } from "express";
 import { sep24RateLimiter } from "../middleware/rateLimit";
@@ -13,6 +12,7 @@ import { ERROR_CODES } from "../constants/errorCodes";
 import { TransactionModel } from "../models/transaction";
 import { createError } from "../middleware/errorHandler";
 import { enqueueSepWebhook } from "../services/stellar/webhooks";
+import { enqueueCallbackRetry } from "../queue/callbackQueue";
 import {
   generateSignedSep24Url,
   verifySep24Signature,
@@ -27,7 +27,11 @@ import {
   PostgresSep24TransactionStore,
   Sep24TransactionStore,
 } from "./sep24Store";
-import { renderSep24InteractivePage } from "../services/sep24InteractivePage";
+import {
+  renderSep24InteractivePage,
+  renderSep24ExpiredSessionPage,
+} from "../services/sep24InteractivePage";
+import { getConfigValue } from "../config/appConfig";
 import {
   OrangeQrCodeGenerator,
   renderOrangeMoneyQrSection,
@@ -316,7 +320,8 @@ export const generateInteractiveUrl = async (
   });
 
   if ((request as any).token) params.append("token", (request as any).token);
-  if ((request as any).session_token) params.append("session_token", (request as any).session_token);
+  if ((request as any).session_token)
+    params.append("session_token", (request as any).session_token);
 
   if (request.memo) params.append("memo", request.memo);
   if (transaction.memo_type) params.append("memo_type", transaction.memo_type);
@@ -421,8 +426,132 @@ export const initiateWithdrawal = async (
   return generateInteractiveUrl(request, "withdrawal");
 };
 
-export const getTransaction = (id: string): Sep24Transaction | undefined =>
-  transactions.get(id);
+// ============================================================================
+// Interactive session expiry (#2264)
+// ============================================================================
+
+/**
+ * Only transactions still waiting on the user to complete the interactive
+ * flow can "expire" in the SEP-24 sense. Once the off-chain leg has started
+ * moving (pending_external/pending_anchor/pending_trust/pending_stellar) or
+ * reached a terminal state, the interactive URL is no longer the active
+ * surface and expiry no longer applies.
+ */
+const EXPIRABLE_STATUSES: Sep24TransactionStatus[] = [
+  "pending_user_transfer_start",
+];
+
+function getInteractiveSessionExpiryMs(): number {
+  const minutes = getConfigValue<number>(
+    "sep24.interactiveSessionExpiryMinutes",
+  );
+  return minutes * 60 * 1000;
+}
+
+/**
+ * Returns true when `transaction` is still in an expirable status and its
+ * `created_at` is older than the configured interactive session expiry
+ * duration (default 15 minutes).
+ */
+export function isInteractiveSessionExpired(
+  transaction: Sep24Transaction,
+  now: Date = new Date(),
+): boolean {
+  if (!EXPIRABLE_STATUSES.includes(transaction.status)) return false;
+  if (!transaction.created_at) return false;
+
+  const createdAtMs = new Date(transaction.created_at).getTime();
+  if (Number.isNaN(createdAtMs)) return false;
+
+  return now.getTime() - createdAtMs >= getInteractiveSessionExpiryMs();
+}
+
+/**
+ * Looks up a transaction and, if its interactive session has expired,
+ * lazily transitions it to `expired` before returning it. This is the
+ * SEP-24 equivalent of a Redis TTL eviction for this module's in-memory +
+ * Postgres-backed store: the record isn't deleted (SEP-24 callers still
+ * need to see a terminal `expired` status), but it stops being treated as
+ * an active, in-progress session the moment it's next read.
+ */
+export const getTransaction = (id: string): Sep24Transaction | undefined => {
+  const transaction = transactions.get(id);
+  if (!transaction) return undefined;
+
+  if (isInteractiveSessionExpired(transaction)) {
+    return updateTransactionStatus(
+      id,
+      "expired",
+      "Interactive session expired before the user completed the flow.",
+    );
+  }
+
+  return transaction;
+};
+
+/**
+ * Sweeps all in-memory transactions for expired interactive sessions and
+ * transitions each to `expired`. Intended to be called on a schedule (see
+ * jobs/sep24InteractiveExpirationJob.ts) so a session expires even if no one
+ * ever requests it again, mirroring the sweep pattern already used for
+ * SEP-38 firm quotes (expireStaleQuotes).
+ *
+ * Returns the number of sessions transitioned to expired.
+ */
+export function expireStaleInteractiveSessions(now: Date = new Date()): number {
+  let count = 0;
+  for (const transaction of transactions.values()) {
+    if (isInteractiveSessionExpired(transaction, now)) {
+      updateTransactionStatus(
+        transaction.id,
+        "expired",
+        "Interactive session expired before the user completed the flow.",
+      );
+      count++;
+    }
+  }
+  return count;
+}
+
+/**
+ * Renews an expired (or about-to-expire) interactive session by minting a
+ * fresh transaction + signed interactive URL for the same deposit/withdrawal
+ * parameters, then marking the original record `expired` once the new one
+ * exists so a reader of the old transaction_id sees a clear trail rather
+ * than a silently-reused id.
+ *
+ * Throws if the original transaction cannot be found.
+ */
+export async function renewInteractiveSession(
+  expiredTransactionId: string,
+): Promise<InteractiveFlowResponse> {
+  const original = transactions.get(expiredTransactionId);
+  if (!original) {
+    throw new Error(`Transaction ${expiredTransactionId} not found`);
+  }
+
+  const renewed = await generateInteractiveUrl(
+    {
+      asset_code: original.asset_in || "",
+      amount: original.amount_in || "0",
+      account: original.account || "",
+      memo: original.memo,
+      memo_type: original.memo_type,
+      callback: original.callback,
+    },
+    original.kind,
+  );
+
+  if (original.status !== "expired") {
+    updateTransactionStatus(
+      expiredTransactionId,
+      "expired",
+      `Superseded by renewed session ${renewed.id}.`,
+    );
+  }
+
+  return renewed;
+}
 
 function decrementActiveTransactionCount(account: string): void {
   const current = activeTransactionsPerAccount.get(account) || 0;
@@ -462,6 +591,15 @@ export const updateTransactionStatus = (
       transaction,
     ).catch((err) =>
       logger.error(`[sep24-webhook] Error enqueuing webhook:`, err),
+    );
+
+    enqueueCallbackRetry({
+      transactionId: transaction.id,
+      status,
+      callbackUrl: transaction.callback,
+      payload: transaction as unknown as Record<string, unknown>,
+    }).catch((err) =>
+      logger.error(`[sep24-callback] Error enqueuing callback retry:`, err),
     );
   }
 
@@ -520,8 +658,29 @@ export const processCallback = async (
     ).catch((err) =>
       logger.error(`[sep24-webhook] Error enqueuing webhook:`, err),
     );
+
+    enqueueCallbackRetry({
+      transactionId: transaction.id,
+      status,
+      callbackUrl: transaction.callback,
+      payload: transaction as unknown as Record<string, unknown>,
+    }).catch((err) =>
+      logger.error(`[sep24-callback] Error enqueuing callback retry:`, err),
+    );
   }
 
+  return transaction;
+};
+
+/**
+ * Replaces the in-memory copy of a transaction with a record loaded from
+ * durable storage. Used by out-of-band settlement (e.g. bank statement
+ * reconciliation) that changes a deposit's state in the database directly.
+ */
+export const loadTransactionFromStore = (
+  transaction: Sep24Transaction,
+): Sep24Transaction => {
+  transactions.set(transaction.id, transaction);
   return transaction;
 };
 
@@ -556,6 +715,7 @@ async function defaultPaymentSender(): Promise<DepositPaymentSender> {
 export const fulfillDeposit = async (
   id: string,
   sender?: DepositPaymentSender,
+  options: { resumePendingStellar?: boolean } = {},
 ): Promise<Sep24Transaction> => {
   const transaction = transactions.get(id);
   if (!transaction) throw new Error(`Transaction ${id} not found`);
@@ -563,7 +723,7 @@ export const fulfillDeposit = async (
     throw new Error(`Transaction ${id} is not a deposit`);
   }
   if (transaction.status === "completed") return transaction;
-  if (transaction.status === "pending_stellar") {
+  if (transaction.status === "pending_stellar" && !options.resumePendingStellar) {
     throw new Error(`Deposit ${id} is already being submitted`);
   }
   if (["failed", "expired"].includes(transaction.status)) {
@@ -730,6 +890,26 @@ sep24Router.post("/withdraw", sep24Limiter, withdrawHandler);
 sep24Router.get("/interactive/deposit", async (req: Request, res: Response) => {
   res.setHeader("Content-Type", "text/html; charset=utf-8");
 
+  const transactionId = req.query.transaction_id
+    ? String(req.query.transaction_id)
+    : undefined;
+
+  // Accessing an expired interactive URL shows an expiration notice with a
+  // renewal option instead of the normal deposit page (#2264). getTransaction
+  // lazily transitions the record to "expired" as a side effect of this
+  // check, so subsequent reads (polling, admin tooling) see it too.
+  if (transactionId) {
+    const transaction = getTransaction(transactionId);
+    if (transaction && transaction.status === "expired") {
+      return res.send(
+        renderSep24ExpiredSessionPage({
+          transactionId,
+          renewUrl: `/sep24/interactive/renew/${transactionId}`,
+        }),
+      );
+    }
+  }
+
   const merchantId = req.query.merchant_id
     ? String(req.query.merchant_id)
     : undefined;
@@ -773,6 +953,31 @@ sep24Router.get("/interactive/deposit", async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * POST /sep24/interactive/renew/:id
+ *
+ * Renewal endpoint for an expired interactive session (#2264): mints a new
+ * transaction + signed interactive URL for the same deposit/withdrawal
+ * parameters as the expired one, marks the original record superseded, and
+ * redirects the caller to the fresh interactive URL.
+ */
+sep24Router.post(
+  "/interactive/renew/:id",
+  sep24Limiter,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const renewed = await renewInteractiveSession(req.params.id);
+      return res.redirect(303, renewed.url);
+    } catch (error: any) {
+      next(
+        createError(ERROR_CODES.NOT_FOUND, error.message, {
+          error: error.message,
+        }),
+      );
+    }
+  },
+);
+
 // Canonical SEP-24 paths.
 sep24Router.post(
   "/transactions/deposit/interactive",
@@ -789,7 +994,9 @@ const transactionModel = new TransactionModel();
 
 sep24Router.get("/transaction", async (req: Request, res: Response) => {
   const { id, stellar_transaction_id, external_transaction_id } = req.query;
-  const txId = (id || stellar_transaction_id || external_transaction_id) as string;
+  const txId = (id ||
+    stellar_transaction_id ||
+    external_transaction_id) as string;
 
   if (!txId) {
     throw createError(ERROR_CODES.INVALID_INPUT, "Missing id", {
@@ -805,8 +1012,13 @@ sep24Router.get("/transaction", async (req: Request, res: Response) => {
       if (dbTx) {
         let status: string = "pending_external";
         if (dbTx.status === "completed") status = "completed";
-        if (["failed", "cancelled", "reversed", "clawed_back"].includes(dbTx.status)) status = "failed";
-        
+        if (
+          ["failed", "cancelled", "reversed", "clawed_back"].includes(
+            dbTx.status,
+          )
+        )
+          status = "failed";
+
         transaction = {
           id: dbTx.id,
           kind: dbTx.type === "withdraw" ? "withdrawal" : "deposit",
@@ -814,7 +1026,10 @@ sep24Router.get("/transaction", async (req: Request, res: Response) => {
           amount_in: dbTx.amount,
           amount_out: dbTx.amount,
           created_at: dbTx.createdAt.toISOString(),
-          completed_at: dbTx.status === "completed" && dbTx.updatedAt ? dbTx.updatedAt.toISOString() : undefined,
+          completed_at:
+            dbTx.status === "completed" && dbTx.updatedAt
+              ? dbTx.updatedAt.toISOString()
+              : undefined,
           message: dbTx.notes || "Detailed status message",
           more_info_url: `${getSep24Config().webAuthDomain}/tx/${dbTx.id}`,
         };
@@ -846,23 +1061,31 @@ sep24Router.get("/transaction", async (req: Request, res: Response) => {
       amount_fee: transaction.amount_fee,
       started_at: formatRFC3339(transaction.created_at),
       completed_at: formatRFC3339(transaction.completed_at),
-      more_info_url: transaction.more_info_url || `${getSep24Config().webAuthDomain}/tx/${transaction.id}`,
+      more_info_url:
+        transaction.more_info_url ||
+        `${getSep24Config().webAuthDomain}/tx/${transaction.id}`,
       message: transaction.message || "Detailed status message",
-    }
+    },
   };
 
   res.json(response);
 });
 
-sep24Router.get("/interactive/callback", async (req: Request, res: Response, next: NextFunction) => {
-  const { sep24RouteHandler } = await import("../routes/sep24.js");
-  return sep24RouteHandler(req, res, next);
-});
+sep24Router.get(
+  "/interactive/callback",
+  async (req: Request, res: Response, next: NextFunction) => {
+    const { sep24RouteHandler } = await import("../routes/sep24.js");
+    return sep24RouteHandler(req, res, next);
+  },
+);
 
-sep24Router.get("/callback/popup", async (req: Request, res: Response, next: NextFunction) => {
-  const { sep24RouteHandler } = await import("../routes/sep24.js");
-  return sep24RouteHandler(req, res, next);
-});
+sep24Router.get(
+  "/callback/popup",
+  async (req: Request, res: Response, next: NextFunction) => {
+    const { sep24RouteHandler } = await import("../routes/sep24.js");
+    return sep24RouteHandler(req, res, next);
+  },
+);
 
 sep24Router.put("/transaction/:id", async (req: Request, res: Response) => {
   const { status, message } = req.body;

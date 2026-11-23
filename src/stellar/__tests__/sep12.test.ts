@@ -7,7 +7,23 @@ import { UserModel } from "../../models/users";
 import { errorHandler } from "../../middleware/errorHandler";
 import { Keypair } from "@stellar/stellar-sdk";
 
-// Mock KYC Service & UserModel
+// Mock Stellar SDK, KYC Service & UserModel
+jest.mock("@stellar/stellar-sdk", () => ({
+  Keypair: {
+    random: jest.fn().mockReturnValue({
+      publicKey: () => "GD5DJQDQKEZBDQZBH4ENLN5JTQAVLHKUL2QHYK3LTJY2J5N2Z5Q5K7AA",
+      secret: () => "SD5DJQDQKEZBDQZBH4ENLN5JTQAVLHKUL2QHYK3LTJY2J5N2Z5Q5K7AA",
+    }),
+    fromSecret: jest.fn(),
+  },
+  StrKey: {
+    isValidEd25519PublicKey: jest
+      .fn()
+      .mockImplementation(
+        (val) => typeof val === "string" && val.startsWith("G") && val.length === 56,
+      ),
+  },
+}));
 jest.mock("../../services/kyc");
 jest.mock("../../models/users");
 

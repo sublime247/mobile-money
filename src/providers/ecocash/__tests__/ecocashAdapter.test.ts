@@ -9,6 +9,16 @@ import {
 jest.mock("axios");
 const axiosMock = axios as jest.Mocked<typeof axios>;
 
+// #2365: disburse() schedules a status-poll fallback job via BullMQ after a
+// successful submission. These adapter tests exercise the HTTP/signing
+// logic in isolation, so the queue is mocked rather than hitting a real
+// Redis connection (which would hang in CI without one).
+const scheduleEcoCashStatusPollMock = jest.fn().mockResolvedValue(undefined);
+jest.mock("../../../queue/ecocashStatusPollingQueue", () => ({
+  scheduleEcoCashStatusPoll: (...args: unknown[]) =>
+    scheduleEcoCashStatusPollMock(...args),
+}));
+
 function createMockAxiosError(
   status: number,
   data?: Record<string, unknown>,
@@ -119,6 +129,47 @@ describe("EcoCashAdapter.disburse", () => {
     });
     expect(typeof body.signature).toBe("string");
     expect(options).toMatchObject({ timeout: 5_000 });
+  });
+
+  it("schedules a status-poll fallback job after a successful disbursement (#2365)", async () => {
+    axiosMock.post.mockResolvedValueOnce({
+      data: { transactionId: "eco-txn-poll-1", resultCode: "0" },
+    });
+    const adapter = new EcoCashAdapter({ ...adapterConfig, privateKey });
+
+    await adapter.disburse("+263771234567", "150.00", "USD", "ref-poll-1");
+
+    expect(scheduleEcoCashStatusPollMock).toHaveBeenCalledWith(
+      "eco-txn-poll-1",
+    );
+  });
+
+  it("does not fail the disbursement if scheduling the status poll throws", async () => {
+    axiosMock.post.mockResolvedValueOnce({
+      data: { transactionId: "eco-txn-poll-2", resultCode: "0" },
+    });
+    scheduleEcoCashStatusPollMock.mockRejectedValueOnce(
+      new Error("redis unavailable"),
+    );
+    const adapter = new EcoCashAdapter({ ...adapterConfig, privateKey });
+
+    const result = await adapter.disburse(
+      "+263771234567",
+      "150.00",
+      "USD",
+      "ref-poll-2",
+    );
+
+    expect(result.success).toBe(true);
+  });
+
+  it("does not attempt to schedule a status poll when the disbursement request fails validation", async () => {
+    const adapter = new EcoCashAdapter({ ...adapterConfig, privateKey });
+
+    await adapter.disburse("+1234567890", "150.00", "USD", "ref-invalid");
+
+    expect(axiosMock.post).not.toHaveBeenCalled();
+    expect(scheduleEcoCashStatusPollMock).not.toHaveBeenCalled();
   });
 
   it("supports disbursing from the ZWL wallet", async () => {
@@ -235,6 +286,10 @@ describe("EcoCashAdapter.requestPayment", () => {
 describe("EcoCashAdapter.getTransactionStatus", () => {
   const adapter = new EcoCashAdapter(adapterConfig);
 
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   it.each([
     ["SUCCESS", "completed"],
     ["COMPLETED", "completed"],
@@ -249,11 +304,56 @@ describe("EcoCashAdapter.getTransactionStatus", () => {
     expect(result.status).toBe(expected);
   });
 
-  it("returns unknown when the status query fails", async () => {
+  it("returns unknown when the status query fails with a non-retryable error", async () => {
     axiosMock.get.mockRejectedValueOnce(new Error("network error"));
 
     const result = await adapter.getTransactionStatus("ref-1");
 
     expect(result.status).toBe("unknown");
+    expect(axiosMock.get).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries a transient 504 from the status endpoint via retryWithJitter (#2367), then resolves", async () => {
+    jest.useFakeTimers();
+    try {
+      axiosMock.get
+        .mockRejectedValueOnce(
+          Object.assign(new Error("Gateway Timeout"), {
+            response: { status: 504 },
+          }),
+        )
+        .mockResolvedValueOnce({ data: { status: "SUCCESS" } });
+
+      const resultPromise = adapter.getTransactionStatus("ref-retry");
+      // Let the retry's backoff sleep elapse (max possible delay is 10s).
+      await jest.advanceTimersByTimeAsync(10_000);
+      const result = await resultPromise;
+
+      expect(result.status).toBe("completed");
+      expect(axiosMock.get).toHaveBeenCalledTimes(2);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("gives up and returns unknown after exhausting retries on a persistent 502", async () => {
+    jest.useFakeTimers();
+    try {
+      axiosMock.get.mockRejectedValue(
+        Object.assign(new Error("Bad Gateway"), {
+          response: { status: 502 },
+        }),
+      );
+
+      const resultPromise = adapter.getTransactionStatus("ref-persistent");
+      await jest.advanceTimersByTimeAsync(60_000);
+      const result = await resultPromise;
+
+      expect(result.status).toBe("unknown");
+      // Default retryWithJitter: 1 initial attempt + 3 retries = 4 calls.
+      expect(axiosMock.get).toHaveBeenCalledTimes(4);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

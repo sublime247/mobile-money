@@ -7,7 +7,8 @@ export class WaveSimulator {
 
   constructor() {
     this.webhookSecret = process.env.WAVE_WEBHOOK_SECRET || "test_secret";
-    this.webhookUrl = process.env.WAVE_WEBHOOK_URL || "http://localhost:3000/api/webhooks/wave"; // Default, to be overridden in tests
+    this.webhookUrl =
+      process.env.WAVE_WEBHOOK_URL || "http://localhost:3000/api/webhooks/wave"; // Default, to be overridden in tests
   }
 
   /**
@@ -22,23 +23,27 @@ export class WaveSimulator {
 
   /**
    * Dispatches a simulated webhook event after a delay.
+   *
+   * `checkoutSessionId` is reused as the webhook's `data.id` so retries of the
+   * same checkout resolve to the same idempotency key.
    */
   public async dispatchWebhook(
+    checkoutSessionId: string,
     clientReference: string,
     status: "succeeded" | "cancelled" | "processing",
     amount: string,
     currency: string = "XOF",
-    delayMs: number = 0
+    delayMs: number = 0,
   ): Promise<void> {
     if (delayMs > 0) {
       await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
 
     const payload = {
-      id: `evt_${Date.now()}`,
+      id: `evt_${checkoutSessionId}`,
       type: "checkout.session.completed",
       data: {
-        id: `cs_${Date.now()}`,
+        id: checkoutSessionId,
         client_reference: clientReference,
         payment_status: status,
         amount,
@@ -65,7 +70,11 @@ export class WaveSimulator {
   /**
    * Generates a mock checkout session response.
    */
-  public createCheckoutSession(amount: string, currency: string, clientReference: string) {
+  public createCheckoutSession(
+    amount: string,
+    currency: string,
+    clientReference: string,
+  ) {
     return {
       id: `cs_${Date.now()}`,
       amount,

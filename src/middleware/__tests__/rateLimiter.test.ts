@@ -81,8 +81,10 @@ jest.mock("../../models/merchantApiKey", () => ({
 
 import {
   merchantRateLimiter,
+  publicRateLimiter,
   sep38RateLimiter,
   SEP38_RATE_LIMIT,
+  PUBLIC_RATE_LIMIT,
 } from "../rateLimiter";
 import { TIER_LIMITS } from "../../models/merchantApiKey";
 
@@ -94,6 +96,14 @@ function makeMerchantApp(): Express {
   const app = express();
   app.set("trust proxy", true);
   app.use(merchantRateLimiter);
+  app.use((_req: Request, res: Response) => res.status(200).json({ ok: true }));
+  return app;
+}
+
+function makePublicApp(): Express {
+  const app = express();
+  app.set("trust proxy", true);
+  app.use(publicRateLimiter);
   app.use((_req: Request, res: Response) => res.status(200).json({ ok: true }));
   return app;
 }
@@ -353,3 +363,44 @@ describe("sep38RateLimiter", () => {
     expect(res.status).toBe(200);
   });
 });
+
+// ===========================================================================
+// publicRateLimiter — sliding window & RFC-7807 problem details
+// ===========================================================================
+
+describe("publicRateLimiter — public endpoint quotas & RFC-7807 problem details", () => {
+  it("sets X-RateLimit-Limit to 60 for public requests", async () => {
+    const res = await request(makePublicApp()).get("/");
+    expect(res.headers["x-ratelimit-limit"]).toBe(String(PUBLIC_RATE_LIMIT));
+    expect(res.headers["x-ratelimit-remaining"]).toBe(String(PUBLIC_RATE_LIMIT - 1));
+    expect(res.headers["x-ratelimit-reset"]).toBeDefined();
+    expect(res.status).toBe(200);
+  });
+
+  it("allows 60 requests per minute and blocks the 61st with HTTP 429 and RFC-7807 problem details", async () => {
+    const app = makePublicApp();
+    for (let i = 0; i < PUBLIC_RATE_LIMIT; i++) {
+      const okRes = await request(app).get("/");
+      expect(okRes.status).toBe(200);
+    }
+
+    const blockedRes = await request(app).get("/");
+    expect(blockedRes.status).toBe(429);
+    expect(parseInt(blockedRes.headers["retry-after"], 10)).toBeGreaterThan(0);
+    expect(blockedRes.body.type).toBe("https://api.mobilemoney.com/errors/rate-limit-exceeded");
+    expect(blockedRes.body.title).toBe("Too Many Requests");
+    expect(blockedRes.body.status).toBe(429);
+    expect(blockedRes.body.detail).toContain("Public rate limit of 60 requests per minute exceeded");
+    expect(blockedRes.body.instance).toBe("/");
+  });
+
+  it("fails open when Redis eval throws", async () => {
+    const { redisClient } = jest.requireMock("../../config/redis") as {
+      redisClient: { eval: jest.Mock };
+    };
+    redisClient.eval.mockRejectedValueOnce(new Error("Redis unavailable"));
+    const res = await request(makePublicApp()).get("/");
+    expect(res.status).toBe(200);
+  });
+});
+

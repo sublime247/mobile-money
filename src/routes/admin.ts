@@ -1,3 +1,6 @@
+import { createQueueControlRouter } from "./admin/queueControl";
+import { providerQueueControl } from "../queue/providerQueueControl";
+import { auditService } from "../services/auditService";
 import logger, { getTelecomAverageMetrics } from "../utils/logger";
 
 import { Router, Request, Response, NextFunction } from "express";
@@ -54,22 +57,45 @@ import { resetCircuitBreakerForProvider } from "../utils/circuitBreaker";
 import { ERROR_CODES } from "../constants/errorCodes";
 import { createError } from "../middleware/errorHandler";
 import { AuditLogFilter, AuditLogModel } from "../models/auditLog";
+import { sarReportService } from "../services/sarReportService";
 
-import adminControllerRouter, {
-  getDeadLetterJobsHandler,
-  getDeadLetterJobByIdHandler,
-  replayDeadLetterJobHandler,
-} from "../controllers/adminController";
+import adminControllerRouter from "../controllers/adminController";
 
 const router = Router();
 router.use("/monitoring", adminControllerRouter);
 
-// Dead-Letter Queue (DLQ) Admin Endpoints (#1989)
-router.get("/dlq", dlqInspectorHandler);
-router.get("/dlq/jobs", getDeadLetterJobsHandler);
-router.get("/dlq/jobs/:id", getDeadLetterJobByIdHandler);
-router.get("/dlq/:id", getDeadLetterJobByIdHandler);
-router.post("/dlq/replay/:id", replayDeadLetterJobHandler);
+/**
+ * POST /api/admin/compliance/sar/:userId
+ * One-click SAR export compiling customer profile, KYC links, transaction timeline, and audit logs.
+ */
+router.post(
+  "/compliance/sar/:userId",
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { userId } = req.params;
+      const officer = (req as any).user;
+      const officerId = officer?.id || "compliance_officer_admin";
+      const { justification } = req.body || {};
+
+      const reportPackage = await sarReportService.generateSARDraft(
+        userId,
+        officerId,
+        {
+          justification,
+          ipAddress: req.ip,
+          userAgent: req.get("user-agent"),
+        },
+      );
+
+      res.status(200).json({
+        message: "SAR report package generated successfully",
+        report: reportPackage,
+      });
+    } catch (error: any) {
+      next(error);
+    }
+  },
+);
 const IMPERSONATION_TOKEN_EXPIRES_IN = "15m";
 const IMPERSONATION_TOKEN_TTL_MS = 15 * 60 * 1000;
 const READ_ONLY_IMPERSONATION_MESSAGE = "Read-only mode active";
@@ -289,6 +315,36 @@ router.get(
 );
 
 router.get(
+  "/audit-export",
+  requireAdmin,
+  logAdminAction("EXPORT_AUDIT_PACKAGE"),
+  async (req: Request, res: Response) => {
+    try {
+      const fromRaw = String(req.query.from || "");
+      const toRaw = String(req.query.to || "");
+      const from = fromRaw ? new Date(fromRaw) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const to = toRaw ? new Date(toRaw) : new Date();
+      if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
+        throw createError(ERROR_CODES.INVALID_INPUT, "from and to must be valid ISO dates");
+      }
+      const { archive } = await auditService.buildAuditExportArchive({
+        from,
+        to,
+        includeKycDocuments: String(req.query.includeKycDocuments ?? "true") !== "false",
+      });
+      const filename = `audit-export-${from.toISOString().slice(0, 10)}-${to.toISOString().slice(0, 10)}.zip`;
+      res.setHeader("Content-Type", "application/zip");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      archive.pipe(res);
+    } catch (error) {
+      if ((error as { statusCode?: number }).statusCode) throw error;
+      logger.error("Error generating audit export:", error);
+      throw createError(ERROR_CODES.INTERNAL_ERROR, "Failed to generate audit export");
+    }
+  },
+);
+
+router.get(
   "/audit-logs/view",
   requireAdmin,
   logAdminAction("VIEW_AUDIT_LOGS"),
@@ -333,9 +389,6 @@ router.get(
   async (req: Request, res: Response) => {
     try {
       const category = req.query.category as string | undefined;
-      const { systemConfigService } = await import(
-        "../services/systemConfigService.js"
-      );
       const configs = await systemConfigService.getAll(category);
 
       res.json({
@@ -356,9 +409,6 @@ router.get(
   logAdminAction("GET_SYSTEM_CONFIG"),
   async (req: Request, res: Response) => {
     try {
-      const { systemConfigService } = await import(
-        "../services/systemConfigService.js"
-      );
       const entry = await systemConfigService.get(req.params.key);
 
       if (!entry) {
@@ -402,9 +452,6 @@ router.put(
         );
       }
 
-      const { systemConfigService } = await import(
-        "../services/systemConfigService.js"
-      );
       const entry = await systemConfigService.upsert({
         key: key.trim(),
         value: String(value),
@@ -438,9 +485,6 @@ router.delete(
         throw createError(ERROR_CODES.UNAUTHORIZED, "Authentication required");
       }
 
-      const { systemConfigService } = await import(
-        "../services/systemConfigService.js"
-      );
       const deleted = await systemConfigService.delete(req.params.key);
 
       if (!deleted) {
@@ -492,9 +536,6 @@ router.patch(
         }
       }
 
-      const { systemConfigService } = await import(
-        "../services/systemConfigService.js"
-      );
       const results = await systemConfigService.bulkUpsert(
         configs.map((c: any) => ({
           key: c.key.trim(),
@@ -1812,6 +1853,20 @@ router.get(
   requireAdmin,
   logAdminAction("VIEW_DLQ"),
   dlqInspectorHandler,
+);
+
+// Per-provider pause/resume for maintenance windows (#2282):
+//   POST /api/admin/queues/:provider/pause
+//   POST /api/admin/queues/:provider/resume
+//   GET  /api/admin/queues/:provider/status
+//   GET  /api/admin/queues/paused
+router.use(
+  "/queues",
+  requireAdmin,
+  createQueueControlRouter({
+    control: providerQueueControl,
+    audit: (entry) => auditService.logAdminAction(entry),
+  }),
 );
 
 /**

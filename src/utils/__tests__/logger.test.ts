@@ -86,7 +86,9 @@ describe("scrubLogOutput — PII and secret sanitization (#1648)", () => {
   /* ------------------------------------------------------------------ */
 
   it("redacts Bearer tokens", () => {
-    const result = scrubLogOutput('Authorization: Bearer some-random-token-value-here');
+    const result = scrubLogOutput(
+      "Authorization: Bearer some-random-token-value-here",
+    );
     expect(result).not.toContain("some-random-token-value-here");
     expect(result).toContain("[REDACTED]");
   });
@@ -107,8 +109,7 @@ describe("scrubLogOutput — PII and secret sanitization (#1648)", () => {
 
   it("redacts international phone numbers", () => {
     const result = scrubLogOutput("phone: +12025551234");
-    expect(result).not.toContain("+12025551234");
-    expect(result).toContain("[REDACTED]");
+    expect(result).toBe("phone: +1*****234");
   });
 
   /* ------------------------------------------------------------------ */
@@ -160,5 +161,34 @@ describe("scrubLogOutput — PII and secret sanitization (#1648)", () => {
     expect(PII_USER_FIELDS).toContain("email");
     expect(PII_USER_FIELDS).toContain("phone");
     expect(PII_USER_FIELDS).toContain("firstName");
+  });
+});
+
+describe("payment PII masking", () => {
+  it("masks message text and JSON metadata, including numeric fields", () => {
+    const line = JSON.stringify({
+      message: "Payment for +254712345123 with national ID=AB123456",
+      customer: {
+        msisdn: 254712345123,
+        nationalId: 12345678,
+        bank_account_number: "001234567890",
+      },
+    });
+    expect(JSON.parse(scrubLogOutput(line))).toEqual({
+      message: "Payment for +254*****123 with national ID=[REDACTED]",
+      customer: {
+        msisdn: "+254*****123",
+        nationalId: "[REDACTED]",
+        bank_account_number: "[REDACTED]",
+      },
+    });
+  });
+
+  it("preserves JSON when the message includes serialized PII", () => {
+    const message = JSON.stringify({ bankAccountNumber: "001234567890" });
+    const scrubbed = JSON.parse(scrubLogOutput(JSON.stringify({ message })));
+    expect(JSON.parse(scrubbed.message)).toEqual({
+      bankAccountNumber: "[REDACTED]",
+    });
   });
 });

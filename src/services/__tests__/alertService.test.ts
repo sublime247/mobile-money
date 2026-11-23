@@ -6,7 +6,13 @@ jest.mock("../../config/redis", () => ({
 }));
 
 import axios from "axios";
-import { sendAlert, sendLowBalanceAlert, resetAlertRateLimits } from "../alertService";
+import {
+  dispatchWebhookBacklogAlert,
+  resetAlertRateLimits,
+  sendAlert,
+  sendLowBalanceAlert,
+  webhookBacklogAction,
+} from "../alertService";
 
 jest.mock("axios");
 const mockedAxios = axios as jest.Mocked<typeof axios>;
@@ -284,5 +290,62 @@ describe("consecutive provider authentication failures", () => {
     await Promise.resolve();
 
     expect(mockedAxios.post).toHaveBeenCalledTimes(1);
+});
+
+describe("webhook backlog alerts", () => {
+  test.each([
+    [500, 900, false, undefined],
+    [501, 0, false, "trigger"],
+    [1, 901, false, "trigger"],
+    [1, 901, true, undefined],
+    [100, 900, true, undefined],
+    [99, 900, true, "resolve"],
+    [501, 0, true, undefined],
+    [0, 0, false, undefined],
+  ])(
+    "evaluates depth %i and age %i with an open incident of %s",
+    (depth, oldestAgeSeconds, active, expected) => {
+      expect(webhookBacklogAction({ depth, oldestAgeSeconds }, active)).toBe(
+        expected,
+      );
+    },
+  );
+
+  it("uses one Events API v2 deduplication key for the trigger and resolve", async () => {
+    mockedAxios.post.mockClear();
+    const backlog = { depth: 501, oldestAgeSeconds: 15 };
+    await dispatchWebhookBacklogAlert(
+      "routing-key",
+      "webhook-backlog",
+      "trigger",
+      backlog,
+    );
+    await dispatchWebhookBacklogAlert(
+      "routing-key",
+      "webhook-backlog",
+      "resolve",
+      backlog,
+    );
+
+    const event = { routing_key: "routing-key", dedup_key: "webhook-backlog" };
+    expect(mockedAxios.post).toHaveBeenNthCalledWith(
+      1,
+      "https://events.pagerduty.com/v2/enqueue",
+      expect.objectContaining({
+        ...event,
+        event_action: "trigger",
+        payload: expect.objectContaining({
+          severity: "critical",
+          custom_details: backlog,
+        }),
+      }),
+      { timeout: 5000, maxRedirects: 0 },
+    );
+    expect(mockedAxios.post).toHaveBeenNthCalledWith(
+      2,
+      "https://events.pagerduty.com/v2/enqueue",
+      { ...event, event_action: "resolve" },
+      { timeout: 5000, maxRedirects: 0 },
+    );
   });
 });

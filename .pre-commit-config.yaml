@@ -12,6 +12,13 @@ repos:
         pass_filenames: true
         always_run: false
 
+  # Gitleaks - scans staged changes using the repo's .gitleaks.toml
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+        args: ["--config=.gitleaks.toml"]
+
   # Standard pre-commit hooks
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.5.0

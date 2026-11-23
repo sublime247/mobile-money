@@ -8,6 +8,7 @@ import {
 } from "./config/serverConfig";
 import { createError, errorHandler } from "./middleware/errorHandler";
 import { timeoutErrorHandler } from "./middleware/timeout";
+import { sanitizationMiddleware } from "./middleware/sanitization";
 import { ERROR_CODES } from "./constants/errorCodes";
 import logger from "./utils/logger";
 
@@ -18,6 +19,7 @@ export function createConfiguredServer(
   options?: ServerConfigOptions,
 ): Application {
   const app = express();
+  app.use(sanitizationMiddleware);
   setupServerConfig(app, options);
   return app;
 }
@@ -46,6 +48,15 @@ export interface GracefulShutdownOptions {
   redisClient?: { disconnect?: () => Promise<unknown>; quit?: () => Promise<unknown> } | null;
   disconnectRedis?: () => Promise<unknown>;
   timeoutMs?: number;
+  /**
+   * Max time to wait for `onCleanup` (queue workers closing, letting
+   * in-flight BullMQ jobs finish, etc.) before giving up and continuing the
+   * shutdown anyway. Default 30s, matching BullMQ's recommended grace
+   * period for in-flight job completion. Without this bound, a single
+   * hung job would block the DB pool and Redis from ever closing and the
+   * process would never exit on SIGTERM/SIGINT.
+   */
+  onCleanupTimeoutMs?: number;
   signals?: NodeJS.Signals[];
   onShutdownStart?: (signal: string) => void | Promise<void>;
   onCleanup?: () => void | Promise<void>;
@@ -65,6 +76,7 @@ export class GracefulShutdownHandler {
   private signals: NodeJS.Signals[];
   private onShutdownStart?: (signal: string) => void | Promise<void>;
   private onCleanup?: () => void | Promise<void>;
+  private onCleanupTimeoutMs: number;
   private exitProcess: boolean;
 
   private isShuttingDown = false;
@@ -85,6 +97,9 @@ export class GracefulShutdownHandler {
     this.signals = options.signals ?? ["SIGTERM", "SIGINT"];
     this.onShutdownStart = options.onShutdownStart;
     this.onCleanup = options.onCleanup;
+    this.onCleanupTimeoutMs =
+      options.onCleanupTimeoutMs ??
+      parseInt(process.env.QUEUE_SHUTDOWN_TIMEOUT_MS || "30000", 10);
     this.exitProcess = options.exitProcess ?? (process.env.NODE_ENV !== "test");
   }
 
@@ -179,6 +194,33 @@ export class GracefulShutdownHandler {
   }
 
   /**
+   * Runs `fn` but gives up after `timeoutMs`, logging a warning instead of
+   * letting a hung cleanup step (e.g. a BullMQ job that never settles)
+   * block the rest of the shutdown sequence indefinitely.
+   */
+  private async runCleanupWithTimeout(
+    fn: () => void | Promise<void>,
+    timeoutMs: number,
+  ): Promise<void> {
+    let timedOut = false;
+
+    const timeoutPromise = new Promise<void>((resolve) => {
+      setTimeout(() => {
+        timedOut = true;
+        resolve();
+      }, timeoutMs).unref?.();
+    });
+
+    await Promise.race([Promise.resolve(fn()), timeoutPromise]);
+
+    if (timedOut) {
+      logger.warn(
+        `[Shutdown] Cleanup did not complete within ${timeoutMs}ms; continuing shutdown anyway (in-flight jobs may be interrupted)`,
+      );
+    }
+  }
+
+  /**
    * Executes the graceful shutdown sequence.
    */
   public async shutdown(signal: NodeJS.Signals | string = "SIGTERM"): Promise<void> {
@@ -247,9 +289,11 @@ export class GracefulShutdownHandler {
         logger.info("[Shutdown] HTTP listener closed");
       }
 
-      // 3. Custom cleanup (queue drainage, heartbeat, etc.)
+      // 3. Custom cleanup (queue drainage, heartbeat, etc.) — bounded so a
+      //    single hung in-flight job can't block the rest of shutdown
+      //    (DB pool / Redis close, process exit) forever.
       if (this.onCleanup) {
-        await this.onCleanup();
+        await this.runCleanupWithTimeout(this.onCleanup, this.onCleanupTimeoutMs);
       }
 
       // 4. Close PostgreSQL pool

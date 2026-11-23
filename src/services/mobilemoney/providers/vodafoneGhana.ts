@@ -12,11 +12,10 @@
 //! prompt, which this adapter's `requestPayment` accepts as an optional
 //! third parameter.
 
-import type { AxiosInstance } from "axios";
-import { providerHttp } from "../../providerStatus";
+import { AxiosInstance } from "axios";
+import { createProviderHttpClient } from "./providerHttpClient";
 import { createHmac, timingSafeEqual } from "crypto";
-
-const http = providerHttp("vodafone-ghana");
+import { attachTelcoTracingInterceptor } from "../../../utils/telcoTracing";
 
 export type VodafoneGhanaTransactionStatus =
   "completed" | "failed" | "pending" | "unknown";
@@ -83,7 +82,7 @@ export class VodafoneGhanaProvider {
     this.callbackSecret = process.env.VODAFONE_GH_CALLBACK_SECRET || "";
     this.currency = process.env.VODAFONE_GH_CURRENCY || "GHS";
 
-    this.client = http.create({
+    this.client = createProviderHttpClient("vodafone_ghana", {
       baseURL:
         process.env.VODAFONE_GH_BASE_URL || "https://sandbox.vodafone.com.gh",
       timeout: Number(process.env.VODAFONE_GH_TIMEOUT_MS || 30000),
@@ -92,6 +91,7 @@ export class VodafoneGhanaProvider {
         "Content-Type": "application/json",
       },
     });
+    attachTelcoTracingInterceptor(this.client);
   }
 
   private buildBasicAuthHeader(): string {

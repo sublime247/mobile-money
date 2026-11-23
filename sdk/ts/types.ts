@@ -13,6 +13,19 @@ export interface ClientConfig {
   transport?: "fetch" | "axios";
   /** Optional custom headers */
   headers?: Record<string, string>;
+  /** Automatic retry behavior for idempotent requests (default: enabled, 3 retries) */
+  retry?: RetryOptions;
+}
+
+export interface RetryOptions {
+  /** Set to false to disable automatic retries entirely (default: true) */
+  enabled?: boolean;
+  /** Maximum number of retry attempts after the initial request (default: 3) */
+  maxRetries?: number;
+  /** Base delay in milliseconds for exponential backoff (default: 200) */
+  baseDelayMs?: number;
+  /** Maximum delay cap in milliseconds between retries (default: 5000) */
+  maxDelayMs?: number;
 }
 
 export interface AuthParams {
@@ -109,4 +122,41 @@ export interface TransactionStatusResult {
   startedAt?: string;
   completedAt?: string;
   message?: string;
+}
+
+export interface ListTransactionsParams {
+  /** Items requested per page (server clamps to 1-100, default: 20) */
+  limit?: number;
+  /** Stop after yielding this many items in total (default: no cap) */
+  maxItems?: number;
+  /** Start iterating from this cursor instead of the first page */
+  cursor?: string;
+  /** ISO 8601 date (YYYY-MM-DD), inclusive lower bound */
+  startDate?: string;
+  /** ISO 8601 date (YYYY-MM-DD), inclusive upper bound */
+  endDate?: string;
+  minAmount?: number;
+  maxAmount?: number;
+  provider?: string;
+  /** Tags to filter by (sent comma-separated) */
+  tags?: string[];
+}
+
+export interface TransactionListItem {
+  id: string;
+  [key: string]: unknown;
+}
+
+export interface TransactionListPagination {
+  limit?: number;
+  next_cursor?: string | null;
+  next_token?: string | null;
+  has_next?: boolean;
+  hasMore?: boolean;
+  offset?: number;
+}
+
+export interface TransactionListResponse {
+  data: TransactionListItem[];
+  pagination?: TransactionListPagination;
 }

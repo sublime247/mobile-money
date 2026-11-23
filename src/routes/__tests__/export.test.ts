@@ -1,6 +1,7 @@
 import express from "express";
 import request from "supertest";
 import { PassThrough, Readable } from "stream";
+import { generateKeyPairSync } from "crypto";
 
 jest.mock("../../middleware/auth", () => ({
   requireAuth: jest.fn((req, res, next) => {
@@ -179,6 +180,69 @@ describe("createExportRoutes", () => {
     });
   });
 
+  describe("signed exports", () => {
+    const originalSigningKey = process.env.ANCHOR_REPORT_SIGNING_KEY;
+
+    afterEach(() => {
+      if (originalSigningKey === undefined)
+        delete process.env.ANCHOR_REPORT_SIGNING_KEY;
+      else process.env.ANCHOR_REPORT_SIGNING_KEY = originalSigningKey;
+    });
+
+    it("returns a ZIP containing the streamed signed CSV export", async () => {
+      const { privateKey } = generateKeyPairSync("rsa", {
+        modulusLength: 2048,
+        privateKeyEncoding: { type: "pkcs8", format: "pem" },
+        publicKeyEncoding: { type: "spki", format: "pem" },
+      });
+      process.env.ANCHOR_REPORT_SIGNING_KEY = privateKey;
+      const { app, client } = buildApp([{ id: 3, status: "completed" }]);
+
+      const response = await request(app)
+        .get("/export?format=csv&signed=true")
+        .set("x-test-user-id", "user-1")
+        .buffer(true)
+        .parse((res, callback) => {
+          const chunks: Buffer[] = [];
+          res.on("data", (chunk: Buffer) => chunks.push(chunk));
+          res.on("end", () => callback(null, Buffer.concat(chunks)));
+        })
+        .expect(200);
+
+      expect(response.headers["content-type"]).toBe("application/zip");
+      expect((response.body as Buffer).subarray(0, 4).toString("hex")).toBe(
+        "504b0304",
+      );
+      expect(client.release).toHaveBeenCalled();
+    });
+
+    it("returns a ZIP containing the streamed signed PDF export", async () => {
+      const { privateKey } = generateKeyPairSync("rsa", {
+        modulusLength: 2048,
+        privateKeyEncoding: { type: "pkcs8", format: "pem" },
+        publicKeyEncoding: { type: "spki", format: "pem" },
+      });
+      process.env.ANCHOR_REPORT_SIGNING_KEY = privateKey;
+      const { app } = buildApp([{ id: 4, status: "completed" }]);
+
+      const response = await request(app)
+        .get("/export?format=pdf&signed=true")
+        .set("x-test-user-id", "user-1")
+        .buffer(true)
+        .parse((res, callback) => {
+          const chunks: Buffer[] = [];
+          res.on("data", (chunk: Buffer) => chunks.push(chunk));
+          res.on("end", () => callback(null, Buffer.concat(chunks)));
+        })
+        .expect(200);
+
+      expect(response.headers["content-type"]).toBe("application/zip");
+      expect((response.body as Buffer).subarray(0, 4).toString("hex")).toBe(
+        "504b0304",
+      );
+    });
+  });
+
   describe("large exports do not exhaust memory (#1794)", () => {
     /**
      * Builds an app whose "database" row source is a lazily-generated
@@ -211,7 +275,9 @@ describe("createExportRoutes", () => {
 
       const client = {
         release: jest.fn(),
-        query: jest.fn(() => Readable.from(generateRows(), { objectMode: true })),
+        query: jest.fn(() =>
+          Readable.from(generateRows(), { objectMode: true }),
+        ),
       };
       const db = { connect: jest.fn().mockResolvedValue(client) };
 

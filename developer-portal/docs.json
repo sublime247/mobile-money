@@ -22,6 +22,18 @@
     "name": "Get API Key",
     "url": "/quickstart"
   },
+  "api": {
+    "baseUrl": [
+      "https://api.mobilemoney.dev/v1",
+      "https://sandbox-api.mobilemoney.dev/v1"
+    ],
+    "auth": {
+      "method": "bearer"
+    },
+    "playground": {
+      "display": "interactive"
+    }
+  },
   "navigation": {
     "tabs": [
       {

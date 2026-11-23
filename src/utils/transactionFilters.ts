@@ -9,6 +9,7 @@ export enum TransactionStatus {
   Failed = "failed",
   Cancelled = "cancelled",
   Review = "review",
+  PendingReview = "pending_review",
   Dispute = "dispute",
   Reversed = "reversed",
   ClawedBack = "clawed_back",

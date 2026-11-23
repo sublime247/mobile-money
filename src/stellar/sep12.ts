@@ -19,12 +19,20 @@ import { ERROR_CODES } from "../constants/errorCodes";
 import { createError } from "../middleware/errorHandler";
 import { UserModel } from "../models/users";
 import { CustomerDataMaskingService } from "../services/customerDataMaskingService";
-import { createDeleteCustomerHandler } from "../routes/sep12";
+import {
+  createDeleteCustomerHandler,
+  sep12DocumentUploadMiddleware,
+} from "../routes/sep12";
 import {
   kycSanitizeBody,
   sanitizeKycPayload,
   sanitizeKycString,
 } from "../validators/kycSanitizer";
+import {
+  CustomerService,
+  defaultCustomerService,
+  customerEvents,
+} from "../services/customerService";
 
 /**
  * SEP-12: KYC API
@@ -164,11 +172,13 @@ export class Sep12Service {
   private kycService: KYCService;
   private db: Pool;
   private userModel: UserModel;
+  public customerService: CustomerService;
 
-  constructor(db: Pool) {
+  constructor(db: Pool, customerService?: CustomerService) {
     this.db = db;
     this.kycService = new KYCService(db);
     this.userModel = new UserModel();
+    this.customerService = customerService || defaultCustomerService;
   }
 
   /**
@@ -749,56 +759,11 @@ export const createSep12Router = (db: Pool): Router => {
   router.put(
     "/customer",
     sep12Limiter,
-    (req: Request, res: Response, next: NextFunction) => {
-      upload.any()(req, res, (err: any) => {
-        if (err) {
-          return next(
-            createError(
-              ERROR_CODES.INVALID_INPUT,
-              err.message || "File upload failed",
-              { error: err.message || "File upload failed" },
-            ),
-          );
-        }
-        next();
-      });
-    },
+    sep12DocumentUploadMiddleware,
     kycSanitizeBody,
     async (req: Request, res: Response) => {
       try {
         const customerData = { ...req.body };
-
-        // Support multipart binary document uploads (#1943)
-        if (req.files && Array.isArray(req.files)) {
-          const path = await import("path");
-          const crypto = await import("crypto");
-          const { ALLOWED_MIME_TYPES, ALLOWED_EXTENSIONS } = await import("../middleware/upload.js");
-
-          for (const file of req.files as Express.Multer.File[]) {
-            const ext = path.extname(file.originalname).toLowerCase();
-            if (file.size > 10 * 1024 * 1024) {
-              throw createError(
-                ERROR_CODES.INVALID_INPUT,
-                "File size exceeds 10MB limit",
-                { error: "File size exceeds 10MB limit" },
-              );
-            }
-            if (!ALLOWED_MIME_TYPES.includes(file.mimetype) || !ALLOWED_EXTENSIONS.includes(ext)) {
-              throw createError(
-                ERROR_CODES.INVALID_INPUT,
-                `Invalid file format. Allowed: PDF, PNG, JPEG`,
-                { error: `Invalid file format. Allowed: PDF, PNG, JPEG` },
-              );
-            }
-
-            // Generate secure encrypted reference for stored document asset
-            const hash = crypto.createHash("sha256").update(file.buffer).digest("hex");
-            const base64Data = file.buffer.toString("base64");
-            const encryptedRef = `enc_doc_${hash.substring(0, 16)}:${base64Data}`;
-            customerData[file.fieldname] = encryptedRef;
-          }
-        }
-
         const customer = await sep12Service.putCustomer(customerData);
         res.json(customer);
       } catch (error: any) {
@@ -827,4 +792,5 @@ export const createSep12Router = (db: Pool): Router => {
   return router;
 };
 
+export { CustomerService, defaultCustomerService, customerEvents };
 export default createSep12Router;

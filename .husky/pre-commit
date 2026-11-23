@@ -1,1 +1,4 @@
+if command -v gitleaks >/dev/null 2>&1; then
+  gitleaks protect --staged --config .gitleaks.toml --redact --verbose || exit 1
+fi
 npx lint-staged

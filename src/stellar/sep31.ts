@@ -1,3 +1,9 @@
+import { UserModel } from "../models/users";
+import {
+  validateReceiverPhoneCountryMatch,
+  validateSenderKycApproved,
+  validateSep31KycFields,
+} from "../validators/sep31";
 import { ipReputationService } from "../services/ipReputation";
 import logger from "../utils/logger";
 import { Router, Request, Response } from "express";
@@ -61,7 +67,6 @@ function calculateFee(amount: number, options: FeeOptions = {}): FeeResult {
     },
   };
 }
-
 
 // --- SEP-31 Status State Machine ---
 // Valid statuses per SEP-31 spec
@@ -196,6 +201,90 @@ function isValidUUID(str: string): boolean {
   );
 }
 
+// --- Memo verification (#2369) ---
+//
+// Every registered SEP-31 transfer generates a unique memo (`generateMemo`
+// above) that the sender is instructed to attach to their on-chain payment.
+// `sep31MonitorJob.checkPaymentReceived` previously matched incoming
+// payments by amount alone ("memo check removed as memos are at transaction
+// level" — true for the *operation* record, but the Horizon transaction
+// record the operation belongs to does carry the memo). Matching by amount
+// only means an unrelated payment of the same size silently satisfies the
+// wrong pending transfer, and a payment with a missing/incorrect memo is
+// accepted instead of rejected and refunded.
+
+export interface StellarPaymentRecord {
+  /** The Stellar account that sent the payment (refund destination on mismatch). */
+  from: string;
+  amount: string;
+  assetCode: string;
+  assetIssuer?: string;
+  transactionHash: string;
+  memoType: string | null;
+  memo: string | null;
+}
+
+/**
+ * Compares the memo recorded against a SEP-31 transfer with the memo
+ * actually attached to the on-chain payment that otherwise matches it by
+ * destination/asset/amount. `expectedMemoType` is always "text" today (see
+ * `generateMemo`), but the comparison is defensive about absent/mismatched
+ * types so a hash-memo or memo-less payment is rejected rather than
+ * silently accepted.
+ */
+export function memoMatches(
+  payment: Pick<StellarPaymentRecord, "memo" | "memoType">,
+  expectedMemo: string,
+  expectedMemoType: string = "text",
+): boolean {
+  if (!payment.memo || !payment.memoType) return false;
+  if (payment.memoType !== expectedMemoType) return false;
+  return payment.memo === expectedMemo;
+}
+
+/**
+ * Finds the first payment to `destinationAccount` for `expectedAsset`/
+ * `expectedAmount` among `payments`, and reports whether its memo matches
+ * `expectedMemo`. Returns `null` when no payment of the right
+ * destination/asset/amount is found at all (nothing to validate yet — the
+ * sender simply hasn't paid), so callers can distinguish "not paid" from
+ * "paid with the wrong memo".
+ */
+export function matchPaymentByMemo(
+  payments: StellarPaymentRecord[],
+  params: {
+    expectedAmount: string;
+    expectedAssetCode: string;
+    expectedAssetIssuer?: string | null;
+    expectedMemo: string;
+    expectedMemoType?: string;
+  },
+): { payment: StellarPaymentRecord; memoValid: boolean } | null {
+  const expected = parseFloat(params.expectedAmount);
+
+  const candidate = payments.find((p) => {
+    const amount = parseFloat(p.amount);
+    const amountMatches = Math.abs(amount - expected) < 0.0000001;
+    const assetMatches =
+      p.assetCode === params.expectedAssetCode &&
+      (params.expectedAssetIssuer
+        ? p.assetIssuer === params.expectedAssetIssuer
+        : !p.assetIssuer);
+    return amountMatches && assetMatches;
+  });
+
+  if (!candidate) return null;
+
+  return {
+    payment: candidate,
+    memoValid: memoMatches(
+      candidate,
+      params.expectedMemo,
+      params.expectedMemoType ?? "text",
+    ),
+  };
+}
+
 // --- Routes ---
 
 /**
@@ -267,9 +356,13 @@ router.post(
     const ip = req.ip || req.connection.remoteAddress || "0.0.0.0";
     const risk = await ipReputationService.checkIP(ip);
     if (risk.isTorExitNode) {
-      throw createError(ERROR_CODES.UNAUTHORIZED, "High risk IP detected: Tor Exit Node", {
-        error: "High risk IP detected",
-      });
+      throw createError(
+        ERROR_CODES.UNAUTHORIZED,
+        "High risk IP detected: Tor Exit Node",
+        {
+          error: "High risk IP detected",
+        },
+      );
     }
 
     const {
@@ -375,13 +468,29 @@ router.post(
       );
     }
 
+    // Descriptive SEP-31 error for missing corridor fields (#2263): a
+    // cross-border transfer needs a destination country to route and
+    // validate against, same as receiver_id/sender_id above.
+    const destinationCountryCode =
+      req.body.country_code || req.body.destination_country;
+    if (!destinationCountryCode) {
+      throw createError(
+        ERROR_CODES.INVALID_INPUT,
+        "Missing required corridor field: destination_country (or country_code)",
+        {
+          error: "invalid_request",
+          message:
+            "Missing required corridor field: destination_country (or country_code)",
+        },
+      );
+    }
+
     // Strict KYC schema validation per country specifications (#1945)
-    const { validateSep31KycFields } = await import("../validators/sep31.js");
     const kycValidation = validateSep31KycFields(
       fields,
       finalSenderId,
       finalReceiverId,
-      req.body.country_code || req.body.destination_country,
+      destinationCountryCode,
     );
     if (!kycValidation.valid) {
       throw createError(
@@ -389,11 +498,53 @@ router.post(
         kycValidation.error || "Missing mandatory KYC compliance fields",
         {
           error: "invalid_request",
-          message: kycValidation.error || "Missing mandatory KYC compliance fields",
+          message:
+            kycValidation.error || "Missing mandatory KYC compliance fields",
           details: {
             missingSenderFields: kycValidation.missingSenderFields,
             missingReceiverFields: kycValidation.missingReceiverFields,
           },
+        },
+      );
+    }
+
+    // Receiver phone / destination country-code format validation (#2263)
+    const receiverMobileNumber =
+      txFields.receiver?.mobile_number ||
+      txFields.receiver_mobile_number ||
+      fields?.receiver?.mobile_number;
+    const phoneCountryValidation = validateReceiverPhoneCountryMatch(
+      receiverMobileNumber,
+      destinationCountryCode,
+    );
+    if (!phoneCountryValidation.valid) {
+      throw createError(
+        ERROR_CODES.INVALID_INPUT,
+        phoneCountryValidation.error ||
+          "Invalid receiver phone/country combination",
+        {
+          error: "invalid_request",
+          message:
+            phoneCountryValidation.error ||
+            "Invalid receiver phone/country combination",
+        },
+      );
+    }
+
+    // Sender SEP-12 KYC approval status (#2263)
+    const userModel = new UserModel();
+    const senderKycValidation = await validateSenderKycApproved(
+      finalSenderId,
+      (id) => userModel.findById(id),
+    );
+    if (!senderKycValidation.valid) {
+      throw createError(
+        ERROR_CODES.UNAUTHORIZED,
+        senderKycValidation.error || "Sender KYC status is not approved",
+        {
+          error: "invalid_request",
+          message:
+            senderKycValidation.error || "Sender KYC status is not approved",
         },
       );
     }
@@ -465,7 +616,8 @@ router.post(
             senderName: senderScreeningIdentifier,
             receiverName: receiverScreeningIdentifier,
             dailyVolumeUsd:
-              dailyVolumeUsd + (Number.isFinite(parsedAmount) ? parsedAmount : 0),
+              dailyVolumeUsd +
+              (Number.isFinite(parsedAmount) ? parsedAmount : 0),
           },
           { persistAudit: false },
         );

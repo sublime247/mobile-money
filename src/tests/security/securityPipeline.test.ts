@@ -9,6 +9,8 @@ import express from "express";
 import rateLimit from "express-rate-limit";
 import request from "supertest";
 import { execSync } from "child_process";
+import { buildCspDirectives } from "../../config/express";
+import { applySecurityMiddleware } from "../../config/express";
 
 jest.mock("child_process", () => ({
   execSync: jest.fn(),
@@ -50,6 +52,57 @@ describe("Security Scanning Tools & Pipeline Tests", () => {
         },
       }),
     );
+  });
+
+  it("applies the required Helmet security headers to application routes", async () => {
+    const app = express();
+    applySecurityMiddleware(app);
+    app.get("/headers-check", (_req, res) => res.sendStatus(200));
+
+    const response = await request(app).get("/headers-check").expect(200);
+
+    expect(response.headers["content-security-policy"]).toContain(
+      "frame-ancestors 'none'",
+    );
+    expect(response.headers["strict-transport-security"]).toContain("preload");
+    expect(response.headers["x-content-type-options"]).toBe("nosniff");
+    expect(response.headers["x-frame-options"]).toBe("DENY");
+  });
+
+  describe("CSP frame source configuration", () => {
+    const originalFrameSrc = process.env.CSP_FRAME_SRC;
+    const originalInteractiveUrl = process.env.SEP24_INTERACTIVE_URL;
+
+    afterEach(() => {
+      if (originalFrameSrc === undefined) delete process.env.CSP_FRAME_SRC;
+      else process.env.CSP_FRAME_SRC = originalFrameSrc;
+      if (originalInteractiveUrl === undefined)
+        delete process.env.SEP24_INTERACTIVE_URL;
+      else process.env.SEP24_INTERACTIVE_URL = originalInteractiveUrl;
+    });
+
+    it("allows exact configured SEP-24 and WebAuth origins", () => {
+      process.env.CSP_FRAME_SRC = "https://wallet.example.com";
+      process.env.SEP24_INTERACTIVE_URL = "https://anchor.example.com/sep24";
+
+      const directives = buildCspDirectives();
+
+      expect(directives.frameSrc).toEqual([
+        "'self'",
+        "https://wallet.example.com",
+        "https://api.mobilemoney.com",
+        "https://anchor.example.com",
+      ]);
+      expect(directives.frameAncestors).toEqual(["'none'"]);
+    });
+
+    it("rejects wildcard frame origins", () => {
+      process.env.CSP_FRAME_SRC = "https://*.example.com";
+
+      expect(() => buildCspDirectives()).toThrow(
+        "CSP frame sources must be exact origins",
+      );
+    });
   });
 
   describe("1. Security Scanner Tool Execution", () => {

@@ -1,5 +1,5 @@
-import type { AxiosInstance, AxiosRequestConfig, AxiosResponse } from "axios";
-import { providerHttp } from "../../providerStatus";
+import { AxiosInstance, AxiosRequestConfig, AxiosResponse } from "axios";
+import { createProviderHttpClient } from "./providerHttpClient";
 import { createHmac, randomUUID } from "crypto";
 import logger from "../../../utils/logger";
 import { maskPII } from "../../../utils/masking";
@@ -36,8 +36,7 @@ type OrangeGuineaResult = {
 };
 
 import { BaseProvider } from "../../providers/baseProvider";
-
-const http = providerHttp("orange-guinea");
+import { attachTelcoTracingInterceptor } from "../../../utils/telcoTracing";
 
 export class OrangeGuineaProvider extends BaseProvider {
   private readonly authPath: string;
@@ -79,11 +78,12 @@ export class OrangeGuineaProvider extends BaseProvider {
     this.callbackSecret = process.env.ORANGE_GUINEA_CALLBACK_SECRET ?? "";
     this.callbackSignatureHeader = process.env.ORANGE_GUINEA_CALLBACK_SIGNATURE_HEADER ?? "X-Oapi-Signature";
 
-    this.httpClient = http.create({
+    this.httpClient = createProviderHttpClient("orange_guinea", {
       baseURL: this.baseUrl,
       timeout: this.timeoutMs,
       validateStatus: () => true,
     });
+    attachTelcoTracingInterceptor(this.httpClient);
   }
 
   async requestPayment(

@@ -3,7 +3,8 @@
 #![allow(deprecated)]
 
 use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype, token, Address, Env, IntoVal, Symbol, Vec,
+    contract, contracterror, contractevent, contractimpl, contracttype, token, Address, Env,
+    IntoVal, Symbol, Vec,
 };
 
 // ── Error types ──────────────────────────────────────────────
@@ -19,6 +20,8 @@ pub enum RouterError {
     InvalidAmount = 5,
     DeadlineReached = 6,
     PoolNotFound = 7,
+    ContractPaused = 8,
+    NotEmergencyAdmin = 9,
 }
 
 // ── Liquidity Pool ────────────────────────────────────────────
@@ -55,6 +58,31 @@ pub struct RouterState {
 
 const ROUTER_STATE_KEY: &str = "ROUTER_STATE";
 
+// ── Emergency pause state ─────────────────────────────────────
+
+#[contracttype]
+#[derive(Clone)]
+pub struct PauseState {
+    pub paused: bool,
+    pub emergency_admin: Address,
+}
+
+const PAUSE_STATE_KEY: &str = "PAUSE_STATE";
+
+#[contractevent(topics = ["ContractPaused"])]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ContractPaused {
+    #[topic]
+    pub admin: Address,
+}
+
+#[contractevent(topics = ["ContractUnpaused"])]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ContractUnpaused {
+    #[topic]
+    pub admin: Address,
+}
+
 // ── Router Contract ───────────────────────────────────────────
 
 #[contract]
@@ -84,7 +112,104 @@ impl Router {
         };
 
         env.storage().instance().set(&ROUTER_STATE_KEY, &state);
+
+        // The owner is the initial emergency admin; it can be rotated with
+        // `set_emergency_admin`.
+        let pause_state = PauseState {
+            paused: false,
+            emergency_admin: owner,
+        };
+        env.storage().instance().set(&PAUSE_STATE_KEY, &pause_state);
         env.storage().instance().extend_ttl(1000, 10000);
+    }
+
+    // ── Emergency pause control ───────────────────────────────
+
+    /// Replace the emergency admin. Only the router owner may rotate it.
+    pub fn set_emergency_admin(env: Env, caller: Address, new_admin: Address) {
+        caller.require_auth();
+
+        let state: RouterState = env
+            .storage()
+            .instance()
+            .get(&ROUTER_STATE_KEY)
+            .expect("not initialized");
+        assert!(caller == state.owner, "only owner can set emergency admin");
+
+        let mut pause_state = Self::load_pause_state(&env);
+        pause_state.emergency_admin = new_admin;
+        env.storage().instance().set(&PAUSE_STATE_KEY, &pause_state);
+        env.storage().instance().extend_ttl(1000, 10000);
+    }
+
+    /// Pause all routing and swap execution. Restricted to the emergency admin.
+    pub fn pause(env: Env, caller: Address) -> Result<(), RouterError> {
+        caller.require_auth();
+
+        let mut pause_state = Self::load_pause_state(&env);
+        if caller != pause_state.emergency_admin {
+            return Err(RouterError::NotEmergencyAdmin);
+        }
+
+        pause_state.paused = true;
+        env.storage().instance().set(&PAUSE_STATE_KEY, &pause_state);
+        env.storage().instance().extend_ttl(1000, 10000);
+
+        ContractPaused { admin: caller }.publish(&env);
+        Ok(())
+    }
+
+    /// Resume routing and swap execution. Restricted to the emergency admin.
+    pub fn unpause(env: Env, caller: Address) -> Result<(), RouterError> {
+        caller.require_auth();
+
+        let mut pause_state = Self::load_pause_state(&env);
+        if caller != pause_state.emergency_admin {
+            return Err(RouterError::NotEmergencyAdmin);
+        }
+
+        pause_state.paused = false;
+        env.storage().instance().set(&PAUSE_STATE_KEY, &pause_state);
+        env.storage().instance().extend_ttl(1000, 10000);
+
+        ContractUnpaused { admin: caller }.publish(&env);
+        Ok(())
+    }
+
+    /// Returns true while the router is paused.
+    pub fn is_paused(env: Env) -> bool {
+        Self::load_pause_state(&env).paused
+    }
+
+    /// Returns the address allowed to pause/unpause the router.
+    pub fn get_emergency_admin(env: Env) -> Address {
+        Self::load_pause_state(&env).emergency_admin
+    }
+
+    fn load_pause_state(env: &Env) -> PauseState {
+        if let Some(pause_state) = env.storage().instance().get(&PAUSE_STATE_KEY) {
+            return pause_state;
+        }
+
+        // Upgrade compatibility: contracts initialized before pause control was
+        // added have no pause state. Default to unpaused with the router owner
+        // as the emergency admin.
+        let state: RouterState = env
+            .storage()
+            .instance()
+            .get(&ROUTER_STATE_KEY)
+            .expect("not initialized");
+        PauseState {
+            paused: false,
+            emergency_admin: state.owner,
+        }
+    }
+
+    fn ensure_not_paused(env: &Env) -> Result<(), RouterError> {
+        if Self::load_pause_state(env).paused {
+            return Err(RouterError::ContractPaused);
+        }
+        Ok(())
     }
 
     // ── add_pool ─────────────────────────────────────────────
@@ -157,6 +282,8 @@ impl Router {
         amount_in: i128,
         max_hops: u32,
     ) -> Result<Vec<Address>, RouterError> {
+        Self::ensure_not_paused(&env)?;
+
         soroban_sdk::assert_with_error!(&env, amount_in > 0, RouterError::InvalidAmount);
         soroban_sdk::assert_with_error!(&env, max_hops > 0, RouterError::RouteNotFound);
 
@@ -267,6 +394,7 @@ impl Router {
         deadline: u32,
     ) -> Result<i128, RouterError> {
         caller.require_auth();
+        Self::ensure_not_paused(&env)?;
 
         soroban_sdk::assert_with_error!(&env, amount_in > 0, RouterError::InvalidAmount);
         soroban_sdk::assert_with_error!(&env, min_amount_out > 0, RouterError::InvalidAmount);
@@ -744,3 +872,6 @@ mod tests {
         assert_eq!(pool.reserve(&other_asset), 0);
     }
 }
+
+#[cfg(test)]
+mod test;

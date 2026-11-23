@@ -24,10 +24,13 @@ import {
 } from "../models/merchantWebhook";
 import { MerchantWebhookService } from "../services/merchantWebhookService";
 import { validateWebhookUrl, SsrfBlockedError } from "../security/ssrf";
+import { verifyWebhookSignature } from "../utils/webhookSigner";
 
 const router = Router();
 const webhookModel = new MerchantWebhookModel();
 const webhookService = new MerchantWebhookService();
+
+export { verifyWebhookSignature };
 
 // All routes require authentication
 router.use(requireAuth);

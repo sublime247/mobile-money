@@ -1,0 +1,13 @@
+apiVersion: 1
+
+providers:
+  - name: "Mobile Money Observability Dashboards"
+    orgId: 1
+    folder: "Mobile Money"
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/definitions
+      foldersFromFilesStructure: true

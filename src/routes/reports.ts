@@ -3,6 +3,7 @@ import { Router, Request, Response } from "express";
 import { pool, queryRead } from "../config/database";
 import { redisClient } from "../config/redis";
 import { requireAuth, AuthRequest } from "../middleware/auth";
+import { requireFinanceAccess } from "../middleware/requireFinanceAccess";
 import { TimeoutPresets, haltOnTimedout } from "../middleware/timeout";
 import { amlService } from "../services/aml";
 
@@ -132,6 +133,7 @@ reportsRoutes.get(
   "/reconciliation",
   haltOnTimedout,
   requireAuth,
+  requireFinanceAccess,
   async (req: AuthRequest, res: Response) => {
     try {
       const {
@@ -378,6 +380,7 @@ reportsRoutes.get(
   "/aml",
   haltOnTimedout,
   requireAuth,
+  requireFinanceAccess,
   async (req: AuthRequest, res: Response) => {
     try {
       const startDateRaw =

@@ -50,7 +50,10 @@ function buildMetrics(reg: Registry = defaultRegister) {
       help: "RED: HTTP request duration with exemplars",
       labelNames: ["method", "route", "status_code"],
       buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10],
-      enableExemplars: false,
+      // Exemplars let Grafana jump from a latency spike to the exact trace.
+      // They are serialized only when the registry serves OpenMetrics
+      // (METRICS_OPENMETRICS=true); the Prometheus text format omits them.
+      enableExemplars: String(reg.contentType) === Registry.OPENMETRICS_CONTENT_TYPE,
       registers: [reg],
     });
 
@@ -77,6 +80,12 @@ export function tracingMetricsMiddleware(
   next: NextFunction,
 ): void {
   const start = process.hrtime.bigint();
+  // Capture the active trace while the HTTP span is still open; the span ends
+  // when the response finishes, which is the same tick as our `finish` hook.
+  const { trace_id, span_id } =
+    typeof getTraceIds === "function"
+      ? getTraceIds()
+      : { trace_id: "", span_id: "" };
 
   res.on("finish", () => {
     const durationSeconds = Number(process.hrtime.bigint() - start) / 1e9;
@@ -86,9 +95,6 @@ export function tracingMetricsMiddleware(
       (req.route?.path as string | undefined) ?? req.path ?? "unknown";
     const method = req.method;
     const statusCode = String(res.statusCode);
-    const { trace_id, span_id } = (typeof getTraceIds === "function"
-      ? getTraceIds()
-      : null) ?? { trace_id: "", span_id: "" };
 
     const labels = { method, route, status_code: statusCode };
     const { httpRequestsTotal, httpRequestErrorsTotal, httpRequestDuration } =
@@ -100,7 +106,15 @@ export function tracingMetricsMiddleware(
       httpRequestErrorsTotal.inc(labels);
     }
 
-    httpRequestDuration.observe(labels, durationSeconds);
+    if (String(defaultRegister.contentType) === Registry.OPENMETRICS_CONTENT_TYPE) {
+      httpRequestDuration.observe({
+        labels,
+        value: durationSeconds,
+        exemplarLabels: trace_id ? { trace_id, span_id } : {},
+      });
+    } else {
+      httpRequestDuration.observe(labels, durationSeconds);
+    }
   });
 
   next();

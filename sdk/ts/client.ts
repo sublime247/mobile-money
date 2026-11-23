@@ -13,9 +13,47 @@ import type {
   DepositParams,
   DepositResult,
   TransactionStatusResult,
+  ListTransactionsParams,
+  TransactionListItem,
+  TransactionListResponse,
 } from "./types.ts";
 import { type Transport, FetchTransport } from "./transport.ts";
-import { AuthenticationError, ValidationError } from "./errors.ts";
+import {
+  MobileMoneyError,
+  BridgeError,
+  AuthenticationError,
+  InsufficientFundsError,
+  TelcoTimeoutError,
+  RateLimitError,
+  ValidationError,
+  NotFoundError,
+  parseApiError,
+} from "./errors.ts";
+
+export {
+  MobileMoneyError,
+  BridgeError,
+  AuthenticationError,
+  InsufficientFundsError,
+  TelcoTimeoutError,
+  RateLimitError,
+  ValidationError,
+  NotFoundError,
+  parseApiError,
+};
+
+/**
+ * API response error interceptor for custom HTTP clients or interceptor pipelines
+ */
+export function apiResponseInterceptor(response: {
+  status: number;
+  data?: unknown;
+  headers?: Record<string, string>;
+}): void {
+  if (response.status >= 400) {
+    throw parseApiError(response.status, response.data, response.headers);
+  }
+}
 
 export class StellarBridgeClient {
   private readonly baseUrl: string;
@@ -35,7 +73,7 @@ export class StellarBridgeClient {
     this.baseUrl = sanitizedUrl;
     this.jwtToken = config.jwtToken;
     this.timeoutMs = config.timeoutMs || 15000;
-    this.transport = new FetchTransport();
+    this.transport = new FetchTransport(config.retry);
     this.defaultHeaders = config.headers || {};
   }
 
@@ -275,5 +313,76 @@ export class StellarBridgeClient {
       id: response.data.id,
       status: response.data.status || "pending_user_transfer_start",
     };
+  }
+
+  /**
+   * Async iterator over transaction history that follows pagination
+   * automatically. Usage: `for await (const tx of client.listTransactions()) {}`
+   *
+   * Pages are fetched lazily as the previous page is exhausted, using the
+   * server's `next_cursor` (or `next_token`). If the server answers with
+   * offset-style pagination (no cursor), `offset` is advanced instead.
+   * Iteration ends when there are no more pages or `maxItems` is reached.
+   */
+  public async *listTransactions(
+    params: ListTransactionsParams = {},
+  ): AsyncGenerator<TransactionListItem, void, undefined> {
+    const { maxItems, limit } = params;
+    if (limit !== undefined && (!Number.isInteger(limit) || limit < 1)) {
+      throw new ValidationError("limit must be a positive integer");
+    }
+    if (maxItems !== undefined && (!Number.isInteger(maxItems) || maxItems < 0)) {
+      throw new ValidationError("maxItems must be a non-negative integer");
+    }
+
+    let cursor = params.cursor;
+    let offset = 0;
+    let yielded = 0;
+
+    while (maxItems === undefined || yielded < maxItems) {
+      // Don't over-fetch on the final page when a cap is set.
+      const remaining = maxItems === undefined ? undefined : maxItems - yielded;
+      const pageLimit =
+        limit === undefined
+          ? remaining === undefined ? undefined : Math.min(remaining, 20)
+          : remaining === undefined ? limit : Math.min(limit, remaining);
+
+      const response = await this.transport.request<TransactionListResponse>({
+        method: "GET",
+        url: `${this.baseUrl}/api/transactions`,
+        headers: this.getAuthHeaders(),
+        params: {
+          limit: pageLimit,
+          after: cursor,
+          offset: cursor || offset === 0 ? undefined : offset,
+          startDate: params.startDate,
+          endDate: params.endDate,
+          minAmount: params.minAmount,
+          maxAmount: params.maxAmount,
+          provider: params.provider,
+          tags: params.tags?.length ? params.tags.join(",") : undefined,
+        },
+        timeoutMs: this.timeoutMs,
+      });
+
+      const items = response.data?.data ?? [];
+      const page = response.data?.pagination ?? {};
+
+      for (const item of items) {
+        if (maxItems !== undefined && yielded >= maxItems) return;
+        yielded++;
+        yield item;
+      }
+
+      const nextCursor = page.next_cursor ?? page.next_token ?? undefined;
+      if (nextCursor && (page.has_next ?? true)) {
+        cursor = nextCursor;
+      } else if (!nextCursor && page.hasMore && items.length > 0) {
+        offset += items.length;
+        cursor = undefined;
+      } else {
+        return;
+      }
+    }
   }
 }

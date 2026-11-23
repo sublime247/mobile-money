@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import { Server } from "http";
-import { Request, Response } from "express";
+import { NextFunction, Request, Response } from "express";
 import express = require("express");
 import mockServerConfig from "../src/config/mockServer";
 import {
@@ -229,11 +229,65 @@ function getReferenceId(
   );
 }
 
+/**
+ * Runtime fault injection for any provider endpoint, independent of the
+ * per-provider business-logic `scenario` query/header/body field above.
+ *
+ * Request-level overrides (useful for exercising one specific request's
+ * retry/timeout handling in CI without affecting other concurrent calls):
+ *   X-Mock-Status: <http status>  — short-circuit with this status and a
+ *                                   generic JSON error body (e.g. 500, 503).
+ *   X-Mock-Delay: <milliseconds>  — delay before responding (or before
+ *                                   returning the injected status, if both
+ *                                   headers are set together).
+ *
+ * A "network drop" is simulated by destroying the underlying socket instead
+ * of sending a response, so SDK/client code sees a connection-reset error
+ * exactly as it would against a real flaky upstream.
+ */
+function faultInjectionMiddleware(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): void {
+  const delayMs = toDelayMs(req.header("x-mock-delay"));
+  const statusHeader = req.header("x-mock-status");
+  const forcedStatus = statusHeader
+    ? Number.parseInt(statusHeader, 10)
+    : null;
+
+  const respond = () => {
+    if (forcedStatus === 599) {
+      // Convention for "simulate a dropped connection", since no real HTTP
+      // status code means that - the socket is closed with no response.
+      req.socket.destroy();
+      return;
+    }
+
+    if (forcedStatus !== null && Number.isFinite(forcedStatus)) {
+      res.status(forcedStatus).json({
+        error: "mock_injected_fault",
+        message: `Fault injected via X-Mock-Status: ${forcedStatus}`,
+      });
+      return;
+    }
+
+    next();
+  };
+
+  if (delayMs && delayMs > 0) {
+    setTimeout(respond, delayMs);
+  } else {
+    respond();
+  }
+}
+
 export function createProviderMockApp() {
   const app = express();
   const transactions = new Map<string, StoredTransaction>();
 
   app.use(express.json());
+  app.use(faultInjectionMiddleware);
 
   const moovTestKeys = generateMoovTestKeyPair();
 

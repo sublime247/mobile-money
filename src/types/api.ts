@@ -1,5 +1,7 @@
 import { Transaction, TransactionStatus } from "../models/transaction";
 import { KYCLevel } from "../config/limits";
+import type { PoolStarvationState } from "../middleware/dbConnectionLeakDetector";
+import type { ReplicationLagReport } from "../services/databaseHealth";
 
 // ---------------------------------------------------------------------------
 // Transaction
@@ -176,6 +178,11 @@ export interface HealthCheckResponse {
   status: "ok";
   timestamp: string;
   gitHash?: string;
+  database?: {
+    pool: PoolStarvationState | null;
+    /** #2484: replication lag in milliseconds plus a 10s alert flag. */
+    replicationLag?: ReplicationLagReport;
+  };
 }
 
 export interface ReadinessCheckResponse {

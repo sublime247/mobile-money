@@ -42,6 +42,8 @@ export function validateServerEnvironment(): void {
   );
 }
 
+import { sanitizationMiddleware } from "../middleware/sanitization";
+
 /**
  * Configures core Express application settings, trust proxy, and body parsers.
  */
@@ -49,6 +51,7 @@ export function configureAppCore(app: Application): void {
   app.set("trust proxy", getSessionTrustProxy());
   app.use(express.json({ limit: "10mb" }));
   app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+  app.use(sanitizationMiddleware);
   app.use(compressionMiddleware);
 }
 

@@ -21,12 +21,14 @@
 
 use soroban_sdk::{
     contract, contracterror, contractevent, contractimpl, contracttype, symbol_short, token,
-    Address, Env, Map, Symbol,
+    xdr::ToXdr, Address, BytesN, Env, Map, Symbol, Vec,
 };
 
 const CONFIG: Symbol = symbol_short!("CONFIG");
 const REQUESTS: Symbol = symbol_short!("REQUESTS");
 const NEXT_ID: Symbol = symbol_short!("NEXT_ID");
+const GOVERNANCE: Symbol = symbol_short!("GOVERN");
+const CANCEL_VOTES: Symbol = symbol_short!("CANCEL_V");
 
 /// The mandatory delay between initiating and executing a withdrawal that
 /// meets or exceeds `min_timelock_amount`.
@@ -48,6 +50,12 @@ pub enum TimelockError {
     RequestAlreadyResolved = 5,
     /// `execute_withdrawal` was called before the 48-hour delay elapsed.
     TimelockNotExpired = 6,
+    /// The governance admin list or cancellation threshold was invalid.
+    InvalidGovernanceConfig = 7,
+    /// The caller is not one of the configured governance admins.
+    UnauthorizedGovernanceAdmin = 8,
+    /// This governance admin has already voted to cancel the operation.
+    AlreadyVoted = 9,
 }
 
 #[contracttype]
@@ -67,6 +75,21 @@ pub enum WithdrawalStatus {
     Pending,
     Executed,
     Cancelled,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, PartialEq)]
+pub struct GovernanceConfig {
+    pub admins: Vec<Address>,
+    pub cancellation_threshold: u32,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, PartialEq)]
+pub struct CancellationStatus {
+    pub request_id: u64,
+    pub approvals: Vec<Address>,
+    pub threshold: u32,
 }
 
 // ── Events ───────────────────────────────────────────────────────────────────
@@ -92,6 +115,27 @@ pub struct WithdrawalCancelled {
 pub struct WithdrawalExecuted {
     #[topic]
     pub request_id: u64,
+}
+
+#[contractevent(topics = ["timelock", "cancellation_vote_cast"])]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CancellationVoteCast {
+    #[topic]
+    pub request_id: u64,
+    #[topic]
+    pub admin: Address,
+    pub approvals: u32,
+    pub threshold: u32,
+}
+
+#[contractevent(topics = ["timelock", "operation_cancelled"])]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct OperationCancelled {
+    #[topic]
+    pub request_id: u64,
+    #[topic]
+    pub operation_hash: BytesN<32>,
+    pub approving_admins: Vec<Address>,
 }
 
 #[contracttype]
@@ -127,6 +171,8 @@ impl TimelockContract {
 
         admin.require_auth();
 
+        let mut governance_admins = Vec::new(&env);
+        governance_admins.push_back(admin.clone());
         env.storage().instance().set(
             &CONFIG,
             &TimelockConfig {
@@ -135,9 +181,19 @@ impl TimelockContract {
                 min_timelock_amount,
             },
         );
+        env.storage().instance().set(
+            &GOVERNANCE,
+            &GovernanceConfig {
+                admins: governance_admins,
+                cancellation_threshold: 1,
+            },
+        );
         env.storage()
             .instance()
             .set(&REQUESTS, &Map::<u64, WithdrawalRequest>::new(&env));
+        env.storage()
+            .instance()
+            .set(&CANCEL_VOTES, &Map::<u64, Vec<Address>>::new(&env));
         env.storage().instance().set(&NEXT_ID, &0u64);
         env.storage().instance().extend_ttl(1000, 10000);
 
@@ -192,31 +248,145 @@ impl TimelockContract {
         Ok(id)
     }
 
-    /// Cancel a pending withdrawal request before it executes. Admin-only.
-    /// This is the safety valve: if a request looks malicious (e.g. a
-    /// compromised admin key initiated it), a second admin action can stop
-    /// it any time before `executable_at`.
-    pub fn cancel_withdrawal(env: Env, request_id: u64) -> Result<(), TimelockError> {
+    /// Configure the governance admin set and the M-of-N threshold required
+    /// to cancel a pending operation. Admin-only.
+    pub fn configure_governance(
+        env: Env,
+        admins: Vec<Address>,
+        cancellation_threshold: u32,
+    ) -> Result<(), TimelockError> {
         let config = Self::get_config(&env)?;
         config.admin.require_auth();
 
+        if admins.is_empty() || cancellation_threshold == 0 {
+            return Err(TimelockError::InvalidGovernanceConfig);
+        }
+        if cancellation_threshold > admins.len() {
+            return Err(TimelockError::InvalidGovernanceConfig);
+        }
+        for i in 0..admins.len() {
+            let admin = admins.get(i).unwrap();
+            for j in (i + 1)..admins.len() {
+                if admin == admins.get(j).unwrap() {
+                    return Err(TimelockError::InvalidGovernanceConfig);
+                }
+            }
+        }
+
+        env.storage().instance().set(
+            &GOVERNANCE,
+            &GovernanceConfig {
+                admins,
+                cancellation_threshold,
+            },
+        );
+        env.storage()
+            .instance()
+            .set(&CANCEL_VOTES, &Map::<u64, Vec<Address>>::new(&env));
+        env.storage().instance().extend_ttl(1000, 10000);
+
+        Ok(())
+    }
+
+    /// Cast a governance admin's signed cancellation vote for a pending
+    /// operation. Returns the total approvals recorded so far; once the
+    /// configured threshold is reached the operation is cancelled atomically.
+    pub fn vote_cancel(env: Env, request_id: u64, admin: Address) -> Result<u32, TimelockError> {
+        let governance = Self::load_governance(&env)?;
+        if !governance.admins.iter().any(|a| a == admin) {
+            return Err(TimelockError::UnauthorizedGovernanceAdmin);
+        }
+        admin.require_auth();
+
         let mut requests = Self::get_requests(&env);
-        let mut request = requests
+        let request = requests
             .get(request_id)
             .ok_or(TimelockError::RequestNotFound)?;
-
         if request.status != WithdrawalStatus::Pending {
             return Err(TimelockError::RequestAlreadyResolved);
         }
 
-        request.status = WithdrawalStatus::Cancelled;
-        requests.set(request_id, request);
-        env.storage().instance().set(&REQUESTS, &requests);
-        env.storage().instance().extend_ttl(1000, 10000);
+        let mut votes = Self::get_cancel_votes(&env);
+        let mut approvals = votes.get(request_id).unwrap_or_else(|| Vec::new(&env));
+        if approvals.iter().any(|a| a == admin) {
+            return Err(TimelockError::AlreadyVoted);
+        }
+        approvals.push_back(admin.clone());
 
-        WithdrawalCancelled { request_id }.publish(&env);
+        let approval_count = approvals.len();
+        if approval_count >= governance.cancellation_threshold {
+            let operation_hash = Self::operation_hash(&env, &request);
+            let mut cancelled = request;
+            cancelled.status = WithdrawalStatus::Cancelled;
+            requests.set(request_id, cancelled);
+            env.storage().instance().set(&REQUESTS, &requests);
 
+            votes.remove(request_id);
+            env.storage().instance().set(&CANCEL_VOTES, &votes);
+            env.storage().instance().extend_ttl(1000, 10000);
+
+            WithdrawalCancelled { request_id }.publish(&env);
+            OperationCancelled {
+                request_id,
+                operation_hash,
+                approving_admins: approvals.clone(),
+            }
+            .publish(&env);
+        } else {
+            votes.set(request_id, approvals.clone());
+            env.storage().instance().set(&CANCEL_VOTES, &votes);
+            env.storage().instance().extend_ttl(1000, 10000);
+
+            CancellationVoteCast {
+                request_id,
+                admin,
+                approvals: approval_count,
+                threshold: governance.cancellation_threshold,
+            }
+            .publish(&env);
+        }
+
+        Ok(approval_count)
+    }
+
+    /// Submit a cancellation vote under the `cancel_operation` name. This is
+    /// the same thresholded flow as `vote_cancel`; the operation is cancelled
+    /// automatically as soon as the required number of admins have approved.
+    pub fn cancel_operation(
+        env: Env,
+        request_id: u64,
+        admin: Address,
+    ) -> Result<u32, TimelockError> {
+        Self::vote_cancel(env, request_id, admin)
+    }
+
+    /// Legacy single-admin cancellation entry point. It records the primary
+    /// admin's cancellation vote; with the default one-of-one governance
+    /// configuration this cancels immediately, while a multi-admin setup
+    /// requires the remaining approvals through `vote_cancel`.
+    pub fn cancel_withdrawal(env: Env, request_id: u64) -> Result<(), TimelockError> {
+        let config = Self::get_config(&env)?;
+        Self::vote_cancel(env, request_id, config.admin)?;
         Ok(())
+    }
+
+    pub fn get_governance(env: Env) -> Result<GovernanceConfig, TimelockError> {
+        Self::load_governance(&env)
+    }
+
+    pub fn get_cancellation_status(
+        env: Env,
+        request_id: u64,
+    ) -> Result<CancellationStatus, TimelockError> {
+        let governance = Self::load_governance(&env)?;
+        let approvals = Self::get_cancel_votes(&env)
+            .get(request_id)
+            .unwrap_or_else(|| Vec::new(&env));
+        Ok(CancellationStatus {
+            request_id,
+            approvals,
+            threshold: governance.cancellation_threshold,
+        })
     }
 
     /// Execute a pending withdrawal once its 48-hour delay has elapsed.
@@ -249,6 +419,10 @@ impl TimelockContract {
         request.status = WithdrawalStatus::Executed;
         requests.set(request_id, request);
         env.storage().instance().set(&REQUESTS, &requests);
+
+        let mut votes = Self::get_cancel_votes(&env);
+        votes.remove(request_id);
+        env.storage().instance().set(&CANCEL_VOTES, &votes);
         env.storage().instance().extend_ttl(1000, 10000);
 
         WithdrawalExecuted { request_id }.publish(&env);
@@ -303,11 +477,34 @@ impl TimelockContract {
             .ok_or(TimelockError::NotInitialized)
     }
 
+    fn load_governance(env: &Env) -> Result<GovernanceConfig, TimelockError> {
+        env.storage()
+            .instance()
+            .get(&GOVERNANCE)
+            .ok_or(TimelockError::NotInitialized)
+    }
+
     fn get_requests(env: &Env) -> Map<u64, WithdrawalRequest> {
         env.storage()
             .instance()
             .get(&REQUESTS)
             .unwrap_or_else(|| Map::new(env))
+    }
+
+    fn get_cancel_votes(env: &Env) -> Map<u64, Vec<Address>> {
+        env.storage()
+            .instance()
+            .get(&CANCEL_VOTES)
+            .unwrap_or_else(|| Map::new(env))
+    }
+
+    fn operation_hash(env: &Env, request: &WithdrawalRequest) -> BytesN<32> {
+        let mut bytes = request.id.to_xdr(env);
+        bytes.append(&request.recipient.clone().to_xdr(env));
+        bytes.append(&request.amount.to_xdr(env));
+        bytes.append(&request.requested_at.to_xdr(env));
+        bytes.append(&request.executable_at.to_xdr(env));
+        env.crypto().sha256(&bytes).into()
     }
 
     fn next_id(env: &Env) -> u64 {
@@ -322,7 +519,8 @@ mod test {
     extern crate std;
 
     use super::*;
-    use soroban_sdk::testutils::{Address as _, Ledger};
+    use soroban_sdk::testutils::{Address as _, Events as _, Ledger};
+    use soroban_sdk::Event;
 
     /// 7-decimal-place stroop units, matching this repo's other contracts'
     /// SAC test tokens.
@@ -547,5 +745,154 @@ mod test {
 
         let result = client.try_initialize(&admin, &token, &THRESHOLD);
         assert_eq!(result, Err(Ok(TimelockError::AlreadyInitialized)));
+    }
+
+    fn governance_setup(env: &Env) -> (TimelockContractClient<'_>, Address, Address, Address) {
+        let (client, admin1, _token) = setup(env);
+        let admin2 = Address::generate(env);
+        let admin3 = Address::generate(env);
+        let mut admins = Vec::new(env);
+        admins.push_back(admin1.clone());
+        admins.push_back(admin2.clone());
+        admins.push_back(admin3.clone());
+        client.configure_governance(&admins, &2u32);
+        (client, admin1, admin2, admin3)
+    }
+
+    #[test]
+    fn multi_admin_cancellation_requires_threshold_and_emits_operation_cancelled() {
+        let env = Env::default();
+        env.ledger().with_mut(|li| li.timestamp = 1_000);
+        let (client, admin1, admin2, _admin3) = governance_setup(&env);
+        let recipient = Address::generate(&env);
+
+        let id = client.initiate_withdrawal(&recipient, &ABOVE_THRESHOLD);
+        let request = client.get_request(&id);
+
+        assert_eq!(client.vote_cancel(&id, &admin1), 1);
+        assert_eq!(client.get_request(&id).status, WithdrawalStatus::Pending);
+
+        let status = client.get_cancellation_status(&id);
+        assert_eq!(status.threshold, 2);
+        assert_eq!(status.approvals.len(), 1);
+
+        assert_eq!(client.vote_cancel(&id, &admin2), 2);
+
+        let mut approvals = Vec::new(&env);
+        approvals.push_back(admin1);
+        approvals.push_back(admin2);
+        let expected = OperationCancelled {
+            request_id: id,
+            operation_hash: TimelockContract::operation_hash(&env, &request),
+            approving_admins: approvals,
+        };
+        let emitted = env.events().all().filter_by_contract(&client.address);
+        assert_eq!(
+            emitted.events().last(),
+            Some(&expected.to_xdr(&env, &client.address))
+        );
+
+        assert_eq!(client.get_request(&id).status, WithdrawalStatus::Cancelled);
+        assert_eq!(client.get_cancellation_status(&id).approvals.len(), 0);
+
+        env.ledger()
+            .with_mut(|li| li.timestamp = 1_000 + TIMELOCK_DURATION_SECONDS);
+        assert_eq!(
+            client.try_execute_withdrawal(&id),
+            Err(Ok(TimelockError::RequestAlreadyResolved))
+        );
+    }
+
+    #[test]
+    fn unauthorized_accounts_cannot_vote_or_cancel() {
+        let env = Env::default();
+        let (client, admin1, _admin2, _admin3) = governance_setup(&env);
+        let recipient = Address::generate(&env);
+        let id = client.initiate_withdrawal(&recipient, &ABOVE_THRESHOLD);
+        let outsider = Address::generate(&env);
+
+        assert_eq!(
+            client.try_vote_cancel(&id, &outsider),
+            Err(Ok(TimelockError::UnauthorizedGovernanceAdmin))
+        );
+        assert_eq!(
+            client.try_cancel_operation(&id, &outsider),
+            Err(Ok(TimelockError::UnauthorizedGovernanceAdmin))
+        );
+
+        // Even a real governance admin must supply their own authorization.
+        env.set_auths(&[]);
+        assert!(client.try_vote_cancel(&id, &admin1).is_err());
+        assert!(client.try_cancel_operation(&id, &admin1).is_err());
+    }
+
+    #[test]
+    fn governance_admin_cannot_vote_twice() {
+        let env = Env::default();
+        let (client, admin1, _admin2, _admin3) = governance_setup(&env);
+        let recipient = Address::generate(&env);
+        let id = client.initiate_withdrawal(&recipient, &ABOVE_THRESHOLD);
+
+        client.vote_cancel(&id, &admin1);
+
+        assert_eq!(
+            client.try_vote_cancel(&id, &admin1),
+            Err(Ok(TimelockError::AlreadyVoted))
+        );
+    }
+
+    #[test]
+    fn cancel_operation_alias_records_a_vote_without_cancelling_below_threshold() {
+        let env = Env::default();
+        env.ledger().with_mut(|li| li.timestamp = 1_000);
+        let (client, admin1, _admin2, _admin3) = governance_setup(&env);
+        let recipient = Address::generate(&env);
+        let id = client.initiate_withdrawal(&recipient, &ABOVE_THRESHOLD);
+
+        assert_eq!(client.cancel_operation(&id, &admin1), 1);
+        assert_eq!(client.get_request(&id).status, WithdrawalStatus::Pending);
+
+        env.ledger()
+            .with_mut(|li| li.timestamp = 1_000 + TIMELOCK_DURATION_SECONDS);
+        client.execute_withdrawal(&id);
+        assert_eq!(client.get_request(&id).status, WithdrawalStatus::Executed);
+    }
+
+    #[test]
+    fn configure_governance_rejects_invalid_thresholds_and_duplicates() {
+        let env = Env::default();
+        let (client, admin, _token) = setup(&env);
+
+        let empty = Vec::new(&env);
+        assert_eq!(
+            client.try_configure_governance(&empty, &1u32),
+            Err(Ok(TimelockError::InvalidGovernanceConfig))
+        );
+
+        let mut one_admin = Vec::new(&env);
+        one_admin.push_back(admin.clone());
+        assert_eq!(
+            client.try_configure_governance(&one_admin, &2u32),
+            Err(Ok(TimelockError::InvalidGovernanceConfig))
+        );
+
+        let mut duplicate = Vec::new(&env);
+        duplicate.push_back(admin.clone());
+        duplicate.push_back(admin);
+        assert_eq!(
+            client.try_configure_governance(&duplicate, &1u32),
+            Err(Ok(TimelockError::InvalidGovernanceConfig))
+        );
+    }
+
+    #[test]
+    fn configure_governance_requires_admin_auth() {
+        let env = Env::default();
+        let (client, admin, _token) = setup(&env);
+        let mut admins = Vec::new(&env);
+        admins.push_back(admin);
+
+        env.set_auths(&[]);
+        assert!(client.try_configure_governance(&admins, &1u32).is_err());
     }
 }

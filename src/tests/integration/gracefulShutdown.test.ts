@@ -196,4 +196,69 @@ describe("Graceful Shutdown Handler Integration Tests (#1991)", () => {
     expect(typeof unregister).toBe("function");
     expect(() => unregister()).not.toThrow();
   });
+
+  describe("bounded onCleanup for in-flight queue jobs (#2373)", () => {
+    it("waits for onCleanup (e.g. BullMQ worker.close()) to finish before closing DB/Redis", async () => {
+      let cleanupResolved = false;
+      const handler = createGracefulShutdownHandler({
+        pool: mockPool,
+        disconnectRedis: mockDisconnectRedis,
+        timeoutMs: 1000,
+        onCleanupTimeoutMs: 1000,
+        exitProcess: false,
+        onCleanup: async () => {
+          await new Promise((r) => setTimeout(r, 50));
+          cleanupResolved = true;
+        },
+      });
+
+      await handler.shutdown("SIGTERM");
+
+      expect(cleanupResolved).toBe(true);
+      expect(mockPool.end).toHaveBeenCalled();
+    });
+
+    it("force-continues shutdown after onCleanup exceeds its timeout, without blocking DB/Redis close forever", async () => {
+      const handler = createGracefulShutdownHandler({
+        pool: mockPool,
+        disconnectRedis: mockDisconnectRedis,
+        timeoutMs: 500,
+        onCleanupTimeoutMs: 100,
+        exitProcess: false,
+        onCleanup: () =>
+          // Simulates a worker.close() that never resolves because an
+          // in-flight job hung.
+          new Promise(() => {}),
+      });
+
+      const startedAt = Date.now();
+      await handler.shutdown("SIGTERM");
+      const elapsed = Date.now() - startedAt;
+
+      expect(elapsed).toBeLessThan(1000);
+      expect(mockPool.end).toHaveBeenCalled();
+      expect(mockDisconnectRedis).toHaveBeenCalled();
+    });
+
+    it("defaults onCleanupTimeoutMs to 30s (via QUEUE_SHUTDOWN_TIMEOUT_MS or the 30s fallback)", () => {
+      const originalEnv = process.env.QUEUE_SHUTDOWN_TIMEOUT_MS;
+      delete process.env.QUEUE_SHUTDOWN_TIMEOUT_MS;
+
+      const handler = createGracefulShutdownHandler({
+        pool: mockPool,
+        exitProcess: false,
+      });
+
+      // Internal field access to verify the default without waiting 30s —
+      // acceptable here since this is testing the constructor's default
+      // resolution, not shutdown behavior.
+      expect((handler as unknown as { onCleanupTimeoutMs: number }).onCleanupTimeoutMs).toBe(
+        30000,
+      );
+
+      if (originalEnv !== undefined) {
+        process.env.QUEUE_SHUTDOWN_TIMEOUT_MS = originalEnv;
+      }
+    });
+  });
 });

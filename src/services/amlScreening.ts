@@ -21,7 +21,10 @@ import { getPepCheckService } from "./compliance/pepCheck";
 
 export type AmlScreeningParty = "sender" | "receiver";
 export type AmlScreeningListType = "sanctions" | "pep";
-export type AmlScreeningStatus = "passed" | "pending_compliance_review";
+export type AmlScreeningStatus =
+  | "passed"
+  | "pending_compliance_review"
+  | "blocked_frozen";
 
 /** Status written to transaction metadata when screening flags a payment. */
 export const PENDING_COMPLIANCE_REVIEW = "pending_compliance_review" as const;
@@ -55,6 +58,8 @@ export interface AmlScreeningAuditRecord {
   matchedName: string;
   score: number;
   source: string;
+  /** Reference of the matched list entry (e.g. OFAC-456), when known. */
+  listReference?: string;
   dailyVolumeUsd: number;
   status: AmlScreeningStatus;
   createdAt: string;
@@ -83,6 +88,17 @@ export interface AmlScreeningResult {
   auditRecordIds: string[];
 }
 
+export type RecipientScreeningDecision = "clear" | "review" | "block";
+
+export interface RecipientScreeningResult {
+  decision: RecipientScreeningDecision;
+  matches: AmlScreeningMatch[];
+  /** Highest-scoring sanctions match, if any. */
+  topSanctionsMatch?: AmlScreeningMatch;
+  pepMatches: AmlScreeningMatch[];
+  auditRecordIds: string[];
+}
+
 export interface PepMatchRecord {
   record: {
     fullName: string;
@@ -104,6 +120,8 @@ export interface PepScreener {
 export interface AmlScreeningConfig {
   highVolumeThresholdUsd: number;
   matchThreshold: number;
+  /** Sanctions score at or above which a payout is blocked and frozen. */
+  blockThreshold: number;
   cacheExpiryMs: number;
 }
 
@@ -242,6 +260,9 @@ export class AmlScreeningService {
     this.config = {
       highVolumeThresholdUsd: config.highVolumeThresholdUsd ?? 1000,
       matchThreshold: config.matchThreshold ?? 0.85,
+      blockThreshold:
+        config.blockThreshold ??
+        (Number(process.env.SANCTIONS_BLOCK_THRESHOLD) || 0.95),
       cacheExpiryMs: config.cacheExpiryMs ?? 60 * 60 * 1000,
     };
     this.pepScreener = pepScreener ?? getPepCheckService();
@@ -476,6 +497,85 @@ export class AmlScreeningService {
   }
 
   /**
+   * Screens the recipient of a cash-out against sanctions (OFAC/UN/EU) and PEP
+   * lists before disbursement. Unlike {@link screenParties} this is not gated
+   * on volume: every withdrawal is screened.
+   *
+   * - sanctions score >= blockThreshold  -> "block" (freeze the transaction)
+   * - sanctions score >= matchThreshold  -> "review" (manual compliance review)
+   * - PEP matches only                   -> "clear", returned in `pepMatches`
+   *   so the caller can flag the account without stopping the payout
+   *
+   * Every match writes an audit entry carrying the score and list reference.
+   */
+  async screenRecipient(input: {
+    transactionId: string;
+    userId?: string;
+    recipientName: string;
+  }): Promise<RecipientScreeningResult> {
+    const sanctions = await this.screenNameAgainstSanctions(
+      input.recipientName,
+      "receiver",
+    );
+    const pepMatches = await this.screenNameAgainstPep(
+      input.recipientName,
+      "receiver",
+    );
+    const matches = [...sanctions, ...pepMatches].sort(
+      (a, b) => b.score - a.score,
+    );
+    const topSanctionsMatch = sanctions[0];
+
+    let decision: RecipientScreeningDecision = "clear";
+    if (topSanctionsMatch) {
+      decision =
+        topSanctionsMatch.score >= this.config.blockThreshold
+          ? "block"
+          : "review";
+    }
+
+    const auditRecordIds: string[] = [];
+    for (const match of matches) {
+      const isBlockingMatch =
+        decision === "block" && match === topSanctionsMatch;
+      const status: AmlScreeningStatus = isBlockingMatch
+        ? "blocked_frozen"
+        : match.listType === "sanctions"
+          ? PENDING_COMPLIANCE_REVIEW
+          : "passed";
+      const record = await this.recordScreeningAudit({
+        transactionId: input.transactionId,
+        userId: input.userId,
+        party: match.party,
+        listType: match.listType,
+        screenedName: match.screenedName,
+        matchedName: match.matchedName,
+        score: match.score,
+        source: match.source,
+        listReference: match.externalId,
+        dailyVolumeUsd: 0,
+        status,
+      });
+      auditRecordIds.push(record.id);
+    }
+
+    if (decision !== "clear") {
+      logger.warn(
+        {
+          transactionId: input.transactionId,
+          decision,
+          list: topSanctionsMatch?.source,
+          reference: topSanctionsMatch?.externalId,
+          score: topSanctionsMatch?.score,
+        },
+        "[AmlScreening] Withdrawal recipient matched sanctions list",
+      );
+    }
+
+    return { decision, matches, topSanctionsMatch, pepMatches, auditRecordIds };
+  }
+
+  /**
    * Convenience entry point for the SEP-31 pipeline: looks up the sender's
    * daily volume and screens the parties in one call.
    */
@@ -525,8 +625,8 @@ export class AmlScreeningService {
         `INSERT INTO aml_screening_audit (
             id, transaction_id, user_id, party, list_type, screened_name,
             matched_name, score, source, daily_volume_usd, status,
-            previous_hash, record_hash, created_at
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+            previous_hash, record_hash, created_at, list_reference
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
          ON CONFLICT (id) DO NOTHING`,
         [
           record.id,
@@ -543,6 +643,7 @@ export class AmlScreeningService {
           record.previousHash,
           record.recordHash,
           record.createdAt,
+          record.listReference ?? null,
         ],
       );
     } catch (error) {
@@ -583,6 +684,9 @@ export class AmlScreeningService {
       status: record.status,
       createdAt: record.createdAt,
       previousHash: record.previousHash,
+      // Only hashed when present so records written before this field existed
+      // keep verifying.
+      ...(record.listReference ? { listReference: record.listReference } : {}),
     });
     return crypto.createHash("sha256").update(canonical).digest("hex");
   }

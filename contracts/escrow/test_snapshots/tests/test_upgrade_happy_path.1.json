@@ -299,24 +299,6 @@
                         "map": [
                           {
                             "key": {
-                              "symbol": "admin_signers"
-                            },
-                            "val": {
-                              "vec": [
-                                {
-                                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARQG5"
-                                },
-                                {
-                                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAATYON"
-                                },
-                                {
-                                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5"
-                                }
-                              ]
-                            }
-                          },
-                          {
-                            "key": {
                               "symbol": "amount"
                             },
                             "val": {
@@ -381,18 +363,14 @@
                           },
                           {
                             "key": {
-                              "symbol": "released"
+                              "symbol": "status"
                             },
                             "val": {
-                              "bool": false
-                            }
-                          },
-                          {
-                            "key": {
-                              "symbol": "required_admin_signatures"
-                            },
-                            "val": {
-                              "u32": 2
+                              "vec": [
+                                {
+                                  "symbol": "Pending"
+                                }
+                              ]
                             }
                           },
                           {
@@ -401,6 +379,41 @@
                             },
                             "val": {
                               "address": "CACMVW2KK4H5FZDFF2AUCAKQTEJMZZWJUIZF23XMRVYQBSXYLHZ6BKWN"
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "ESC_ADM"
+                      },
+                      "val": {
+                        "map": [
+                          {
+                            "key": {
+                              "symbol": "admin_signers"
+                            },
+                            "val": {
+                              "vec": [
+                                {
+                                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARQG5"
+                                },
+                                {
+                                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAATYON"
+                                },
+                                {
+                                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5"
+                                }
+                              ]
+                            }
+                          },
+                          {
+                            "key": {
+                              "symbol": "required_admin_signatures"
+                            },
+                            "val": {
+                              "u32": 2
                             }
                           }
                         ]

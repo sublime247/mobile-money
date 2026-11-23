@@ -33,7 +33,7 @@ export const env = cleanEnv(process.env, {
   }),
   DB_MAX_CONNECTIONS: num({
     desc: "Maximum number of connections in each database pool",
-    default: 50,
+    default: 30,
   }),
   DB_POOL_MAX_USES: num({
     desc: "Maximum number of uses for a pool connection before it is closed and replaced (0 = unlimited)",
@@ -45,7 +45,7 @@ export const env = cleanEnv(process.env, {
   }),
   DB_POOL_IDLE_TIMEOUT_MS: num({
     desc: "Idle timeout in milliseconds for primary pool connections",
-    default: 15000,
+    default: 30000,
   }),
   DB_POOL_CONNECTION_TIMEOUT_MS: num({
     desc: "Connection timeout in milliseconds for primary pool connections",

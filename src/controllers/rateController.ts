@@ -7,6 +7,8 @@ import { Request, Response } from "express";
 import { z } from "zod";
 import {
   currencyService,
+  AIRTEL_FEE_TIERS,
+  calculateAirtelFee,
   SupportedCurrency,
 } from "../services/currency";
 import logger from "../utils/logger";
@@ -55,6 +57,19 @@ export class RateController {
       });
     }
   };
+  calculateAirtelFeeQuote = (req: Request, res: Response): void => {
+    const parsed = z.object({ amount: z.number().nonnegative() }).safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: "A non-negative amount is required" });
+      return;
+    }
+    res.json({ success: true, data: calculateAirtelFee(parsed.data.amount) });
+  };
+
+  getAirtelFeeTiers = (_req: Request, res: Response): void => {
+    res.json({ success: true, data: { tiers: AIRTEL_FEE_TIERS } });
+  };
+
 }
 
 export const rateController = new RateController();

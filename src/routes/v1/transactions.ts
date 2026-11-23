@@ -14,9 +14,11 @@ import {
   patchMetadataHandler,
   deleteMetadataKeysHandler,
   searchByMetadataHandler,
+  batchStatusHandler,
 } from "../../controllers/transactionController";
 import { validateNetworkMiddleware } from "../../middleware/validateNetworkMiddleware";
 import { TimeoutPresets, haltOnTimedout } from "../../middleware/timeout";
+import { RequestTimeoutPresets } from "../../middleware/requestTimeout";
 import { validateTransactionFilters } from "../../utils/transactionFilters";
 import { requireAuth } from "../../middleware/auth";
 import { checkAccountStatusStrict } from "../../middleware/checkAccountStatus";
@@ -24,6 +26,7 @@ import { geolocateMiddleware } from "../../middleware/geolocate";
 import { geoFencingMiddleware } from "../../middleware/geoFencing";
 import { createExportRoutes } from "../export";
 import { TransactionModel, TransactionStatus } from "../../models/transaction";
+import { getReceiptJsonHandler } from "../../controllers/receiptController";
 import { generateTransactionPdfBuffer } from "../../services/pdfReceipt";
 import { validate2FAForWithdrawal } from "../../services/twoFactorWithdrawalService";
 import { strictIdempotency } from "../../middleware/idempotency";
@@ -99,6 +102,15 @@ transactionRoutesV1.patch(
   reviewAmlAlertHandler,
 );
 
+// Bulk transaction status lookup (up to 50 IDs per request)
+transactionRoutesV1.post(
+  "/batch-status",
+  requireAuth,
+  RequestTimeoutPresets.complexBatch,
+  setApiVersion("v1"),
+  batchStatusHandler,
+);
+
 // Get specific transaction
 transactionRoutesV1.get(
   "/:id",
@@ -106,6 +118,16 @@ transactionRoutesV1.get(
   haltOnTimedout,
   setApiVersion("v1"),
   getTransactionHandler,
+);
+
+// JSON receipt with itemised multi-currency fee breakdown
+transactionRoutesV1.get(
+  "/:id/receipt/json",
+  TimeoutPresets.quick,
+  haltOnTimedout,
+  requireAuth,
+  setApiVersion("v1"),
+  getReceiptJsonHandler,
 );
 
 transactionRoutesV1.get(

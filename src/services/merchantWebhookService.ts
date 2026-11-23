@@ -8,6 +8,8 @@ import { SAMPLE_WEBHOOK_PAYLOAD } from "../routes/webhooks";
 import { WebhookCacheInvalidation } from "./cacheAside";
 import { signWebhookPayload } from "../crypto/webhookSigning";
 import { validateWebhookUrl, SsrfBlockedError } from "../security/ssrf";
+import { createWebhookSignature } from "../utils/webhookSigner";
+import { context, propagation } from "@opentelemetry/api";
 
 const model = new MerchantWebhookModel();
 
@@ -79,6 +81,9 @@ async function deliver(
 
   const body = JSON.stringify(payload);
   const signature = signPayload(body, secret);
+  const momoHeaders = createWebhookSignature(body, secret);
+  const traceCarrier: Record<string, string> = {};
+  propagation.inject(context.active(), traceCarrier);
 
   try {
     const controller = new AbortController();
@@ -91,6 +96,8 @@ async function deliver(
         headers: {
           "Content-Type": "application/json",
           "X-Webhook-Signature": signature,
+          ...momoHeaders,
+          ...traceCarrier,
           "User-Agent": "MobileMoney-Webhook/1.0",
         },
         body,
@@ -144,14 +151,17 @@ export class MerchantWebhookService {
     this.fetchImpl = fetchImpl;
     this.maxAttempts = Math.max(
       1,
-      options.maxAttempts ?? Number(process.env.WEBHOOK_RETRY_MAX_ATTEMPTS ?? 3),
+      options.maxAttempts ??
+        Number(process.env.WEBHOOK_RETRY_MAX_ATTEMPTS ?? 3),
     );
     this.baseDelayMs = Math.max(
       0,
-      options.baseDelayMs ?? Number(process.env.WEBHOOK_RETRY_BASE_DELAY_MS ?? 500),
+      options.baseDelayMs ??
+        Number(process.env.WEBHOOK_RETRY_BASE_DELAY_MS ?? 500),
     );
     this.sleep =
-      options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+      options.sleep ??
+      ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
     this.logger = options.logger ?? console;
   }
 

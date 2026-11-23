@@ -1,0 +1,25 @@
+meta {
+  name: "Readiness Check"
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{base_url}}/ready
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+}
+
+tests {
+  test("service is ready", function() {
+    expect([200, 503]).to.include(res.getStatus());
+  });
+}
+
+docs {
+  Returns 503 while dependencies (database, redis) are still warming up.
+}

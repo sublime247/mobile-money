@@ -4,6 +4,10 @@ import { v4 as uuidv4 } from "uuid";
 import NodeCache from "node-cache";
 import { rateProvider } from "../services/sep38/rateProvider";
 import { sep38Service } from "../services/sep38Service";
+import {
+  createQuote as persistQuote,
+  getQuote as fetchPersistedQuote,
+} from "../services/sep38/quoteService";
 import { SUPPORTED_CURRENCIES } from "../services/currency";
 
 const router = Router();
@@ -310,16 +314,54 @@ router.post("/quote", async (req: Request, res: Response) => {
       }
     }
 
-    const quote = await sep38Service.createQuote({
+    // Priced via the indicative-pricing engine above (consistent with
+    // /prices and /price), then persisted through quoteService so the
+    // quote is durable (DB-backed, with a real expires_at/status lifecycle)
+    // and covered by the scheduled expireStaleQuotes() sweep job — rather
+    // than the Redis/in-memory-only store sep38Service.createQuote used,
+    // which never actually enforced expiration on referenced execution and
+    // had no persisted record once the Redis TTL silently evicted the key.
+    const priceDetails = await sep38Service.calculatePrice({
       sellAsset,
       buyAsset,
       sellAmount: sell_amount ? String(sell_amount) : undefined,
       buyAmount: buy_amount ? String(buy_amount) : undefined,
-      ttl: quoteTTL,
-      context: context as string | undefined,
     });
 
-    res.json(quote);
+    if (!priceDetails) {
+      res.status(422).json({
+        error: `No rate available for the pair ${sellAsset} / ${buyAsset}`,
+      });
+      return;
+    }
+
+    const persisted = await persistQuote({
+      sellAsset,
+      buyAsset,
+      price: priceDetails.price,
+      totalPrice: priceDetails.total_price,
+      sellAmount: priceDetails.sell_amount,
+      buyAmount: priceDetails.buy_amount,
+      feePercent: priceDetails.fee_percent,
+      feeFixed: priceDetails.fee_fixed,
+      status: "active",
+      ttlSeconds: quoteTTL,
+    });
+
+    res.json({
+      id: persisted.id,
+      expires_at: persisted.expiresAt.toISOString(),
+      total_price: persisted.totalPrice || persisted.price,
+      price: persisted.price,
+      sell_asset: persisted.sellAsset,
+      buy_asset: persisted.buyAsset,
+      sell_amount: persisted.sellAmount,
+      buy_amount: persisted.buyAmount,
+      fee_percent: persisted.feePercent,
+      fee_fixed: persisted.feeFixed,
+      created_at: persisted.createdAt.toISOString(),
+      status: persisted.status,
+    });
   } catch (err) {
     logger.error({ err }, "POST /sep38/quote failed");
     res.status(500).json({ error: "Internal server error" });
@@ -335,19 +377,34 @@ router.get("/quote/:id", async (req: Request, res: Response) => {
       return;
     }
 
-    const { quote, expired } = await sep38Service.getQuote(id);
-
-    if (expired) {
-      res.status(410).json({ error: "Quote has expired" });
-      return;
-    }
+    const quote = await fetchPersistedQuote(id);
 
     if (!quote) {
       res.status(404).json({ error: "Quote not found" });
       return;
     }
 
-    res.json(quote);
+    const isExpired =
+      quote.status === "expired" || new Date() >= new Date(quote.expiresAt);
+    if (isExpired) {
+      res.status(410).json({ error: "Quote has expired" });
+      return;
+    }
+
+    res.json({
+      id: quote.id,
+      expires_at: quote.expiresAt.toISOString(),
+      total_price: quote.totalPrice || quote.price,
+      price: quote.price,
+      sell_asset: quote.sellAsset,
+      buy_asset: quote.buyAsset,
+      sell_amount: quote.sellAmount,
+      buy_amount: quote.buyAmount,
+      fee_percent: quote.feePercent,
+      fee_fixed: quote.feeFixed,
+      created_at: quote.createdAt.toISOString(),
+      status: quote.status,
+    });
   } catch (err) {
     logger.error({ err }, "GET /sep38/quote/:id failed");
     res.status(500).json({ error: "Internal server error" });

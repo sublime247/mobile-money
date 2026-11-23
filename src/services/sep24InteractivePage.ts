@@ -1,3 +1,5 @@
+import { createHash } from "crypto";
+
 export const SEP24_INTERACTIVE_HTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -50,6 +52,13 @@ export const SEP24_INTERACTIVE_HTML = `<!DOCTYPE html>
         .feature-card p { color: #6b7280; font-size: 0.9rem; }
         .feature-card .icon { font-size: 1.75rem; margin-bottom: 0.75rem; }
 
+        .text-center { text-align: center; }
+        .calc-result-label { font-size: 0.85rem; color: #6b7280; }
+
+        .orange-qr-card { display: inline-block; background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 1.5rem; }
+        .orange-qr-amount { font-size: 1.25rem; font-weight: 700; margin-top: 0.75rem; }
+        .orange-qr-merchant { color: #6b7280; font-size: 0.9rem; }
+
         footer { text-align: center; padding: 2rem 0; color: #9ca3af; font-size: 0.85rem; border-top: 1px solid #e5e7eb; }
     </style>
 </head>
@@ -63,7 +72,7 @@ export const SEP24_INTERACTIVE_HTML = `<!DOCTYPE html>
     </section>
 
     <section class="section calculator-section">
-        <div class="container" style="text-align:center;">
+        <div class="container text-center">
             <h2 class="section-title">Fee Calculator</h2>
             <p class="section-subtitle">Estimate transaction fees before you initiate a transfer.</p>
             <div class="calc-grid">
@@ -86,7 +95,7 @@ export const SEP24_INTERACTIVE_HTML = `<!DOCTYPE html>
                     </select>
                 </div>
                 <div class="calc-result">
-                    <p style="font-size:0.85rem;color:#6b7280;">Estimated Fee</p>
+                    <p class="calc-result-label">Estimated Fee</p>
                     <p class="amount">2.50 USDC</p>
                 </div>
             </div>
@@ -121,7 +130,7 @@ export const SEP24_INTERACTIVE_HTML = `<!DOCTYPE html>
     </section>
 
     <section class="section integration-section">
-        <div class="container" style="text-align:center;">
+        <div class="container text-center">
             <h2 class="section-title">Integration Steps</h2>
             <p class="section-subtitle">Get up and running in four easy steps.</p>
             <div class="steps">
@@ -159,8 +168,8 @@ export const SEP24_INTERACTIVE_HTML = `<!DOCTYPE html>
 
     <section class="section features-section">
         <div class="container">
-            <h2 class="section-title" style="text-align:center;">Features</h2>
-            <p class="section-subtitle" style="text-align:center;">Why choose SEP-24 interactive flows.</p>
+            <h2 class="section-title text-center">Features</h2>
+            <p class="section-subtitle text-center">Why choose SEP-24 interactive flows.</p>
             <div class="features-grid">
                 <div class="feature-card">
                     <div class="icon">🔒</div>
@@ -215,6 +224,28 @@ export const SEP24_INTERACTIVE_HTML = `<!DOCTYPE html>
 </body>
 </html>`;
 
+function sha256Source(content: string): string {
+  return `'sha256-${createHash("sha256").update(content, "utf8").digest("base64")}'`;
+}
+
+function inlineBlockSources(tag: "script" | "style"): string[] {
+  const pattern = new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, "g");
+  return Array.from(SEP24_INTERACTIVE_HTML.matchAll(pattern), (match) =>
+    sha256Source(match[1]),
+  );
+}
+
+/**
+ * CSP hash sources for the inline `<script>` and `<style>` blocks above, so
+ * the interactive view can run under a strict policy without
+ * `'unsafe-inline'`. Computed from the template, so they stay in sync when
+ * the markup changes.
+ */
+export const SEP24_INTERACTIVE_CSP_HASHES = {
+  script: inlineBlockSources("script"),
+  style: inlineBlockSources("style"),
+};
+
 export interface Sep24InteractivePageOptions {
   /**
    * Pre-rendered HTML injected before `</body>`. Used to embed the Orange
@@ -240,4 +271,73 @@ export function renderSep24InteractivePage(
 
   if (!injection) return SEP24_INTERACTIVE_HTML;
   return SEP24_INTERACTIVE_HTML.replace("</body>", `${injection}\n</body>`);
+}
+
+// ============================================================================
+// Expired interactive session notice (#2264)
+// ============================================================================
+
+export interface Sep24ExpiredSessionPageOptions {
+  /** The expired transaction_id, shown for support/debugging purposes. */
+  transactionId: string;
+  /**
+   * URL the renewal button submits to (a POST endpoint that mints a fresh
+   * interactive session for the same deposit/withdrawal and redirects the
+   * user to it).
+   */
+  renewUrl: string;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/**
+ * Renders the page shown when a wallet (or user) opens an interactive
+ * deposit/withdrawal URL whose session has expired per the configurable
+ * `sep24.interactiveSessionExpiryMinutes` duration. Offers a renewal button
+ * that posts to `renewUrl` to mint a fresh session rather than leaving the
+ * user stuck on a dead link.
+ */
+export function renderSep24ExpiredSessionPage(
+  options: Sep24ExpiredSessionPageOptions,
+): string {
+  const transactionId = escapeHtml(options.transactionId);
+  const renewUrl = escapeHtml(options.renewUrl);
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Session Expired — Mobile Money</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #111827; background: #f9fafb; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+        .card { background: #fff; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); padding: 2.5rem; max-width: 420px; text-align: center; }
+        .icon { font-size: 2.5rem; margin-bottom: 1rem; }
+        h1 { font-size: 1.35rem; font-weight: 700; margin-bottom: 0.5rem; }
+        p { color: #6b7280; font-size: 0.95rem; margin-bottom: 1.5rem; }
+        .tx-id { font-family: monospace; font-size: 0.8rem; color: #9ca3af; margin-bottom: 1.5rem; word-break: break-all; }
+        button { background: #2563eb; color: #fff; border: none; border-radius: 8px; padding: 0.75rem 1.5rem; font-size: 0.95rem; font-weight: 600; cursor: pointer; width: 100%; }
+        button:hover { background: #1d4ed8; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="icon">&#9201;</div>
+        <h1>This session has expired</h1>
+        <p>The interactive deposit/withdrawal link you followed is no longer valid. Start a new session to continue.</p>
+        <div class="tx-id">Transaction: ${transactionId}</div>
+        <form method="POST" action="${renewUrl}">
+            <button type="submit">Renew session</button>
+        </form>
+    </div>
+</body>
+</html>`;
 }

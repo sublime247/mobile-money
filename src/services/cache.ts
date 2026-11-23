@@ -5,6 +5,7 @@ import {
   cacheMissesTotal,
   cacheHitRatio,
 } from "../utils/metrics";
+import { fxCacheRequestsTotal, fxCacheHitRatio } from "../monitoring/metrics";
 import { layeredCache } from "./layeredCache";
 
 export type CacheOptions = {
@@ -97,6 +98,102 @@ function updateHitRatio(route: string, hit: boolean) {
     console.warn("Cache: metrics update error", e);
   }
 }
+
+// Local counters to calculate the FX cache hit ratio
+let fxCacheHits = 0;
+let fxCacheMisses = 0;
+
+export function recordFxCacheHit(): void {
+  try {
+    fxCacheHits += 1;
+    fxCacheRequestsTotal.inc({ result: "hit" });
+    updateFxCacheHitRatio();
+  } catch (e) {
+    console.warn("FX Cache: metrics hit update error", e);
+  }
+}
+
+export function recordFxCacheMiss(): void {
+  try {
+    fxCacheMisses += 1;
+    fxCacheRequestsTotal.inc({ result: "miss" });
+    updateFxCacheHitRatio();
+  } catch (e) {
+    console.warn("FX Cache: metrics miss update error", e);
+  }
+}
+
+export function updateFxCacheHitRatio(): number {
+  const total = fxCacheHits + fxCacheMisses;
+  const ratio = total > 0 ? fxCacheHits / total : 0;
+  try {
+    fxCacheHitRatio.set(ratio);
+  } catch (e) {
+    console.warn("FX Cache: metrics ratio update error", e);
+  }
+  return ratio;
+}
+
+export function getFxCacheHitRatio(): number {
+  const total = fxCacheHits + fxCacheMisses;
+  return total > 0 ? fxCacheHits / total : 0;
+}
+
+export function resetFxCacheMetrics(): void {
+  fxCacheHits = 0;
+  fxCacheMisses = 0;
+  try {
+    fxCacheHitRatio.set(0);
+  } catch {
+    // ignore
+  }
+}
+
+export interface FxExchangeRateCacheOptions {
+  ttlSeconds?: number;
+}
+
+export class FxExchangeRateCacheManager {
+  private readonly defaultTtl: number;
+
+  constructor(options: FxExchangeRateCacheOptions = {}) {
+    this.defaultTtl = options.ttlSeconds ?? 30;
+  }
+
+  async getRate(pair: string): Promise<string | null> {
+    const key = `fx:rate:${pair.toLowerCase()}`;
+    const cached = await getFromCache(key);
+    if (cached !== null && cached !== undefined) {
+      recordFxCacheHit();
+      return typeof cached === "string" ? cached : JSON.stringify(cached);
+    }
+    recordFxCacheMiss();
+    return null;
+  }
+
+  async setRate(
+    pair: string,
+    rate: string | number | Record<string, unknown>,
+    ttlSeconds = this.defaultTtl,
+  ): Promise<void> {
+    const key = `fx:rate:${pair.toLowerCase()}`;
+    await setToCache(key, ttlSeconds, rate);
+  }
+
+  recordHit(): void {
+    recordFxCacheHit();
+  }
+
+  recordMiss(): void {
+    recordFxCacheMiss();
+  }
+
+  getHitRatio(): number {
+    return getFxCacheHitRatio();
+  }
+}
+
+export const fxExchangeRateCacheManager = new FxExchangeRateCacheManager();
 
 export function Cache(opts?: CacheOptions) {
   return function (

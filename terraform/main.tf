@@ -98,6 +98,20 @@ resource "aws_dynamodb_table" "terraform_locks" {
   }
 }
 
+# ── 0b. S3 KYC Documents + Multi-Region Replication ───────────────────────
+module "s3" {
+  source = "./modules/s3"
+
+  providers = {
+    aws.replica = aws.replica
+  }
+
+  project             = var.project
+  environment         = var.environment
+  primary_bucket_name = var.kyc_s3_primary_bucket_name
+  replica_bucket_name = var.kyc_s3_replica_bucket_name
+}
+
 # ── 1. Networking ──────────────────────────────────────────────────────────
 module "vpc" {
   source = "./modules/vpc"

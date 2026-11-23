@@ -42,8 +42,17 @@ export interface ProviderRateLimit {
   };
 }
 
+/**
+ * Hard-coded fallback defaults, used only when a provider has no env-var
+ * override (see `getTelecomProviderLimits` below, #2277). `max`/`duration`
+ * become BullMQ's own `Worker.limiter` option 1:1 on the provider's
+ * dedicated rate-limited queue (see src/queue/providerRateLimitedQueues.ts),
+ * so a job that would exceed the limit is automatically delayed by BullMQ
+ * itself rather than failed.
+ */
 export const telecomProviderLimits: Record<string, ProviderRateLimit> = {
-  MTN: { concurrency: 10, limiter: { max: 50, duration: 1000 } },
+  MTN: { concurrency: 10, limiter: { max: 10, duration: 1000 } },
+  ORANGE: { concurrency: 5, limiter: { max: 5, duration: 1000 } },
   AIRTEL: { concurrency: 5, limiter: { max: 20, duration: 1000 } },
   VODAFONE: { concurrency: 8, limiter: { max: 30, duration: 1000 } },
   // Safe default fallback boundary
@@ -51,11 +60,38 @@ export const telecomProviderLimits: Record<string, ProviderRateLimit> = {
 };
 
 /**
- * Dynamically resolves rate limits matching a telecom provider's speed capabilities.
+ * Per-provider env var overrides for the BullMQ rate limit applied to that
+ * provider's dedicated queue (#2277). `<PROVIDER>_RATE_LIMIT_MAX_PER_SEC`
+ * sets `limiter.max` with `limiter.duration` fixed at 1000ms, e.g.
+ * `MTN_RATE_LIMIT_MAX_PER_SEC=10` or `ORANGE_RATE_LIMIT_MAX_PER_SEC=5`.
+ * See `.env.example` for the full documented list.
+ */
+function envRateLimitMaxPerSec(provider: string): number | null {
+  const raw = process.env[`${provider}_RATE_LIMIT_MAX_PER_SEC`];
+  if (!raw) return null;
+  const n = parseInt(raw, 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/**
+ * Dynamically resolves rate limits matching a telecom provider's speed
+ * capabilities. Resolution order (first match wins):
+ *   1. `<PROVIDER>_RATE_LIMIT_MAX_PER_SEC` env var (limiter.max only;
+ *      duration is fixed at 1000ms and concurrency keeps the static default)
+ *   2. The static `telecomProviderLimits` table above
+ *   3. `telecomProviderLimits.DEFAULT`
  */
 export function getTelecomProviderLimits(provider?: string): ProviderRateLimit {
   const activeProvider = (provider || process.env.TELECOM_PROVIDER || "DEFAULT").toUpperCase();
-  return telecomProviderLimits[activeProvider] || telecomProviderLimits.DEFAULT;
+  const base = telecomProviderLimits[activeProvider] || telecomProviderLimits.DEFAULT;
+
+  const envMax = envRateLimitMaxPerSec(activeProvider);
+  if (envMax === null) return base;
+
+  return {
+    ...base,
+    limiter: { max: envMax, duration: 1000 },
+  };
 }
 
 // ---------------------------------------------------------------------------

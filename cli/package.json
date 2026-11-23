@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "description": "Admin maintenance CLI for mobile-money",
   "bin": {
-    "momo-cli": "./dist/index.js"
+    "momo-cli": "./dist/index.js",
+    "mm": "./dist/index.js"
   },
   "scripts": {
     "build": "tsc",
@@ -11,6 +12,7 @@
     "test": "tsx --test src/**/*.test.ts"
   },
   "dependencies": {
+    "@stellar/stellar-sdk": "^17.0.1",
     "axios": "^1.6.2",
     "chalk": "^5.3.0",
     "cli-table3": "^0.6.3",

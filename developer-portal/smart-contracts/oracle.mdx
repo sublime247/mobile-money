@@ -1,6 +1,56 @@
 ---
-title: 'Oracle Contract'
-description: 'Multi-pool price oracle for exchange rate feeds'
+title: "Oracle Contract"
+description: "Multi-pool price oracle for exchange rate feeds"
 ---
 
 The Oracle contract securely brings off-chain fiat exchange rates onto the Stellar network.
+
+## Contract interface
+
+The contract keeps a list of registered liquidity pools per asset pair and
+reads a quote from each of them. The backend only calls the read-only
+functions:
+
+| Function                                                               | Returns                                                                                                                     |
+| ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `get_rate(asset_in, asset_out, amount_in)`                             | Best `amount_out` across the registered pools                                                                               |
+| `get_rate_with_spread(asset_in, asset_out, amount_in, max_spread_bps)` | Best `amount_out`, or `SpreadTooHigh` (error `#5`) when the best and worst pool quotes differ by more than `max_spread_bps` |
+| `validate_spread(asset_in, asset_out, amount_in, max_spread_bps)`      | `true` when the spread is within the limit                                                                                  |
+| `list_pools(asset_in, asset_out)`                                      | The registered pools for the pair                                                                                           |
+
+## Backend integration
+
+When enabled, the API reads local fiat rates from the oracle instead of the
+static rate table. The code lives in `src/services/oracle/`:
+
+- `oracleClient.ts` simulates `get_rate_with_spread` over Soroban RPC. It never
+  signs or submits a transaction.
+- `oracleRateProvider.ts` turns quotes into rates, caches them, and validates
+  them. `CurrencyService` calls it when it refreshes rates.
+
+A rate is used only if it passes two checks:
+
+1. The contract accepts the quote, meaning its pools agree within
+   `ORACLE_MAX_SPREAD_BPS`.
+2. Selling the proceeds straight back returns no more than the amount sold
+   (plus 1 bp of rounding) and no less than the sold amount minus
+   `ORACLE_MAX_SPREAD_BPS`. A round trip that profits is an arbitrage; one that
+   loses too much is a stale or manipulated quote.
+
+If the oracle is disabled, unreachable, or rejects a currency, that currency
+keeps its rate from the static fallback table, so a failing oracle never blocks
+conversions.
+
+| Variable                | Purpose                                                                                                                                        | Default                                            |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| `ORACLE_RATES_ENABLED`  | Set to `true` to use the oracle                                                                                                                | off                                                |
+| `ORACLE_CONTRACT_ID`    | Oracle contract id (required when enabled)                                                                                                     | none                                               |
+| `ORACLE_ASSET_MAP`      | JSON map of currency code to asset contract address, for example `{"USD":"C...","NGN":"C..."}` (required when enabled, and must include `USD`) | none                                               |
+| `ORACLE_RPC_URL`        | Soroban RPC URL                                                                                                                                | public testnet RPC on testnet, required on mainnet |
+| `ORACLE_QUOTE_AMOUNT`   | `amount_in` used for quotes, in base units                                                                                                     | `10000000`                                         |
+| `ORACLE_MAX_SPREAD_BPS` | Largest tolerated spread in basis points                                                                                                       | `100`                                              |
+| `ORACLE_CACHE_TTL_MS`   | How long a rate is reused                                                                                                                      | `60000`                                            |
+| `ORACLE_TIMEOUT_MS`     | Timeout for each RPC request                                                                                                                   | `5000`                                             |
+
+Quotes are ratios of base units, so every mapped asset must use the same number
+of decimals (7 for Stellar asset contracts).

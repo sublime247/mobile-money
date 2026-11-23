@@ -41,4 +41,23 @@ router.post(
   },
 );
 
+router.post(
+  "/b2b/callback",
+  validateRequest(vodafoneGhanaCallbackSchema),
+  async (req: Request, res: Response) => {
+    const parsed = VodafoneGhanaProvider.parseCallback(req.body);
+
+    logger.info(
+      {
+        transactionId: parsed.transactionId,
+        status: parsed.status,
+        voucherCode: parsed.voucherCode,
+      },
+      "VodafoneGhana: B2B callback received",
+    );
+
+    res.status(200).json({ status: "accepted" });
+  },
+);
+
 export default router;

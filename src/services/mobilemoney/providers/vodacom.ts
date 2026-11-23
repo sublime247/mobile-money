@@ -1,12 +1,11 @@
-import type { AxiosInstance } from "axios";
-import { providerHttp } from "../../providerStatus";
+import { AxiosInstance } from "axios";
+import { createProviderHttpClient } from "./providerHttpClient";
 import crypto from "crypto";
 import logger from "../../../utils/logger";
 import { maskPII } from "../../../utils/masking";
 import { resolveVodacomError } from "./errors/vodacomErrorMatrix";
 import { attachCorrelationIdInterceptor } from "../../../utils/correlationIdInterceptor";
-
-const http = providerHttp("vodacom");
+import { attachTelcoTracingInterceptor } from "../../../utils/telcoTracing";
 
 function encrypt(data: string, publicKeyPem: string): string {
   if (!publicKeyPem) {
@@ -51,7 +50,7 @@ export class VodacomProvider {
     this.market = process.env.VODACOM_MARKET || "vodacomTZN";
     this.currency = process.env.VODACOM_CURRENCY || "TZS";
 
-    this.client = http.create({
+    this.client = createProviderHttpClient("vodacom", {
       baseURL: this.baseUrl,
       timeout: 10000,
       headers: {
@@ -61,6 +60,7 @@ export class VodacomProvider {
       },
     });
     attachCorrelationIdInterceptor(this.client);
+    attachTelcoTracingInterceptor(this.client);
   }
 
   private async getAccessToken(): Promise<string> {

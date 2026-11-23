@@ -27,10 +27,13 @@ import {
   bulkRoutesV1,
   disputeRoutesV1,
   statsRoutesV1,
+  accountingRoutesV1,
   transactionDisputeRoutesV1,
   transactionRoutesV1,
   vaultRoutesV1,
+  institutionalRoutesV1,
 } from "./routes/v1";
+import { quotesRouter } from "./routes/quotes";
 import { transactionRoutes } from "./routes/transactions";
 import { initializeEscrowEventProcessing } from "./services/stellar/stellarService";
 import { authRoutes } from "./routes/auth";
@@ -39,6 +42,7 @@ import { transactionDisputeRoutes, disputeRoutes } from "./routes/disputes";
 import { statsRoutes } from "./routes/stats";
 import { contactsRoutes } from "./routes/contacts";
 import { reportsRoutes } from "./routes/reports";
+import { requireFinanceAccess } from "./middleware/requireFinanceAccess";
 import feesRoutes from "./routes/fees";
 import deepHealthRoutes from "./routes/health";
 import { docsRouter } from "./routes/docs";
@@ -47,6 +51,7 @@ import { adminRoutes } from "./routes/admin";
 import kycTierUpgradeRoutes from "./routes/kycTierUpgradeRoutes";
 import { userRoutes } from "./routes/users";
 import { createError, errorHandler } from "./middleware/errorHandler";
+import { slidingRateLimiter } from "./middleware/slidingRateLimiter";
 import {
   connectRedis,
   disconnectRedis,
@@ -70,18 +75,34 @@ import { responseTime } from "./middleware/responseTime";
 import { requestId } from "./middleware/requestId";
 import { correlationIdMiddleware } from "./middleware/correlationId";
 import { readReplicaRoutingMiddleware } from "./middleware/readReplicaRouting";
-import { dbConnectionLeakDetector } from "./middleware/dbConnectionLeakDetector";
+import {
+  dbConnectionLeakDetector,
+  PoolStarvationMonitor,
+} from "./middleware/dbConnectionLeakDetector";
+import {
+  publicApiRateLimiter,
+  sepRateLimiter,
+} from "./middleware/rateLimitRedis";
+import {
+  merchantRateLimiter,
+  publicRateLimiter,
+} from "./middleware/rateLimiter";
+import merchantWebhookRouter from "./routes/merchantWebhooks";
 import { i18nMiddleware } from "./utils/i18n";
 import { metricsMiddleware } from "./middleware/metrics";
 import { tracingMetricsMiddleware } from "./middleware/tracingMetrics";
 import { validateStellarNetwork, logStellarNetwork } from "./config/stellar";
 import { sessionAnomalyLogger } from "./services/logger";
 import { HealthCheckResponse, ReadinessCheckResponse } from "./types/api";
+import { getReplicationLagReport } from "./services/databaseHealth";
 import { privacyRoutes } from "./routes/privacy";
 import { developerDashboardRoutes } from "./routes/developerDashboard";
 import { travelRuleRoutes } from "./routes/travelRule";
+import { complianceRoutes } from "./routes/compliance";
+import { makerCheckerRoutes } from "./routes/makerChecker";
 import mtnCallbacksRouter from "./routes/mtnCallbacks";
 import mpesaCallbacksRouter from "./routes/mpesaCallbacks";
+import waveWebhookRouter from "./providers/wave/waveWebhook";
 import { createMpesaC2BRouter } from "./providers/mpesa/c2b";
 import orangeMadagascarCallbacksRouter from "./routes/orangeMadagascarCallbacks";
 import orangeGuineaCallbacksRouter from "./routes/orangeGuineaCallbacks";
@@ -101,6 +122,7 @@ import tomlRouter from "./routes/toml";
 import feeStrategiesRouter from "./routes/feeStrategies";
 import { ipBlacklistMiddleware } from "./middleware/ipBlacklist";
 import { providerLogMaskingMiddleware } from "./middleware/providerLogMasking";
+import { sanitizationMiddleware } from "./middleware/sanitization";
 import crossChainRouter from "./routes/crossChain";
 import stellarRouter from "./routes/stellar";
 import reconciliationRoutes from "./routes/reconciliation";
@@ -119,6 +141,14 @@ import {
 } from "./services/heartbeatService";
 import { startStellarExporter } from "./services/stellarExporter";
 import { StellarService } from "./services/stellar/stellarService";
+import {
+  startStellarCollector,
+  stopStellarCollector,
+} from "./monitoring/stellarCollector";
+import {
+  startSyntheticProbeWorker,
+  stopSyntheticProbeWorker,
+} from "./workers/syntheticProbeWorker";
 
 // Sentry Middleware
 import { initSentry, sentryBreadcrumbMiddleware } from "./middleware/sentry";
@@ -126,7 +156,10 @@ import { WebSocketManager } from "./websocket";
 import { layeredCache } from "./services/layeredCache";
 import { ERROR_CODES } from "./constants/errorCodes";
 import { startApolloServer } from "./graphql/server";
-import { applySecurityMiddleware } from "./config/express";
+import {
+  applySecurityMiddleware,
+  interactiveSecurityMiddleware,
+} from "./config/express";
 import { createCorsMiddleware } from "./middleware/cors";
 
 dotenv.config();
@@ -157,6 +190,10 @@ const SHUTDOWN_TIMEOUT_MS = parseInt(
   process.env.SHUTDOWN_TIMEOUT_MS || "10000",
   10,
 );
+const QUEUE_SHUTDOWN_TIMEOUT_MS = parseInt(
+  process.env.QUEUE_SHUTDOWN_TIMEOUT_MS || "30000",
+  10,
+);
 
 let server: Server | null = null;
 
@@ -164,6 +201,7 @@ export const shutdownHandler = createGracefulShutdownHandler({
   pool,
   disconnectRedis,
   timeoutMs: SHUTDOWN_TIMEOUT_MS,
+  onCleanupTimeoutMs: QUEUE_SHUTDOWN_TIMEOUT_MS,
   onCleanup: async () => {
     console.log("[Shutdown] Draining queue resources");
     const { shutdownQueue } = await import("./queue/index.js");
@@ -173,6 +211,11 @@ export const shutdownHandler = createGracefulShutdownHandler({
     console.log("[Shutdown] Stopping heartbeat service");
     stopHeartbeatService();
     console.log("[Shutdown] Heartbeat service stopped");
+
+    const { currencyService } = await import("./services/currency.js");
+    currencyService.shutdown();
+    stopStellarCollector();
+    stopSyntheticProbeWorker();
   },
 });
 
@@ -189,6 +232,8 @@ app.use(tracingMetricsMiddleware);
 // Helmet, CORS, and related security headers are applied inside
 // applySecurityMiddleware() imported from "./config/express".
 applySecurityMiddleware(app);
+// Stricter, view-specific headers for server-rendered SEP-24 web views.
+app.use("/sep24/interactive", interactiveSecurityMiddleware);
 
 // Compression middleware
 if (process.env.COMPRESSION_ENABLED !== "false") {
@@ -209,6 +254,7 @@ app.use(
     extended: true,
   }),
 );
+app.use(sanitizationMiddleware);
 // app.use(rateLimitMiddleware);
 app.use(responseTime);
 app.use(requestId);
@@ -238,11 +284,23 @@ app.use(
 );
 app.use(sessionAnomalyLogger);
 
-app.get("/health", (_req: Request, res: Response) => {
+// Samples primary pool active/idle/waiting counts into Prometheus and alerts on
+// sustained starvation (#2293). The getter follows pool replacement on reconnect.
+const poolStarvationMonitor = new PoolStarvationMonitor(() => pool);
+
+app.get("/health", async (_req: Request, res: Response) => {
+  // #2484: cached replica snapshot only, so this liveness hot path performs no
+  // database round trip. Replication lag is reported in milliseconds along
+  // with an explicit alert flag for a replica more than 10s behind primary.
+  const replicationLag = await getReplicationLagReport();
   const body: HealthCheckResponse = {
     status: "ok",
     timestamp: new Date().toISOString(),
     gitHash: process.env.BUILD_HASH,
+    database: {
+      pool: poolStarvationMonitor.getState(),
+      replicationLag,
+    },
   };
   res.json(body);
 });
@@ -251,7 +309,7 @@ app.get("/health", (_req: Request, res: Response) => {
 // mobile money provider gateways) plus memory/uptime stats. See src/routes/health.ts.
 app.use(deepHealthRoutes);
 
-app.get("/api/live-rates", async (_req: Request, res: Response) => {
+app.get("/api/live-rates", publicApiRateLimiter, async (_req: Request, res: Response) => {
   try {
     const response = await axios.get("https://open.er-api.com/v6/latest/USD", {
       timeout: 5000,
@@ -390,7 +448,7 @@ app.get("/health/lb", async (req: Request, res: Response) => {
   res.status(healthy ? 200 : 503).json(responseData);
 });
 
-app.use("/.well-known/stellar.toml", tomlRouter);
+app.use("/.well-known/stellar.toml", publicApiRateLimiter, tomlRouter);
 app.use(express.static(path.join(process.cwd(), "public")));
 app.use(globalTimeout);
 app.use(haltOnTimedout);
@@ -406,8 +464,11 @@ app.use("/api/v1/transactions", transactionDisputeRoutesV1);
 app.use("/api/v1/transactions/bulk", bulkRoutesV1);
 app.use("/api/v1/disputes", disputeRoutesV1);
 app.use("/api/v1/stats", statsRoutesV1);
+app.use("/api/v1/accounting", accountingRoutesV1);
 app.use("/api/v1/vaults", vaultRoutesV1);
 app.use("/api/v1/compliance/travel-rule", travelRuleRoutes);
+app.use("/api/v1/compliance", complianceRoutes);
+app.use("/api/admin", makerCheckerRoutes);
 
 app.use(
   "/api/transactions",
@@ -434,6 +495,7 @@ app.use("/api/stats", statsRoutes);
 app.use("/api/contacts", contactsRoutes);
 app.use("/api/mtn", mtnCallbacksRouter);
 app.use("/api/mpesa", mpesaCallbacksRouter);
+app.use("/api/webhooks/wave", waveWebhookRouter);
 app.use("/api/mpesa/c2b", createMpesaC2BRouter());
 app.use("/api/orange-madagascar", orangeMadagascarCallbacksRouter);
 app.use("/api/orange-guinea", orangeGuineaCallbacksRouter);
@@ -444,6 +506,9 @@ app.use("/api/multisig", multisigCallbacksRouter);
 app.use("/api/admin", createCorsMiddleware());
 app.use("/api/admin/withdrawals", adminWithdrawalsRouter);
 app.use("/api/reports", reportsRoutes);
+app.use("/api/v1/reports", reportsRoutes);
+// Gate any financial export handler mounted under this prefix.
+app.use("/api/v1/export/financial", requireAuth, requireFinanceAccess);
 app.use("/api/fees", feesRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/kyc", createKYCRoutes(pool));
@@ -452,20 +517,26 @@ app.use("/api/cross-chain", crossChainRouter);
 app.use("/api/stellar", stellarRouter);
 app.use("/api/reconciliation", reconciliationRoutes);
 app.use("/api/exchange-rate-buffers", exchangeRateBufferRoutes);
+app.use("/api/rates", publicApiRateLimiter, slidingRateLimiter({
+  windowMs: 60 * 1000,
+  anonymousLimit: 60,
+  authenticatedLimit: 600,
+}));
 app.use("/api/admin/assets", adminAssetRoutes);
 app.use("/api/settings", settingsRoutes);
 app.use("/api/statements", statementsRoutes);
 app.use("/api/monitoring", adminControllerRouter);
-app.get("/", (_req: Request, res: Response) => {
+app.get("/", interactiveSecurityMiddleware, (_req: Request, res: Response) => {
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.send(SEP24_INTERACTIVE_HTML);
 });
 app.use("/", paymentLinkRoutes);
 
-// GDPR
+app.use("/api/merchant/webhooks", merchantRateLimiter, merchantWebhookRouter);
 app.use("/api/gdpr", privacyRoutes);
 app.use("/api/developer", developerDashboardRoutes);
 app.use("/api/admin", requireAuth, adminRoutes);
+app.use("/api/v1/admin", requireAuth, adminRoutes);
 app.use("/api/admin/providers/status", requireAuth, providerStatusRouter);
 app.use("/api/admin/kyc-upgrades", requireAuth, kycTierUpgradeRoutes);
 
@@ -474,14 +545,14 @@ if (process.env.NODE_ENV === "development" || process.env.NODE_ENV === "test") {
   const mockWaveRouter = require("./routes/mockWave").default;
   app.use("/mock/wave", mockWaveRouter);
 }
-app.use("/api/admin/auth", createAdminSep10Router());
-app.use("/sep10", createSep10Router());
-app.use("/sep8", createSep8Router(pool));
-app.use("/sep31", sep31Router);
-app.use("/sep24", sep24Router);
-app.use("/sep38", sep38Router);
-app.use("/sep12", createSep12Router(pool));
-app.use("/sep30", sep30Routes);
+app.use("/api/admin/auth", sepRateLimiter, createAdminSep10Router());
+app.use("/sep10", sepRateLimiter, createSep10Router());
+app.use("/sep8", sepRateLimiter, createSep8Router(pool));
+app.use("/sep31", sepRateLimiter, sep31Router);
+app.use("/sep24", sepRateLimiter, sep24Router);
+app.use("/sep38", sepRateLimiter, sep38Router);
+app.use("/sep12", sepRateLimiter, createSep12Router(pool));
+app.use("/sep30", sepRateLimiter, sep30Routes);
 
 // Prometheus Metrics Scraper Endpoint
 app.use("/metrics", createMetricsRouter());
@@ -524,6 +595,22 @@ async function initializeRuntime(): Promise<void> {
   const { startJobs } = await import("./jobs/scheduler.js");
   startJobs();
 
+  poolStarvationMonitor.start();
+
+  // Local fiat rates from the on-chain oracle, when ORACLE_RATES_ENABLED is set
+  // and configured. Not awaited: until the first refresh completes, and for any
+  // currency the oracle cannot price, the static rates apply.
+  const { getOracleRateProvider } =
+    await import("./services/oracle/oracleRateProvider.js");
+  const oracleRates = getOracleRateProvider();
+  if (oracleRates) {
+    const { currencyService } = await import("./services/currency.js");
+    currencyService.setRateSource(oracleRates);
+    void currencyService.initialize().catch((err: Error) => {
+      console.error("[OracleRates] Initial rate refresh failed:", err.message);
+    });
+  }
+
   // Start JWT key rotation worker (issue #1971): rotates the signing key
   // on schedule and deprecates old secrets after the grace window.
   const { startKeyRotationWorker } = await import("./workers/keyRotation.js");
@@ -531,6 +618,8 @@ async function initializeRuntime(): Promise<void> {
 
   // Initialize Prometheus Horizon Scraper
   startStellarExporter();
+  startStellarCollector();
+  startSyntheticProbeWorker();
 
   // Verify Horizon reachability before starting runtime workers
   try {
@@ -606,16 +695,27 @@ async function initializeRuntime(): Promise<void> {
       scheduleProviderBalanceAlertJob,
       startAccountingTokenRefreshWorker,
       startWebhookRetryWorker,
+      startWebhookRetryBacklogWatcher,
       startRefundWorker,
       startReceivingAnchorWebhookWorker,
+      startBankDepositSettlementWorker,
+      startRedisBackpressureMonitor,
+      startTransactionOutboxRelay,
+      startScheduledJobs,
     } = await import("./queue/index.js");
+    startRedisBackpressureMonitor();
+    startTransactionOutboxRelay();
     startProviderBalanceAlertWorker();
     startAccountingTokenRefreshWorker();
     startWebhookRetryWorker();
+    startWebhookRetryBacklogWatcher();
     startRefundWorker();
     startReceivingAnchorWebhookWorker();
+    startBankDepositSettlementWorker();
     await scheduleProviderBalanceAlertJob();
     console.log("Provider balance alert queue initialized");
+    await startScheduledJobs();
+    console.log("Float reconciliation job initialized");
 
     // STK push query polling fallback (#1969): poll `stkpushquery` when the
     // callback does not arrive within 30s. Safe to start unconditionally —

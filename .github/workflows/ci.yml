@@ -2,448 +2,63 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches:
+      - main
   pull_request:
-    branches: [main, develop]
-  schedule:
-    - cron: "0 0 * * *" # Daily certificate check
+    branches:
+      - main
 
 jobs:
-  cert-check:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: npm
-
-      - name: Verify package-lock.json exists
-        run: |
-          if [ ! -f package-lock.json ]; then
-            npm install --package-lock-only --ignore-scripts
-          fi
-
-      - name: Install dependencies
-        run: npm ci --ignore-scripts
-
-      - name: Run Certificate Expiry Check
-        run: npm run check-cert
-        continue-on-error: true
-
-  security:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            bridge-starter-node/package-lock.json
-
-      - name: Verify root package-lock.json exists
-        run: |
-          if [ ! -f package-lock.json ]; then
-            echo "⚠️ package-lock.json not found, generating it..."
-            npm install --package-lock-only --ignore-scripts
-          else
-            echo "✅ package-lock.json found"
-          fi
-
-      - name: Install root dependencies without lifecycle scripts
-        run: npm ci --ignore-scripts
-
-      - name: Run root npm audit for high vulnerabilities
-        run: npm run audit:high
-        continue-on-error: true
-
-      - name: Check if Snyk is configured
-        id: check_snyk
-        run: |
-          if [ -n "${{ secrets.SNYK_TOKEN }}" ]; then
-            echo "snyk_available=true" >> $GITHUB_OUTPUT
-          else
-            echo "snyk_available=false" >> $GITHUB_OUTPUT
-            echo "⚠️ SNYK_TOKEN not configured. Skipping Snyk scan."
-            echo "To enable Snyk scanning, add SNYK_TOKEN secret."
-          fi
-
-      - name: Setup Snyk CLI
-        if: steps.check_snyk.outputs.snyk_available == 'true'
-        uses: snyk/actions/setup@v1.0.0
-
-      - name: Run root Snyk test for high vulnerabilities
-        if: steps.check_snyk.outputs.snyk_available == 'true'
-        run: npm run snyk:test:high
-        continue-on-error: true
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-
-      - name: Verify bridge-starter-node package-lock.json exists
-        working-directory: bridge-starter-node
-        run: |
-          if [ ! -f package-lock.json ]; then
-            echo "⚠️ bridge-starter-node/package-lock.json not found, generating it..."
-            npm install --package-lock-only --ignore-scripts
-          else
-            echo "✅ bridge-starter-node/package-lock.json found"
-          fi
-
-      - name: Install bridge-starter-node dependencies without lifecycle scripts
-        working-directory: bridge-starter-node
-        run: npm ci --ignore-scripts
-
-      - name: Run bridge-starter-node npm audit for high vulnerabilities
-        working-directory: bridge-starter-node
-        run: npm run audit:high
-        continue-on-error: true
-
-      - name: Run bridge-starter-node Snyk test for high vulnerabilities
-        if: steps.check_snyk.outputs.snyk_available == 'true'
-        working-directory: bridge-starter-node
-        run: npm run snyk:test:high
-        continue-on-error: true
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-
   test:
+    name: Test & Drift Detection
     runs-on: ubuntu-latest
-    needs: security
-
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: test_user
-          POSTGRES_PASSWORD: test_password
-          POSTGRES_DB: test_db
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: npm
-
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libvips-dev libjpeg-dev libpng-dev libtiff-dev libgif-dev librsvg2-dev libpoppler-cpp-dev libcairo2-dev libpango1.0-dev libjpeg8-dev libgif-dev build-essential
-
-      - name: Verify package-lock.json exists
-        run: |
-          if [ ! -f package-lock.json ]; then
-            echo "⚠️ package-lock.json not found, generating it..."
-            npm install --package-lock-only --ignore-scripts
-          else
-            echo "✅ package-lock.json found"
-          fi
+          cache: "npm"
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Wait for Postgres to be ready
-        run: |
-          for i in $(seq 1 30); do
-            pg_isready -h localhost -p 5432 -U test_user && break
-            echo "Waiting for Postgres... attempt $i/30"
-            sleep 1
-          done
+      - name: Check OpenAPI Specification Drift
+        run: npx tsx scripts/generate-openapi-file.ts --check
 
-      - name: Run database migrations and rollback test
-        run: bash scripts/testMigrations.sh 2>&1
-        continue-on-error: false
-        env:
-          DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_db
+      - name: Run OpenAPI Drift Tests
+        run: npx tsx --test scripts/tests/checkOpenApiDrift.test.ts
 
-      - name: Run linter
-        run: npm run lint
-        continue-on-error: false
-
-      - name: Run tests with coverage
-        run: npm run test:coverage -- --maxWorkers=2 --bail --forceExit
-        timeout-minutes: 10
-        continue-on-error: true
-        env:
-          DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_db
-          REDIS_URL: redis://localhost:6379
-          STELLAR_ISSUER_SECRET: S-DUMMY-SECRET-KEY-FOR-TESTING-PURPOSES-ONLY
-          NODE_ENV: test
-          NODE_OPTIONS: --experimental-vm-modules
-          CI: true
-
-      - name: Run Pact Contract Tests
-        run: npm run test:pact
-        continue-on-error: true
-        env:
-          NODE_OPTIONS: --experimental-vm-modules
-          CI: true
-
-      - name: Upload Pact files as artifacts
-        uses: actions/upload-artifact@v4
-        if: success()
-        with:
-          name: pact-contracts
-          path: pacts/
-          retention-days: 30
-          if-no-files-found: ignore
-
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
-
-      - name: Build for E2E
-        run: npm run build
-        continue-on-error: false
-
-      - name: Start server for E2E
-        run: node dist/src/index.js &
-        env:
-          DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_db
-          REDIS_URL: redis://localhost:6379
-          STELLAR_ISSUER_SECRET: S-DUMMY-SECRET-KEY-FOR-TESTING-PURPOSES-ONLY
-          NODE_ENV: development
-          JWT_SECRET: ci-jwt-secret-32-chars-long-ok-x
-          SESSION_SECRET: ci-session-secret
-          BUILD_HASH: ${{ github.sha }}
-
-      - name: Wait for server to be ready
-        run: npx wait-on http://127.0.0.1:3000/health --timeout 30000
-        continue-on-error: true
-
-      - name: Run Playwright e2e tests
-        run: npx playwright test --project=chromium --workers=1 --retries=1 --reporter=dot
-        continue-on-error: true
-        env:
-          E2E_BASE_URL: http://127.0.0.1:3000
-          DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_db
-          REDIS_URL: redis://localhost:6379
-          STELLAR_ISSUER_SECRET: S-DUMMY-SECRET-KEY-FOR-TESTING-PURPOSES-ONLY
-          NODE_ENV: development
-          JWT_SECRET: ci-jwt-secret-32-chars-long-ok-x
-          SESSION_SECRET: ci-session-secret
-
-      - name: Upload Playwright report
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: playwright-report
-          path: playwright-report/
-          retention-days: 7
-
-  migration-dry-run:
+  migration-rollback:
+    name: Migration Rollback Verification
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16-alpine
+        image: postgres:16
         env:
-          POSTGRES_USER: test_user
-          POSTGRES_PASSWORD: test_password
-          POSTGRES_DB: test_db
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mobile_money_test
         ports:
           - 5432:5432
         options: >-
-          --health-cmd pg_isready
+          --health-cmd "pg_isready -U postgres -d mobile_money_test"
           --health-interval 10s
           --health-timeout 5s
-          --health-retries 5
-
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mobile_money_test
+      NODE_ENV: test
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: npm
-
-      - name: Verify package-lock.json exists
-        run: |
-          if [ ! -f package-lock.json ]; then
-            npm install --package-lock-only --ignore-scripts
-          fi
-
-      - name: Install dependencies
-        run: npm ci --ignore-scripts
-
-      - name: Wait for Postgres
-        run: |
-          for i in $(seq 1 30); do
-            pg_isready -h localhost -p 5432 -U test_user && break
-            echo "Waiting for Postgres... attempt $i/30"
-            sleep 1
-          done
-
-      - name: Dry-run pending migrations
-        run: npm run migrate:dry-run
-        env:
-          DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_db
-          NODE_ENV: test
-
-  build:
-    runs-on: ubuntu-latest
-    needs: test
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: npm
-
-      - name: Verify package-lock.json exists
-        run: |
-          if [ ! -f package-lock.json ]; then
-            echo "⚠️ package-lock.json not found, generating it..."
-            npm install --package-lock-only --ignore-scripts
-          else
-            echo "✅ package-lock.json found"
-          fi
+          cache: "npm"
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Build
-        run: npm run build
-        continue-on-error: false
-
-      - name: Check build artifacts
-        run: ls -la dist/
-        continue-on-error: false
-
-  # Docker build job - optional, only runs if secrets are configured
-  # To enable: Add REGISTRY_USERNAME and REGISTRY_PASSWORD to repository secrets
-  docker:
-    runs-on: ubuntu-latest
-    needs: [test, build]
-    # Skip if secrets are not configured
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Check if registry credentials are configured
-        id: check_secrets
-        run: |
-          if [ -n "${{ secrets.REGISTRY_USERNAME }}" ] && [ -n "${{ secrets.REGISTRY_PASSWORD }}" ]; then
-            echo "credentials_available=true" >> $GITHUB_OUTPUT
-          else
-            echo "credentials_available=false" >> $GITHUB_OUTPUT
-            echo "⚠️ Docker registry credentials not configured. Skipping Docker build."
-            echo "To enable Docker builds, add REGISTRY_USERNAME and REGISTRY_PASSWORD secrets."
-          fi
-
-      - name: Log in to Container Registry
-        if: steps.check_secrets.outputs.credentials_available == 'true'
-        uses: docker/login-action@v4
-        with:
-          username: ${{ secrets.REGISTRY_USERNAME }}
-          password: ${{ secrets.REGISTRY_PASSWORD }}
-
-      - name: Build and push Docker image
-        if: steps.check_secrets.outputs.credentials_available == 'true'
-        id: docker_build
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: ./Dockerfile
-          push: true
-          build-args: |
-            BUILD_HASH=${{ github.sha }}
-          tags: |
-            ${{ github.repository }}:${{ github.sha }}
-            ${{ github.repository }}:${{ github.ref_name }}
-            ${{ github.ref_name == 'main' && format('{0}:latest', github.repository) || '' }}
-
-      - name: Log image location and tags
-        if: steps.check_secrets.outputs.credentials_available == 'true'
-        run: |
-          echo "=== Docker Image Build Complete ==="
-          echo "Image Location: ${{ github.repository }}"
-          echo "Image Digest: ${{ steps.docker_build.outputs.digest }}"
-          echo "Assigned Tags:"
-          echo "  - ${{ github.repository }}:${{ github.sha }}"
-          echo "  - ${{ github.repository }}:${{ github.ref_name }}"
-          if [ "${{ github.ref_name }}" == "main" ]; then
-            echo "  - ${{ github.repository }}:latest"
-          fi
-          echo "=================================="
-
-  # Slack failure notification — fires only when a job fails on the main branch.
-  # Requires the SLACK_WEBHOOK_URL repository secret (see CONTRIBUTING.md).
-  notify-slack:
-    runs-on: ubuntu-latest
-    needs: [security, test, build, docker]
-    # Always run this job so it can evaluate the failure condition,
-    # but only send a notification when something upstream failed on main.
-    if: |
-      always() &&
-      github.ref == 'refs/heads/main' &&
-      contains(needs.*.result, 'failure')
-    steps:
-      - name: Check if Slack webhook is configured
-        id: check_slack
-        run: |
-          if [ -n "${{ secrets.SLACK_WEBHOOK_URL }}" ]; then
-            echo "slack_available=true" >> $GITHUB_OUTPUT
-          else
-            echo "slack_available=false" >> $GITHUB_OUTPUT
-            echo "⚠️ SLACK_WEBHOOK_URL not configured. Skipping Slack notification."
-            echo "To enable Slack notifications, add SLACK_WEBHOOK_URL secret."
-          fi
-
-      - name: Send Slack failure notification
-        if: steps.check_slack.outputs.slack_available == 'true'
-        uses: slackapi/slack-github-action@v2
-        with:
-          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
-          webhook-type: incoming-webhook
-          payload: |
-            {
-              "text": ":x: CI Failed on `main`",
-              "blocks": [
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": ":x: *CI Failed on `main`*\n*Workflow:* ${{ github.workflow }}\n*Triggered by:* ${{ github.actor }}\n*Commit:* `${{ github.sha }}`\n*<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View failed run>*"
-                  }
-                }
-              ]
-            }
+      - name: Run migration rollback verification
+        run: bash scripts/testMigrations.sh

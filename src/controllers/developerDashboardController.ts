@@ -126,4 +126,120 @@ export class DeveloperDashboardController {
       );
     }
   }
+
+  /**
+   * POST /api/v1/sandbox/transactions/:id/simulate
+   * Restricted to testnet/sandbox API keys. Advances transaction status and dispatches simulated webhook.
+   */
+  static async simulateTransaction(req: Request, res: Response) {
+    const rawApiKey =
+      req.header("X-API-Key") ||
+      (req.headers["x-api-key"] as string | undefined) ||
+      (req.query.api_key as string | undefined);
+
+    if (!rawApiKey) {
+      return res.status(401).json({
+        error: "Unauthorized",
+        message: "API key is required for sandbox simulation",
+      });
+    }
+
+    const lowerKey = rawApiKey.toLowerCase();
+
+    // Check if key is a production key
+    const isProduction =
+      lowerKey.startsWith("prod_") ||
+      lowerKey.startsWith("live_") ||
+      lowerKey.startsWith("sk_live_") ||
+      lowerKey.startsWith("pk_live_") ||
+      lowerKey.startsWith("production_") ||
+      lowerKey.includes("production") ||
+      lowerKey.includes("prod");
+
+    if (isProduction) {
+      return res.status(403).json({
+        error: "Forbidden",
+        message: "Simulation is restricted to testnet/sandbox API keys",
+      });
+    }
+
+    // Check if key is a sandbox/testnet key
+    const isSandbox =
+      lowerKey.startsWith("test_") ||
+      lowerKey.startsWith("sandbox_") ||
+      lowerKey.startsWith("sb_") ||
+      lowerKey.startsWith("sk_test_") ||
+      lowerKey.startsWith("pk_test_") ||
+      lowerKey.startsWith("testnet_") ||
+      lowerKey.includes("test") ||
+      lowerKey.includes("sandbox");
+
+    if (!isSandbox) {
+      return res.status(403).json({
+        error: "Forbidden",
+        message: "Simulation is restricted to testnet/sandbox API keys",
+      });
+    }
+
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({
+        error: "Bad Request",
+        message: "Transaction ID is required",
+      });
+    }
+
+    const { status, reason } = req.body || {};
+    const userId = (req as any).user?.id || "sandbox-user";
+
+    try {
+      const result = await service.simulateTransaction({
+        transactionId: id,
+        status,
+        reason,
+        userId,
+      });
+      return res.status(200).json(result);
+    } catch (error) {
+      logger.error("Simulate transaction error:", error);
+      return res.status(500).json({
+        error: "Internal Server Error",
+        message: "Failed to simulate transaction",
+      });
+    }
+  }
+
+  /**
+   * POST /api/developer/webhooks/simulate
+   * Triggers simulated payment callback to a developer's target URL
+   */
+  static async simulateWebhook(req: Request, res: Response) {
+    const { provider, status, targetUrl, amount, currency, transactionType, secret } = req.body || {};
+
+    if (!provider || !status || !targetUrl) {
+      return res.status(400).json({
+        error: "Bad Request",
+        message: "Missing required fields: provider, status, and targetUrl are required",
+      });
+    }
+
+    try {
+      const result = await service.simulateWebhook({
+        provider,
+        status,
+        targetUrl,
+        amount,
+        currency,
+        transactionType,
+        secret,
+      });
+      return res.status(200).json(result);
+    } catch (error: any) {
+      logger.error("Webhook simulator error:", error);
+      return res.status(400).json({
+        error: "Simulation Error",
+        message: error.message || "Failed to simulate webhook",
+      });
+    }
+  }
 }

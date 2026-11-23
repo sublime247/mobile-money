@@ -35,6 +35,15 @@ type ExchangeRates = Record<string, number>;
 /** Base currency for all conversions (stored amounts are in this currency). */
 export const BASE_CURRENCY: SupportedCurrency = "USD";
 
+/**
+ * A live source of local fiat rates, expressed as units per USD - for example
+ * the on-chain oracle (see services/oracle). Currencies the source cannot price
+ * are simply left out of the result and keep their static fallback rate.
+ */
+export interface FiatRateSource {
+  getUsdRates(currencies: readonly string[]): Promise<ExchangeRates>;
+}
+
 // ---------------------------------------------------------------------------
 // Internal API response shape (exchangerate-api.com v6)
 // ---------------------------------------------------------------------------
@@ -102,6 +111,15 @@ export class CurrencyService {
   private cache: { rates: ExchangeRates; fetchedAt: Date } | null = null;
   private usingFallback = false;
   private refreshTimer: ReturnType<typeof setInterval> | null = null;
+  private rateSource: FiatRateSource | null = null;
+
+  /**
+   * Prefer `source` over the static rate table on the next refresh. Pass null
+   * to go back to the static rates only.
+   */
+  setRateSource(source: FiatRateSource | null): void {
+    this.rateSource = source;
+  }
 
   /**
    * Fetch initial rates and schedule hourly refreshes.
@@ -237,12 +255,77 @@ export class CurrencyService {
   }
 
   private async fetchRates(): Promise<void> {
-    // Placeholder for rate fetching implementation
+    const sourceRates = await this.fetchSourceRates();
+
+    // Source rates win where available; every other currency (or every
+    // currency, when no source is set or it is down) keeps its static rate.
+    this.usingFallback = Object.keys(sourceRates).length === 0;
     this.cache = {
-      rates: FALLBACK_RATES,
+      rates: { ...FALLBACK_RATES, ...sourceRates },
       fetchedAt: new Date(),
     };
+  }
+
+  /**
+   * Rates (units per USD) from the configured rate source, if any. Never
+   * throws: any failure yields an empty result so the static fallback table is
+   * used instead.
+   */
+  private async fetchSourceRates(): Promise<ExchangeRates> {
+    if (!this.rateSource) return {};
+
+    try {
+      return await this.rateSource.getUsdRates(SUPPORTED_CURRENCIES);
+    } catch (err) {
+      logger.warn(
+        `[CurrencyService] Rate source unavailable, using fallback rates: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return {};
+    }
   }
 }
 
 export const currencyService = new CurrencyService();
+
+export interface AirtelFeeTier {
+  min: number;
+  /** Exclusive upper bound. The last tier has no upper bound. */
+  max: number | null;
+  rate: number;
+  label: string;
+}
+
+export const AIRTEL_FEE_TIERS: readonly AirtelFeeTier[] = [
+  { min: 0, max: 1000, rate: 0.01, label: "micro" },
+  { min: 1000, max: 10000, rate: 0.008, label: "standard" },
+  { min: 10000, max: 50000, rate: 0.005, label: "bulk" },
+  { min: 50000, max: null, rate: 0.003, label: "enterprise" },
+];
+
+export const AIRTEL_MIN_FEE = 5;
+
+export interface AirtelFeeResult {
+  grossAmount: number;
+  fee: number;
+  netAmount: number;
+  tier: string;
+  rate: number;
+}
+
+export function calculateAirtelFee(amount: number): AirtelFeeResult {
+  if (!Number.isFinite(amount) || amount < 0) {
+    throw new Error("Amount must be a finite, non-negative number");
+  }
+
+  const tier = AIRTEL_FEE_TIERS.find(
+    ({ min, max }) => amount >= min && (max === null || amount < max),
+  ) ?? AIRTEL_FEE_TIERS[AIRTEL_FEE_TIERS.length - 1];
+  const fee = Math.round(Math.max(amount * tier.rate, AIRTEL_MIN_FEE) * 100) / 100;
+  return {
+    grossAmount: amount,
+    fee,
+    netAmount: Math.round((amount - fee) * 100) / 100,
+    tier: tier.label,
+    rate: tier.rate,
+  };
+}

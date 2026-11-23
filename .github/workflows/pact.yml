@@ -1,0 +1,39 @@
+name: Pact Contracts
+
+on:
+  pull_request:
+    paths:
+      - "tests/pact/**"
+      - "src/stellar/sep38.ts"
+      - "src/services/sep38/**"
+      - "src/services/sep38Service.ts"
+      - "jest.pact.config.js"
+      - ".github/workflows/pact.yml"
+  push:
+    branches: [main]
+
+jobs:
+  consumer-contracts:
+    name: Pact consumer contract tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - run: npm ci
+
+      - name: Run Pact consumer tests
+        run: npm run test:pact
+
+      - name: Upload Pact contract artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pact-contracts
+          path: pacts/*.json
+          if-no-files-found: error
+          retention-days: 30

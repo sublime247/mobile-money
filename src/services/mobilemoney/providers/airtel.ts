@@ -35,6 +35,11 @@ import logger from "../../../utils/logger";
 import { maskPII } from "../../../utils/masking";
 import { formatPhoneForProvider } from "../../../utils/phoneUtils";
 import { attachCorrelationIdInterceptor } from "../../../utils/correlationIdInterceptor";
+import {
+  AirtelTokenManager,
+  calculateJitteredBackoff,
+} from "../airtelClient";
+import { attachTelcoTracingInterceptor } from "../../../utils/telcoTracing";
 
 const http = providerHttp("airtel");
 
@@ -169,6 +174,7 @@ export class AirtelService {
   private session: AirtelSessionState | null = null;
   private sessionPromise: Promise<AirtelSessionState> | null = null;
   private readonly clock: () => number;
+  private tokenManager: AirtelTokenManager;
 
   constructor(
     regionOrOptions?: string | AirtelProviderOptions,
@@ -250,6 +256,7 @@ export class AirtelService {
         validateStatus: () => true,
       });
       attachCorrelationIdInterceptor(client);
+      attachTelcoTracingInterceptor(client);
       this.client = client;
     }
 
@@ -262,6 +269,7 @@ export class AirtelService {
         validateStatus: () => true,
       });
       attachCorrelationIdInterceptor(directClient);
+      attachTelcoTracingInterceptor(directClient);
       this.directClient = directClient;
     }
 
@@ -275,9 +283,19 @@ export class AirtelService {
           validateStatus: () => true,
         });
         attachCorrelationIdInterceptor(proxyClient);
+        attachTelcoTracingInterceptor(proxyClient);
         this.proxyClient = proxyClient;
       }
     }
+
+    this.tokenManager = new AirtelTokenManager({
+      apiKey: this.apiKey,
+      apiSecret: this.apiSecret,
+      baseUrl: this.config.directBaseUrl,
+      clientId: this.apiKey || this.countryCode,
+      clock: this.clock,
+      httpClient: this.directClient as any,
+    });
 
     logger.info(
       { mode: this.mode, country: this.countryCode },
@@ -492,6 +510,7 @@ export class AirtelService {
       return {
         success: response.success ?? false,
         data: response.data,
+        error: response.error,
         providerResponseTimeMs: duration,
       };
     } catch (error: any) {
@@ -648,41 +667,9 @@ export class AirtelService {
   // =========================================================================
 
   private async authenticateDirect(): Promise<string> {
-    if (this.token && this.clock() < this.tokenExpiry) {
-      return this.token;
-    }
-
-    const authHeader =
-      "Basic " +
-      Buffer.from(`${this.apiKey}:${this.apiSecret}`).toString("base64");
-
-    const response = await this.sendRequest(this.directClient, {
-      method: "POST",
-      url: "/auth/oauth2/token",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: authHeader,
-      },
-    });
-
-    if (response.status < 200 || response.status >= 300) {
-      throw new Error(
-        `Airtel direct auth failed with status ${response.status}`,
-      );
-    }
-
-    const data = this.getObjectResponseData<{
-      access_token?: string;
-      expires_in?: number;
-    }>(response);
-    if (!data?.access_token) {
-      throw new Error("Airtel direct auth did not return access_token");
-    }
-
-    this.token = data.access_token;
-    this.tokenExpiry = this.clock() + (data.expires_in ?? 3600) * 1000 - 5000;
-
-    return this.token;
+    const token = await this.tokenManager.getAccessToken();
+    this.token = token;
+    return token;
   }
 
   private async executeViaDirect(
@@ -758,11 +745,15 @@ export class AirtelService {
 
         if (response.status === 401 || response.status === 403) {
           this.token = null;
+          await this.tokenManager.invalidateToken();
           lastResponse = response;
           continue;
         }
 
-        if (response.status >= 500 && attempt < this.config.maxAttempts) {
+        if (
+          (response.status === 429 || response.status >= 500) &&
+          attempt < this.config.maxAttempts
+        ) {
           lastResponse = response;
           await this.delay(attempt);
           continue;
@@ -1538,6 +1529,7 @@ export class AirtelService {
   }
 
   private async delay(attempt: number): Promise<void> {
-    await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
+    const jitteredMs = calculateJitteredBackoff(attempt, 200, 5000);
+    await new Promise((resolve) => setTimeout(resolve, Math.max(10, jitteredMs)));
   }
 }
