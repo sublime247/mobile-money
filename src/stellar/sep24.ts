@@ -15,6 +15,12 @@ import {
   generateSignedSep24Url,
   verifySep24Signature,
 } from "../utils/sep24Signature";
+import {
+  calculateDepositFee,
+  DepositFeeBreakdown,
+  ProviderFeeRates,
+  validateDepositLimits,
+} from "../services/feeCalculator";
 
 function isValidStellarPublicKey(key: string): boolean {
   try {
@@ -41,7 +47,12 @@ export interface Sep24Asset {
   max_amount?: number;
   fee_fixed?: number;
   fee_percent?: number;
+  /** Optional per-telco fee overrides keyed by provider slug. */
+  provider_fees?: Record<string, ProviderFeeRates>;
 }
+
+/** Fee preview fields returned with an interactive deposit session. */
+export interface InteractiveFeePreview extends DepositFeeBreakdown {}
 
 export interface Sep24InfoResponse {
   deposit: Record<string, Sep24Asset>;
@@ -101,6 +112,8 @@ export interface DepositRequest {
   success_url?: string;
   failure_url?: string;
   sep9_fields?: Record<string, string>;
+  /** Selected mobile-money provider (telco) for the deposit. */
+  provider?: string;
 }
 
 export interface WithdrawRequest {
@@ -122,6 +135,8 @@ export interface WithdrawRequest {
 export interface InteractiveFlowResponse {
   url: string;
   id: string;
+  /** Upfront fee breakdown for interactive deposits only. */
+  fee_preview?: InteractiveFeePreview;
 }
 
 const transactions = new Map<string, Sep24Transaction>();
@@ -133,6 +148,26 @@ const activeTransactionsPerAccount = new Map<string, number>();
 // ============================================================================
 // Configuration
 // ============================================================================
+
+/**
+ * Optional telco-specific fee overrides, supplied as a JSON object:
+ *   {"mtn":{"fee_fixed":50,"fee_percent":1},"airtel":{"fee_percent":0.5}}
+ * Invalid JSON is ignored so a bad env var cannot take deposits offline.
+ */
+const parseProviderFees = (
+  raw: string | undefined,
+): Record<string, ProviderFeeRates> | undefined => {
+  if (!raw) return undefined;
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, ProviderFeeRates>)
+      : undefined;
+  } catch {
+    logger.warn("[sep24] Invalid SEP24_PROVIDER_FEES_JSON; ignoring");
+    return undefined;
+  }
+};
 
 export const getSep24Config = () => ({
   webAuthDomain:
@@ -153,6 +188,9 @@ export const getSep24Config = () => ({
       sep24_enabled: true,
       min_amount: 1,
       max_amount: 1000000,
+      fee_fixed: Number(process.env.SEP24_DEPOSIT_FEE_FIXED ?? 0),
+      fee_percent: Number(process.env.SEP24_DEPOSIT_FEE_PERCENT ?? 0),
+      provider_fees: parseProviderFees(process.env.SEP24_PROVIDER_FEES_JSON),
     } as Sep24Asset,
   } as Record<string, Sep24Asset>,
   features: {
@@ -223,6 +261,28 @@ export const generateInteractiveUrl = async (
     lang: request.lang || "en",
   });
 
+  // Upfront deposit fee preview — the interactive screen renders this before
+  // the user confirms the mobile-money transfer. Only deposits incur a fee
+  // preview; withdrawals keep the existing payload shape.
+  let feePreview: InteractiveFeePreview | undefined;
+  if (kind === "deposit") {
+    const previewAsset =
+      config.assets[request.asset_code as keyof typeof config.assets];
+    if (previewAsset) {
+      feePreview = calculateDepositFee({
+        amount: parseFloat(request.amount),
+        asset: previewAsset,
+        provider: "provider" in request ? request.provider : undefined,
+      });
+      params.append("fee_fixed", String(feePreview.fee_fixed));
+      params.append("fee_percent", String(feePreview.fee_percent));
+      params.append("net_amount", String(feePreview.net_amount));
+    }
+  }
+
+  const depositProvider =
+    "provider" in request ? request.provider : undefined;
+  if (depositProvider) params.append("provider", depositProvider);
   if (request.memo) params.append("memo", request.memo);
   if (request.email) params.append("email", request.email);
   if (request.wallet_name) params.append("wallet_name", request.wallet_name);
@@ -248,6 +308,7 @@ export const generateInteractiveUrl = async (
     return {
       url: signedUrl,
       id: transactionId,
+      ...(feePreview ? { fee_preview: feePreview } : {}),
     };
   } catch (error) {
     // Clean up on failure to sign URL
@@ -268,12 +329,11 @@ export const initiateDeposit = async (
   }
 
   const amount = parseFloat(request.amount);
-  if (asset.min_amount && amount < asset.min_amount) {
-    throw new Error(`Minimum deposit amount is ${asset.min_amount}`);
-  }
-  if (asset.max_amount && amount > asset.max_amount) {
-    throw new Error(`Maximum deposit amount is ${asset.max_amount}`);
-  }
+  // Single source of truth for limit validation — the same helper powers the
+  // fee preview's `limit_error` field, so API errors and the interactive
+  // screen cannot disagree about what is allowed.
+  const limitError = validateDepositLimits(amount, asset);
+  if (limitError) throw new Error(limitError);
 
   // Validate account
   if (!request.account || !StrKey.isValidEd25519PublicKey(request.account)) {
@@ -421,9 +481,11 @@ export const calculateFee = async (
   assetCode: string,
   amount: string,
   _operation: "deposit" | "withdrawal",
+  provider?: string,
 ): Promise<{
   fee: string;
   fee_details?: { fixed: number; percent: number };
+  net_amount?: string;
 }> => {
   const config = getSep24Config();
   const asset = config.assets[assetCode as keyof typeof config.assets];
@@ -432,17 +494,19 @@ export const calculateFee = async (
     throw new Error(`Asset ${assetCode} not supported`);
   }
 
-  const amountNum = parseFloat(amount);
-  // ERROR FIX: Changed 'let' to 'const' as 'fee' is not reassigned
-  const fee =
-    (asset.fee_fixed || 0) + amountNum * ((asset.fee_percent || 0) / 100);
+  const preview = calculateDepositFee({
+    amount: parseFloat(amount),
+    asset,
+    provider,
+  });
 
   return {
-    fee: fee.toFixed(2),
-    fee_details:
-      asset.fee_fixed || asset.fee_percent
-        ? { fixed: asset.fee_fixed || 0, percent: asset.fee_percent || 0 }
-        : undefined,
+    fee: preview.fee_amount.toFixed(2),
+    fee_details: {
+      fixed: preview.fee_fixed,
+      percent: preview.fee_percent,
+    },
+    net_amount: preview.net_amount.toFixed(2),
   };
 };
 
@@ -468,7 +532,7 @@ sep24Router.get("/info", async (_req: Request, res: Response) => {
 
 sep24Router.get("/fee", async (req: Request, res: Response) => {
   try {
-    const { asset_code, amount, operation } = req.query;
+    const { asset_code, amount, operation, provider } = req.query;
     if (!asset_code || !amount || !operation) {
       throw createError(ERROR_CODES.INVALID_INPUT, "Missing params", {
         error: "Missing params",
@@ -479,6 +543,7 @@ sep24Router.get("/fee", async (req: Request, res: Response) => {
       asset_code as string,
       amount as string,
       operation as "deposit" | "withdrawal",
+      provider as string | undefined,
     );
 
     res.json({ asset_code, amount, operation, ...feeInfo });
