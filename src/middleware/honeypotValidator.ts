@@ -15,7 +15,11 @@ export function createHoneypotValidator(
     next: NextFunction,
   ): Promise<void> => {
     const honeypotValue = req.body?.company_fax;
-    if (typeof honeypotValue !== "string" || honeypotValue.trim() === "") {
+    if (
+      honeypotValue === undefined ||
+      honeypotValue === null ||
+      (typeof honeypotValue === "string" && honeypotValue.trim() === "")
+    ) {
       next();
       return;
     }

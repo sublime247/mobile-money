@@ -7,10 +7,22 @@ import { pool } from "../config/database";
 import { encryptAES, decryptAES, deriveKey } from "../utils/encryption";
 import { env } from "../config/env";
 import { amlVelocityService } from "../services/amlVelocityService";
+import { evaluateCustomerRisk } from "../compliance/riskTier";
 
 const amlAlertModel = new AMLAlertModel();
 const transactionModel = new TransactionModel();
 const userModel = new UserModel();
+
+function containsPepScreeningRule(ruleHits: unknown): boolean {
+  const hits = Array.isArray(ruleHits) ? ruleHits : [ruleHits];
+  return hits.some(
+    (hit) =>
+      typeof hit === "object" &&
+      hit !== null &&
+      "rule" in hit &&
+      hit.rule === "pep_screening",
+  );
+}
 
 /**
  * List AML alerts with filtering and pagination
@@ -158,9 +170,12 @@ export const getAmlAlertDetails = async (
       return;
     }
 
-    // Fetch related transaction
-    const transaction = await transactionModel.findById(alert.transactionId);
-    if (!transaction) {
+    // Customer-level compliance alerts, such as PEP matches, are not tied to
+    // a transaction.
+    const transaction = alert.transactionId
+      ? await transactionModel.findById(alert.transactionId)
+      : null;
+    if (alert.transactionId && !transaction) {
       res.status(404).json({ error: "Related transaction not found" });
       return;
     }
@@ -173,18 +188,20 @@ export const getAmlAlertDetails = async (
 
     res.json({
       alert,
-      transaction: {
-        id: transaction.id,
-        referenceNumber: transaction.referenceNumber,
-        type: transaction.type,
-        amount: transaction.amount,
-        phoneNumber: transaction.phoneNumber,
-        provider: transaction.provider,
-        status: transaction.status,
-        createdAt: transaction.createdAt,
-        tags: transaction.tags,
-        metadata: transaction.metadata,
-      },
+      transaction: transaction
+        ? {
+            id: transaction.id,
+            referenceNumber: transaction.referenceNumber,
+            type: transaction.type,
+            amount: transaction.amount,
+            phoneNumber: transaction.phoneNumber,
+            provider: transaction.provider,
+            status: transaction.status,
+            createdAt: transaction.createdAt,
+            tags: transaction.tags,
+            metadata: transaction.metadata,
+          }
+        : null,
       user: user
         ? {
             id: user.id,
@@ -248,6 +265,10 @@ export const reviewAmlAlert = async (
     if (!updated) {
       res.status(404).json({ error: "AML alert not found" });
       return;
+    }
+
+    if (containsPepScreeningRule(updated.ruleHits)) {
+      await evaluateCustomerRisk(updated.userId);
     }
 
     // A dismissed (false-positive) alert releases a transaction held in

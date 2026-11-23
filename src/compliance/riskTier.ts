@@ -385,18 +385,7 @@ async function persistRiskTier(
 export async function evaluateCustomerRisk(userId: string): Promise<RiskScore> {
   const input = await gatherRiskInput(userId);
   const riskScore = calculateRiskScore(input);
-
-  try {
-    await persistRiskTier(userId, riskScore);
-  } catch (err) {
-    // Persistence failure is logged but not re-thrown — the score is still
-    // returned to the caller so runtime checks (e.g. pre-transaction limit
-    // enforcement) continue to work even if the DB write fails transiently.
-    logger.error(
-      `[riskTier] Failed to persist risk tier for user ${userId}:`,
-      err,
-    );
-  }
+  await persistRiskTier(userId, riskScore);
 
   logger.info({
     event: "risk_tier_calculated",

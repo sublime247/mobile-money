@@ -10,6 +10,7 @@ jest.mock("../../../compliance/riskTier", () => ({
 }));
 
 import { pool } from "../../../config/database";
+import { evaluateCustomerRisk } from "../../../compliance/riskTier";
 
 const mockQuery = pool.query as jest.Mock;
 
@@ -78,6 +79,7 @@ describe("PepCheckService", () => {
         expect.stringContaining("INSERT INTO aml_alerts"),
         expect.any(Array),
       );
+      expect(evaluateCustomerRisk).toHaveBeenCalledWith("user-123");
     });
   });
 

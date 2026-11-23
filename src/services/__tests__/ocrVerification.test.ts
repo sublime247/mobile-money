@@ -54,4 +54,20 @@ describe("identity OCR verification", () => {
       ).manualReviewRequired,
     ).toBe(true);
   });
+
+  it("accepts a name match at exactly 85% similarity", () => {
+    const extracted = parseIdentityText(
+      "Name: abcdefghijklmnopqrst\nDOB: 1990-02-14",
+    );
+
+    expect(
+      verifyIdentityFields(extracted, {
+        fullName: "abcxefghijxlmnopqrxt",
+        dateOfBirth: "1990-02-14",
+      }),
+    ).toMatchObject({
+      nameSimilarity: 0.85,
+      manualReviewRequired: false,
+    });
+  });
 });
