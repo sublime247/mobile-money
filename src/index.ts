@@ -149,6 +149,7 @@ import {
   startSyntheticProbeWorker,
   stopSyntheticProbeWorker,
 } from "./workers/syntheticProbeWorker";
+import { stopHorizonHealthProbes } from "./config/stellar";
 
 // Sentry Middleware
 import { initSentry, sentryBreadcrumbMiddleware } from "./middleware/sentry";
@@ -216,6 +217,7 @@ export const shutdownHandler = createGracefulShutdownHandler({
     currencyService.shutdown();
     stopStellarCollector();
     stopSyntheticProbeWorker();
+    stopHorizonHealthProbes();
   },
 });
 
@@ -309,42 +311,49 @@ app.get("/health", async (_req: Request, res: Response) => {
 // mobile money provider gateways) plus memory/uptime stats. See src/routes/health.ts.
 app.use(deepHealthRoutes);
 
-app.get("/api/live-rates", publicApiRateLimiter, async (_req: Request, res: Response) => {
-  try {
-    const response = await axios.get("https://open.er-api.com/v6/latest/USD", {
-      timeout: 5000,
-    });
-    if (response.data && response.data.result === "success") {
-      res.json({
-        success: true,
-        rates: response.data.rates,
-        provider: "live",
-      });
-      return;
+app.get(
+  "/api/live-rates",
+  publicApiRateLimiter,
+  async (_req: Request, res: Response) => {
+    try {
+      const response = await axios.get(
+        "https://open.er-api.com/v6/latest/USD",
+        {
+          timeout: 5000,
+        },
+      );
+      if (response.data && response.data.result === "success") {
+        res.json({
+          success: true,
+          rates: response.data.rates,
+          provider: "live",
+        });
+        return;
+      }
+    } catch (error) {
+      logger.warn(
+        "[API] Live rates fetch failed, using fallback:",
+        (error as Error).message,
+      );
     }
-  } catch (error) {
-    logger.warn(
-      "[API] Live rates fetch failed, using fallback:",
-      (error as Error).message,
-    );
-  }
 
-  // Fallback to our hardcoded rates
-  res.json({
-    success: true,
-    rates: {
-      USD: 1,
-      XAF: 600,
-      NGN: 1550,
-      KES: 130,
-      GHS: 15,
-      TZS: 2600,
-      ZMW: 27,
-      RWF: 1320,
-    },
-    provider: "fallback",
-  });
-});
+    // Fallback to our hardcoded rates
+    res.json({
+      success: true,
+      rates: {
+        USD: 1,
+        XAF: 600,
+        NGN: 1550,
+        KES: 130,
+        GHS: 15,
+        TZS: 2600,
+        ZMW: 27,
+        RWF: 1320,
+      },
+      provider: "fallback",
+    });
+  },
+);
 
 app.get("/ready", async (_req: Request, res: Response) => {
   const isShuttingDown = shutdownHandler.getIsShuttingDown();
@@ -517,11 +526,15 @@ app.use("/api/cross-chain", crossChainRouter);
 app.use("/api/stellar", stellarRouter);
 app.use("/api/reconciliation", reconciliationRoutes);
 app.use("/api/exchange-rate-buffers", exchangeRateBufferRoutes);
-app.use("/api/rates", publicApiRateLimiter, slidingRateLimiter({
-  windowMs: 60 * 1000,
-  anonymousLimit: 60,
-  authenticatedLimit: 600,
-}));
+app.use(
+  "/api/rates",
+  publicApiRateLimiter,
+  slidingRateLimiter({
+    windowMs: 60 * 1000,
+    anonymousLimit: 60,
+    authenticatedLimit: 600,
+  }),
+);
 app.use("/api/admin/assets", adminAssetRoutes);
 app.use("/api/settings", settingsRoutes);
 app.use("/api/statements", statementsRoutes);

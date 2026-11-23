@@ -118,6 +118,139 @@ export async function executePathPayment(
   }
 }
 
+export interface ClaimableBalanceRefundParams {
+  sourceKeypair: StellarSdk.Keypair;
+  destination: string;
+  asset: StellarSdk.Asset;
+  amount: string;
+  anchorRecoveryAccount?: string;
+  recoveryDelaySeconds?: number;
+  memo?: StellarSdk.Memo;
+}
+
+export interface ClaimableBalanceRefundResult {
+  hash: string;
+  ledger: number;
+  envelope: string;
+  destination: string;
+  recoveryAccount: string;
+  recoveryDelaySeconds: number;
+}
+
+export interface RefundRoutingParams extends ClaimableBalanceRefundParams {
+  sendPayment: () => Promise<{
+    hash?: string;
+    submittedAt?: Date;
+    envelope?: string;
+  }>;
+}
+
+export interface RefundRoutingResult {
+  method: "payment" | "claimable_balance";
+  hash?: string;
+  submittedAt?: Date;
+  envelope?: string;
+}
+
+export const DEFAULT_CLAIMABLE_BALANCE_RECOVERY_SECONDS = 7 * 24 * 60 * 60;
+
+export function buildCreateClaimableBalanceOperation(
+  params: ClaimableBalanceRefundParams,
+): StellarSdk.xdr.Operation {
+  const recoveryDelaySeconds =
+    params.recoveryDelaySeconds ?? DEFAULT_CLAIMABLE_BALANCE_RECOVERY_SECONDS;
+  const recoveryAccount =
+    params.anchorRecoveryAccount ?? params.sourceKeypair.publicKey();
+
+  if (!Number.isFinite(recoveryDelaySeconds) || recoveryDelaySeconds <= 0) {
+    throw new Error("Recovery delay must be positive");
+  }
+  if (!StellarSdk.StrKey.isValidEd25519PublicKey(params.destination)) {
+    throw new Error("Invalid claimable balance destination");
+  }
+  if (!StellarSdk.StrKey.isValidEd25519PublicKey(recoveryAccount)) {
+    throw new Error("Invalid claimable balance recovery account");
+  }
+
+  return StellarSdk.Operation.createClaimableBalance({
+    asset: params.asset,
+    amount: params.amount,
+    claimants: [
+      new StellarSdk.Claimant(
+        params.destination,
+        StellarSdk.Claimant.predicateUnconditional(),
+      ),
+      new StellarSdk.Claimant(
+        recoveryAccount,
+        StellarSdk.Claimant.predicateNot(
+          StellarSdk.Claimant.predicateBeforeRelativeTime(
+            String(recoveryDelaySeconds),
+          ),
+        ),
+      ),
+    ],
+  });
+}
+
+export async function refundToClaimableBalance(
+  params: ClaimableBalanceRefundParams,
+): Promise<ClaimableBalanceRefundResult> {
+  const server = getStellarServer();
+  const recoveryDelaySeconds =
+    params.recoveryDelaySeconds ?? DEFAULT_CLAIMABLE_BALANCE_RECOVERY_SECONDS;
+  const recoveryAccount =
+    params.anchorRecoveryAccount ?? params.sourceKeypair.publicKey();
+  const account = await server.loadAccount(params.sourceKeypair.publicKey());
+  const builder = new StellarSdk.TransactionBuilder(account, {
+    fee: StellarSdk.BASE_FEE,
+    networkPassphrase: getNetworkPassphrase(),
+  }).addOperation(buildCreateClaimableBalanceOperation(params));
+
+  if (params.memo) {
+    builder.addMemo(params.memo);
+  }
+
+  const transaction = builder.setTimeout(30).build();
+  transaction.sign(params.sourceKeypair);
+  const response = await server.submitTransaction(transaction);
+
+  return {
+    hash: response.hash,
+    ledger: response.ledger,
+    envelope: transaction.toEnvelope().toXDR("base64"),
+    destination: params.destination,
+    recoveryAccount,
+    recoveryDelaySeconds,
+  };
+}
+
+export async function routeRefundPayment(
+  params: RefundRoutingParams,
+): Promise<RefundRoutingResult> {
+  const { sendPayment, ...claimableBalanceParams } = params;
+
+  if (!params.asset.isNative()) {
+    const trusted = await new AssetService().hasTrustline(
+      params.destination,
+      params.asset,
+    );
+    if (!trusted) {
+      const claimableBalance = await refundToClaimableBalance(
+        claimableBalanceParams,
+      );
+      return {
+        method: "claimable_balance",
+        hash: claimableBalance.hash,
+        submittedAt: new Date(),
+        envelope: claimableBalance.envelope,
+      };
+    }
+  }
+
+  const payment = await sendPayment();
+  return { method: "payment", ...payment };
+}
+
 /** Thrown when the path payment is rejected due to slippage / sendMax exceeded. */
 export class SlippageError extends Error {
   constructor(message: string) {

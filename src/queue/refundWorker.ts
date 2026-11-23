@@ -126,7 +126,7 @@ async function processRefundJob(
   });
 
   const amount = String(transaction.amount);
-  const refundResult = await stellarService.sendPayment(
+  const refundResult = await stellarService.sendRefundPayment(
     transaction.stellarAddress,
     amount,
     "Mobile Money Refunds",
@@ -153,6 +153,13 @@ async function processRefundJob(
       reason,
       hash: refundResult.hash || null,
       completedAt: new Date().toISOString(),
+    },
+    stellar: {
+      transactionHash: refundResult.hash,
+      envelope: refundResult.envelope,
+      submittedAt: (refundResult.submittedAt ?? new Date()).toISOString(),
+      baseFee: 100,
+      refundMethod: refundResult.method,
     },
   });
 

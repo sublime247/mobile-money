@@ -10,6 +10,7 @@ import {
 import { resolveEcoCashErrorFromResponse } from "../../services/providers/errors/ecocashErrorMatrix";
 import { scheduleEcoCashStatusPoll } from "../../queue/ecocashStatusPollingQueue";
 import { retryWithJitter } from "../../utils/retryWithJitter";
+import { createEcoCashAuth, EcoCashTokenManager } from "./auth";
 
 const http = providerHttp("ecocash");
 
@@ -45,6 +46,10 @@ interface EcoCashAdapterConfig {
   disbursePath?: string;
   statusPath?: string;
   timeoutMs?: number;
+  tokenManager?: EcoCashTokenManager;
+  tokenUrl?: string;
+  clientId?: string;
+  clientSecret?: string;
 }
 
 const DEFAULT_TIMEOUT_MS = 10_000;
@@ -101,6 +106,7 @@ export class EcoCashAdapter implements MobileMoneyProvider {
   private readonly disbursePath: string;
   private readonly statusPath: string;
   private readonly timeoutMs: number;
+  private readonly tokenManager?: EcoCashTokenManager;
 
   constructor(config: EcoCashAdapterConfig = {}) {
     this.privateKey =
@@ -122,6 +128,31 @@ export class EcoCashAdapter implements MobileMoneyProvider {
     this.timeoutMs =
       config.timeoutMs ??
       (Number(process.env.ECOCASH_TIMEOUT_MS) || DEFAULT_TIMEOUT_MS);
+
+    const oauthConfigured = Boolean(
+      config.tokenManager ??
+      config.tokenUrl ??
+      config.clientId ??
+      config.clientSecret ??
+      process.env.ECOCASH_TOKEN_URL ??
+      process.env.ECOCASH_CLIENT_ID ??
+      process.env.ECOCASH_CLIENT_SECRET,
+    );
+    this.tokenManager =
+      config.tokenManager ??
+      (oauthConfigured
+        ? createEcoCashAuth({
+            tokenUrl: config.tokenUrl,
+            clientId: config.clientId,
+            clientSecret: config.clientSecret,
+            timeoutMs: this.timeoutMs,
+          })
+        : undefined);
+  }
+
+  private async authHeaders(): Promise<Record<string, string>> {
+    if (!this.tokenManager) return {};
+    return this.tokenManager.getAuthorizationHeader();
   }
 
   private joinUrl(path: string): string {
@@ -184,6 +215,7 @@ export class EcoCashAdapter implements MobileMoneyProvider {
     );
 
     try {
+      const authHeaders = await this.authHeaders();
       const response = await http.post(
         this.joinUrl(this.disbursePath),
         {
@@ -197,7 +229,7 @@ export class EcoCashAdapter implements MobileMoneyProvider {
           signature,
         },
         {
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...authHeaders },
           timeout: this.timeoutMs,
         },
       );
@@ -249,6 +281,10 @@ export class EcoCashAdapter implements MobileMoneyProvider {
           ? (error.response?.data as Record<string, unknown> | undefined)
           : undefined;
       const resultCode = responseBody?.resultCode as string | undefined;
+
+      if (statusCode === 401 && this.tokenManager) {
+        await this.tokenManager.invalidate();
+      }
 
       const mapped = resolveEcoCashErrorFromResponse(resultCode, statusCode);
 
@@ -311,10 +347,11 @@ export class EcoCashAdapter implements MobileMoneyProvider {
       // 502/503/504 or network timeout here is always safe to retry --
       // unlike disburse() above, there is no risk of double-submitting a
       // payment.
+      const authHeaders = await this.authHeaders();
       const response = await retryWithJitter(() =>
         http.get(this.joinUrl(this.statusPath), {
           params: { merchantCode: this.merchantCode, reference: referenceId },
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...authHeaders },
           timeout: this.timeoutMs,
         }),
       );
@@ -333,6 +370,13 @@ export class EcoCashAdapter implements MobileMoneyProvider {
       }
       return { status: "unknown" };
     } catch (error: unknown) {
+      if (
+        error instanceof AxiosError &&
+        error.response?.status === 401 &&
+        this.tokenManager
+      ) {
+        await this.tokenManager.invalidate();
+      }
       log.error(
         {
           referenceId,
