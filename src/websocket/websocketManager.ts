@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import logger from "../utils/logger";
 import { WebSocketServer, WebSocket } from "ws";
 import { IncomingMessage, Server } from "http";
@@ -135,7 +136,7 @@ export class WebSocketManager {
         return;
       }
 
-      const clientId = `${client.userId}::${Date.now()}`;
+      const clientId = `${client.userId}::${randomUUID()}`;
       this.clients.set(clientId, client);
       this.joinUserRoom(client.userId, clientId);
 
