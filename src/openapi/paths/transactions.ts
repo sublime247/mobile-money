@@ -348,7 +348,7 @@ registry.registerPath({
             previousStatus: z.string(),
             webhookDispatched: z.boolean(),
             event: z.string(),
-            payload: z.record(z.any()),
+            payload: z.record(z.string(), z.unknown()),
           }),
         },
       },
@@ -361,5 +361,20 @@ registry.registerPath({
       description: "Forbidden - Production API key rejected for sandbox simulation",
       content: { "application/json": { schema: ErrorResponseSchema } },
     },
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/api/v1/transactions/{id}/receipt/json",
+  tags: [TAG],
+  summary: "Get an itemized transaction receipt in JSON",
+  security: SECURITY,
+  request: { params: z.object({ id: z.string() }) },
+  responses: {
+    200: { description: "Transaction receipt with multi-currency fee breakdown" },
+    401: { description: "Authentication required" },
+    403: { description: "Access denied" },
+    404: { description: "Transaction not found" },
   },
 });
