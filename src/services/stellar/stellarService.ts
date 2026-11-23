@@ -6,6 +6,7 @@ import { transactionTotal, transactionErrorsTotal } from "../../utils/metrics";
 import { AssetService, getConfiguredPaymentAsset } from "./assetService";
 import { sanctionService } from "../sanctionService";
 import { resolveToBaseAddress } from "../../stellar/muxed";
+import { routeRefundPayment } from "../../stellar/payments";
 import { assertStrictStellarGAddress } from "../../utils/stellarAddressValidator";
 import { getChannelPool } from "../channelPool";
 
@@ -183,7 +184,9 @@ export class StellarService {
     try {
       if (this.isMockMode) return 100;
       const feeStats = await this.server.feeStats();
-      return Number(feeStats.fee_charged?.p90 || feeStats.last_ledger_base_fee || 100);
+      return Number(
+        feeStats.fee_charged?.p90 || feeStats.last_ledger_base_fee || 100,
+      );
     } catch {
       try {
         return await this.server.fetchBaseFee();
@@ -207,7 +210,10 @@ export class StellarService {
       let timeoutId: NodeJS.Timeout;
       const callPromise = this.server.fetchBaseFee();
       const timeoutPromise = new Promise((_, reject) => {
-        timeoutId = setTimeout(() => reject(new Error("Horizon ping timeout")), timeoutMs);
+        timeoutId = setTimeout(
+          () => reject(new Error("Horizon ping timeout")),
+          timeoutMs,
+        );
       });
 
       await Promise.race([callPromise, timeoutPromise]);
@@ -302,7 +308,10 @@ export class StellarService {
               ? (account as any).sequenceNumber()
               : undefined);
           if (rawSeq) {
-            this.sequenceLockManager.setTrackedSequence(sourcePublicKey, rawSeq);
+            this.sequenceLockManager.setTrackedSequence(
+              sourcePublicKey,
+              rawSeq,
+            );
           }
 
           const transaction = await buildAndSign(account);
@@ -311,7 +320,10 @@ export class StellarService {
           if (rawSeq) {
             try {
               const nextSeq = (BigInt(rawSeq) + 1n).toString();
-              this.sequenceLockManager.setTrackedSequence(sourcePublicKey, nextSeq);
+              this.sequenceLockManager.setTrackedSequence(
+                sourcePublicKey,
+                nextSeq,
+              );
             } catch {
               // ignore BigInt error
             }
@@ -420,6 +432,7 @@ export class StellarService {
   ): Promise<{
     hash?: string;
     submittedAt?: Date;
+    envelope?: string;
   }> {
     try {
       // Resolve destination address (handle both G and M addresses)
@@ -439,7 +452,9 @@ export class StellarService {
 
       // If address-based screening is preferred, use checkPartiesByAddress
       // This resolves muxed accounts and screens by the base address
-      const senderAddress = this.issuerKeypair ? this.issuerKeypair.publicKey() : "G_SENDER_MOCK";
+      const senderAddress = this.issuerKeypair
+        ? this.issuerKeypair.publicKey()
+        : "G_SENDER_MOCK";
       try {
         await sanctionService.checkPartiesByAddress(
           senderAddress,
@@ -493,6 +508,7 @@ export class StellarService {
 
       const issuerKeypair = this.issuerKeypair;
       const baseFee = await this.getNetworkBaseFee();
+      let submittedEnvelope: string | undefined;
 
       const buildTx = async (
         source: StellarSdk.Account | StellarSdk.Horizon.AccountResponse,
@@ -523,16 +539,19 @@ export class StellarService {
             throw new Error("Fee payer keypair not configured");
           }
           const bumpBase = await this.getNetworkBaseFee();
-          const feeBumpTx = StellarSdk.TransactionBuilder.buildFeeBumpTransaction(
-            this.feePayerKeypair,
-            (parseInt(transaction.fee) + bumpBase).toString(),
-            transaction,
-            getNetworkPassphrase(),
-          );
+          const feeBumpTx =
+            StellarSdk.TransactionBuilder.buildFeeBumpTransaction(
+              this.feePayerKeypair,
+              (parseInt(transaction.fee) + bumpBase).toString(),
+              transaction,
+              getNetworkPassphrase(),
+            );
           feeBumpTx.sign(this.feePayerKeypair);
+          submittedEnvelope = feeBumpTx.toEnvelope().toXDR("base64");
           return feeBumpTx;
         }
 
+        submittedEnvelope = transaction.toEnvelope().toXDR("base64");
         return transaction;
       };
 
@@ -567,6 +586,7 @@ export class StellarService {
       return {
         hash: response.hash,
         submittedAt: new Date(),
+        envelope: submittedEnvelope,
       };
     } catch (error) {
       transactionTotal.inc({
@@ -583,6 +603,44 @@ export class StellarService {
 
       throw error;
     }
+  }
+
+  async sendRefundPayment(
+    destinationAddress: string,
+    amount: string,
+    senderName?: string,
+    receiverName?: string,
+    useFeeBump = true,
+    memo?: StellarSdk.Memo,
+  ): Promise<{
+    hash?: string;
+    submittedAt?: Date;
+    envelope?: string;
+    method: "payment" | "claimable_balance";
+  }> {
+    const destination = resolveToBaseAddress(destinationAddress);
+    const sendPayment = () =>
+      this.sendPayment(
+        destination,
+        amount,
+        senderName,
+        receiverName,
+        useFeeBump,
+        memo,
+      );
+
+    if (!this.issuerKeypair) {
+      return { ...(await sendPayment()), method: "payment" };
+    }
+
+    return routeRefundPayment({
+      sourceKeypair: this.issuerKeypair,
+      destination,
+      asset: getConfiguredPaymentAsset(),
+      amount,
+      memo,
+      sendPayment,
+    });
   }
 
   async getBalance(address: string): Promise<string> {
@@ -729,8 +787,7 @@ export class StellarService {
       })
         .addOperation(
           StellarSdk.Operation.setOptions({
-            setFlags:
-              StellarSdk.xdr.AccountFlags.authClawbackEnabledFlag.value,
+            setFlags: StellarSdk.xdr.AccountFlags.authClawbackEnabledFlag.value,
           }),
         )
         .setTimeout(30)

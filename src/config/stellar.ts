@@ -88,10 +88,16 @@ const getHorizonPool = (): HorizonPool => {
   const urls = getHorizonUrls();
   const key = urls.join(",");
   if (!horizonPool || horizonPoolKey !== key) {
+    horizonPool?.stopHealthProbes();
     horizonPool = new HorizonPool(urls);
+    horizonPool.startHealthProbes();
     horizonPoolKey = key;
   }
   return horizonPool;
+};
+
+export const stopHorizonHealthProbes = (): void => {
+  horizonPool?.stopHealthProbes();
 };
 
 /**

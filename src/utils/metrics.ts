@@ -162,6 +162,28 @@ export const horizonRequestFailoverTotal = new Counter({
   registers: [register],
 });
 
+export const horizonFailoverAlertsTotal = new Counter({
+  name: "horizon_failover_alerts_total",
+  help: "Total number of Horizon node failover alerts raised",
+  labelNames: ["from_node", "to_node"],
+  registers: [register],
+});
+
+export const horizonProbeLatencySeconds = new Histogram({
+  name: "horizon_probe_latency_seconds",
+  help: "Latency of Horizon health probes in seconds",
+  labelNames: ["node", "status"],
+  buckets: [0.1, 0.5, 1, 2, 5],
+  registers: [register],
+});
+
+export const horizonCircuitBreakerState = new Gauge({
+  name: "horizon_circuit_breaker_state",
+  help: "Current Horizon node circuit breaker state (0=closed, 1=open)",
+  labelNames: ["node"],
+  registers: [register],
+});
+
 export const healthCheckResponseTimeSeconds = new Histogram({
   name: "health_check_response_time_seconds",
   help: "Duration of provider health checks in seconds",
@@ -425,5 +447,3 @@ export const momoProviderErrorsTotal = new Counter({
   labelNames: ["provider", "error_type"],
   registers: [register],
 });
-
-

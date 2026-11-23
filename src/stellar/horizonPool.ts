@@ -1,8 +1,11 @@
 import * as StellarSdk from "@stellar/stellar-sdk";
 import logger from "../utils/logger";
 import {
+  horizonCircuitBreakerState,
+  horizonFailoverAlertsTotal,
   horizonNodeFailuresTotal,
   horizonNodeHealth,
+  horizonProbeLatencySeconds,
   horizonRequestFailoverTotal,
 } from "../utils/metrics";
 
@@ -53,19 +56,76 @@ const BUILDER_METHODS = new Set<string>([
   "paths",
 ]);
 
-interface HorizonNode {
+export type CircuitState = "closed" | "open" | "half_open";
+
+export class NodeCircuitBreaker {
+  failures = 0;
+  downUntil = 0;
+  state: CircuitState = "closed";
+
+  constructor(
+    readonly threshold = 3,
+    readonly cooldownMs = 30_000,
+  ) {}
+
+  isDown(now = Date.now()): boolean {
+    if (this.state === "closed") return false;
+    if (now >= this.downUntil) {
+      this.state = "half_open";
+      return false;
+    }
+    return true;
+  }
+
+  recordFailure(now = Date.now()): boolean {
+    this.failures += 1;
+    if (this.failures < this.threshold) return false;
+
+    const wasOpen = this.state === "open" && this.downUntil > now;
+    this.state = "open";
+    this.downUntil = now + this.cooldownMs;
+    return !wasOpen;
+  }
+
+  recordSuccess(): void {
+    this.failures = 0;
+    this.downUntil = 0;
+    this.state = "closed";
+  }
+}
+
+export interface HorizonNode {
   url: string;
   server: StellarSdk.Horizon.Server;
-  consecutiveFailures: number;
-  /** Epoch ms before which the node is considered down (cooldown). */
-  downUntil: number;
+  breaker: NodeCircuitBreaker;
 }
+
+export interface HealthProbeResult {
+  node: string;
+  ok: boolean;
+  latencyMs: number;
+  status?: number;
+  error?: string;
+}
+
+export type HorizonHealthProbe = (
+  url: string,
+  timeoutMs: number,
+) => Promise<{ status: number }>;
 
 export interface HorizonPoolConfig {
   /** Consecutive failover-eligible failures before a node is taken out of rotation. */
   maxConsecutiveFailures: number;
   /** How long (ms) a node stays out of rotation after being marked down. */
   cooldownMs: number;
+  /** How often active health probes run. */
+  probeIntervalMs: number;
+  /** A probe slower than this is treated as a failure. */
+  latencyThresholdMs: number;
+  /** Timeout applied to an individual probe request. */
+  probeTimeoutMs: number;
+  /** Overridable probe transport (used by tests). */
+  probe?: HorizonHealthProbe;
 }
 
 const DEFAULT_CONFIG: HorizonPoolConfig = {
@@ -74,6 +134,15 @@ const DEFAULT_CONFIG: HorizonPoolConfig = {
     10,
   ),
   cooldownMs: parseInt(process.env.HORIZON_COOLDOWN_MS || "30000", 10),
+  probeIntervalMs: parseInt(
+    process.env.HORIZON_PROBE_INTERVAL_MS || "15000",
+    10,
+  ),
+  latencyThresholdMs: parseInt(
+    process.env.HORIZON_LATENCY_THRESHOLD_MS || "2000",
+    10,
+  ),
+  probeTimeoutMs: parseInt(process.env.HORIZON_PROBE_TIMEOUT_MS || "2000", 10),
 };
 
 /**
@@ -128,12 +197,21 @@ export function isFailoverEligible(error: unknown): boolean {
   return false;
 }
 
+const defaultHealthProbe: HorizonHealthProbe = async (url, timeoutMs) => {
+  const response = await fetch(`${url.replace(/\/+$/, "")}/health`, {
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  return { status: response.status };
+};
+
 export class HorizonPool {
   private readonly nodes: HorizonNode[];
   private readonly config: HorizonPoolConfig;
   private cursor = 0;
   /** Cached transparent-failover proxy. */
   private proxy: StellarSdk.Horizon.Server | null = null;
+  private probeTimer: NodeJS.Timeout | null = null;
+  private probeInFlight: Promise<HealthProbeResult[]> | null = null;
 
   constructor(urls: string[], config: Partial<HorizonPoolConfig> = {}) {
     if (urls.length === 0) {
@@ -145,12 +223,15 @@ export class HorizonPool {
       server: new StellarSdk.Horizon.Server(url, {
         allowHttp: url.startsWith("http://") || process.env.NODE_ENV === "test",
       }),
-      consecutiveFailures: 0,
-      downUntil: 0,
+      breaker: new NodeCircuitBreaker(
+        this.config.maxConsecutiveFailures,
+        this.config.cooldownMs,
+      ),
     }));
     // Initialise health gauge so all nodes are visible in Prometheus.
     for (const node of this.nodes) {
       horizonNodeHealth.set({ node: node.url }, 1);
+      horizonCircuitBreakerState.set({ node: node.url }, 0);
     }
   }
 
@@ -171,52 +252,77 @@ export class HorizonPool {
     for (let i = 0; i < this.nodes.length; i++) {
       rotated.push(this.nodes[(this.cursor + i) % this.nodes.length]);
     }
-    const healthy = rotated.filter((n) => n.downUntil <= now);
-    const down = rotated.filter((n) => n.downUntil > now);
+    const healthy = rotated.filter((n) => !n.breaker.isDown(now));
+    const down = rotated.filter((n) => n.breaker.isDown(now));
     return healthy.length > 0 ? [...healthy, ...down] : rotated;
   }
 
   private markSuccess(node: HorizonNode): void {
-    if (node.consecutiveFailures > 0 || node.downUntil > 0) {
+    if (node.breaker.failures > 0 || node.breaker.downUntil > 0) {
       logger.info(
         { horizon_node: node.url },
         "Horizon node recovered, back in rotation",
       );
     }
-    node.consecutiveFailures = 0;
-    node.downUntil = 0;
+    node.breaker.recordSuccess();
     horizonNodeHealth.set({ node: node.url }, 1);
+    horizonCircuitBreakerState.set({ node: node.url }, 0);
   }
 
   private markFailure(
     node: HorizonNode,
     operation: string,
     error: unknown,
-  ): void {
-    node.consecutiveFailures += 1;
-    const errorType = classifyError(error);
+    errorTypeOverride?: string,
+  ): boolean {
+    const errorType = errorTypeOverride ?? classifyError(error);
     horizonNodeFailuresTotal.inc({ node: node.url, error_type: errorType });
 
-    const willDisable =
-      node.consecutiveFailures >= this.config.maxConsecutiveFailures;
-    if (willDisable) {
-      node.downUntil = Date.now() + this.config.cooldownMs;
-      horizonNodeHealth.set({ node: node.url }, 0);
-    }
+    const tripped = node.breaker.recordFailure();
 
     logger.warn(
       {
         horizon_node: node.url,
         operation,
         error_type: errorType,
-        consecutive_failures: node.consecutiveFailures,
-        disabled: willDisable,
-        cooldown_ms: willDisable ? this.config.cooldownMs : undefined,
+        consecutive_failures: node.breaker.failures,
+        disabled: tripped,
+        cooldown_ms: tripped ? this.config.cooldownMs : undefined,
         err: error instanceof Error ? error.message : String(error),
       },
-      willDisable
+      tripped
         ? "Horizon node failed and was removed from rotation"
         : "Horizon node request failed",
+    );
+
+    if (tripped) {
+      horizonNodeHealth.set({ node: node.url }, 0);
+      horizonCircuitBreakerState.set({ node: node.url }, 1);
+      this.announceFailover(node, operation, errorType);
+    }
+    return tripped;
+  }
+
+  private announceFailover(
+    failedNode: HorizonNode,
+    operation: string,
+    reason: string,
+  ): void {
+    const next = this.candidateOrder().find((node) => node !== failedNode);
+    horizonFailoverAlertsTotal.inc(
+      { from_node: failedNode.url, to_node: next?.url ?? "none" },
+      1,
+    );
+    logger.warn(
+      {
+        event: "horizon_failover",
+        operation,
+        from_node: failedNode.url,
+        to_node: next?.url ?? null,
+        reason,
+        consecutive_failures: failedNode.breaker.failures,
+      },
+      "Horizon failover: switching traffic to a healthy node",
     );
   }
 
@@ -278,6 +384,94 @@ export class HorizonPool {
   /** The currently-preferred underlying server (for streaming / passthrough). */
   getActiveServer(): StellarSdk.Horizon.Server {
     return this.candidateOrder()[0].server;
+  }
+
+  async probeNode(node: HorizonNode): Promise<HealthProbeResult> {
+    const startedAt = Date.now();
+    try {
+      const probe = this.config.probe ?? defaultHealthProbe;
+      const response = await probe(node.url, this.config.probeTimeoutMs);
+      const latencyMs = Date.now() - startedAt;
+
+      if (response.status >= 500) {
+        throw Object.assign(
+          new Error(`Health probe returned ${response.status}`),
+          {
+            response: { status: response.status },
+          },
+        );
+      }
+      if (latencyMs > this.config.latencyThresholdMs) {
+        throw new Error(
+          `Health probe latency ${latencyMs}ms exceeds ${this.config.latencyThresholdMs}ms`,
+        );
+      }
+
+      horizonProbeLatencySeconds.observe(
+        { node: node.url, status: "success" },
+        latencyMs / 1000,
+      );
+      this.markSuccess(node);
+      return { node: node.url, ok: true, latencyMs, status: response.status };
+    } catch (error) {
+      const latencyMs = Date.now() - startedAt;
+      const errorType =
+        latencyMs > this.config.latencyThresholdMs
+          ? "latency"
+          : classifyError(error);
+      horizonProbeLatencySeconds.observe(
+        { node: node.url, status: "failure" },
+        latencyMs / 1000,
+      );
+      this.markFailure(node, "health_probe", error, errorType);
+      return {
+        node: node.url,
+        ok: false,
+        latencyMs,
+        status: (error as { response?: { status?: number } })?.response?.status,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
+  async runHealthProbeCycle(): Promise<HealthProbeResult[]> {
+    if (this.probeInFlight) return this.probeInFlight;
+    this.probeInFlight = Promise.all(
+      this.nodes.map((node) => this.probeNode(node)),
+    )
+      .then((results) => {
+        logger.debug(
+          {
+            horizon_nodes: results.map((result) => ({
+              node: result.node,
+              ok: result.ok,
+              latency_ms: result.latencyMs,
+            })),
+          },
+          "Horizon health probe cycle complete",
+        );
+        return results;
+      })
+      .finally(() => {
+        this.probeInFlight = null;
+      });
+    return this.probeInFlight;
+  }
+
+  startHealthProbes(): void {
+    if (this.probeTimer) return;
+    void this.runHealthProbeCycle();
+    this.probeTimer = setInterval(() => {
+      void this.runHealthProbeCycle();
+    }, this.config.probeIntervalMs);
+    this.probeTimer.unref?.();
+  }
+
+  stopHealthProbes(): void {
+    if (this.probeTimer) {
+      clearInterval(this.probeTimer);
+      this.probeTimer = null;
+    }
   }
 
   /**

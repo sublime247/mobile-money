@@ -9,6 +9,7 @@ import { runDisputeSlaJob } from "./disputeSlaJob";
 import { runBalanceMonitorJob } from "./balanceMonitorJob";
 import { runSep31MonitorJob } from "./sep31MonitorJob";
 import { runFeeBumpJob } from "./feeBumpJob";
+import { runFeeBumpWatchdogOnce } from "../stellar/feeBumpWatchdog";
 import { runSep31FeeBumpJob } from "./sep31FeeBumpJob";
 import { runSponsorWalletMonitorJob } from "../services/stellar/feeBump";
 import { MonitoringService } from "../services/monitoringService";
@@ -104,6 +105,12 @@ const JOBS: JobConfig[] = [
     // Every 30 seconds - monitors and bumps fees for stuck transactions
     schedule: process.env.FEE_BUMP_CRON || "*/30 * * * * *",
     handler: runFeeBumpJob,
+  },
+  {
+    name: "pending-fee-bump-watchdog",
+    // Every 15 seconds - wraps mempool transactions older than 60 seconds
+    schedule: process.env.PENDING_FEE_BUMP_CRON || "*/15 * * * * *",
+    handler: () => runFeeBumpWatchdogOnce().then(() => undefined),
   },
   {
     name: "sep31-fee-bump",
