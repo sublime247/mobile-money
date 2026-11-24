@@ -32,7 +32,13 @@ import {
   CustomerService,
   defaultCustomerService,
   customerEvents,
+  CustomerTransitionResult,
 } from "../services/customerService";
+import {
+  KYC_STATUS_UPDATED,
+  KycStatusUpdatedEvent,
+  kycStatusEvents,
+} from "../services/kycStatusEvents";
 
 /**
  * SEP-12: KYC API
@@ -165,6 +171,53 @@ const PutCustomerSchema = z.object({
 }).catchall(z.any()); // Catch all unmapped dynamic fields
 
 // ============================================================================
+// Customer status webhook payload (#2427)
+// ============================================================================
+
+/**
+ * Body POSTed to registered partner anchors when a customer's KYC review
+ * completes. Deliveries are signed with HMAC-SHA256 over
+ * `<timestamp>.<body>` using the partner's shared secret (headers
+ * `X-Momo-Signature`, `X-Momo-Timestamp`, `X-Webhook-Signature`) and queued
+ * in BullMQ with retries — see `queue/customerCallbackQueue.ts`.
+ */
+export const Sep12StatusWebhookPayloadSchema = z
+  .object({
+    event: z.enum(["customer.kyc.accepted", "customer.kyc.rejected"]),
+    event_id: z.string().min(1),
+    customer_id: z.string().min(1),
+    account: z.string().nullable(),
+    previous_status: z.nativeEnum(Sep12CustomerStatus),
+    current_status: z.enum([
+      Sep12CustomerStatus.ACCEPTED,
+      Sep12CustomerStatus.REJECTED,
+    ]),
+    status: z.enum([Sep12CustomerStatus.ACCEPTED, Sep12CustomerStatus.REJECTED]),
+    reason: z.string().nullable(),
+    timestamp: z.string().datetime(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
+  })
+  .superRefine((payload, ctx) => {
+    if (payload.status === Sep12CustomerStatus.ACCEPTED && payload.reason) {
+      ctx.addIssue({
+        code: "custom",
+        message: "reason is only sent for REJECTED customers",
+        path: ["reason"],
+      });
+    }
+  });
+
+export type Sep12StatusWebhookPayload = z.infer<
+  typeof Sep12StatusWebhookPayloadSchema
+>;
+
+/** Statuses that trigger a partner webhook. */
+const NOTIFIABLE_STATUSES = new Set<Sep12CustomerStatus>([
+  Sep12CustomerStatus.ACCEPTED,
+  Sep12CustomerStatus.REJECTED,
+]);
+
+// ============================================================================
 // SEP-12 Service
 // ============================================================================
 
@@ -179,6 +232,71 @@ export class Sep12Service {
     this.kycService = new KYCService(db);
     this.userModel = new UserModel();
     this.customerService = customerService || defaultCustomerService;
+  }
+
+  /**
+   * Notify registered partner anchors that a customer's KYC review finished.
+   *
+   * Dispatches only when the customer moves into ACCEPTED or REJECTED from a
+   * different status; repeated provider events for an unchanged status are
+   * ignored. The failure reason is included only for REJECTED customers.
+   *
+   * @returns the transition result, or `null` when no webhook is due.
+   */
+  async notifyCustomerStatusChange(
+    event: KycStatusUpdatedEvent,
+  ): Promise<CustomerTransitionResult | null> {
+    if (!event.userId) {
+      return null;
+    }
+
+    const level = (event.kycLevel as KYCLevel) || KYCLevel.NONE;
+    const currentStatus = this.mapKYCStatusToSep12(
+      event.status as KYCStatus,
+      level,
+    );
+    if (!NOTIFIABLE_STATUSES.has(currentStatus)) {
+      return null;
+    }
+
+    const previousStatus = event.previousStatus
+      ? this.mapKYCStatusToSep12(event.previousStatus as KYCStatus, level)
+      : Sep12CustomerStatus.PROCESSING;
+    if (
+      event.previousStatus &&
+      (event.previousStatus === event.status ||
+        previousStatus === currentStatus)
+    ) {
+      return null;
+    }
+
+    let account: string | undefined;
+    try {
+      const result = await this.db.query<{ stellar_address: string | null }>(
+        "SELECT stellar_address FROM users WHERE id = $1",
+        [event.userId],
+      );
+      account = result.rows[0]?.stellar_address ?? undefined;
+    } catch (error) {
+      logger.warn(
+        {
+          customerId: event.userId,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        "[SEP-12] Could not resolve Stellar account for status webhook",
+      );
+    }
+
+    const isRejected = currentStatus === Sep12CustomerStatus.REJECTED;
+    return this.customerService.transitionCustomerStatus({
+      customerId: event.userId,
+      account,
+      previousStatus,
+      currentStatus,
+      reason: isRejected
+        ? event.rejectionReason || "Customer verification was rejected"
+        : undefined,
+    });
   }
 
   /**
@@ -703,12 +821,66 @@ export class Sep12Service {
 }
 
 // ============================================================================
+// KYC status → partner webhook trigger
+// ============================================================================
+
+let activeKycStatusListener:
+  | ((event: KycStatusUpdatedEvent) => void)
+  | null = null;
+
+/**
+ * Subscribe `service` to KYC status updates so partner anchors are notified
+ * when a customer is accepted or rejected. Only one trigger is active at a
+ * time; attaching again replaces the previous one so repeated router
+ * construction never sends duplicate webhooks.
+ *
+ * @returns a function that detaches the trigger.
+ */
+export function attachKycStatusWebhookTrigger(
+  service: Sep12Service,
+): () => void {
+  detachKycStatusWebhookTrigger();
+
+  const listener = (event: KycStatusUpdatedEvent) => {
+    service.notifyCustomerStatusChange(event).catch((error) => {
+      logger.error(
+        {
+          applicantId: event.applicantId,
+          customerId: event.userId,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        "[SEP-12] Failed to dispatch customer status webhook",
+      );
+    });
+  };
+
+  kycStatusEvents.on(KYC_STATUS_UPDATED, listener);
+  activeKycStatusListener = listener;
+
+  return () => {
+    if (activeKycStatusListener === listener) {
+      detachKycStatusWebhookTrigger();
+    }
+  };
+}
+
+export function detachKycStatusWebhookTrigger(): void {
+  if (activeKycStatusListener) {
+    kycStatusEvents.off(KYC_STATUS_UPDATED, activeKycStatusListener);
+    activeKycStatusListener = null;
+  }
+}
+
+// ============================================================================
 // Express Router
 // ============================================================================
 
 export const createSep12Router = (db: Pool): Router => {
   const router = Router();
   const sep12Service = new Sep12Service(db);
+
+  // Notify partner anchors when KYC review completes (#2427).
+  attachKycStatusWebhookTrigger(sep12Service);
 
   // Rate limiter for SEP-12 endpoints
   const sep12Limiter = sep12RateLimiter;

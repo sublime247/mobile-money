@@ -11,6 +11,7 @@ import {
   TRANSACTION_LIMITS,
 } from "../config/limits";
 import { isTransientError, withRetry } from "./retry";
+import { emitKycStatusUpdated } from "./kycStatusEvents";
 
 // KYC Provider: Entrust Identity Verification (formerly Onfido)
 // Documentation: https://documentation.identity.entrust.com/api/latest/
@@ -785,8 +786,15 @@ export class KYCService {
     const updateResult = await this.db.query<{
       user_id: string | null;
       kyc_level: string | null;
+      previous_status?: string | null;
     }>(
       `
+        WITH previous AS (
+          SELECT verification_status
+          FROM kyc_applicants
+          WHERE applicant_id = $5
+          LIMIT 1
+        )
         UPDATE kyc_applicants
         SET verification_status = $1,
             kyc_level = $2,
@@ -794,7 +802,8 @@ export class KYCService {
             applicant_data = COALESCE(applicant_data, '{}'::jsonb) || $4::jsonb,
             updated_at = CURRENT_TIMESTAMP
         WHERE applicant_id = $5
-        RETURNING user_id, kyc_level
+        RETURNING user_id, kyc_level,
+          (SELECT verification_status FROM previous) AS previous_status
       `,
       [
         verification.status,
@@ -821,7 +830,21 @@ export class KYCService {
       ],
     );
 
-    const userId = updateResult.rows[0]?.user_id;
+    const updatedRow = updateResult.rows[0];
+    const userId = updatedRow?.user_id;
+    if (updatedRow) {
+      // Lets SEP-12 notify partner anchors of the status change (#2427).
+      emitKycStatusUpdated({
+        applicantId,
+        userId: userId ?? null,
+        previousStatus: updatedRow.previous_status,
+        status: verification.status,
+        kycLevel: verification.level,
+        rejectionReason: verification.rejectionReason,
+        source: eventAction,
+      });
+    }
+
     if (userId && verification.status === KYCStatus.APPROVED) {
       await this.updateUserKYCLevel(userId, verification.level);
     } else if (

@@ -1,5 +1,5 @@
 import logger from "../utils/logger";
-import { Queue, Worker, Job } from "bullmq";
+import { Queue, Worker, Job, UnrecoverableError } from "bullmq";
 import { queueOptions } from "./config";
 import { validateWebhookUrl } from "../security/ssrf";
 import { createWebhookSignature, computeWebhookSignature } from "../utils/webhookSigner";
@@ -42,13 +42,33 @@ export async function enqueueCustomerCallback(
   });
 }
 
+/** HTTP statuses treated as transient partner failures worth retrying. */
+const RETRYABLE_CLIENT_STATUSES = new Set([408, 425, 429]);
+
+/**
+ * Whether a failed delivery should be retried: 5xx, timeouts and rate limits
+ * are transient; any other 4xx means the partner rejected the request and
+ * retrying would not help.
+ */
+export function isRetryableCallbackStatus(statusCode: number): boolean {
+  return statusCode >= 500 || RETRYABLE_CLIENT_STATUSES.has(statusCode);
+}
+
+export interface CustomerCallbackDeliveryResult {
+  status: "delivered" | "failed" | "blocked";
+  statusCode?: number;
+  error?: string;
+  /** For failed deliveries: whether the failure is transient. */
+  retryable?: boolean;
+}
+
 /**
  * Deliver a customer status callback to the target URL with HMAC signature.
  */
 export async function deliverCustomerCallback(
   jobData: CustomerCallbackJobData,
   fetchImpl: typeof fetch = fetch,
-): Promise<{ status: "delivered" | "failed" | "blocked"; statusCode?: number; error?: string }> {
+): Promise<CustomerCallbackDeliveryResult> {
   const { customerId, callbackUrl, secret, payload, timestamp } = jobData;
 
   try {
@@ -65,8 +85,9 @@ export async function deliverCustomerCallback(
   const sigHeaders = createWebhookSignature(payloadString, secret, timestamp);
   const hmacHex = computeWebhookSignature(payloadString, secret, timestamp);
 
+  let response: Response;
   try {
-    const response = await fetchImpl(callbackUrl, {
+    response = await fetchImpl(callbackUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -76,29 +97,56 @@ export async function deliverCustomerCallback(
       },
       body: payloadString,
     });
-
-    if (!response.ok) {
-      const errText = await response.text().catch(() => "");
-      const errMsg = `HTTP error ${response.status}: ${errText}`;
-      logger.warn(
-        { customerId, callbackUrl, status: response.status },
-        `[customer-callback] Failed callback response: ${errMsg}`,
-      );
-      throw new Error(errMsg);
-    }
-
-    logger.info(
-      { customerId, callbackUrl, status: response.status },
-      "[customer-callback] Webhook callback delivered successfully",
-    );
-    return { status: "delivered", statusCode: response.status };
   } catch (error: any) {
+    // Network errors / timeouts are transient.
     logger.error(
       { customerId, callbackUrl, error: error.message },
       "[customer-callback] Error delivering customer webhook callback",
     );
-    return { status: "failed", error: error.message };
+    return { status: "failed", error: error.message, retryable: true };
   }
+
+  if (!response.ok) {
+    const errText = await response.text().catch(() => "");
+    const errMsg = `HTTP error ${response.status}: ${errText}`;
+    const retryable = isRetryableCallbackStatus(response.status);
+    logger.warn(
+      { customerId, callbackUrl, status: response.status, retryable },
+      `[customer-callback] Failed callback response: ${errMsg}`,
+    );
+    return {
+      status: "failed",
+      statusCode: response.status,
+      error: errMsg,
+      retryable,
+    };
+  }
+
+  logger.info(
+    { customerId, callbackUrl, status: response.status },
+    "[customer-callback] Webhook callback delivered successfully",
+  );
+  return { status: "delivered", statusCode: response.status };
+}
+
+/**
+ * BullMQ processor: throws a retryable error for transient partner failures
+ * (so the job is retried with backoff) and an `UnrecoverableError` for
+ * permanent ones (so it fails immediately without burning retries).
+ */
+export async function processCustomerCallbackJob(
+  job: Pick<Job<CustomerCallbackJobData>, "data">,
+  fetchImpl: typeof fetch = fetch,
+): Promise<CustomerCallbackDeliveryResult> {
+  const result = await deliverCustomerCallback(job.data, fetchImpl);
+  if (result.status === "failed") {
+    const message = result.error || "Delivery failed";
+    if (result.retryable === false) {
+      throw new UnrecoverableError(message);
+    }
+    throw new Error(message);
+  }
+  return result;
 }
 
 export let customerCallbackWorker: Worker<CustomerCallbackJobData> | null = null;
@@ -111,10 +159,7 @@ export function startCustomerCallbackWorker(fetchImpl: typeof fetch = fetch): Wo
   customerCallbackWorker = new Worker<CustomerCallbackJobData>(
     CUSTOMER_CALLBACK_QUEUE_NAME,
     async (job: Job<CustomerCallbackJobData>) => {
-      const result = await deliverCustomerCallback(job.data, fetchImpl);
-      if (result.status === "failed") {
-        throw new Error(result.error || "Delivery failed");
-      }
+      await processCustomerCallbackJob(job, fetchImpl);
     },
     queueOptions,
   );
