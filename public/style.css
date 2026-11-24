@@ -120,7 +120,7 @@ body {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background-color: hsl(var(--text-muted));
+  background-color: #767676;
 }
 
 .status-dot.pulsing {
@@ -317,7 +317,7 @@ body {
   margin-left: 8px;
   font-family: var(--font-mono);
   font-size: 0.75rem;
-  color: hsl(var(--text-muted));
+  color: #767676;
 }
 
 .visual-body {
@@ -356,7 +356,7 @@ body {
 
 .step-label {
   font-size: 0.75rem;
-  color: hsl(var(--text-muted));
+  color: #767676;
   font-weight: 500;
 }
 
@@ -579,7 +579,7 @@ body {
 .calc-divider {
   text-align: center;
   font-size: 1.25rem;
-  color: hsl(var(--text-muted));
+  color: #767676;
 }
 
 .calc-details {
@@ -674,7 +674,7 @@ body {
 .code-lang {
   font-family: var(--font-mono);
   font-size: 0.75rem;
-  color: hsl(var(--text-muted));
+  color: #767676;
 }
 
 .btn-copy {
@@ -711,7 +711,7 @@ body {
   padding: 40px 0;
   border-top: 1px solid hsl(var(--border));
   font-size: 0.85rem;
-  color: hsl(var(--text-muted));
+  color: #767676;
 }
 
 .footer-container {
@@ -726,7 +726,7 @@ body {
 }
 
 .footer-links a {
-  color: hsl(var(--text-muted));
+  color: #767676;
   text-decoration: none;
   transition: color 0.2s ease;
 }
@@ -811,7 +811,7 @@ body {
 .theme-switcher button {
   background: transparent;
   border: none;
-  color: hsl(var(--text-muted));
+  color: #767676;
   padding: 6px 14px;
   border-radius: 6px;
   font-size: 0.8rem;

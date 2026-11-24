@@ -1,54 +1,94 @@
-# Dependencies
+# ── Dependencies ──────────────────────────────────
 node_modules/
 
-# Build outputs
+# ── Build Output ──────────────────────────────────
 dist/
-contracts/target/
-benchmarks/target/
 *.tsbuildinfo
 .docusaurus/
 
-# Kotlin SDK build artifacts
+# ── Rust / Cargo ──────────────────────────────────
+**/target/
+
+# ── Kotlin / Gradle SDK ──────────────────────────
+sdk/bin/
 sdk/build/
 sdk/.gradle/
+.gradle/
 gradle-temp/
 
-# Environment and secrets
-.env
-.env.local
-.env.*.local
-certs/
-.orange-session/
-
-# Test coverage
+# ── Test Artifacts ────────────────────────────────
 coverage/
 .nyc_output/
 stryker-tmp/
+playwright-report/
+test-results/
 
-# Logs
+# ── Pact Contract Artifacts ──────────────────────
+pacts/*.json
+!pacts/.gitkeep
+
+# ── Logs & Reports ────────────────────────────────
+logs/
+reports/
 *.log
 pact.log
 *.pact.log
 
-# OS files
-.DS_Store
-.idea
-.vscode/settings.json
+# ── Load Test / Benchmark Output ─────────────────
+tests/load/results/*.json
+benchmarks/results/*.json
+benchmarks/results/*.html
 
-# Kiro
+# ── Environment & Secrets ─────────────────────────
+.env
+.env.local
+.env.*.local
+!.env.example
+!.env.config.example
+certs/
+.orange-session/
+k8s/secret.yaml
+secret.yaml
+*.momo-profiles.json
+
+# ── OS Files ──────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Editor & IDE ──────────────────────────────────
+.idea/
+.vs/
+.vscode/settings.json
+.kilo/
 .kiro/
 
-# Playwright
+# ── PR Bundles & Patches ─────────────────────────
+.pull_request/
+
+# ── Terraform ─────────────────────────────────────
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+
+# ── Package Manager (using npm) ──────────────────
+pnpm-lock.yaml
+pnpm-workspace.yaml
+
+# ── Playwright ────────────────────────────────────
 playwright-report/
 test-results/
 
-# Load test output
-tests/load/results/*.json
-benchmarks/results/*.json
-
-# Temporary files
+# ── Temporary Files ──────────────────────────────
 *.tmp
 *.temp
 .cache/
 
-secret.yaml
+# ── Python ───────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+
+# ── Soroban deployment config (may reference admin keys) ──
+config/contracts.json

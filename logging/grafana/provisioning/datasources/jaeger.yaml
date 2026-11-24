@@ -1,0 +1,12 @@
+apiVersion: 1
+
+datasources:
+  - name: Jaeger
+    type: jaeger
+    access: proxy
+    url: http://jaeger:16686
+    jsonData:
+      # Pivot from a log line or a RED-metric exemplar (trace_id) straight into
+      # the trace waterfall in the Jaeger UI.
+      nodeTags:
+        - service.name

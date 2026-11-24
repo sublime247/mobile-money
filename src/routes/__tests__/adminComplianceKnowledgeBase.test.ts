@@ -10,6 +10,21 @@ const mockComplianceDocumentModel = {
   getFacets: jest.fn(),
 };
 
+jest.mock("@stellar/stellar-sdk", () => ({
+  Networks: {
+    TESTNET: "Test SDF Network ; September 2015",
+    PUBLIC: "Public Global Stellar Network ; September 2015",
+  },
+  Keypair: {
+    fromSecret: jest.fn(),
+    random: jest.fn(),
+  },
+  Horizon: {
+    Server: jest.fn().mockImplementation(() => ({})),
+  },
+  Server: jest.fn().mockImplementation(() => ({})),
+}));
+
 jest.mock("../../models/complianceDocument", () => ({
   ComplianceDocumentModel: jest
     .fn()

@@ -1,0 +1,36 @@
+meta {
+  name: "SEP-38 Get Firm Quote by ID"
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{base_url}}/sep38/quote/{{quote_id}}
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  Authorization: Bearer {{jwt_token}}
+}
+
+script:pre-request {
+  // Guard: authenticated requests need a SEP-10 (or login) token.
+  const token = bru.getEnvVar("jwt_token");
+  if (!token) {
+    throw new Error(
+      "jwt_token is empty — run 'SEP-10 Sign Challenge & Get Token' (01-auth) first."
+    );
+  }
+}
+
+tests {
+  test("quote returned", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("quote carries an expiration timestamp", function() {
+    const body = res.getBody();
+    expect(body.expires_at).to.be.a("string");
+  });
+}

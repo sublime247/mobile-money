@@ -1,0 +1,25 @@
+---
+title: 'Initiate Withdrawal'
+api: 'POST /v1/transactions/withdraw'
+description: 'Withdraw Stellar tokens to a mobile money wallet'
+---
+
+Initiates a withdrawal from the Stellar network to a mobile money wallet.
+
+### Request Body
+
+<ParamField body="amount" type="number" required>
+  The amount of tokens to withdraw.
+</ParamField>
+<ParamField body="assetCode" type="string" required>
+  The Stellar asset code (e.g., `USDC`).
+</ParamField>
+<ParamField body="provider" type="string" required>
+  The target mobile money provider.
+</ParamField>
+<ParamField body="phone" type="string" required>
+  The destination phone number.
+</ParamField>
+
+### Response
+Returns a withdrawal transaction ID and a Stellar memo to use when transferring funds.

@@ -1,0 +1,14 @@
+---
+title: 'Submit KYC Documents'
+api: 'POST /v1/kyc/documents'
+description: 'Upload identity verification documents'
+---
+
+Upload documents for KYC verification via multipart/form-data.
+
+<ParamField body="documentType" type="string" required>
+  Type of document (e.g., `ID_CARD`, `PASSPORT`).
+</ParamField>
+<ParamField body="file" type="file" required>
+  The document image/PDF file.
+</ParamField>

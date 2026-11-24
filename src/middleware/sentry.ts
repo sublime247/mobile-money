@@ -72,7 +72,37 @@ export const sentryBreadcrumbMiddleware = (
 };
 
 /**
- * Global Sentry configuration with PII scrubbing in beforeSend
+ * Request headers that must never reach Sentry, matched case-insensitively.
+ * Authorization and Cookie can carry bearer tokens / session secrets, so
+ * they are redacted outright rather than passed through the generic
+ * scrubSensitiveData key-matching above.
+ */
+const SENSITIVE_HEADERS = [
+  "authorization",
+  "cookie",
+  "set-cookie",
+  "x-api-key",
+];
+
+const scrubHeaders = (
+  headers: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined => {
+  if (!headers) return headers;
+
+  const scrubbed: Record<string, unknown> = { ...headers };
+  for (const key of Object.keys(scrubbed)) {
+    if (SENSITIVE_HEADERS.includes(key.toLowerCase())) {
+      scrubbed[key] = "[REDACTED]";
+    }
+  }
+  return scrubbed;
+};
+
+/**
+ * Global Sentry configuration with PII scrubbing in beforeSend.
+ * Scrubs the request body (via scrubSensitiveData) and sensitive request
+ * headers (Authorization, Cookie, Set-Cookie, X-Api-Key) before any event
+ * is transmitted.
  */
 export const initSentry = (dsn: string, release?: string) => {
   Sentry.init({
@@ -83,8 +113,39 @@ export const initSentry = (dsn: string, release?: string) => {
       if (event.request?.data) {
         event.request.data = scrubSensitiveData(event.request.data);
       }
+      if (event.request?.headers) {
+        event.request.headers = scrubHeaders(
+          event.request.headers as Record<string, unknown>,
+        ) as typeof event.request.headers;
+      }
       return event;
     },
     tracesSampleRate: 1.0,
+  });
+
+  registerProcessErrorCapture();
+};
+
+/**
+ * Captures process-level failures that never reach Express's error
+ * middleware: unhandled promise rejections and uncaught exceptions.
+ * Safe to call multiple times; listeners are only attached once.
+ */
+let processHandlersRegistered = false;
+export const registerProcessErrorCapture = () => {
+  if (processHandlersRegistered) return;
+  processHandlersRegistered = true;
+
+  process.on("unhandledRejection", (reason) => {
+    Sentry.captureException(
+      reason instanceof Error ? reason : new Error(String(reason)),
+      { tags: { source: "unhandledRejection" } },
+    );
+  });
+
+  process.on("uncaughtException", (error) => {
+    Sentry.captureException(error, {
+      tags: { source: "uncaughtException" },
+    });
   });
 };

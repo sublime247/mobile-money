@@ -14,9 +14,11 @@ import {
   patchMetadataHandler,
   deleteMetadataKeysHandler,
   searchByMetadataHandler,
+  batchStatusHandler,
 } from "../../controllers/transactionController";
 import { validateNetworkMiddleware } from "../../middleware/validateNetworkMiddleware";
 import { TimeoutPresets, haltOnTimedout } from "../../middleware/timeout";
+import { RequestTimeoutPresets } from "../../middleware/requestTimeout";
 import { validateTransactionFilters } from "../../utils/transactionFilters";
 import { requireAuth } from "../../middleware/auth";
 import { checkAccountStatusStrict } from "../../middleware/checkAccountStatus";
@@ -24,8 +26,10 @@ import { geolocateMiddleware } from "../../middleware/geolocate";
 import { geoFencingMiddleware } from "../../middleware/geoFencing";
 import { createExportRoutes } from "../export";
 import { TransactionModel, TransactionStatus } from "../../models/transaction";
+import { getReceiptJsonHandler } from "../../controllers/receiptController";
 import { generateTransactionPdfBuffer } from "../../services/pdfReceipt";
 import { validate2FAForWithdrawal } from "../../services/twoFactorWithdrawalService";
+import { strictIdempotency } from "../../middleware/idempotency";
 
 export const transactionRoutesV1 = Router();
 transactionRoutesV1.use(createExportRoutes());
@@ -36,8 +40,9 @@ const transactionModel = new TransactionModel();
 transactionRoutesV1.post(
   "/deposit",
   requireAuth,
-  checkAccountStatusStrict,
   geoFencingMiddleware,
+  strictIdempotency,
+  checkAccountStatusStrict,
   validateNetworkMiddleware,
   TimeoutPresets.long,
   haltOnTimedout,
@@ -50,8 +55,9 @@ transactionRoutesV1.post(
 transactionRoutesV1.post(
   "/withdraw",
   requireAuth,
-  checkAccountStatusStrict,
   geoFencingMiddleware,
+  strictIdempotency,
+  checkAccountStatusStrict,
   validateNetworkMiddleware,
   TimeoutPresets.long,
   haltOnTimedout,
@@ -96,6 +102,15 @@ transactionRoutesV1.patch(
   reviewAmlAlertHandler,
 );
 
+// Bulk transaction status lookup (up to 50 IDs per request)
+transactionRoutesV1.post(
+  "/batch-status",
+  requireAuth,
+  RequestTimeoutPresets.complexBatch,
+  setApiVersion("v1"),
+  batchStatusHandler,
+);
+
 // Get specific transaction
 transactionRoutesV1.get(
   "/:id",
@@ -103,6 +118,16 @@ transactionRoutesV1.get(
   haltOnTimedout,
   setApiVersion("v1"),
   getTransactionHandler,
+);
+
+// JSON receipt with itemised multi-currency fee breakdown
+transactionRoutesV1.get(
+  "/:id/receipt/json",
+  TimeoutPresets.quick,
+  haltOnTimedout,
+  requireAuth,
+  setApiVersion("v1"),
+  getReceiptJsonHandler,
 );
 
 transactionRoutesV1.get(
@@ -119,6 +144,10 @@ transactionRoutesV1.get(
       const transaction = await transactionModel.findById(id);
       if (!transaction)
         return res.status(404).json({ error: "Transaction not found" });
+
+      if (transaction.userId !== req.jwtUser?.userId && req.user?.role !== "admin") {
+        return res.status(403).json({ error: "You do not have permission to access this transaction" });
+      }
 
       if (transaction.status !== TransactionStatus.Completed)
         return res.status(400).json({

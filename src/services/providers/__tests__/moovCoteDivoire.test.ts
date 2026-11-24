@@ -1,9 +1,24 @@
-import axios from "axios";
+import axios, { AxiosError, type InternalAxiosRequestConfig } from "axios";
 import { MoovCoteDivoireProvider } from "../moovCoteDivoire";
 
 jest.mock("axios");
 
 const axiosMock = axios as jest.Mocked<typeof axios>;
+
+function createMockAxiosError(
+  status: number,
+  data?: Record<string, unknown>,
+): AxiosError {
+  const config = {} as InternalAxiosRequestConfig;
+  const response = {
+    status,
+    statusText: "",
+    headers: {},
+    config,
+    data,
+  };
+  return new AxiosError("Request failed", String(status), config, {}, response as never);
+}
 
 const providerConfig = {
   apiKey: "test-client-id",
@@ -161,6 +176,73 @@ describe("MoovCoteDivoireProvider", () => {
       expect(result).toEqual({
         success: false,
         referenceId: "deposit-4",
+        error: "Moov Côte d'Ivoire deposit push failed",
+      });
+    });
+
+    it("maps an INSUFFICIENT_BALANCE response code to a specific error message", async () => {
+      axiosMock.post
+        .mockResolvedValueOnce({
+          data: { access_token: "moov-token", expires_in: 3600 },
+        })
+        .mockRejectedValueOnce(
+          createMockAxiosError(400, { code: "INSUFFICIENT_BALANCE" }),
+        );
+      const provider = new MoovCoteDivoireProvider(providerConfig);
+
+      const result = await provider.requestPayment(
+        "0701020304",
+        "5000",
+        "deposit-5",
+      );
+
+      expect(result).toEqual({
+        success: false,
+        referenceId: "deposit-5",
+        error: "Insufficient balance in the Moov Money account",
+      });
+    });
+
+    it("maps a bare HTTP 402 (no body code) to insufficient balance", async () => {
+      axiosMock.post
+        .mockResolvedValueOnce({
+          data: { access_token: "moov-token", expires_in: 3600 },
+        })
+        .mockRejectedValueOnce(createMockAxiosError(402));
+      const provider = new MoovCoteDivoireProvider(providerConfig);
+
+      const result = await provider.requestPayment(
+        "0701020304",
+        "5000",
+        "deposit-6",
+      );
+
+      expect(result).toEqual({
+        success: false,
+        referenceId: "deposit-6",
+        error: "Insufficient balance in the Moov Money account",
+      });
+    });
+
+    it("falls back to the generic message for an unrecognised error code", async () => {
+      axiosMock.post
+        .mockResolvedValueOnce({
+          data: { access_token: "moov-token", expires_in: 3600 },
+        })
+        .mockRejectedValueOnce(
+          createMockAxiosError(400, { code: "SOME_UNMAPPED_CODE" }),
+        );
+      const provider = new MoovCoteDivoireProvider(providerConfig);
+
+      const result = await provider.requestPayment(
+        "0701020304",
+        "5000",
+        "deposit-7",
+      );
+
+      expect(result).toEqual({
+        success: false,
+        referenceId: "deposit-7",
         error: "Moov Côte d'Ivoire deposit push failed",
       });
     });

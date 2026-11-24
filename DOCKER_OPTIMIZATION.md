@@ -130,7 +130,7 @@ docs/, docs-portal/, *.md (except .env.example)
 **Config/tooling**:
 
 ```
-jest.*, stryker.*, playwright.config.ts, wrangler.toml, codecov.yml, openapitools.json
+jest.*, stryker.*, playwright.config.ts, wrangler.toml, openapitools.json
 ```
 
 The reduced build context speeds up `docker build` (less data transferred to Docker daemon) and ensures test data, documentation, and tooling never accidentally enter the image.

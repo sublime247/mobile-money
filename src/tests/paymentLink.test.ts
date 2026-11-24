@@ -42,6 +42,11 @@ jest.mock("../queue/transactionQueue", () => ({
 jest.mock("../queue/transactionQueue.js", () => ({
   addTransactionJob: jest.fn<any>().mockResolvedValue({ id: "mock-job-id" }),
 }));
+jest.mock("../services/transactionLimit/transactionLimitService", () => ({
+  TransactionLimitService: jest.fn().mockImplementation(() => ({
+    checkTransactionLimit: jest.fn().mockResolvedValue({ allowed: true }),
+  })),
+}));
 
 // Mock lockManager to bypass distributed lock acquisition/release and execute immediately
 jest.mock("../utils/lock", () => ({

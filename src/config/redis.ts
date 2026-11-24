@@ -1,6 +1,6 @@
 import logger from "../utils/logger";
 import { createClient } from "redis";
-import { RedisStore } from "connect-redis";
+import RedisStore from "connect-redis";
 
 export const SESSION_TTL_SECONDS = parseInt(
   process.env.SESSION_TTL_SECONDS || "86400",

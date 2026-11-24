@@ -14,9 +14,19 @@ jest.mock("../../config/stellar", () => ({
 }));
 
 import { getFeeBumpConfig, getStellarServer } from "../../config/stellar";
+import { enforceSep8Approval } from "../sep8";
+
+jest.mock("../sep8", () => ({
+  enforceSep8Approval: jest.fn(async (envelope: string) => ({
+    regulated: false,
+    status: null,
+    envelope,
+  })),
+}));
 
 const mockGetStellarServer = getStellarServer as jest.Mock;
 const mockGetFeeBumpConfig = getFeeBumpConfig as jest.Mock;
+const mockEnforceSep8Approval = enforceSep8Approval as jest.Mock;
 
 const sourceKeypair = StellarSdk.Keypair.random();
 const feePayerKeypair = StellarSdk.Keypair.random();
@@ -29,6 +39,10 @@ function makeAccount(accountId: string, sequence = "123") {
 function makeServer(overrides: Record<string, unknown> = {}) {
   return {
     fetchBaseFee: jest.fn().mockResolvedValue(100),
+    feeStats: jest.fn().mockResolvedValue({
+      last_ledger_base_fee: "100",
+      fee_charged: { p90: "100" },
+    }),
     fetchTimebounds: jest.fn().mockResolvedValue({
       minTime: "0",
       maxTime: "1700000000",
@@ -59,6 +73,12 @@ function makePaymentOperation() {
 
 describe("stellar fee bump transactions", () => {
   beforeEach(() => {
+    mockEnforceSep8Approval.mockReset();
+    mockEnforceSep8Approval.mockImplementation(async (envelope: string) => ({
+      regulated: false,
+      status: null,
+      envelope,
+    }));
     mockGetFeeBumpConfig.mockReturnValue({
       feePayerPublicKey: feePayerKeypair.publicKey(),
       feePayerPrivateKey: feePayerKeypair.secret(),
@@ -121,7 +141,10 @@ describe("stellar fee bump transactions", () => {
 
   it("enforces the configured fee cap for fee-bumped transactions", async () => {
     const server = makeServer({
-      fetchBaseFee: jest.fn().mockResolvedValue(300),
+      feeStats: jest.fn().mockResolvedValue({
+        last_ledger_base_fee: "300",
+        fee_charged: { p90: "300" },
+      }),
     });
     mockGetStellarServer.mockReturnValue(server);
     mockGetFeeBumpConfig.mockReturnValue({
@@ -211,4 +234,97 @@ describe("stellar fee bump transactions", () => {
       "exceeds max allowed 10000",
     );
   });
+
+  it("handles fee congestion by detecting surge fee and wrapping in fee bump", async () => {
+    const server = makeServer({
+      feeStats: jest.fn().mockResolvedValue({
+        last_ledger_base_fee: "500",
+        fee_charged: { p90: "800" },
+      }),
+    });
+    mockGetStellarServer.mockReturnValue(server);
+    mockGetFeeBumpConfig.mockReturnValue({
+      baseFeeStroops: 100,
+      maxFeePerTransaction: 10_000,
+      feePayerPublicKey: feePayerKeypair.publicKey(),
+      feePayerPrivateKey: feePayerKeypair.secret(),
+    });
+
+    const feeStats = await server.feeStats();
+    const surgeFee = Number(feeStats.fee_charged.p90);
+    expect(surgeFee).toBe(800);
+
+    const result = await buildTransactionWithFeeBump({
+      sourceAccount: sourceKeypair.publicKey(),
+      operations: [makePaymentOperation()],
+      enableFeeBump: true,
+    });
+
+    expect(result.usedFeeBump).toBe(true);
+    expect(result.fee).toBeGreaterThanOrEqual(100);
+    expect(result.envelope).toBeDefined();
+  });
+
+  it("submits the revised XDR returned by the SEP-08 gate", async () => {
+    const server = makeServer();
+    mockGetStellarServer.mockReturnValue(server);
+    const original = (
+      await buildTransactionWithFeeBump({
+        sourceAccount: sourceKeypair.publicKey(),
+        operations: [makePaymentOperation()],
+        enableFeeBump: true,
+      })
+    ).envelope;
+
+    const revisedEnvelope = new StellarSdk.TransactionBuilder(
+      makeAccount(sourceKeypair.publicKey(), "123"),
+      {
+        fee: "100",
+        networkPassphrase: StellarSdk.Networks.TESTNET,
+      },
+    )
+      .addOperation(
+        StellarSdk.Operation.payment({
+          destination,
+          asset: StellarSdk.Asset.native(),
+          amount: "2",
+        }),
+      )
+      .setTimeout(30)
+      .build()
+      .toEnvelope()
+      .toXDR("base64");
+
+    mockEnforceSep8Approval.mockResolvedValueOnce({
+      regulated: true,
+      status: "revised",
+      envelope: revisedEnvelope,
+      response: { status: "revised", tx: revisedEnvelope, message: "revised" },
+    });
+
+    const sep8Options = { approvalServerUrl: "https://approval.example.com" };
+    const result = await submitTransaction(original, { sep8: sep8Options });
+
+    expect(result.success).toBe(true);
+    expect(result.envelope).toBe(revisedEnvelope);
+    expect(mockEnforceSep8Approval).toHaveBeenCalledWith(original, sep8Options);
+    const submitted = server.submitTransaction.mock.calls[0][0];
+    expect(submitted).toBeInstanceOf(StellarSdk.Transaction);
+    expect(Number((submitted.operations[0] as any).amount)).toBe(2);
+  });
+
+  it("does not reach Horizon when the SEP-08 gate rejects a transaction", async () => {
+    const server = makeServer();
+    mockGetStellarServer.mockReturnValue(server);
+    mockEnforceSep8Approval.mockRejectedValueOnce(
+      new Error("SEP-08 rejected: account is sanctioned"),
+    );
+
+    const result = await submitTransaction("irrelevant-envelope");
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("SEP-08 rejected");
+    expect(server.submitTransaction).not.toHaveBeenCalled();
+  });
 });
+

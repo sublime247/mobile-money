@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { printError } from "./momo-cli";
 /**
- * Database Backup Script (Issue #553)
+ * Database Backup Script (Issue #1867)
  *
  * Usage:
  *   npx tsx src/scripts/backup.ts
@@ -43,7 +43,7 @@ async function main() {
       );
       console.log(`   Duration: ${result.duration_ms}ms`);
       console.log(
-        `   Checksum: ${result.metadata?.checksum.substring(0, 16)}...`,
+        `   Checksum: ${result.metadata?.checksum?.substring(0, 16) || "unavailable"}...`,
       );
     } else {
       printError("");

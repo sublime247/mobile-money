@@ -223,16 +223,25 @@ describe("VodacomProvider", () => {
       const activeAxios = require("axios") as jest.Mocked<typeof axios>;
       activeAxios.create.mockReturnValue(mockClient as any);
 
-      const service = new MobileMoneyService();
+      const env = jest.replaceProperty(process, "env", {
+        ...process.env,
+        NODE_ENV: "development",
+      });
+      try {
+        const service = new MobileMoneyService();
 
-      const result = await service.initiatePayment(
-        "vodacom",
-        "255700000000",
-        "1000",
-      );
+        const result = await service.initiatePayment(
+          "vodacom",
+          "255700000000",
+          "1000",
+        );
 
-      expect(result.success).toBe(true);
-      expect(result.data.output_TransactionID).toBe("TXN-LAZY");
+        expect(result.success).toBe(true);
+        expect(result.data.output_TransactionID).toBe("TXN-LAZY");
+        expect(mockClient.post).toHaveBeenCalledTimes(1);
+      } finally {
+        env.restore();
+      }
     });
   });
 });

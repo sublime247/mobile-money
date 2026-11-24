@@ -51,3 +51,27 @@ export async function setEventSyncCursor(
     [streamKey, cursor],
   );
 }
+
+/**
+ * Returns streams whose cursor hasn't advanced in over `staleMinutes` —
+ * an operational health check for chunked ledger event sync (#1791): a
+ * stream that's stopped advancing usually means its worker died or is
+ * stuck, and this is the query an ops dashboard/alert would run. Backed by
+ * idx_event_sync_state_updated_at (added alongside this function) rather
+ * than a sequential scan over every tracked stream.
+ */
+export async function getStaleEventSyncStreams(
+  staleMinutes: number,
+): Promise<EventSyncStateRow[]> {
+  const result = await pool.query<EventSyncStateRow>(
+    `
+      SELECT stream_key, cursor, updated_at
+      FROM event_sync_state
+      WHERE updated_at < NOW() - ($1 || ' minutes')::INTERVAL
+      ORDER BY updated_at ASC;
+    `,
+    [staleMinutes],
+  );
+
+  return result.rows;
+}

@@ -240,6 +240,10 @@ function buildGeneralSection(): string {
   const sep31Url = process.env.SEP31_SERVER || `${baseUrl}/sep31`;
   lines.push(`DIRECT_PAYMENT_SERVER=${tomlStr(sep31Url)}`);
 
+  // ANCHOR_QUOTES_SERVER (SEP-38)
+  const sep38Url = process.env.ANCHOR_QUOTES_URL || `${baseUrl}/sep38`;
+  lines.push(`ANCHOR_QUOTES_SERVER=${tomlStr(sep38Url)}`);
+
   // SIGNING_KEY
   const signingKey =
     process.env.STELLAR_SIGNING_KEY || process.env.STELLAR_ISSUER_ACCOUNT || "";

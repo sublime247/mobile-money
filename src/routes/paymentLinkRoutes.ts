@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { authenticateToken } from "../middleware/auth";
+import { honeypotValidator } from "../middleware/honeypotValidator";
 import { TimeoutPresets, haltOnTimedout } from "../middleware/timeout";
 import {
   createPaymentLinkHandler,
@@ -32,6 +33,7 @@ paymentLinkRoutes.post(
   "/pay/:token/process",
   TimeoutPresets.long,
   haltOnTimedout,
+  honeypotValidator,
   processPaymentHandler,
 );
 

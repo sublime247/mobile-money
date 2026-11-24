@@ -58,11 +58,74 @@ export const Sep38InfoResponseSchema = registry.register(
 
 // ─── Prices / Price ───────────────────────────────────────────────────────────
 
-/** Query parameters shared by GET /prices and GET /price */
+/** Query parameters for GET /price (single explicit pair) */
 export const Sep38PriceQuerySchema = z.object({
   sell_asset: Sep38AssetSchema,
   buy_asset: Sep38AssetSchema,
 });
+
+/** Query parameters for GET /prices (FX discovery across buy assets) */
+export const Sep38PricesQuerySchema = z.object({
+  sell_asset: Sep38AssetSchema,
+  sell_amount: AmountStringSchema,
+  buy_asset: Sep38AssetSchema.optional().openapi({
+    description:
+      "Optional — narrow the discovery result to a single buy_asset.",
+  }),
+});
+
+export const Sep38FeeDetailSchema = z
+  .object({
+    name: z.string().openapi({ example: "percentage_fee" }),
+    amount: z.string().openapi({ example: "0.0025000" }),
+    description: z.string().optional().openapi({
+      example: "0.50% conversion fee, in sell_asset units.",
+    }),
+  })
+  .openapi("Sep38FeeDetail");
+
+export const Sep38FeeSchema = z
+  .object({
+    total: z.string().openapi({
+      example: "0.0025000",
+      description: "Total fee, in sell_asset units.",
+    }),
+    asset: Sep38AssetSchema.openapi({
+      description: "The asset the fee is denominated in (sell_asset).",
+    }),
+    details: z.array(Sep38FeeDetailSchema).openapi({
+      description: "Itemized breakdown of the fee total.",
+    }),
+  })
+  .openapi("Sep38Fee", {
+    description: "SEP-38 fee breakdown for a price or quote.",
+  });
+
+export const Sep38PriceItemSchema = z
+  .object({
+    asset: Sep38AssetSchema,
+    price: z.string().openapi({
+      example: "129.5000000",
+      description: "Units of this asset per 1 unit of sell_asset.",
+    }),
+    decimals: z.number().int().openapi({ example: 7 }),
+  })
+  .openapi("Sep38PriceItem");
+
+export const Sep38PricesResponseSchema = registry.register(
+  "Sep38PricesResponse",
+  z
+    .object({
+      buy_assets: z.array(Sep38PriceItemSchema).openapi({
+        description:
+          "Indicative price for sell_asset against every supported buy_asset " +
+          "(or just the requested one, if buy_asset was provided).",
+      }),
+    })
+    .openapi("Sep38PricesResponse", {
+      description: "Indicative FX discovery prices for a sell_asset.",
+    }),
+);
 
 export const Sep38PriceResponseSchema = registry.register(
   "Sep38PriceResponse",
@@ -82,6 +145,7 @@ export const Sep38PriceResponseSchema = registry.register(
         example: "0.0000000",
         description: "Fixed fee in sell_asset units.",
       }),
+      fee: Sep38FeeSchema,
     })
     .openapi("Sep38PriceResponse", {
       description: "Indicative or firm price for an asset pair.",
@@ -146,6 +210,7 @@ export const Sep38QuoteSchema = registry.register(
       price: z.string().openapi({ example: "650.1234567" }),
       fee_percent: z.string().openapi({ example: "0.50" }),
       fee_fixed: z.string().openapi({ example: "0.0000000" }),
+      fee: Sep38FeeSchema,
       created_at: z
         .string()
         .datetime()

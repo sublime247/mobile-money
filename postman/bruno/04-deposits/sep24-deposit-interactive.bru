@@ -1,0 +1,54 @@
+meta {
+  name: "SEP-24 Initiate Interactive Deposit"
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{base_url}}/sep24/transactions/deposit/interactive
+  body: json
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  Authorization: Bearer {{jwt_token}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "asset_code": "USDC",
+    "account": "{{stellar_public_key}}",
+    "amount": "50.00"
+  }
+}
+
+script:pre-request {
+  // Guard: authenticated requests need a SEP-10 (or login) token.
+  const token = bru.getEnvVar("jwt_token");
+  if (!token) {
+    throw new Error(
+      "jwt_token is empty — run 'SEP-10 Sign Challenge & Get Token' (01-auth) first."
+    );
+  }
+}
+
+script:post-response {
+  const body = res.getBody();
+  if (res.getStatus() === 200 && body && body.id) {
+    bru.setEnvVar("transaction_id", body.id);
+  }
+}
+
+tests {
+  test("interactive flow started", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("webview url and transaction id returned", function() {
+    const body = res.getBody();
+    expect(body.url).to.be.a("string");
+    expect(body.id).to.be.a("string");
+    expect(bru.getEnvVar("transaction_id")).to.equal(body.id);
+  });
+}

@@ -1,0 +1,36 @@
+name: Migration Lint
+
+on:
+  pull_request:
+    paths:
+      - "migrations/**/*.sql"
+
+jobs:
+  check-migrations:
+    name: Zero-downtime DDL check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - run: npm ci
+
+      - name: Lint migration files changed in this PR
+        run: |
+          # Collect only the new/modified .sql migration files (not .down.sql)
+          FILES=$(git diff --name-only --diff-filter=ACM origin/${{ github.base_ref }}...HEAD \
+            | grep -E '^migrations/[^/]+\.sql$' \
+            | grep -v '\.down\.sql$' || true)
+
+          if [ -z "$FILES" ]; then
+            echo "No migration files changed in this PR."
+            exit 0
+          fi
+
+          echo "Checking migration files:"
+          echo "$FILES"
+          npx tsx scripts/check-migrations.ts $FILES

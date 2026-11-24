@@ -139,6 +139,7 @@ async function sendTxnSms(
       provider,
       kind,
       errorMessage,
+      locale: user.preferredLanguage,
     });
   } catch (smsErr) {
     logger.error(`[${transactionId}] SMS notification error`, smsErr);
@@ -185,6 +186,14 @@ async function processBatchResults(
       await transactionModel.patchMetadata(payout.transactionId, {
         batchError: "No result returned from batch processing",
       });
+      await sendTxnSms(
+        payout.transactionId,
+        payout.phoneNumber,
+        payout.amount,
+        payout.provider,
+        "transaction_failed",
+        "No result returned from batch processing",
+      );
       continue;
     }
 

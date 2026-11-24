@@ -1,6 +1,8 @@
 import { Request, Response, NextFunction } from "express";
-// @ts-ignore
-import geoip from "geoip-lite";
+import {
+  lookupPaymentLocation,
+  rejectBlockedPaymentCountry,
+} from "./geoIpFilter";
 
 // Operational regions: African countries where mobile money services are supported
 const OPERATIONAL_REGIONS = new Set([
@@ -26,43 +28,17 @@ const OPERATIONAL_REGIONS = new Set([
   "BW", // Botswana
 ]);
 
-// Sanctioned countries (OFAC, UN, EU sanctions lists)
-const SANCTIONED_COUNTRIES = new Set([
-  "CU", // Cuba
-  "IR", // Iran
-  "KP", // North Korea
-  "SY", // Syria
-  "RU", // Russia (partial sanctions)
-  "BY", // Belarus
-  "VE", // Venezuela (partial sanctions)
-  "MM", // Myanmar (partial sanctions)
-  "SD", // Sudan
-  "SS", // South Sudan
-]);
-
-function extractClientIp(req: Request): string | null {
-  const forwarded = req.headers["x-forwarded-for"];
-  if (typeof forwarded === "string") {
-    const first = forwarded.split(",")[0].trim();
-    if (first) return first;
-  }
-  if (Array.isArray(forwarded) && forwarded.length > 0) {
-    return forwarded[0].trim();
-  }
-  return req.ip || req.socket.remoteAddress || null;
-}
-
 /**
  * IP Geofencing Middleware
  * Validates that transactions originate from operational regions
  * and blocks requests from sanctioned jurisdictions
  */
-export function geoFencingMiddleware(
+export async function geoFencingMiddleware(
   req: Request,
   res: Response,
   next: NextFunction,
-): void {
-  const clientIp = extractClientIp(req);
+): Promise<void> {
+  const clientIp = req.ip || req.socket.remoteAddress;
 
   if (!clientIp) {
     res.status(403).json({
@@ -72,20 +48,7 @@ export function geoFencingMiddleware(
     return;
   }
 
-  // Skip validation for localhost/private IPs in development
-  if (
-    process.env.NODE_ENV !== "production" &&
-    (clientIp === "127.0.0.1" ||
-      clientIp === "::1" ||
-      clientIp.startsWith("192.168.") ||
-      clientIp.startsWith("10.") ||
-      clientIp.startsWith("172."))
-  ) {
-    next();
-    return;
-  }
-
-  const geo = geoip.lookup(clientIp);
+  const geo = await lookupPaymentLocation(clientIp);
 
   if (!geo || !geo.country) {
     // Unable to determine location - fail closed in production
@@ -106,18 +69,7 @@ export function geoFencingMiddleware(
 
   const countryCode = geo.country;
 
-  // Check sanctioned countries first
-  if (SANCTIONED_COUNTRIES.has(countryCode)) {
-    console.warn(
-      `[GEOFENCE] Blocked transaction from sanctioned country: ${countryCode}, IP: ${clientIp}`,
-    );
-    res.status(451).json({
-      error: "Unavailable For Legal Reasons",
-      message: `Transactions from ${countryCode} are not permitted due to sanctions`,
-      countryCode,
-    });
-    return;
-  }
+  if (rejectBlockedPaymentCountry(res, clientIp, geo)) return;
 
   // Check operational regions
   if (!OPERATIONAL_REGIONS.has(countryCode)) {

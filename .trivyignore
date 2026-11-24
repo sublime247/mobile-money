@@ -1,0 +1,10 @@
+# Trivy vulnerability exceptions.
+#
+# Add one CVE ID per line, with a comment explaining why it's accepted:
+# why it doesn't apply to how this service uses the dependency, or a
+# tracking link/date for when the fix will land. Do not add a blanket
+# ignore for a whole package - scope every exception to a specific CVE so
+# a future fixed version stops being silently ignored too.
+#
+# Example:
+# CVE-2023-12345 # Only exploitable via a code path this service never calls (see #1234). Revisit 2026-Q2.

@@ -63,12 +63,16 @@ function mockServer(overrides: Partial<Record<string, jest.Mock>> = {}) {
     call: jest.fn().mockResolvedValue({ records: [makePathRecord()] }),
   });
 
-  const loadAccount = jest.fn().mockResolvedValue({
-    account_id: senderKeypair.publicKey(),
-    sequence: "1000",
-    incrementSequenceNumber: jest.fn(),
-    balances: [],
-  });
+  const loadAccount = jest
+    .fn()
+    .mockImplementation(async (accountId: string) => {
+      const acct = new StellarSdk.Account(
+        accountId || senderKeypair.publicKey(),
+        "1000",
+      ) as any;
+      acct.balances = [];
+      return acct;
+    });
 
   return {
     strictReceivePaths,
@@ -107,9 +111,11 @@ describe("findPaymentPaths", () => {
       destinationAccount,
     );
 
-    expect(server.strictReceivePaths).toHaveBeenCalledWith(xafAsset, "5", [
-      destinationAccount,
-    ]);
+    expect(server.strictReceivePaths).toHaveBeenCalledWith(
+      [xafAsset],
+      usdcAsset,
+      "5",
+    );
     expect(paths).toHaveLength(1);
     expect(paths[0].destination_asset_code).toBe("USDC");
   });

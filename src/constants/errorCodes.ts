@@ -60,6 +60,7 @@ export const ERROR_CODES = {
   INTERNAL_ERROR: "INTERNAL_ERROR",
   SERVICE_UNAVAILABLE: "SERVICE_UNAVAILABLE",
   DATABASE_ERROR: "DATABASE_ERROR",
+  GATEWAY_TIMEOUT: "GATEWAY_TIMEOUT",
 };
 
 /**
@@ -149,6 +150,14 @@ export const getHttpStatus = (code: string): number => {
   }
   if (code === ERROR_CODES.SERVICE_UNAVAILABLE) {
     return 503;
+  }
+  if (
+    code === ERROR_CODES.GATEWAY_TIMEOUT ||
+    code === "57014" ||
+    code === "QUERY_TIMEOUT" ||
+    code === "STATEMENT_TIMEOUT"
+  ) {
+    return 504;
   }
   if (
     code.startsWith("500") ||

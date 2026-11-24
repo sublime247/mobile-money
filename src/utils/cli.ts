@@ -26,6 +26,7 @@ export const CLI_ERROR_CODES = {
   InvalidBatchId: "CLI_INVALID_BATCH_ID",
   ExecutionFailed: "CLI_EXECUTION_FAILED",
   UnknownCommand: "CLI_UNKNOWN_COMMAND",
+  ProviderDown: "CLI_PROVIDER_DOWN",
 } as const;
 
 export type CliErrorCode =
@@ -54,6 +55,24 @@ function formatCode(code?: CliErrorCode): string {
 
 export function formatCliHeading(title: string): string {
   return `${style(title, "cyan", true)}\n${style("=".repeat(title.length), "gray")}`;
+}
+
+/**
+ * Renders rows as a plain-text table with a header separator. Column widths
+ * adapt to the widest cell, so the output stays aligned for any content.
+ */
+export function formatTable(headers: string[], rows: string[][]): string {
+  const widths = headers.map((header, column) =>
+    Math.max(header.length, ...rows.map((row) => (row[column] ?? "").length)),
+  );
+  const renderRow = (cells: string[]) =>
+    widths
+      .map((width, column) => (cells[column] ?? "").padEnd(width))
+      .join(" | ")
+      .trimEnd();
+  const separator = widths.map((width) => "-".repeat(width)).join("-+-");
+
+  return [renderRow(headers), separator, ...rows.map(renderRow)].join("\n");
 }
 
 export function printInfo(message: string): void {

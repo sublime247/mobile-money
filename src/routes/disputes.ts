@@ -200,32 +200,75 @@ disputeRoutes.get(
   requireAuth,
   requirePermission("dispute:read"),
   async (req: Request, res: Response) => {
-    const { from, to, assignedTo } = req.query;
+    const { from, to, startDate, endDate, assignedTo, format } = req.query;
 
     const filter: { from?: Date; to?: Date; assignedTo?: string } = {};
 
-    if (from) {
-      const d = new Date(from as string);
-      if (isNaN(d.getTime()))
+    const rawFrom = from || startDate;
+    const rawTo = to || endDate;
+
+    if (rawFrom) {
+      const fromStr = String(rawFrom).trim();
+      const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(fromStr);
+      const d = isDateOnly
+        ? new Date(`${fromStr}T00:00:00.000Z`)
+        : new Date(fromStr);
+      if (isNaN(d.getTime())) {
         throw createError(ERROR_CODES.INVALID_INPUT, 'Invalid "from" date', {
           error: 'Invalid "from" date',
         });
+      }
       filter.from = d;
     }
-    if (to) {
-      const d = new Date(to as string);
-      if (isNaN(d.getTime()))
+
+    if (rawTo) {
+      const toStr = String(rawTo).trim();
+      const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(toStr);
+      const d = isDateOnly
+        ? new Date(`${toStr}T23:59:59.999Z`)
+        : new Date(toStr);
+      if (isNaN(d.getTime())) {
         throw createError(ERROR_CODES.INVALID_INPUT, 'Invalid "to" date', {
           error: 'Invalid "to" date',
         });
+      }
       filter.to = d;
     }
-    if (assignedTo) filter.assignedTo = assignedTo as string;
+
+    if (filter.from && filter.to && filter.from > filter.to) {
+      throw createError(
+        ERROR_CODES.INVALID_INPUT,
+        '"from" date must be before or equal to "to" date',
+        {
+          error: '"from" date must be before or equal to "to" date',
+        },
+      );
+    }
+
+    if (assignedTo) filter.assignedTo = String(assignedTo).trim();
 
     try {
       const report = await disputeService.generateReport(filter);
+
+      if (format === "csv") {
+        const headers = ["Status", "Count", "AvgResolutionHours"];
+        const rows = [headers.join(",")];
+        report.summary.forEach((s) => {
+          rows.push([s.status, s.count, s.avgResolutionHours ?? "0"].join(","));
+        });
+        res.header("Content-Type", "text/csv");
+        res.header(
+          "Content-Disposition",
+          `attachment; filename="disputes_report_${Date.now()}.csv"`,
+        );
+        return res.send(rows.join("\n"));
+      }
+
       return res.json(report);
     } catch (error) {
+      if (error && typeof error === "object" && "code" in error) {
+        throw error;
+      }
       const message =
         error instanceof Error ? error.message : "Failed to generate report";
       throw createError(ERROR_CODES.INTERNAL_ERROR, message, {

@@ -9,7 +9,9 @@ import { runDisputeSlaJob } from "./disputeSlaJob";
 import { runBalanceMonitorJob } from "./balanceMonitorJob";
 import { runSep31MonitorJob } from "./sep31MonitorJob";
 import { runFeeBumpJob } from "./feeBumpJob";
+import { runFeeBumpWatchdogOnce } from "../stellar/feeBumpWatchdog";
 import { runSep31FeeBumpJob } from "./sep31FeeBumpJob";
+import { runSponsorWalletMonitorJob } from "../services/stellar/feeBump";
 import { MonitoringService } from "../services/monitoringService";
 import { createPagerDutyService } from "../services/pagerDutyService";
 import { runProviderBalanceAlertJob } from "./balances";
@@ -18,9 +20,13 @@ import { runKycTierUpgradeJob } from "./kycTierUpgradeJob";
 import { runLiquidityRebalanceJob } from "./liquidityRebalanceJob";
 import { runCrossChainMonitorJob } from "./crossChainMonitorJob";
 import { runDailySettlementJob } from "./dailySettlementJob";
+import { runPartnerCommissionJob } from "./partnerCommissionJob";
+import { runFxRevaluationJob } from "./fxRevaluationJob";
 import { runDailyProviderReconciliation } from "./providerReconciliationJob";
 import { runReconciliationJob } from "./reconciliationJob";
-import { runDatabaseBackupJob } from "./databaseBackupJob";
+import { runLedgerReconciliationJob } from "./ledgerReconciliationJob";
+import { runStellarDiscrepancyJob } from "./stellarDiscrepancyJob";
+import { runDatabaseBackupJob, runVacuumAnalyzeJob } from "./databaseBackupJob";
 import { runDatabaseBackupVerifyJob } from "./databaseBackupVerifyJob";
 import { INDEX_REINDEX_CRON, INDEX_REINDEX_JOB_ENABLED } from "../config/env";
 import { runIndexReindexJob } from "./indexReindexJob";
@@ -30,12 +36,25 @@ import { runRebalanceJobHandler } from "./rebalanceJob";
 import { startNotificationWorker } from "../workers/notificationWorker";
 import { runTravelRuleExportJob } from "../services/compliance/travelRuleExport";
 import { runDlqCleanupJob } from "../queue/dlq";
+import { purgeExpiredProviderErrorLogs } from "../services/providerErrorLogService";
 import { runHighValueComplianceReportJob } from "./highValueComplianceReportJob";
+import { runStellarReconciliationJob } from "../workers/stellarReconciliation";
+import { runAirtelReconciliationWorker } from "../workers/airtelReconciliation";
+import { runQuoteExpirationJob } from "./quoteExpirationJob";
+import { runSep24InteractiveExpirationJob } from "./sep24InteractiveExpirationJob";
+import { runDailySarSummaryJob } from "./dailySarSummaryJob";
+import { runPartitionManagerJob } from "./partitionManager";
+import { withJobTrace } from "../queue/jobTracing";
+import { runKycRetentionPurgeJob } from "./kycRetentionPurgeJob";
+import { runRiskTierRecalculationJob } from "./riskTierRecalculationJob";
+import { runStellarBalanceMonitorJob } from "./stellarBalanceMonitorJob";
 
 interface JobConfig {
   name: string;
   schedule: string;
   handler: () => Promise<void>;
+  /** IANA timezone for the cron expression (defaults to the server timezone). */
+  timezone?: string;
 }
 
 const JOBS: JobConfig[] = [
@@ -88,10 +107,22 @@ const JOBS: JobConfig[] = [
     handler: runFeeBumpJob,
   },
   {
+    name: "pending-fee-bump-watchdog",
+    // Every 15 seconds - wraps mempool transactions older than 60 seconds
+    schedule: process.env.PENDING_FEE_BUMP_CRON || "*/15 * * * * *",
+    handler: () => runFeeBumpWatchdogOnce().then(() => undefined),
+  },
+  {
     name: "sep31-fee-bump",
     // Every 30 seconds - bumps fees for stuck SEP-31 transactions
     schedule: process.env.SEP31_FEE_BUMP_CRON || "*/30 * * * * *",
     handler: runSep31FeeBumpJob,
+  },
+  {
+    name: "sponsor-wallet-monitor",
+    // Hourly - monitors dedicated Stellar fee-bump sponsor wallet balance
+    schedule: process.env.SPONSOR_WALLET_MONITOR_CRON || "0 * * * *",
+    handler: runSponsorWalletMonitorJob,
   },
   {
     name: "provider-balance-alert",
@@ -106,10 +137,32 @@ const JOBS: JobConfig[] = [
     handler: runProviderHealthCheckJob,
   },
   {
+    name: "airtel-balance-monitor",
+    // Every 15 minutes - checks Airtel operational balance and alerts
+    schedule: process.env.AIRTEL_BALANCE_MONITOR_CRON || "*/15 * * * *",
+    handler: async () => {
+      const { checkAirtelBalanceAndAlert } =
+        await import("./balanceMonitorJob.js");
+      return checkAirtelBalanceAndAlert();
+    },
+  },
+  {
     name: "daily-settlement",
     // Daily at 01:00 AM UTC — sweeps merchant fees and settles provider balances
     schedule: process.env.DAILY_SETTLEMENT_CRON || "0 1 * * *",
     handler: runDailySettlementJob,
+  },
+  {
+    name: "partner-commission",
+    // 1st of every month at 02:00 UTC — accrues partner revenue share and queues payouts
+    schedule: process.env.PARTNER_COMMISSION_CRON || "0 2 1 * *",
+    handler: runPartnerCommissionJob,
+  },
+  {
+    name: "fx-revaluation",
+    // 1st of every month at 03:00 UTC — marks foreign float to market and posts unrealized FX gain/loss
+    schedule: process.env.FX_REVALUATION_CRON || "0 3 1 * *",
+    handler: runFxRevaluationJob,
   },
   {
     name: "provider-reconciliation",
@@ -159,6 +212,24 @@ const JOBS: JobConfig[] = [
     handler: runReconciliationJob,
   },
   {
+    name: "ledger-reconciliation",
+    // Every 15 minutes - checks internal double-entry ledger consistency
+    schedule: process.env.LEDGER_RECONCILIATION_CRON || "*/15 * * * *",
+    handler: runLedgerReconciliationJob,
+  },
+  {
+    name: "stellar-anchor-reconciliation",
+    // Every 10 minutes - reconciles on-chain payment hashes against internal DB records
+    schedule: process.env.STELLAR_RECONCILIATION_CRON || "*/10 * * * *",
+    handler: runStellarReconciliationJob,
+  },
+  {
+    name: "stellar-discrepancy",
+    // Daily at 4:00 AM - compares previous 24h of Horizon anchor payments with the local ledger
+    schedule: process.env.STELLAR_DISCREPANCY_CRON || "0 4 * * *",
+    handler: runStellarDiscrepancyJob,
+  },
+  {
     name: "database-backup",
     // Daily at 2:00 AM
     schedule: process.env.DATABASE_BACKUP_CRON || "0 2 * * *",
@@ -169,6 +240,13 @@ const JOBS: JobConfig[] = [
     // Daily at 3:00 AM
     schedule: process.env.DATABASE_BACKUP_VERIFY_CRON || "0 3 * * *",
     handler: runDatabaseBackupVerifyJob,
+  },
+  {
+    name: "vacuum-analyze",
+    // Every 6 hours at UTC 00:00, 06:00, 12:00 and 18:00 (#2481).
+    schedule: process.env.VACUUM_ANALYZE_CRON || "0 */6 * * *",
+    timezone: "UTC",
+    handler: runVacuumAnalyzeJob,
   },
   {
     name: "jwt-key-rotation",
@@ -202,17 +280,100 @@ const JOBS: JobConfig[] = [
     handler: runHighValueComplianceReportJob,
   },
   {
+    name: "daily-sar-summary",
+    // Daily at midnight UTC - encrypts the previous day's flagged-activity
+    // summary into the compliance archive and notifies the compliance team
+    schedule: process.env.DAILY_SAR_SUMMARY_CRON || "0 0 * * *",
+    timezone: "UTC",
+    handler: runDailySarSummaryJob,
+  },
+  {
+    name: "audit-log-partition-manager",
+    // Daily at 00:15 UTC - pre-creates the next months' audit_logs partitions
+    schedule: process.env.AUDIT_LOG_PARTITION_CRON || "15 0 * * *",
+    timezone: "UTC",
+    handler: runPartitionManagerJob,
+  },
+  {
     name: "dlq-cleanup",
     // Daily at 3:30 AM — removes DLQ entries older than 90 days after overnight audit window
     schedule: process.env.DLQ_CLEANUP_CRON || "30 3 * * *",
     handler: runDlqCleanupJob,
+  },
+  {
+    name: "provider-error-log-purge",
+    // Daily at 03:45 UTC - deletes sanitized provider failure snapshots
+    // older than their 30-day retention window (#2445)
+    schedule: process.env.PROVIDER_ERROR_LOG_PURGE_CRON || "45 3 * * *",
+    timezone: "UTC",
+    handler: async () => {
+      await purgeExpiredProviderErrorLogs();
+    },
+  },
+  {
+    name: "airtel-disbursement-reconciliation",
+    // Every minute - polls Airtel disbursement status for payouts whose
+    // webhook callback has been delayed beyond 60 seconds (#1955)
+    schedule: process.env.AIRTEL_RECONCILIATION_CRON || "* * * * *",
+    handler: async () => {
+      await runAirtelReconciliationWorker();
+    },
+  },
+  {
+    name: "sep38-quote-expiration",
+    // Every minute - sweeps expired firm quotes and releases reserved liquidity
+    schedule: process.env.SEP38_QUOTE_EXPIRATION_CRON || "* * * * *",
+    handler: runQuoteExpirationJob,
+  },
+  {
+    name: "sep24-interactive-expiration",
+    // Every minute - sweeps interactive deposit/withdrawal sessions past the
+    // configurable expiry duration and transitions them to expired (#2264)
+    schedule: process.env.SEP24_INTERACTIVE_EXPIRATION_CRON || "* * * * *",
+    handler: runSep24InteractiveExpirationJob,
+  },
+  {
+    name: "kyc-retention-purge",
+    // Daily at 03:30 UTC — securely purges KYC identity documents for closed
+    // accounts that have exceeded the legal retention window (default: 5 years).
+    // Satisfies GDPR Article 17 and regional data protection obligations.
+    schedule: process.env.KYC_RETENTION_PURGE_CRON || "30 3 * * *",
+    timezone: "UTC",
+    handler: runKycRetentionPurgeJob,
+  },
+  {
+    name: "stellar-balance-monitor",
+    // Every 2 minutes — polls Horizon for hot wallet / fee account XLM and
+    // asset balances; dispatches PagerDuty + Slack alerts on shortfall.
+    schedule: process.env.STELLAR_BALANCE_MONITOR_CRON || "*/2 * * * *",
+    timezone: "UTC",
+    handler: runStellarBalanceMonitorJob,
+  },
+  {
+    name: "risk-tier-recalculation",
+    // Every 6 hours — recalculates Low/Medium/High risk tiers for active
+    // customers so daily limits and mandatory 2FA stay current with behaviour.
+    schedule: process.env.RISK_TIER_RECALCULATION_CRON || "0 */6 * * *",
+    timezone: "UTC",
+    handler: runRiskTierRecalculationJob,
   },
 ];
 
 async function runJob(job: JobConfig): Promise<void> {
   console.log(`[${job.name}] Starting job`);
   try {
-    await job.handler();
+    // Wrap every scheduled job in an OTel span so cron-driven work shows up in
+    // the same trace waterfall as HTTP-triggered activity.
+    await withJobTrace(
+      `scheduler.${job.name}`,
+      undefined,
+      () => job.handler(),
+      {
+        "job.name": job.name,
+        "job.schedule": job.schedule,
+        "job.source": "cron",
+      },
+    );
     console.log(`[${job.name}] Completed`);
   } catch (err) {
     logger.error(`[${job.name}] Failed:`, err);
@@ -234,7 +395,12 @@ export function startJobs(): void {
       );
       continue;
     }
-    cron.schedule(job.schedule, () => runJob(job));
+    const run = () => runJob(job);
+    if (job.timezone) {
+      cron.schedule(job.schedule, run, { timezone: job.timezone });
+    } else {
+      cron.schedule(job.schedule, run);
+    }
     console.log(`[scheduler] "${job.name}" scheduled - ${job.schedule}`);
   }
 

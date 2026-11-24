@@ -9,7 +9,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install ALL dependencies (including devDependencies) required for building
-RUN npm ci
+RUN npm ci --ignore-scripts
 
 # Copy source (build context is trimmed by .dockerignore)
 COPY . .
@@ -30,7 +30,7 @@ ENV NODE_ENV=production
 
 # Install production dependencies, then prune in a SINGLE RUN to minimize layer size.
 # All removals in the same layer prevent deleted files from inflating the image.
-RUN npm ci --omit=dev --ignore-scripts && \
+RUN npm ci --omit=dev --legacy-peer-deps --ignore-scripts && \
     npm cache clean --force && \
     \
     # ── Prune text bloat (docs, type declarations, source maps, test suites) ──── \
@@ -127,6 +127,14 @@ RUN mkdir -p /app/logs && chown nodejs:nodejs /app/logs
 USER nodejs
 
 EXPOSE 3000
+
+# Probe the lightweight /health endpoint every 30 s.
+# The container is considered healthy once it returns HTTP 200, and unhealthy
+# after 3 consecutive failures (giving the app up to 75 s to start before the
+# first check fires). curl is available on node:24-alpine.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+  CMD ["node", "-e", \
+       "require('http').get('http://localhost:3000/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1); }).on('error', () => process.exit(1));"]
 
 # Run directly with node — no npm/shell wrapper overhead
 CMD ["node", "dist/src/index.js"]

@@ -5,7 +5,7 @@ import { Keypair } from "@stellar/stellar-sdk";
 import { z } from "zod";
 import { TransactionModel, TransactionStatus } from "../models/transaction";
 import { notifyTransactionWebhook, WebhookEvent } from "../services/webhook";
-import { enqueueSepWebhook } from "../services/stellar/webhooks";
+import { notifyReceivingAnchorStatus } from "../services/webhookService";
 import { ingestRateLimiter } from "../middleware/ingestRateLimit";
 
 const router = Router();
@@ -184,29 +184,17 @@ router.post("/webhook", async (req: RawBodyRequest, res: Response) => {
         transactionModel,
       });
 
-      // SEP-31 Webhook Integration
+      // Notify the receiving anchor only for SEP-31 terminal status changes.
       const sep31Meta = (transaction.metadata as any)?.sep31;
       if (sep31Meta) {
         const newSep31Status =
-          newStatus === TransactionStatus.Completed ? "completed" : "failed";
-        const callbackUrl =
-          sep31Meta.callback ||
-          process.env.SEP31_WEBHOOK_URL ||
-          process.env.WEBHOOK_URL;
-        if (callbackUrl) {
-          await enqueueSepWebhook(transaction.id, newSep31Status, callbackUrl, {
-            id: transaction.id,
-            status: newSep31Status,
-            amount: transaction.amount,
-            stellar_transaction_id: payload.transaction_hash,
-            started_at: transaction.createdAt,
-            completed_at: new Date().toISOString(),
-            stellar_memo: sep31Meta.memo,
-            stellar_memo_type: sep31Meta.memo_type,
-          }).catch((err) =>
-            logger.error(err, `[sep31-webhook] Error enqueuing webhook:`),
-          );
-        }
+          newStatus === TransactionStatus.Completed ? "completed" : "error";
+        await notifyReceivingAnchorStatus(transaction, newSep31Status, {
+          ...transaction.metadata,
+          sep31: { ...sep31Meta, transactionHash: payload.transaction_hash },
+        }).catch((err) =>
+          logger.error(err, "[sep31-webhook] Error enqueuing webhook"),
+        );
       }
 
       console.log(

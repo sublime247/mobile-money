@@ -1,116 +1,141 @@
 export {};
 
+jest.mock(
+  "stellar-sdk",
+  () => ({
+    Keypair: { fromSecret: jest.fn(), random: jest.fn() },
+    StrKey: { isValidEd25519PublicKey: jest.fn(), isValidMed25519PublicKey: jest.fn() },
+    MuxedAccount: jest.fn(),
+    Account: jest.fn(),
+    Asset: jest.fn(),
+    Operation: jest.fn(),
+    TransactionBuilder: jest.fn(),
+  }),
+  { virtual: true }
+);
+
 // ---------------------------------------------------------------------------
 // Shared mock factories — recreated fresh after each resetModules()
 // ---------------------------------------------------------------------------
 
-// Top-level references updated by each beforeEach that calls resetModules
 let mockConsume: jest.Mock;
 let mockNatsClose: jest.Mock;
 let mockWorkerClose: jest.Mock;
+let mockNatsEnabled = true;
 
-// Helper: build all jest.mock() registrations after resetModules.
-// Must be called inside beforeEach BEFORE the dynamic import.
+jest.mock("../../src/utils/logger", () => ({
+  __esModule: true,
+  default: {
+    info: jest.fn(),
+    warn: (meta: any, msg?: string) => {
+      console.warn(typeof meta === "string" ? meta : `${msg || ""} ${JSON.stringify(meta)}`);
+    },
+    error: (meta: any, msg?: string) => {
+      console.error(typeof meta === "string" ? meta : `${msg || ""} ${JSON.stringify(meta)}`);
+    },
+    debug: jest.fn(),
+    trace: jest.fn(),
+  },
+}));
+
+jest.mock("../../src/queue/nats", () => ({
+  NATS_QUEUE_ENABLED: true,
+  NATS_ACK_WAIT_MS: 30000,
+  natsManager: {
+    consume: (...args: any[]) => mockConsume(...args),
+    close: (...args: any[]) => mockNatsClose(...args),
+  },
+}));
+
+jest.mock("bullmq", () => ({
+  Queue: jest.fn().mockImplementation(() => ({
+    add: jest.fn(),
+    close: jest.fn(),
+  })),
+  Worker: jest.fn().mockImplementation(() => ({
+    close: (...args: any[]) => mockWorkerClose(...args),
+  })),
+}));
+
+jest.mock("../../src/queue/config", () => ({
+  queueOptions: {},
+  getTelecomProviderLimits: () => ({ concurrency: 3, limiter: { max: 10, duration: 1000 } }),
+}));
+
+jest.mock("../../src/config/database", () => ({
+  pool: { query: jest.fn().mockResolvedValue({ rows: [] }) },
+}));
+
+jest.mock("../../src/tracer", () => ({
+  __esModule: true,
+  default: {
+    startSpan: jest.fn(() => ({
+      setTag: jest.fn(),
+      finish: jest.fn(),
+      context: jest.fn(() => ({})),
+    })),
+    scope: jest.fn(() => ({
+      activate: jest.fn((_: unknown, work: () => Promise<unknown>) => work()),
+    })),
+  },
+}));
+
+jest.mock("../../src/queue/syncQueue", () => ({
+  SYNC_QUEUE_NAME: "accounting-sync",
+}));
+
+let mockSyncToQuickBooks: jest.Mock;
+let mockSyncToXero: jest.Mock;
+
+class RateLimitError extends Error {
+  constructor(msg?: string) {
+    super(msg ?? "Rate limit exceeded");
+    this.name = "RateLimitError";
+  }
+}
+class NetworkError extends Error {
+  constructor(msg?: string) {
+    super(msg ?? "Network connection failed");
+    this.name = "NetworkError";
+  }
+}
+class ValidationError extends Error {
+  constructor(msg?: string) {
+    super(msg ?? "Validation failed");
+    this.name = "ValidationError";
+  }
+}
+
+jest.mock("../../src/services/accounting/accountingService", () => ({
+  AccountingService: jest.fn().mockImplementation(() => ({
+    syncToQuickBooks: (...args: any[]) => mockSyncToQuickBooks(...args),
+    syncToXero: (...args: any[]) => mockSyncToXero(...args),
+  })),
+  RateLimitError,
+  NetworkError,
+  ValidationError,
+}));
+
 function registerMocks(opts: {
   natsEnabled: boolean;
   consumeImpl?: () => Promise<void>;
 }) {
+  delete process.env.NATS_SYNC_SUBJECT;
+  delete process.env.NATS_SYNC_DURABLE_CONSUMER;
+  delete process.env.NATS_SYNC_CONSUMER_GROUP;
+  delete process.env.NATS_CONSUMER_GROUP;
+  delete process.env.SYNC_WORKER_CONCURRENCY;
+  delete process.env.ACTIVE_PROVIDER;
+
+  process.env.NATS_QUEUE_ENABLED = opts.natsEnabled ? "true" : "false";
+  mockNatsEnabled = opts.natsEnabled;
   mockConsume = jest
     .fn()
     .mockImplementation(opts.consumeImpl ?? (() => Promise.resolve()));
   mockNatsClose = jest.fn().mockResolvedValue(undefined);
   mockWorkerClose = jest.fn().mockResolvedValue(undefined);
-
-  jest.mock("../../src/utils/logger", () => ({
-    __esModule: true,
-    default: {
-      info: jest.fn(),
-      warn: (meta: any, msg?: string) => {
-        console.warn(typeof meta === "string" ? meta : `${msg || ""} ${JSON.stringify(meta)}`);
-      },
-      error: (meta: any, msg?: string) => {
-        console.error(typeof meta === "string" ? meta : `${msg || ""} ${JSON.stringify(meta)}`);
-      },
-      debug: jest.fn(),
-      trace: jest.fn(),
-    },
-  }));
-
-  jest.mock("../../src/queue/nats", () => ({
-    NATS_QUEUE_ENABLED: opts.natsEnabled,
-    NATS_ACK_WAIT_MS: 30000,
-    natsManager: {
-      consume: mockConsume,
-      close: mockNatsClose,
-    },
-  }));
-
-  jest.mock("bullmq", () => ({
-    Queue: jest.fn().mockImplementation(() => ({
-      add: jest.fn(),
-      close: jest.fn(),
-    })),
-    Worker: jest.fn().mockImplementation(() => ({
-      close: mockWorkerClose,
-    })),
-  }));
-
-  jest.mock("../../src/queue/config", () => ({
-    queueOptions: {},
-    getTelecomProviderLimits: () => ({ concurrency: 3, limiter: { max: 10, duration: 1000 } }),
-  }));
-
-  jest.mock("../../src/config/database", () => ({
-    pool: { query: jest.fn().mockResolvedValue({ rows: [] }) },
-  }));
-
-  jest.mock("../../src/tracer", () => ({
-    __esModule: true,
-    default: {
-      startSpan: jest.fn(() => ({
-        setTag: jest.fn(),
-        finish: jest.fn(),
-        context: jest.fn(() => ({})),
-      })),
-      scope: jest.fn(() => ({
-        activate: jest.fn((_: unknown, work: () => Promise<unknown>) => work()),
-      })),
-    },
-  }));
-
-  jest.mock("../../src/queue/syncQueue", () => ({
-    SYNC_QUEUE_NAME: "accounting-sync",
-  }));
-
-  jest.mock("../../src/services/accounting/accountingService", () => {
-    class RateLimitError extends Error {
-      constructor(msg?: string) {
-        super(msg ?? "Rate limit exceeded");
-        this.name = "RateLimitError";
-      }
-    }
-    class NetworkError extends Error {
-      constructor(msg?: string) {
-        super(msg ?? "Network connection failed");
-        this.name = "NetworkError";
-      }
-    }
-    class ValidationError extends Error {
-      constructor(msg?: string) {
-        super(msg ?? "Validation failed");
-        this.name = "ValidationError";
-      }
-    }
-    return {
-      AccountingService: jest.fn().mockImplementation(() => ({
-        syncToQuickBooks: jest.fn().mockResolvedValue(undefined),
-        syncToXero: jest.fn().mockResolvedValue(undefined),
-      })),
-      RateLimitError,
-      NetworkError,
-      ValidationError,
-    };
-  });
+  mockSyncToQuickBooks = jest.fn().mockResolvedValue(undefined);
+  mockSyncToXero = jest.fn().mockResolvedValue(undefined);
 }
 
 // ---------------------------------------------------------------------------
@@ -316,95 +341,17 @@ describe("syncWorker — SYNC_WORKER_CONCURRENCY configuration", () => {
 describe("syncWorker — processNatsSyncMessage handler", () => {
   const originalEnv = process.env;
   let handler: (data: any, msg: any) => Promise<void>;
-  let syncToQuickBooks: jest.Mock;
-  let syncToXero: jest.Mock;
 
-  beforeEach(async () => {
+  beforeEach(() => {
     jest.resetModules();
     jest.clearAllMocks();
-    process.env = { ...originalEnv };
+    registerMocks({ natsEnabled: true });
 
-    syncToQuickBooks = jest.fn().mockResolvedValue(undefined);
-    syncToXero = jest.fn().mockResolvedValue(undefined);
-
-    // Build error classes fresh so instanceof checks work in this module scope
-    class RateLimitError extends Error {
-      constructor(msg?: string) {
-        super(msg ?? "Rate limit exceeded");
-        this.name = "RateLimitError";
-      }
+    try {
+      require("../../src/queue/syncWorker");
+    } catch (err) {
+      console.error("[REQUIRE ERROR]", err);
     }
-    class NetworkError extends Error {
-      constructor(msg?: string) {
-        super(msg ?? "Network connection failed");
-        this.name = "NetworkError";
-      }
-    }
-    class ValidationError extends Error {
-      constructor(msg?: string) {
-        super(msg ?? "Validation failed");
-        this.name = "ValidationError";
-      }
-    }
-
-    mockConsume = jest.fn().mockResolvedValue(undefined);
-    mockNatsClose = jest.fn().mockResolvedValue(undefined);
-    mockWorkerClose = jest.fn().mockResolvedValue(undefined);
-
-    jest.mock("../../src/queue/nats", () => ({
-      NATS_QUEUE_ENABLED: true,
-      NATS_ACK_WAIT_MS: 30000,
-      natsManager: { consume: mockConsume, close: mockNatsClose },
-    }));
-
-    jest.mock("bullmq", () => ({
-      Queue: jest.fn().mockImplementation(() => ({
-        add: jest.fn(),
-        close: jest.fn(),
-      })),
-      Worker: jest.fn().mockImplementation(() => ({ close: mockWorkerClose })),
-    }));
-
-    jest.mock("../../src/queue/config", () => ({
-      queueOptions: {},
-      getTelecomProviderLimits: () => ({ concurrency: 3, limiter: { max: 10, duration: 1000 } }),
-    }));
-
-    jest.mock("../../src/tracer", () => ({
-      __esModule: true,
-      default: {
-        startSpan: jest.fn(() => ({
-          setTag: jest.fn(),
-          finish: jest.fn(),
-          context: jest.fn(() => ({})),
-        })),
-        scope: jest.fn(() => ({
-          activate: jest.fn((_: unknown, work: () => Promise<unknown>) =>
-            work(),
-          ),
-        })),
-      },
-    }));
-
-    jest.mock("../../src/queue/syncQueue", () => ({
-      SYNC_QUEUE_NAME: "accounting-sync",
-    }));
-
-    // Store error class refs so we can throw instances below
-    const RL = RateLimitError;
-    const NE = NetworkError;
-
-    jest.mock("../../src/services/accounting/accountingService", () => ({
-      AccountingService: jest.fn().mockImplementation(() => ({
-        syncToQuickBooks,
-        syncToXero,
-      })),
-      RateLimitError: RL,
-      NetworkError: NE,
-      ValidationError,
-    }));
-
-    require("../../src/queue/syncWorker");
     handler = capturedHandler();
   });
 
@@ -420,7 +367,7 @@ describe("syncWorker — processNatsSyncMessage handler", () => {
 
     await expect(handler(data, msg)).resolves.toBeUndefined();
 
-    expect(syncToQuickBooks).toHaveBeenCalledWith("tx-001", data.payload);
+    expect(mockSyncToQuickBooks).toHaveBeenCalledWith("tx-001", data.payload);
     expect(msg.term).not.toHaveBeenCalled();
   });
 
@@ -430,7 +377,7 @@ describe("syncWorker — processNatsSyncMessage handler", () => {
 
     await expect(handler(data, msg)).resolves.toBeUndefined();
 
-    expect(syncToXero).toHaveBeenCalledWith("tx-001", data.payload);
+    expect(mockSyncToXero).toHaveBeenCalledWith("tx-001", data.payload);
     expect(msg.term).not.toHaveBeenCalled();
   });
 
@@ -447,8 +394,8 @@ describe("syncWorker — processNatsSyncMessage handler", () => {
     expect(errorSpy).toHaveBeenCalledWith(
       expect.stringContaining("Unsupported accounting platform"),
     );
-    expect(syncToQuickBooks).not.toHaveBeenCalled();
-    expect(syncToXero).not.toHaveBeenCalled();
+    expect(mockSyncToQuickBooks).not.toHaveBeenCalled();
+    expect(mockSyncToXero).not.toHaveBeenCalled();
 
     errorSpy.mockRestore();
   });
@@ -458,10 +405,8 @@ describe("syncWorker — processNatsSyncMessage handler", () => {
   it("re-throws RateLimitError from quickbooks sync (transient — triggers nak)", async () => {
     const msg = makeMsg();
     const data = makeSyncJobData({ platform: "quickbooks" });
-    const err = new (jest.requireMock(
-      "../../src/services/accounting/accountingService",
-    ).RateLimitError)("QB rate limit");
-    syncToQuickBooks.mockRejectedValueOnce(err);
+    const err = new RateLimitError("QB rate limit");
+    mockSyncToQuickBooks.mockRejectedValueOnce(err);
 
     const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
 
@@ -478,10 +423,8 @@ describe("syncWorker — processNatsSyncMessage handler", () => {
   it("re-throws NetworkError from quickbooks sync (transient — triggers nak)", async () => {
     const msg = makeMsg();
     const data = makeSyncJobData({ platform: "quickbooks" });
-    const err = new (jest.requireMock(
-      "../../src/services/accounting/accountingService",
-    ).NetworkError)("QB network error");
-    syncToQuickBooks.mockRejectedValueOnce(err);
+    const err = new NetworkError("QB network error");
+    mockSyncToQuickBooks.mockRejectedValueOnce(err);
 
     const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
 
@@ -498,10 +441,8 @@ describe("syncWorker — processNatsSyncMessage handler", () => {
   it("re-throws RateLimitError from xero sync (transient — triggers nak)", async () => {
     const msg = makeMsg();
     const data = makeSyncJobData({ platform: "xero" });
-    const err = new (jest.requireMock(
-      "../../src/services/accounting/accountingService",
-    ).RateLimitError)("Xero rate limit");
-    syncToXero.mockRejectedValueOnce(err);
+    const err = new RateLimitError("Xero rate limit");
+    mockSyncToXero.mockRejectedValueOnce(err);
 
     const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
 
@@ -518,10 +459,8 @@ describe("syncWorker — processNatsSyncMessage handler", () => {
   it("re-throws NetworkError from xero sync (transient — triggers nak)", async () => {
     const msg = makeMsg();
     const data = makeSyncJobData({ platform: "xero" });
-    const err = new (jest.requireMock(
-      "../../src/services/accounting/accountingService",
-    ).NetworkError)("Xero network error");
-    syncToXero.mockRejectedValueOnce(err);
+    const err = new NetworkError("Xero network error");
+    mockSyncToXero.mockRejectedValueOnce(err);
 
     const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
 
@@ -540,10 +479,8 @@ describe("syncWorker — processNatsSyncMessage handler", () => {
   it("calls msg.term() and does not re-throw for a permanent error from quickbooks sync", async () => {
     const msg = makeMsg();
     const data = makeSyncJobData({ platform: "quickbooks" });
-    const err = new (jest.requireMock(
-      "../../src/services/accounting/accountingService",
-    ).ValidationError)("QB validation");
-    syncToQuickBooks.mockRejectedValueOnce(err);
+    const err = new ValidationError("QB validation");
+    mockSyncToQuickBooks.mockRejectedValueOnce(err);
 
     const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
 
@@ -560,10 +497,8 @@ describe("syncWorker — processNatsSyncMessage handler", () => {
   it("calls msg.term() and does not re-throw for a permanent error from xero sync", async () => {
     const msg = makeMsg();
     const data = makeSyncJobData({ platform: "xero" });
-    const err = new (jest.requireMock(
-      "../../src/services/accounting/accountingService",
-    ).ValidationError)("Xero validation");
-    syncToXero.mockRejectedValueOnce(err);
+    const err = new ValidationError("Xero validation");
+    mockSyncToXero.mockRejectedValueOnce(err);
 
     const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
 
@@ -580,7 +515,7 @@ describe("syncWorker — processNatsSyncMessage handler", () => {
   it("calls msg.term() for a generic non-Error thrown value (permanent path)", async () => {
     const msg = makeMsg();
     const data = makeSyncJobData({ platform: "quickbooks" });
-    syncToQuickBooks.mockRejectedValueOnce("plain string error");
+    mockSyncToQuickBooks.mockRejectedValueOnce("plain string error");
 
     const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
 
@@ -614,39 +549,10 @@ describe("syncWorker — NATS consume rejection is caught and logged", () => {
 
   it("logs the error via console.error when consume() rejects", async () => {
     const consumeError = new Error("JetStream unavailable");
-    const failingConsume = jest.fn().mockRejectedValue(consumeError);
-    const natsCloseMock = jest.fn().mockResolvedValue(undefined);
-
-    jest.mock("../../src/queue/nats", () => ({
-      NATS_QUEUE_ENABLED: true,
-      NATS_ACK_WAIT_MS: 30000,
-      natsManager: { consume: failingConsume, close: natsCloseMock },
-    }));
-    jest.mock("bullmq", () => ({
-      Queue: jest.fn().mockImplementation(() => ({
-        add: jest.fn(),
-        close: jest.fn(),
-      })),
-      Worker: jest.fn().mockImplementation(() => ({
-        close: jest.fn().mockResolvedValue(undefined),
-      })),
-    }));
-    jest.mock("../../src/queue/config", () => ({
-      queueOptions: {},
-      getTelecomProviderLimits: () => ({ concurrency: 3, limiter: { max: 10, duration: 1000 } }),
-    }));
-    jest.mock("../../src/queue/syncQueue", () => ({
-      SYNC_QUEUE_NAME: "accounting-sync",
-    }));
-    jest.mock("../../src/services/accounting/accountingService", () => ({
-      AccountingService: jest.fn().mockImplementation(() => ({
-        syncToQuickBooks: jest.fn(),
-        syncToXero: jest.fn(),
-      })),
-      RateLimitError: class extends Error {},
-      NetworkError: class extends Error {},
-      ValidationError: class extends Error {},
-    }));
+    registerMocks({
+      natsEnabled: true,
+      consumeImpl: jest.fn().mockRejectedValue(consumeError),
+    });
 
     const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
 
@@ -682,84 +588,23 @@ describe("syncWorker — closeSyncWorker", () => {
   });
 
   it("closes the BullMQ worker and natsManager when NATS_QUEUE_ENABLED is true", async () => {
-    const workerClose = jest.fn().mockResolvedValue(undefined);
-    const natsClose = jest.fn().mockResolvedValue(undefined);
-    const consume = jest.fn().mockResolvedValue(undefined);
-
-    jest.mock("../../src/queue/nats", () => ({
-      NATS_QUEUE_ENABLED: true,
-      NATS_ACK_WAIT_MS: 30000,
-      natsManager: { consume, close: natsClose },
-    }));
-    jest.mock("bullmq", () => ({
-      Queue: jest.fn().mockImplementation(() => ({
-        add: jest.fn(),
-        close: jest.fn(),
-      })),
-      Worker: jest.fn().mockImplementation(() => ({ close: workerClose })),
-    }));
-    jest.mock("../../src/queue/config", () => ({
-      queueOptions: {},
-      getTelecomProviderLimits: () => ({ concurrency: 3, limiter: { max: 10, duration: 1000 } }),
-    }));
-    jest.mock("../../src/queue/syncQueue", () => ({
-      SYNC_QUEUE_NAME: "accounting-sync",
-    }));
-    jest.mock("../../src/services/accounting/accountingService", () => ({
-      AccountingService: jest.fn().mockImplementation(() => ({
-        syncToQuickBooks: jest.fn(),
-        syncToXero: jest.fn(),
-      })),
-      RateLimitError: class extends Error {},
-      NetworkError: class extends Error {},
-      ValidationError: class extends Error {},
-    }));
+    registerMocks({ natsEnabled: true });
 
     const { closeSyncWorker } = require("../../src/queue/syncWorker");
     await closeSyncWorker();
 
-    expect(workerClose).toHaveBeenCalledTimes(1);
-    expect(natsClose).toHaveBeenCalledTimes(1);
+    expect(mockWorkerClose).toHaveBeenCalledTimes(1);
+    expect(mockNatsClose).toHaveBeenCalledTimes(1);
   });
 
   it("closes only the BullMQ worker when NATS_QUEUE_ENABLED is false", async () => {
-    const workerClose = jest.fn().mockResolvedValue(undefined);
-    const natsClose = jest.fn().mockResolvedValue(undefined);
-
-    jest.mock("../../src/queue/nats", () => ({
-      NATS_QUEUE_ENABLED: false,
-      NATS_ACK_WAIT_MS: 30000,
-      natsManager: { consume: jest.fn(), close: natsClose },
-    }));
-    jest.mock("bullmq", () => ({
-      Queue: jest.fn().mockImplementation(() => ({
-        add: jest.fn(),
-        close: jest.fn(),
-      })),
-      Worker: jest.fn().mockImplementation(() => ({ close: workerClose })),
-    }));
-    jest.mock("../../src/queue/config", () => ({
-      queueOptions: {},
-      getTelecomProviderLimits: () => ({ concurrency: 3, limiter: { max: 10, duration: 1000 } }),
-    }));
-    jest.mock("../../src/queue/syncQueue", () => ({
-      SYNC_QUEUE_NAME: "accounting-sync",
-    }));
-    jest.mock("../../src/services/accounting/accountingService", () => ({
-      AccountingService: jest.fn().mockImplementation(() => ({
-        syncToQuickBooks: jest.fn(),
-        syncToXero: jest.fn(),
-      })),
-      RateLimitError: class extends Error {},
-      NetworkError: class extends Error {},
-      ValidationError: class extends Error {},
-    }));
+    registerMocks({ natsEnabled: false });
 
     const { closeSyncWorker } = require("../../src/queue/syncWorker");
     await closeSyncWorker();
 
-    expect(workerClose).toHaveBeenCalledTimes(1);
-    expect(natsClose).not.toHaveBeenCalled();
+    expect(mockWorkerClose).toHaveBeenCalledTimes(1);
+    expect(mockNatsClose).not.toHaveBeenCalled();
   });
 });
 
@@ -781,41 +626,10 @@ describe("syncWorker — NATS disabled branch", () => {
   });
 
   it("does not call natsManager.consume when NATS_QUEUE_ENABLED is false", async () => {
-    const consume = jest.fn().mockResolvedValue(undefined);
-
-    jest.mock("../../src/queue/nats", () => ({
-      NATS_QUEUE_ENABLED: false,
-      NATS_ACK_WAIT_MS: 30000,
-      natsManager: { consume, close: jest.fn() },
-    }));
-    jest.mock("bullmq", () => ({
-      Queue: jest.fn().mockImplementation(() => ({
-        add: jest.fn(),
-        close: jest.fn(),
-      })),
-      Worker: jest.fn().mockImplementation(() => ({
-        close: jest.fn().mockResolvedValue(undefined),
-      })),
-    }));
-    jest.mock("../../src/queue/config", () => ({
-      queueOptions: {},
-      getTelecomProviderLimits: () => ({ concurrency: 3, limiter: { max: 10, duration: 1000 } }),
-    }));
-    jest.mock("../../src/queue/syncQueue", () => ({
-      SYNC_QUEUE_NAME: "accounting-sync",
-    }));
-    jest.mock("../../src/services/accounting/accountingService", () => ({
-      AccountingService: jest.fn().mockImplementation(() => ({
-        syncToQuickBooks: jest.fn(),
-        syncToXero: jest.fn(),
-      })),
-      RateLimitError: class extends Error {},
-      NetworkError: class extends Error {},
-      ValidationError: class extends Error {},
-    }));
+    registerMocks({ natsEnabled: false });
 
     require("../../src/queue/syncWorker");
 
-    expect(consume).not.toHaveBeenCalled();
+    expect(mockConsume).not.toHaveBeenCalled();
   });
 });

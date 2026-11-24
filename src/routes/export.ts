@@ -6,8 +6,9 @@ import {
   NextFunction,
   RequestHandler,
 } from "express";
-import { Transform } from "stream";
-import { pipeline } from "stream/promises";
+import { Transform, Writable } from "stream";
+import { finished, pipeline } from "stream/promises";
+import archiver from "archiver";
 import PDFDocument from "pdfkit";
 import { requireAuth, AuthRequest } from "../middleware/auth";
 import {
@@ -20,6 +21,7 @@ import {
   RawExportQuery,
 } from "../utils/csvExporter";
 import rateLimit from "express-rate-limit";
+import { createReportSigningTransform } from "../security/reportSigner";
 
 export const ALLOWED_HEADERS = [
   ...DEFAULT_ALLOWED_HEADERS,
@@ -102,10 +104,10 @@ export interface ExportRouteOptions {
 async function streamPdfExport(
   rowStream: AsyncIterable<Record<string, unknown>>,
   headers: string[],
-  res: Response,
+  output: Writable,
 ): Promise<void> {
   const doc = new PDFDocument({ size: "A4", margin: 40, layout: "landscape" });
-  doc.pipe(res);
+  doc.pipe(output);
 
   const pageWidth = doc.page.width;
   const pageHeight = doc.page.height;
@@ -174,6 +176,60 @@ async function streamPdfExport(
   }
 
   doc.end();
+  await finished(doc);
+}
+
+async function streamSignedExport(
+  rowStream: AsyncIterable<Record<string, unknown>>,
+  headers: string[],
+  format: "csv" | "pdf",
+  filename: string,
+  res: Response,
+): Promise<void> {
+  const privateKey = process.env.ANCHOR_REPORT_SIGNING_KEY;
+  if (!privateKey)
+    throw new Error("ANCHOR_REPORT_SIGNING_KEY is not configured");
+
+  const reportFilename = filename.replace(/\.zip$/, `.${format}`);
+  const { stream, finalize } = createReportSigningTransform(privateKey);
+  const archive = archiver("zip", { zlib: { level: 9 } });
+  archive.on("error", (error) => stream.destroy(error));
+  archive.pipe(res);
+  archive.append(stream, { name: reportFilename });
+
+  if (format === "pdf") {
+    await streamPdfExport(rowStream, headers, stream);
+    await finished(stream);
+  } else {
+    let first = true;
+    const csvTransform = new Transform({
+      objectMode: true,
+      transform(chunk: Record<string, unknown>, _encoding, callback) {
+        const data =
+          (first ? "\uFEFF" : "") +
+          (first ? `${headers.join(",")}\n` : "") +
+          transactionRowToCsv(chunk, headers);
+        first = false;
+        callback(null, data);
+      },
+      flush(callback) {
+        if (first) callback(null, `\uFEFF${headers.join(",")}\n`);
+        else callback();
+      },
+    });
+    await pipeline(rowStream as NodeJS.ReadableStream, csvTransform, stream);
+  }
+
+  const metadata = finalize();
+  archive.append(metadata.signature, { name: `${reportFilename}.sig` });
+  archive.append(JSON.stringify(metadata, null, 2), {
+    name: `${reportFilename}.metadata.json`,
+  });
+  await new Promise<void>((resolve, reject) => {
+    archive.once("error", reject);
+    res.once("finish", resolve);
+    archive.finalize();
+  });
 }
 
 export function createExportRoutes(options?: ExportRouteOptions) {
@@ -232,16 +288,19 @@ export function createExportRoutes(options?: ExportRouteOptions) {
         const format = ["json", "pdf"].includes(req.query.format as string)
           ? (req.query.format as "json" | "pdf")
           : "csv";
-        const filename = `transactions-${new Date().toISOString().slice(0, 10)}.${format}`;
+        const signed = req.query.signed === "true";
+        const filename = `transactions-${new Date().toISOString().slice(0, 10)}.${signed ? "zip" : format}`;
 
         res.status(200);
         res.setHeader(
           "Content-Type",
-          format === "json"
-            ? "application/json"
-            : format === "pdf"
-              ? "application/pdf"
-              : "text/csv; charset=utf-8",
+          signed
+            ? "application/zip"
+            : format === "json"
+              ? "application/json"
+              : format === "pdf"
+                ? "application/pdf"
+                : "text/csv; charset=utf-8",
         );
         res.setHeader(
           "Content-Disposition",
@@ -257,6 +316,21 @@ export function createExportRoutes(options?: ExportRouteOptions) {
           }
           releaseClient();
         });
+
+        if (signed) {
+          if (format === "json") {
+            throw new Error("Signed exports support CSV and PDF formats only");
+          }
+          await streamSignedExport(
+            rowStream,
+            exportHeaders,
+            format,
+            filename,
+            res,
+          );
+          releaseClient();
+          return;
+        }
 
         if (format === "pdf") {
           await streamPdfExport(rowStream, exportHeaders, res);

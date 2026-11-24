@@ -1,0 +1,65 @@
+---
+title: 'Authentication'
+description: 'Secure your API requests with JWT tokens or API keys'
+---
+
+The Mobile Money API offers two main methods of authentication depending on your integration needs: simple API Keys and robust JWT Bearer tokens.
+
+## API Key Authentication
+
+The simplest way to authenticate is by passing your API key in the `X-API-Key` header. This is recommended for quick scripts, simple server-to-server integrations, and initial testing.
+
+```bash
+curl --request GET \
+  --url https://api.mobilemoney.dev/v1/quotes \
+  --header 'X-API-Key: your_live_or_test_key_here'
+```
+
+## JWT Bearer Tokens (OAuth2)
+
+For enterprise-grade security, particularly in complex architectures or when acting on behalf of multiple user contexts, we support standard OAuth2 Client Credentials flow generating JWTs.
+
+1. **Obtain Token:** Use your client ID and secret to get a token.
+2. **Use Token:** Pass it in the `Authorization` header.
+
+### 1. Requesting a JWT
+
+```bash
+curl --request POST \
+  --url https://api.mobilemoney.dev/oauth2/token \
+  --header 'Content-Type: application/x-www-form-urlencoded' \
+  --data 'grant_type=client_credentials&client_id=YOUR_CLIENT_ID&client_secret=YOUR_CLIENT_SECRET'
+```
+
+**Response:**
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5c...",
+  "token_type": "Bearer",
+  "expires_in": 3600
+}
+```
+
+### 2. Using the JWT
+
+```bash
+curl --request GET \
+  --url https://api.mobilemoney.dev/v1/transactions \
+  --header 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5c...'
+```
+
+### Token Refresh Flow
+
+JWTs expire after 1 hour (3600 seconds). You must request a new token using the Client Credentials flow before the current one expires. We recommend caching the token and refreshing it 5 minutes before expiration.
+
+## Rate Limits
+
+Rate limits are enforced based on your authentication tier:
+
+| Tier | API Key Limits | JWT Limits |
+|------|----------------|------------|
+| Sandbox | 10 req/sec | 10 req/sec |
+| Production (Standard) | 50 req/sec | 100 req/sec |
+| Production (Enterprise) | Custom | Custom |
+
+If you exceed the rate limits, the API will return a `429 Too Many Requests` status code.

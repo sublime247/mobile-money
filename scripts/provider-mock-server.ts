@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import { Server } from "http";
-import { Request, Response } from "express";
+import { NextFunction, Request, Response } from "express";
 import express = require("express");
 import mockServerConfig from "../src/config/mockServer";
 import {
@@ -10,10 +10,10 @@ import {
   getMoovSoapStatus,
 } from "../src/mocks/helpers/moov";
 
-type MockScenario = "success" | "failed" | "pending";
+type MockScenario = "success" | "failed" | "pending" | "timeout";
 
 interface StoredTransaction {
-  provider: "mtn" | "airtel" | "vodacom" | "tigo" | "moov";
+  provider: "mtn" | "airtel" | "vodacom" | "tigo" | "moov" | "orange" | "mpesa";
   scenario: MockScenario;
   createdAt: string;
 }
@@ -23,6 +23,7 @@ interface MockRequestBody {
   delayMs?: number | string;
   externalId?: string;
   reference?: string;
+  referenceId?: string;
   transaction?: {
     id?: string;
   };
@@ -54,6 +55,10 @@ function normalizeScenario(value: unknown): MockScenario {
 
   if (normalized === "pending") {
     return "pending";
+  }
+
+  if (normalized === "timeout") {
+    return "timeout";
   }
 
   return "success";
@@ -110,6 +115,41 @@ async function applyDelay(
   if (delayMs > 0) {
     await new Promise((resolve) => setTimeout(resolve, delayMs));
   }
+}
+
+/**
+ * When the "timeout" scenario is requested, hang the request indefinitely
+ * (never resolve) so callers can exercise their own client-side timeout
+ * handling, matching src/mocks/providerMockServer.ts's chaos-mode
+ * precedent for the same scenario name.
+ *
+ * Returns true if the request was hung (caller must not respond further).
+ */
+async function applyTimeoutIfNeeded(scenario: MockScenario): Promise<boolean> {
+  if (scenario !== "timeout") {
+    return false;
+  }
+  await new Promise(() => {
+    // Intentionally never resolves.
+  });
+  return true;
+}
+
+/**
+ * Narrow a MockScenario to Moov's own MoovMockScenario type. Callers must
+ * only reach this after `applyTimeoutIfNeeded` has already returned (and
+ * thus hung the request) for the "timeout" case, so a runtime "timeout"
+ * value here would indicate a bug, not user input.
+ */
+function asMoovScenario(
+  scenario: MockScenario,
+): "success" | "failed" | "pending" {
+  if (scenario === "timeout") {
+    throw new Error(
+      "asMoovScenario called with timeout scenario after applyTimeoutIfNeeded should have hung the request",
+    );
+  }
+  return scenario;
 }
 
 /**
@@ -183,9 +223,63 @@ function getReferenceId(
     req.header("X-Reference-Id") ||
     req.body?.externalId ||
     req.body?.reference ||
+    req.body?.referenceId ||
     req.body?.transaction?.id ||
     `${fallbackPrefix}-${randomUUID()}`
   );
+}
+
+/**
+ * Runtime fault injection for any provider endpoint, independent of the
+ * per-provider business-logic `scenario` query/header/body field above.
+ *
+ * Request-level overrides (useful for exercising one specific request's
+ * retry/timeout handling in CI without affecting other concurrent calls):
+ *   X-Mock-Status: <http status>  — short-circuit with this status and a
+ *                                   generic JSON error body (e.g. 500, 503).
+ *   X-Mock-Delay: <milliseconds>  — delay before responding (or before
+ *                                   returning the injected status, if both
+ *                                   headers are set together).
+ *
+ * A "network drop" is simulated by destroying the underlying socket instead
+ * of sending a response, so SDK/client code sees a connection-reset error
+ * exactly as it would against a real flaky upstream.
+ */
+function faultInjectionMiddleware(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): void {
+  const delayMs = toDelayMs(req.header("x-mock-delay"));
+  const statusHeader = req.header("x-mock-status");
+  const forcedStatus = statusHeader
+    ? Number.parseInt(statusHeader, 10)
+    : null;
+
+  const respond = () => {
+    if (forcedStatus === 599) {
+      // Convention for "simulate a dropped connection", since no real HTTP
+      // status code means that - the socket is closed with no response.
+      req.socket.destroy();
+      return;
+    }
+
+    if (forcedStatus !== null && Number.isFinite(forcedStatus)) {
+      res.status(forcedStatus).json({
+        error: "mock_injected_fault",
+        message: `Fault injected via X-Mock-Status: ${forcedStatus}`,
+      });
+      return;
+    }
+
+    next();
+  };
+
+  if (delayMs && delayMs > 0) {
+    setTimeout(respond, delayMs);
+  } else {
+    respond();
+  }
 }
 
 export function createProviderMockApp() {
@@ -193,13 +287,22 @@ export function createProviderMockApp() {
   const transactions = new Map<string, StoredTransaction>();
 
   app.use(express.json());
+  app.use(faultInjectionMiddleware);
 
   const moovTestKeys = generateMoovTestKeyPair();
 
   app.get("/health", (_req: Request, res: Response) => {
     res.json({
       status: "ok",
-      providers: ["mtn", "airtel", "vodacom", "tigo", "moov"],
+      providers: [
+        "mtn",
+        "airtel",
+        "vodacom",
+        "tigo",
+        "moov",
+        "orange",
+        "mpesa",
+      ],
     });
   });
 
@@ -223,6 +326,8 @@ export function createProviderMockApp() {
 
       const scenario = getScenario(req);
       const referenceId = getReferenceId(req, "mtn");
+
+      if (await applyTimeoutIfNeeded(scenario)) return;
 
       transactions.set(referenceId, {
         provider: "mtn",
@@ -314,6 +419,8 @@ export function createProviderMockApp() {
 
       const scenario = getScenario(req);
       const referenceId = getReferenceId(req, "airtel-pay");
+
+      if (await applyTimeoutIfNeeded(scenario)) return;
 
       transactions.set(referenceId, {
         provider: "airtel",
@@ -728,6 +835,8 @@ export function createProviderMockApp() {
       const scenario = getScenario(req);
       const referenceId = getReferenceId(req, "moov-deposit");
 
+      if (await applyTimeoutIfNeeded(scenario)) return;
+
       transactions.set(referenceId, {
         provider: "moov",
         scenario,
@@ -744,7 +853,7 @@ export function createProviderMockApp() {
       }
 
       return res.status(200).json({
-        status: getMoovRestStatus(scenario),
+        status: getMoovRestStatus(asMoovScenario(scenario)),
         referenceId,
         transactionId: `moov-txn-${referenceId}`,
         message: "Mock Moov deposit accepted",
@@ -762,10 +871,12 @@ export function createProviderMockApp() {
       const stored = transactions.get(req.params.referenceId);
       const scenario = stored?.scenario || getScenario(req);
 
+      if (await applyTimeoutIfNeeded(scenario)) return;
+
       return res.json({
         referenceId: req.params.referenceId,
         transactionId: `moov-txn-${req.params.referenceId}`,
-        status: getMoovRestStatus(scenario),
+        status: getMoovRestStatus(asMoovScenario(scenario)),
       });
     },
   );
@@ -777,7 +888,10 @@ export function createProviderMockApp() {
       const scenario = getScenario(req);
       const soapAction = String(req.header("SOAPAction") || "").toLowerCase();
       const referenceId = getReferenceId(req, "moov-soap");
-      const status = getMoovSoapStatus(scenario);
+
+      if (await applyTimeoutIfNeeded(scenario)) return;
+
+      const status = getMoovSoapStatus(asMoovScenario(scenario));
 
       transactions.set(referenceId, {
         provider: "moov",
@@ -796,9 +910,213 @@ export function createProviderMockApp() {
         bodyContent = `<MoovResponse><Status>${status}</Status><TransactionId>moov-txn-${referenceId}</TransactionId></MoovResponse>`;
       }
 
-      res.type("text/xml").send(
-        buildMoovSoapResponse(bodyContent, moovTestKeys.privateKey),
-      );
+      res
+        .type("text/xml")
+        .send(buildMoovSoapResponse(bodyContent, moovTestKeys.privateKey));
+    },
+  );
+
+  // ─── Orange Mock Endpoints ───────────────────────────────────────────────
+  // Shape matches ORANGE_DIRECT_* paths (src/services/mobilemoney/providers/orange.ts):
+  // /oauth/token, /v1/payments/collect, /v1/payments/disburse, /v1/payments/:reference.
+
+  app.post("/orange/oauth/token", async (req: Request, res: Response) => {
+    await applyDelay(req);
+    res.json({
+      access_token: "mock-orange-access-token",
+      token_type: "Bearer",
+      expires_in: 3600,
+    });
+  });
+
+  app.post(
+    "/orange/v1/payments/collect",
+    async (req: Request<unknown, unknown, MockRequestBody>, res: Response) => {
+      await applyDelay(req);
+      const scenario = getScenario(req);
+      const referenceId = getReferenceId(req, "orange-collect");
+
+      if (await applyTimeoutIfNeeded(scenario)) return;
+
+      transactions.set(referenceId, {
+        provider: "orange",
+        scenario,
+        createdAt: new Date().toISOString(),
+      });
+
+      if (scenario === "failed") {
+        return res.status(400).json({
+          status: "FAILED",
+          reference: referenceId,
+          message: "Mock Orange collection failure",
+        });
+      }
+
+      return res.status(202).json({
+        status: getOrangeStatus(scenario),
+        reference: referenceId,
+        message: "Mock Orange collection accepted",
+      });
+    },
+  );
+
+  app.post(
+    "/orange/v1/payments/disburse",
+    async (req: Request<unknown, unknown, MockRequestBody>, res: Response) => {
+      await applyDelay(req);
+      const scenario = getScenario(req);
+      const referenceId = getReferenceId(req, "orange-disburse");
+
+      if (await applyTimeoutIfNeeded(scenario)) return;
+
+      transactions.set(referenceId, {
+        provider: "orange",
+        scenario,
+        createdAt: new Date().toISOString(),
+      });
+
+      if (scenario === "failed") {
+        return res.status(400).json({
+          status: "FAILED",
+          reference: referenceId,
+          message: "Mock Orange disbursement failure",
+        });
+      }
+
+      return res.status(202).json({
+        status: getOrangeStatus(scenario),
+        reference: referenceId,
+        message: "Mock Orange disbursement accepted",
+      });
+    },
+  );
+
+  app.get(
+    "/orange/v1/payments/:reference",
+    async (
+      req: Request<{ reference: string }, unknown, MockRequestBody>,
+      res: Response,
+    ) => {
+      await applyDelay(req);
+      const stored = transactions.get(req.params.reference);
+      const scenario = stored?.scenario || getScenario(req);
+
+      if (await applyTimeoutIfNeeded(scenario)) return;
+
+      return res.json({
+        reference: req.params.reference,
+        status: getOrangeStatus(scenario),
+      });
+    },
+  );
+
+  // ─── M-Pesa Mock Endpoints ───────────────────────────────────────────────
+  // Shape matches src/services/providers/mpesaService.ts: OAuth generate,
+  // STK push (collection), B2C (disbursement), STK push query (status).
+
+  app.get("/mpesa/oauth/v1/generate", async (req: Request, res: Response) => {
+    await applyDelay(req);
+    res.json({
+      access_token: "mock-mpesa-access-token",
+      expires_in: "3600",
+    });
+  });
+
+  app.post(
+    "/mpesa/mpesa/stkpush/v1/processrequest",
+    async (req: Request<unknown, unknown, MockRequestBody>, res: Response) => {
+      await applyDelay(req);
+      const scenario = getScenario(req);
+      const referenceId = getReferenceId(req, "mpesa-stk");
+
+      if (await applyTimeoutIfNeeded(scenario)) return;
+
+      transactions.set(referenceId, {
+        provider: "mpesa",
+        scenario,
+        createdAt: new Date().toISOString(),
+      });
+
+      if (scenario === "failed") {
+        return res.status(400).json({
+          MerchantRequestID: referenceId,
+          CheckoutRequestID: referenceId,
+          ResponseCode: "1",
+          ResponseDescription: "Mock M-Pesa STK push failure",
+        });
+      }
+
+      return res.status(200).json({
+        MerchantRequestID: referenceId,
+        CheckoutRequestID: referenceId,
+        ResponseCode: "0",
+        ResponseDescription: "Success. Request accepted for processing",
+      });
+    },
+  );
+
+  app.post(
+    "/mpesa/mpesa/b2c/v1/paymentrequest",
+    async (req: Request<unknown, unknown, MockRequestBody>, res: Response) => {
+      await applyDelay(req);
+      const scenario = getScenario(req);
+      const referenceId = getReferenceId(req, "mpesa-b2c");
+
+      if (await applyTimeoutIfNeeded(scenario)) return;
+
+      transactions.set(referenceId, {
+        provider: "mpesa",
+        scenario,
+        createdAt: new Date().toISOString(),
+      });
+
+      if (scenario === "failed") {
+        return res.status(400).json({
+          ConversationID: referenceId,
+          OriginatorConversationID: referenceId,
+          ResponseCode: "1",
+          ResponseDescription: "Mock M-Pesa B2C failure",
+        });
+      }
+
+      return res.status(200).json({
+        ConversationID: referenceId,
+        OriginatorConversationID: referenceId,
+        ResponseCode: "0",
+        ResponseDescription: "Accept the service request successfully",
+      });
+    },
+  );
+
+  app.post(
+    "/mpesa/mpesa/stkpushquery/v1/query",
+    async (req: Request<unknown, unknown, MockRequestBody>, res: Response) => {
+      await applyDelay(req);
+      const referenceId =
+        req.body?.referenceId || req.header("X-Reference-Id") || undefined;
+      const stored = referenceId ? transactions.get(referenceId) : undefined;
+      const scenario = stored?.scenario || getScenario(req);
+
+      if (await applyTimeoutIfNeeded(scenario)) return;
+
+      if (scenario === "pending") {
+        return res.status(200).json({
+          ResultCode: "NaN",
+          ResultDesc: "The transaction is being processed",
+        });
+      }
+
+      if (scenario === "failed") {
+        return res.status(200).json({
+          ResultCode: "1",
+          ResultDesc: "Mock M-Pesa transaction failed",
+        });
+      }
+
+      return res.status(200).json({
+        ResultCode: "0",
+        ResultDesc: "The service request is processed successfully.",
+      });
     },
   );
 
@@ -819,6 +1137,14 @@ function getTigoStatus(
   if (scenario === "failed") return "FAILED";
   if (scenario === "pending") return "PENDING";
   return "SUCCESS";
+}
+
+function getOrangeStatus(
+  scenario: MockScenario,
+): "SUCCESSFUL" | "FAILED" | "PENDING" {
+  if (scenario === "failed") return "FAILED";
+  if (scenario === "pending") return "PENDING";
+  return "SUCCESSFUL";
 }
 
 export function startProviderMockServer(port = DEFAULT_PORT): Server {

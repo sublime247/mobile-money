@@ -1,5 +1,6 @@
 import logger from "../../utils/logger";
 import { pool } from "../../config/database";
+import { withReadOnlyTransaction } from "../../database/readOnlyClient";
 import { withRetry } from "../retry";
 import { TravelRuleRecord } from "../../compliance/travelRule";
 
@@ -113,7 +114,11 @@ function toFatfFormat(record: TravelRuleRecord): FatfTravelRuleRecord {
 }
 
 async function fetchPendingComplianceLogs(): Promise<TravelRuleRecord[]> {
-  const result = await pool.query<{
+  // #2483: compliance export reads run in a READ ONLY transaction on a replica
+  // when available. The export marker write below deliberately stays on the
+  // primary via pool.query.
+  const result = await withReadOnlyTransaction((client) =>
+    client.query<{
     id: string;
     transaction_id: string;
     amount: string;
@@ -135,6 +140,7 @@ async function fetchPendingComplianceLogs(): Promise<TravelRuleRecord[]> {
     `SELECT * FROM travel_rule_records
      WHERE exported_at IS NULL
      ORDER BY created_at ASC`,
+    ),
   );
 
   return result.rows.map((row) => ({

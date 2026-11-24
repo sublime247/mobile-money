@@ -24,7 +24,7 @@ import {
   sign as cryptoSign,
   verify as cryptoVerify,
 } from "crypto";
-import { Keypair } from "stellar-sdk";
+import { Keypair } from "@stellar/stellar-sdk";
 
 export const ED25519_SIGNATURE_PREFIX = "ed25519=";
 

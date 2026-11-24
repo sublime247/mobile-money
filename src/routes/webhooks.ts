@@ -4,11 +4,13 @@ import { createHmac, timingSafeEqual } from "crypto";
 import { TransactionModel, TransactionStatus } from "../models/transaction";
 import { WebhookService, WebhookEvent } from "../services/webhook";
 import { ingestRateLimiter } from "../middleware/ingestRateLimit";
+import { optionalIdempotency } from "../middleware/idempotency";
 import { AirtelSignatureValidator } from "../utils/airtelSignatureValidator";
 import {
   verifyWebhookPayloadEd25519,
   derivePublicSigningKey,
 } from "../crypto/webhookSigning";
+import { verifyOrangeWebhookSignature } from "../services/mobilemoney/orangeWebhookVerifier";
 
 const router = Router();
 const transactionModel = new TransactionModel();
@@ -246,14 +248,20 @@ router.post("/", async (req: Request, res: Response) => {
         transaction_id: payload.transaction_id,
       });
     }
-    if (payload.status && payload.status !== transaction.status) {
-      await transactionModel.updateStatus(
+    if (payload.status) {
+      const updated = await transactionModel.updateStatus(
         transaction.id,
         payload.status as TransactionStatus,
       );
-      console.log(
-        `[webhook] Updated transaction ${transaction.id} to ${payload.status}`,
-      );
+      if (updated) {
+        console.log(
+          `[webhook] Updated transaction ${transaction.id} to ${payload.status}`,
+        );
+      } else {
+        console.log(
+          `[webhook] Skipped status transition for transaction ${transaction.id} to ${payload.status} (no-op or invalid state transition)`,
+        );
+      }
     }
     console.log(
       `[webhook] Processed event ${payload.event_id} for transaction ${payload.transaction_id}`,
@@ -277,17 +285,22 @@ export async function verifyAirtelWebhookSignature(
   res: Response,
   next: () => void,
 ) {
-  const signature = req.headers["x-airtel-signature"] as string | undefined;
+  const signatureHeader = req.headers["x-airtel-signature"];
+  // Express gives an array when a header is repeated; a repeated
+  // x-airtel-signature is itself a sign of a malformed/spoofed request,
+  // so only a single string value is accepted.
+  const signature =
+    typeof signatureHeader === "string" ? signatureHeader : undefined;
   if (!signature) {
-    console.warn("[webhook-airtel] Missing signature header");
-    return res.status(400).json({ error: "Missing x-airtel-signature header" });
+    console.warn("[webhook-airtel] Missing or malformed signature header");
+    return res.status(401).json({ error: "Missing x-airtel-signature header" });
   }
 
   const rawPayload = JSON.stringify(req.body);
   const isValid = await airtelValidator.verifySignature(rawPayload, signature);
   if (!isValid) {
     console.warn("[webhook-airtel] Invalid signature");
-    return res.status(400).json({ error: "Invalid signature" });
+    return res.status(401).json({ error: "Invalid signature" });
   }
 
   next();
@@ -296,6 +309,7 @@ export async function verifyAirtelWebhookSignature(
 router.post(
   "/airtel",
   verifyAirtelWebhookSignature,
+  optionalIdempotency,
   async (req: Request, res: Response) => {
     try {
       const payload = req.body as FlatWebhookPayload;
@@ -311,14 +325,20 @@ router.post(
           transaction_id: payload.transaction_id,
         });
       }
-      if (payload.status && payload.status !== transaction.status) {
-        await transactionModel.updateStatus(
+      if (payload.status) {
+        const updated = await transactionModel.updateStatus(
           transaction.id,
           payload.status as TransactionStatus,
         );
-        console.log(
-          `[webhook-airtel] Updated transaction ${transaction.id} to ${payload.status}`,
-        );
+        if (updated) {
+          console.log(
+            `[webhook-airtel] Updated transaction ${transaction.id} to ${payload.status}`,
+          );
+        } else {
+          console.log(
+            `[webhook-airtel] Skipped status transition for transaction ${transaction.id} to ${payload.status} (no-op or invalid state transition)`,
+          );
+        }
       }
       console.log(
         `[webhook-airtel] Processed event ${payload.event_id} for transaction ${payload.transaction_id}`,
@@ -331,6 +351,56 @@ router.post(
       });
     } catch (error) {
       console.error("[webhook-airtel] Processing error", error);
+      return res.status(500).json({ error: "Internal server error" });
+    }
+  },
+);
+
+router.post(
+  "/orange",
+  verifyOrangeWebhookSignature,
+  optionalIdempotency,
+  async (req: Request, res: Response) => {
+    try {
+      const payload = req.body as FlatWebhookPayload;
+      if (!payload.transaction_id || !payload.event_type) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+      const transaction = await transactionModel.findById(
+        payload.transaction_id,
+      );
+      if (!transaction) {
+        return res.status(404).json({
+          error: "Transaction not found",
+          transaction_id: payload.transaction_id,
+        });
+      }
+      if (payload.status) {
+        const updated = await transactionModel.updateStatus(
+          transaction.id,
+          payload.status as TransactionStatus,
+        );
+        if (updated) {
+          logger.info(
+            `[webhook-orange] Updated transaction ${transaction.id} to ${payload.status}`,
+          );
+        } else {
+          logger.info(
+            `[webhook-orange] Skipped status transition for transaction ${transaction.id} to ${payload.status} (no-op or invalid state transition)`,
+          );
+        }
+      }
+      logger.info(
+        `[webhook-orange] Processed event ${payload.event_id} for transaction ${payload.transaction_id}`,
+      );
+      return res.status(200).json({
+        success: true,
+        event_id: payload.event_id,
+        transaction_id: payload.transaction_id,
+        processed_at: new Date().toISOString(),
+      });
+    } catch (error) {
+      logger.error("[webhook-orange] Processing error", error);
       return res.status(500).json({ error: "Internal server error" });
     }
   },

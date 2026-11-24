@@ -1,0 +1,46 @@
+meta {
+  name: "SEP-24 Initiate Interactive Withdrawal"
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{base_url}}/sep24/transactions/withdraw/interactive
+  body: json
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  Authorization: Bearer {{jwt_token}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "asset_code": "USDC",
+    "account": "{{stellar_public_key}}",
+    "amount": "25.00"
+  }
+}
+
+script:pre-request {
+  // Guard: authenticated requests need a SEP-10 (or login) token.
+  const token = bru.getEnvVar("jwt_token");
+  if (!token) {
+    throw new Error(
+      "jwt_token is empty — run 'SEP-10 Sign Challenge & Get Token' (01-auth) first."
+    );
+  }
+}
+
+tests {
+  test("interactive withdrawal started", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("webview url returned", function() {
+    const body = res.getBody();
+    expect(body.url).to.be.a("string");
+    expect(body.id).to.be.a("string");
+  });
+}

@@ -16,39 +16,48 @@ export interface ProviderStats {
   [provider: string]: number;
 }
 
+/** Totals plus the distinct-user count, produced by a single scan. */
+export interface OverviewStats extends GeneralStats {
+  activeUsers: number;
+}
+
+export interface TrendPoint {
+  period: Date;
+  volume: number;
+}
+
+/** Provider totals and the volume trend, produced by a single scan. */
+export interface VolumeBreakdown {
+  byProvider: ProviderStats;
+  trends: TrendPoint[];
+}
+
 export interface SystemHealthDashboard {
   stellarReserves: ReserveInfo[];
 }
 
 export class StatsService {
   /**
-   * Get general transaction statistics
+   * Totals, success rate and active-user count.
+   *
+   * All four aggregates share the same filter set (the optional date range),
+   * so they are computed in one pass over the range instead of the two
+   * sequential table scans this used to take.
    */
-  async getGeneralStats(
-    startDate?: Date,
-    endDate?: Date,
-  ): Promise<GeneralStats> {
-    let query = `
-      SELECT 
+  async getOverview(startDate?: Date, endDate?: Date): Promise<OverviewStats> {
+    const range = StatsService.dateRange(startDate, endDate);
+    const query = `
+      SELECT
         COUNT(*) as total,
         COUNT(*) FILTER (WHERE status = 'completed') as successful,
-        COALESCE(SUM(amount::numeric) FILTER (WHERE status = 'completed'), 0) as volume,
-        COALESCE(AVG(amount::numeric) FILTER (WHERE status = 'completed'), 0) as average
+        COALESCE(SUM(amount) FILTER (WHERE status = 'completed'), 0) as volume,
+        COALESCE(AVG(amount) FILTER (WHERE status = 'completed'), 0) as average,
+        COUNT(DISTINCT user_id) as active_users
       FROM transactions
-      WHERE 1=1
+      ${range.conditions ? `WHERE ${range.conditions}` : ""}
     `;
-    const params: (Date | string | number)[] = [];
 
-    if (startDate) {
-      params.push(startDate);
-      query += ` AND created_at >= $${params.length}`;
-    }
-    if (endDate) {
-      params.push(endDate);
-      query += ` AND created_at <= $${params.length}`;
-    }
-
-    const { rows } = await pool.query(query, params);
+    const { rows } = await pool.query(query, range.params);
     const row = rows[0];
 
     const total = parseInt(row.total);
@@ -59,97 +68,84 @@ export class StatsService {
       successRate: total > 0 ? (successful / total) * 100 : 0,
       totalVolume: parseFloat(row.volume),
       averageAmount: parseFloat(row.average),
+      activeUsers: parseInt(row.active_users),
     };
   }
 
   /**
-   * Get transaction volume grouped by provider
+   * Completed volume grouped by provider and by period.
+   *
+   * The provider totals and the trend are two views of the same rows, so a
+   * single GROUP BY (provider, period) scan serves both; the per-provider
+   * totals are just the rows folded together in the application.
    */
-  async getVolumeByProvider(
-    startDate?: Date,
-    endDate?: Date,
-  ): Promise<ProviderStats> {
-    let query = `
-      SELECT provider, COALESCE(SUM(amount::numeric), 0) as volume
-      FROM transactions
-      WHERE status = 'completed'
-    `;
-    const params: (Date | string | number)[] = [];
-
-    if (startDate) {
-      params.push(startDate);
-      query += ` AND created_at >= $${params.length}`;
-    }
-    if (endDate) {
-      params.push(endDate);
-      query += ` AND created_at <= $${params.length}`;
-    }
-
-    query += " GROUP BY provider";
-
-    const { rows } = await pool.query(query, params);
-    const stats: ProviderStats = {};
-    rows.forEach((row) => {
-      stats[row.provider] = parseFloat(row.volume);
-    });
-
-    return stats;
-  }
-
-  /**
-   * Count active users (users with at least one transaction in the given period)
-   */
-  async getActiveUsersCount(startDate?: Date, endDate?: Date): Promise<number> {
-    let query = `SELECT COUNT(DISTINCT user_id) as count FROM transactions WHERE 1=1`;
-    const params: (Date | string | number)[] = [];
-
-    if (startDate) {
-      params.push(startDate);
-      query += ` AND created_at >= $${params.length}`;
-    }
-    if (endDate) {
-      params.push(endDate);
-      query += ` AND created_at <= $${params.length}`;
-    }
-
-    const { rows } = await pool.query(query, params);
-    return parseInt(rows[0].count);
-  }
-
-  /**
-   * Get volume trend by day, week, or month
-   */
-  async getVolumeByPeriod(
+  async getVolumeBreakdown(
     period: "day" | "week" | "month",
     startDate?: Date,
     endDate?: Date,
-  ) {
+  ): Promise<VolumeBreakdown> {
     const interval =
       period === "day" ? "day" : period === "week" ? "week" : "month";
+    const params: (string | Date)[] = [interval];
+    const range = StatsService.dateRange(startDate, endDate, params);
 
-    let query = `
-      SELECT DATE_TRUNC($1, created_at) as period, SUM(amount::numeric) as volume
+    const query = `
+      SELECT provider, DATE_TRUNC($1, created_at) as period, SUM(amount) as volume
       FROM transactions
       WHERE status = 'completed'
+      ${range.conditions ? `AND ${range.conditions}` : ""}
+      GROUP BY provider, period
+      ORDER BY period ASC
     `;
-    const params: (string | Date)[] = [interval];
+
+    const { rows } = await pool.query(query, params);
+
+    const byProvider: ProviderStats = {};
+    const trends: TrendPoint[] = [];
+    const trendIndex = new Map<string, number>();
+
+    rows.forEach((row) => {
+      const volume = parseFloat(row.volume);
+      byProvider[row.provider] = (byProvider[row.provider] || 0) + volume;
+
+      const key =
+        row.period instanceof Date
+          ? row.period.toISOString()
+          : String(row.period);
+      const index = trendIndex.get(key);
+      if (index === undefined) {
+        trendIndex.set(key, trends.length);
+        trends.push({ period: row.period, volume });
+      } else {
+        trends[index].volume += volume;
+      }
+    });
+
+    return { byProvider, trends };
+  }
+
+  /**
+   * Build the optional `created_at` window as bare `a AND b` conditions,
+   * appending its placeholders to `params` so callers keep one numbering
+   * scheme across the whole query (the caller owns the WHERE clause).
+   */
+  private static dateRange(
+    startDate?: Date,
+    endDate?: Date,
+    params: (string | Date)[] = [],
+  ): { conditions: string; params: (string | Date)[] } {
+    const conditions: string[] = [];
 
     if (startDate) {
       params.push(startDate);
-      query += ` AND created_at >= $${params.length}`;
+      conditions.push(`created_at >= $${params.length}`);
     }
     if (endDate) {
       params.push(endDate);
-      query += ` AND created_at <= $${params.length}`;
+      conditions.push(`created_at <= $${params.length}`);
     }
 
-    query += " GROUP BY period ORDER BY period ASC";
-
-    const { rows } = await pool.query(query, params);
-    return rows.map((r) => ({
-      period: r.period,
-      volume: parseFloat(r.volume),
-    }));
+    return { conditions: conditions.join(" AND "), params };
   }
 
   /**

@@ -35,6 +35,8 @@ Thank you for your interest in contributing! This document provides guidelines a
 
 ## 🚀 Getting Started
 
+For a comprehensive step-by-step guide to setting up your local development environment, database, Redis, provider mocks, and test suites, please see **[Developer Environment Onboarding & Setup Guide](docs/DEVELOPER_ONBOARDING.md)**.
+
 ### 1. Fork and Clone
 
 ```bash

@@ -15,6 +15,7 @@ jest.mock("../../auth/2fa", () => ({
 }));
 
 jest.mock("../../services/twoFactorRateLimiter", () => ({
+  MAX_ATTEMPTS: 5,
   twoFactorRateLimiter: {
     isLocked: jest.fn(),
     incrementFailures: jest.fn(),
@@ -73,8 +74,8 @@ describe("twoFactor middleware headers", () => {
     mockedLimiter.incrementFailures.mockResolvedValue(1);
     mockedLimiter.resetFailures.mockResolvedValue(undefined);
     mockedLimiter.getRateLimitHeaders.mockResolvedValue({
-      limit: 3,
-      remaining: 2,
+      limit: 5,
+      remaining: 4,
       resetAt: "2026-06-27T12:00:00.000Z",
       retryAfter: 900,
     });
@@ -84,12 +85,13 @@ describe("twoFactor middleware headers", () => {
     mockedLimiter.isLocked.mockResolvedValue(true);
 
     const { req, res, next } = makeReqRes();
+    req.headers["x-2fa-token"] = "123456";
     const middleware = requireTwoFactor(req, res, next);
 
     await middleware(undefined, req, res, next);
 
-    expect(res.setHeader).toHaveBeenCalledWith("X-RateLimit-Limit", "3");
-    expect(res.setHeader).toHaveBeenCalledWith("X-RateLimit-Remaining", "2");
+    expect(res.setHeader).toHaveBeenCalledWith("X-RateLimit-Limit", "5");
+    expect(res.setHeader).toHaveBeenCalledWith("X-RateLimit-Remaining", "4");
     expect(res.setHeader).toHaveBeenCalledWith(
       "X-RateLimit-Reset",
       "2026-06-27T12:00:00.000Z",
@@ -112,16 +114,33 @@ describe("twoFactor middleware headers", () => {
 
     await middleware(undefined, req, res, next);
 
-    expect(mockedLimiter.incrementFailures).toHaveBeenCalledWith("user-123");
+    expect(mockedLimiter.incrementFailures).toHaveBeenCalledWith(
+      "user-123",
+      undefined,
+    );
     expect(res.setHeader).toHaveBeenCalledWith("Retry-After", "900");
     expect(res.status).toHaveBeenCalledWith(403);
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({
         error: "Invalid 2FA",
-        triesRemaining: 2,
+        triesRemaining: 4,
       }),
     );
     expect(next).not.toHaveBeenCalled();
+  });
+
+  it("passes the user's email through to incrementFailures so a lockout notification can be sent (#2380)", async () => {
+    const { req, res, next } = makeReqRes();
+    req.headers["x-2fa-token"] = "123456";
+    (res.locals.user as any).email = "user-123@example.com";
+    const middleware = requireTwoFactor(req, res, next);
+
+    await middleware(undefined, req, res, next);
+
+    expect(mockedLimiter.incrementFailures).toHaveBeenCalledWith(
+      "user-123",
+      "user-123@example.com",
+    );
   });
 
   it("attaches retry headers when 2FA is required but not provided", async () => {
@@ -139,6 +158,35 @@ describe("twoFactor middleware headers", () => {
         required: true,
       }),
     );
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it("locks verification after 5 brute-force attempts and rejects further codes", async () => {
+    let failures = 0;
+    mockedLimiter.isLocked.mockImplementation(async () => failures >= 5);
+    mockedLimiter.incrementFailures.mockImplementation(async () => ++failures);
+
+    for (let attempt = 1; attempt <= 5; attempt++) {
+      const { req, res, next } = makeReqRes();
+      req.headers["x-2fa-token"] = String(100000 + attempt);
+      await requireTwoFactor(req, res, next)(undefined, req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ triesRemaining: 5 - attempt }),
+      );
+      expect(next).not.toHaveBeenCalled();
+    }
+
+    mockedVerifyTOTPToken.mockClear();
+    mockedVerifyTOTPToken.mockReturnValue(true);
+    const { req, res, next } = makeReqRes();
+    req.headers["x-2fa-token"] = "999999";
+    await requireTwoFactor(req, res, next)(undefined, req, res, next);
+
+    // Even a correct code is refused while the account is locked
+    expect(mockedVerifyTOTPToken).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(429);
     expect(next).not.toHaveBeenCalled();
   });
 

@@ -1,4 +1,4 @@
-import axios from "axios";
+import { providerHttp } from "../../providerStatus";
 import { randomUUID } from "crypto";
 import logger from "../../../utils/logger";
 import {
@@ -27,6 +27,8 @@ export interface BatchPayoutResult {
 
 import { BaseProvider } from "../../providers/baseProvider";
 
+const http = providerHttp("tigo");
+
 export class TigoProvider extends BaseProvider {
   private environment: string;
 
@@ -43,7 +45,7 @@ export class TigoProvider extends BaseProvider {
     if (this.isTokenValid()) {
       return this.cachedToken!;
     }
-    const response = await axios.post(
+    const response = await http.post(
       `${this.baseUrl}/oauth/token`,
       undefined,
       {
@@ -73,7 +75,7 @@ export class TigoProvider extends BaseProvider {
     const start = Date.now();
     try {
       const token = await this.getAccessToken();
-      const response = await axios.post(
+      const response = await http.post(
         `${this.baseUrl}/payments/collect`,
         {
           amount,
@@ -139,7 +141,7 @@ export class TigoProvider extends BaseProvider {
     const start = Date.now();
     try {
       const token = await this.getAccessToken();
-      const response = await axios.post(
+      const response = await http.post(
         `${this.baseUrl}/payments/disburse`,
         {
           amount,
@@ -200,7 +202,7 @@ export class TigoProvider extends BaseProvider {
   async getTransactionStatus(referenceId: string) {
     try {
       const token = await this.getAccessToken();
-      const response = await axios.get(
+      const response = await http.get(
         `${this.baseUrl}/payments/status/${encodeURIComponent(referenceId)}`,
         {
           headers: {
@@ -219,7 +221,7 @@ export class TigoProvider extends BaseProvider {
   async getOperationalBalance() {
     try {
       const token = await this.getAccessToken();
-      const response = await axios.get(`${this.baseUrl}/account/balance`, {
+      const response = await http.get(`${this.baseUrl}/account/balance`, {
         headers: {
           Authorization: `Bearer ${token}`,
           "X-Target-Environment": this.environment,

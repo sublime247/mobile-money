@@ -1,0 +1,46 @@
+meta {
+  name: "Core Direct Mobile Money Payout"
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{base_url}}/api/transactions/withdraw
+  body: json
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  Authorization: Bearer {{jwt_token}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "provider": "mtn",
+    "amount": 5000,
+    "phoneNumber": "{{login_phone}}",
+    "currency": "XAF"
+  }
+}
+
+script:pre-request {
+  // Guard: authenticated requests need a SEP-10 (or login) token.
+  const token = bru.getEnvVar("jwt_token");
+  if (!token) {
+    throw new Error(
+      "jwt_token is empty — run 'SEP-10 Sign Challenge & Get Token' (01-auth) first."
+    );
+  }
+  req.setHeader(
+    "Idempotency-Key",
+    "idemp-with-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8)
+  );
+}
+
+tests {
+  test("payout accepted", function() {
+    expect([200, 201, 202]).to.include(res.getStatus());
+  });
+}

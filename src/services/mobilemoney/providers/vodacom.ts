@@ -1,8 +1,11 @@
-import axios, { AxiosInstance } from "axios";
+import { AxiosInstance } from "axios";
+import { createProviderHttpClient } from "./providerHttpClient";
 import crypto from "crypto";
 import logger from "../../../utils/logger";
 import { maskPII } from "../../../utils/masking";
 import { resolveVodacomError } from "./errors/vodacomErrorMatrix";
+import { attachCorrelationIdInterceptor } from "../../../utils/correlationIdInterceptor";
+import { attachTelcoTracingInterceptor } from "../../../utils/telcoTracing";
 
 function encrypt(data: string, publicKeyPem: string): string {
   if (!publicKeyPem) {
@@ -47,7 +50,7 @@ export class VodacomProvider {
     this.market = process.env.VODACOM_MARKET || "vodacomTZN";
     this.currency = process.env.VODACOM_CURRENCY || "TZS";
 
-    this.client = axios.create({
+    this.client = createProviderHttpClient("vodacom", {
       baseURL: this.baseUrl,
       timeout: 10000,
       headers: {
@@ -56,6 +59,8 @@ export class VodacomProvider {
         Origin: "*",
       },
     });
+    attachCorrelationIdInterceptor(this.client);
+    attachTelcoTracingInterceptor(this.client);
   }
 
   private async getAccessToken(): Promise<string> {
@@ -266,7 +271,7 @@ export class VodacomProvider {
       const code = response.data?.output_ResponseCode;
       if (code === "INS-0") {
         const txStatus = String(
-          response.data?.output_TransactionStatus || "",
+          response.data?.output_ResponseTransactionStatus || response.data?.output_TransactionStatus || "",
         ).toUpperCase();
         if (
           txStatus === "SUCCESSFUL" ||

@@ -1,0 +1,268 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus",
+      "description": "Prometheus data source scraping this service's /metrics endpoint (see utils/metrics.ts).",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    }
+  ],
+  "__requires": [
+    { "type": "grafana", "id": "grafana", "name": "Grafana", "version": "10.0.0" },
+    { "type": "datasource", "id": "prometheus", "name": "Prometheus", "version": "1.0.0" }
+  ],
+  "title": "Mobile Money - Payment Success & Provider Health",
+  "description": "Payment success rates, fiat-to-crypto volume, provider latency, and error codes, backed by the Prometheus metrics registered in src/utils/metrics.ts.",
+  "uid": "mobile-money-payment-success",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "timezone": "utc",
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": { "text": "Prometheus", "value": "${DS_PROMETHEUS}" }
+      },
+      {
+        "name": "provider",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "query": "label_values(transactions_total, provider)",
+        "refresh": 2,
+        "includeAll": true,
+        "multi": true,
+        "current": { "text": "All", "value": "$__all" }
+      }
+    ]
+  },
+  "annotations": {
+    "list": [
+      {
+        "name": "Provider failure spikes",
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "enable": true,
+        "iconColor": "red",
+        "expr": "changes(provider_circuit_breaker_state{provider=~\"$provider\"}[5m]) > 0",
+        "titleFormat": "Circuit breaker state change",
+        "tagKeys": "provider,operation"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Payment success",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Payment success rate (5m)",
+      "description": "Ratio of transactions_total{status=\"success\"} to all transactions_total over a 5-minute window.",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(transactions_total{status=\"success\", provider=~\"$provider\"}[5m])) / sum(rate(transactions_total{provider=~\"$provider\"}[5m]))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 0.9 },
+              { "color": "green", "value": 0.97 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Payment success rate by provider",
+      "description": "sum(rate(transactions_total{status=\"success\"}[5m])) by (provider) / sum(rate(transactions_total[5m])) by (provider)",
+      "gridPos": { "h": 6, "w": 18, "x": 6, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{provider}}",
+          "expr": "sum(rate(transactions_total{status=\"success\", provider=~\"$provider\"}[5m])) by (provider) / sum(rate(transactions_total{provider=~\"$provider\"}[5m])) by (provider)"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 } }
+    },
+    {
+      "id": 4,
+      "type": "row",
+      "title": "Deposits, withdrawals & volume",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 7 }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Active deposits (fiat -> crypto)",
+      "description": "active_transactions{provider} represents in-flight transactions; deposit volume is tracked via transaction_total{type=\"payment\"}. This panel shows the current in-flight count.",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(active_transactions{provider=~\"$provider\"})"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Withdrawals in the last hour (payouts)",
+      "description": "sum(increase(transaction_total{type=\"payout\"}[1h]))",
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(transaction_total{type=\"payout\", provider=~\"$provider\"}[1h]))"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "24h transaction volume by currency",
+      "description": "sum(increase(transactions_total[24h])) by (currency) - fiat-to-crypto volume, counted at transaction completion.",
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{currency}}",
+          "expr": "sum(increase(transactions_total{provider=~\"$provider\"}[24h])) by (currency)"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Deposits vs withdrawals over time",
+      "description": "sum(rate(transaction_total[5m])) by (type) - type=\"payment\" is deposit-side (fiat->crypto), type=\"payout\" is withdrawal-side.",
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 14 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{type}}",
+          "expr": "sum(rate(transaction_total{provider=~\"$provider\"}[5m])) by (type)"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "row",
+      "title": "Provider latency",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 20 }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Provider response time (p50/p95/p99)",
+      "description": "histogram_quantile over provider_response_time_seconds, labelled by provider and operation.",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 21 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{provider}} {{operation}} p50",
+          "expr": "histogram_quantile(0.50, sum(rate(provider_response_time_seconds_bucket{provider=~\"$provider\"}[5m])) by (le, provider, operation))"
+        },
+        {
+          "refId": "B",
+          "legendFormat": "{{provider}} {{operation}} p95",
+          "expr": "histogram_quantile(0.95, sum(rate(provider_response_time_seconds_bucket{provider=~\"$provider\"}[5m])) by (le, provider, operation))"
+        },
+        {
+          "refId": "C",
+          "legendFormat": "{{provider}} {{operation}} p99",
+          "expr": "histogram_quantile(0.99, sum(rate(provider_response_time_seconds_bucket{provider=~\"$provider\"}[5m])) by (le, provider, operation))"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+    {
+      "id": 11,
+      "type": "row",
+      "title": "Errors & provider failures",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 29 }
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Transaction errors by error code",
+      "description": "sum(rate(transaction_errors_total[5m])) by (provider, error_type)",
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 30 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{provider}} - {{error_type}}",
+          "expr": "sum(rate(transaction_errors_total{provider=~\"$provider\"}[5m])) by (provider, error_type)"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Provider failovers",
+      "description": "sum(rate(provider_failover_total[5m])) by (from_provider, to_provider, reason)",
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 30 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{from_provider}} -> {{to_provider}} ({{reason}})",
+          "expr": "sum(rate(provider_failover_total[5m])) by (from_provider, to_provider, reason)"
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "type": "state-timeline",
+      "title": "Provider circuit breaker state",
+      "description": "provider_circuit_breaker_state (0=closed, 0.5=half_open, 1=open). Threshold alert marker for provider failure spikes.",
+      "gridPos": { "h": 7, "w": 24, "x": 0, "y": 37 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{provider}} {{operation}}",
+          "expr": "provider_circuit_breaker_state{provider=~\"$provider\"}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.5 },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

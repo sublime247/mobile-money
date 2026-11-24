@@ -47,3 +47,24 @@ output "ecs_service_name" {
   description = "Name of the ECS service"
   value       = module.web.ecs_service_name
 }
+
+# ── S3 / KMS Replication ───────────────────────────────────────────────────
+output "kyc_s3_primary_bucket_name" {
+  description = "Primary KYC S3 bucket name"
+  value       = module.s3.primary_bucket_name
+}
+
+output "kyc_s3_replica_bucket_name" {
+  description = "Replica KYC S3 bucket name"
+  value       = module.s3.replica_bucket_name
+}
+
+output "kyc_s3_primary_kms_alias_arn" {
+  description = "Primary KMS alias ARN for KYC S3 SSE-KMS"
+  value       = module.s3.primary_kms_alias_arn
+}
+
+output "kyc_s3_replica_kms_alias_arn" {
+  description = "Replica KMS alias ARN for KYC S3 SSE-KMS"
+  value       = module.s3.replica_kms_alias_arn
+}

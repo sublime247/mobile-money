@@ -10,15 +10,44 @@ import { DeveloperDashboardService } from "../developerDashboardService";
 import { merchantWebhookModel } from "../../models/merchantWebhook";
 import { merchantWebhookService } from "../merchantWebhookService";
 
-// Mock dependencies
-jest.mock("../../models/merchantWebhook");
-jest.mock("../merchantWebhookService");
+// Mock dependencies before imports
+jest.mock("../../config/database", () => ({
+  queryRead: jest.fn(),
+  queryWrite: jest.fn(),
+}));
+
+jest.mock("../../models/merchantWebhook", () => ({
+  merchantWebhookModel: {
+    findByUserId: jest.fn(),
+    findById: jest.fn(),
+    getDeliveryLogs: jest.fn(),
+    insertDeliveryLog: jest.fn(),
+  },
+}));
+
+jest.mock("../merchantWebhookService", () => ({
+  merchantWebhookService: {
+    testWebhook: jest.fn(),
+    dispatchEvent: jest.fn(),
+  },
+  merchantWebhookModel: {
+    findByUserId: jest.fn(),
+    findById: jest.fn(),
+    getDeliveryLogs: jest.fn(),
+    insertDeliveryLog: jest.fn(),
+  },
+}));
+
 jest.mock("../../config/redis", () => ({
   redisClient: {
     get: jest.fn(),
     set: jest.fn(),
   },
 }));
+
+import { DeveloperDashboardService } from "../developerDashboardService";
+import { merchantWebhookModel } from "../../models/merchantWebhook";
+import { merchantWebhookService } from "../merchantWebhookService";
 
 describe("Developer Dashboard Service - Webhook Delivery Timeline", () => {
   let service: DeveloperDashboardService;

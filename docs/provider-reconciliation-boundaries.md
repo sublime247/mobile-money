@@ -1,0 +1,1 @@
+# Provider reconciliation boundaries`n`nProvider workflows require verified callbacks, idempotent external references, bounded status reconciliation, and explicit network environment routing.

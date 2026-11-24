@@ -1,13 +1,18 @@
 /**
  * Structured Pino logger for bridge-starter-node.
  *
- * Every log line is emitted as a single JSON object containing:
- *   - time        ISO-8601 timestamp
- *   - level       uppercase label (INFO, WARN, ERROR, DEBUG)
- *   - service     constant "bridge-starter-node"
- *   - env         NODE_ENV value
- *   - msg         human-readable message
- *   - ...context  any extra fields passed by the caller
+ * Every log line is emitted as a single JSON object compatible with
+ * ELK (Elasticsearch/Logstash/Kibana) and Datadog, containing:
+ *   - timestamp      ISO-8601
+ *   - level          uppercase label (INFO, WARN, ERROR, DEBUG)
+ *   - service        constant "bridge-starter-node" (override with SERVICE_NAME)
+ *   - environment    NODE_ENV value
+ *   - correlationId  X-Correlation-ID of the current request, when present
+ *   - message        human-readable message
+ *   - ...context     any extra fields passed by the caller
+ *
+ * Sensitive fields (passwords, PINs, tokens, card numbers, ...) are redacted
+ * at any nesting depth before the line is written.
  *
  * Transport:
  *   - Production / CI  → raw JSON to stdout (pipe to log aggregator)
@@ -31,10 +36,14 @@
 
 import pino, { type Logger, type TransportSingleOptions } from "pino";
 import { AsyncLocalStorage } from "async_hooks";
+import { redact } from "./utils/redact";
 
-export const requestContext = new AsyncLocalStorage<{ trace_id: string }>();
+export const requestContext = new AsyncLocalStorage<{
+  trace_id?: string;
+  correlation_id?: string;
+}>();
 
-const SERVICE_NAME = "bridge-starter-node";
+const SERVICE_NAME = process.env.SERVICE_NAME ?? "bridge-starter-node";
 const LOG_LEVEL = process.env.LOG_LEVEL ?? "info";
 
 const isDev =
@@ -52,6 +61,8 @@ function buildTransport(): TransportSingleOptions | undefined {
     target: "pino-pretty",
     options: {
       colorize: true,
+      messageKey: "message",
+      timestampKey: "timestamp",
       translateTime: "SYS:standard", // human-readable local time in dev
       ignore: "pid,hostname", // reduce noise in terminal output
     },
@@ -68,25 +79,32 @@ const logger: Logger = pino(
     // can filter by service without parsing the message field.
     base: {
       service: SERVICE_NAME,
-      env: process.env.NODE_ENV ?? "development",
+      environment: process.env.NODE_ENV ?? "development",
     },
+
+    // ELK and Datadog index `message` by default.
+    messageKey: "message",
 
     mixin() {
       const store = requestContext.getStore();
-      return store && store.trace_id ? { trace_id: store.trace_id } : {};
+      const fields: Record<string, string> = {};
+      if (store?.correlation_id) fields.correlationId = store.correlation_id;
+      if (store?.trace_id) fields.trace_id = store.trace_id;
+      return fields;
     },
 
-    // Emit level as an uppercase string label (INFO, WARN, …) to match the
-    // convention used by the main mobile-money-api service.
     formatters: {
+      // Emit level as an uppercase string label (INFO, WARN, …) to match the
+      // convention used by the main mobile-money-api service.
       level: (label) => ({ level: label.toUpperCase() }),
+      // Deep-redact sensitive keys and card numbers in every log payload.
+      log: (object) => redact(object) as Record<string, unknown>,
     },
 
-    // ISO-8601 timestamps — compatible with Loki, ELK, and CloudWatch.
-    timestamp: pino.stdTimeFunctions.isoTime,
+    // ISO-8601 `timestamp` field — compatible with Logstash and Datadog.
+    timestamp: () => `,"timestamp":"${new Date().toISOString()}"`,
 
-    // Redact common sensitive fields so they are never written to any sink.
-    // Extend this list as new sensitive fields are introduced.
+    // Pino's path-based redaction also covers bindings added via child().
     redact: {
       paths: [
         "authorization",
@@ -94,14 +112,7 @@ const logger: Logger = pino(
         "headers.authorization",
         "*.headers.authorization",
         "req.headers.authorization",
-        "apiKey",
-        "*.apiKey",
-        "secret",
-        "*.secret",
-        "password",
-        "*.password",
-        "token",
-        "*.token",
+        "req.headers.cookie",
       ],
       censor: "[REDACTED]",
     },

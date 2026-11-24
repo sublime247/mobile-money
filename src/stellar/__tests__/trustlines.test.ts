@@ -66,13 +66,9 @@ function makeAccount(
     ),
   ];
 
-  return {
-    id: publicKey,
-    account_id: publicKey,
-    balances,
-    sequence: "1",
-    incrementSequenceNumber: () => {},
-  } as unknown as StellarSdk.Horizon.AccountResponse;
+  const acct = new StellarSdk.Account(publicKey, "1") as any;
+  acct.balances = balances;
+  return acct;
 }
 
 const TX_RESULT = { hash: "abc123", ledger: 42 };
@@ -144,7 +140,7 @@ describe("createTrustline", () => {
 
     const tx = mockSubmitTransaction.mock.calls[0][0] as StellarSdk.Transaction;
     const op = tx.operations[0] as StellarSdk.Operation.ChangeTrust;
-    expect(op.limit).toBe("1000");
+    expect(op.limit).toBe("1000.0000000");
   });
 });
 
@@ -199,7 +195,7 @@ describe("removeTrustline", () => {
 
     const tx = mockSubmitTransaction.mock.calls[0][0] as StellarSdk.Transaction;
     const op = tx.operations[0] as StellarSdk.Operation.ChangeTrust;
-    expect(op.limit).toBe("0");
+    expect(op.limit).toBe("0.0000000");
   });
 });
 

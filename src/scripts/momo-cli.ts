@@ -6,15 +6,15 @@
  *
  * Commands:
  *   retry-batch <batch_id>  - re-queue failed or stuck transactions belonging to a batch
+ *   provider:health         - inspect status, liquidity and latency of every provider
  */
 
 import dotenv from "dotenv";
 import os from "os";
-import { TransactionStatus } from "../models/transaction";
-import { getQueueStatsAggregate } from "../queue/queueDepthMetrics";
 import {
   CLI_ERROR_CODES,
   formatCliHeading,
+  formatTable,
   printError,
   printSuccess,
   printWarning,
@@ -73,6 +73,100 @@ process.stderr.write = function (
   return originalStderrWrite(chunk, encodingOrCb, cb);
 };
 
+// Providers whose outage makes `provider:health` exit non-zero. Override with
+// a comma-separated MOMO_PRIMARY_PROVIDERS list (e.g. "mtn,airtel,orange").
+const DEFAULT_PRIMARY_PROVIDERS = ["mtn", "airtel"];
+
+export interface ProviderHealthRow {
+  provider: string;
+  status: "UP" | "DOWN";
+  balance: string;
+  latency: string;
+}
+
+export function getPrimaryProviders(): string[] {
+  const configured = process.env.MOMO_PRIMARY_PROVIDERS?.split(",")
+    .map((name) => name.trim().toLowerCase())
+    .filter(Boolean);
+  return configured && configured.length > 0
+    ? configured
+    : DEFAULT_PRIMARY_PROVIDERS;
+}
+
+async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error("timed out")), ms);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Float balance for providers that expose one; "N/A" when it is unavailable. */
+async function fetchProviderBalance(
+  provider: string,
+  timeoutMs: number,
+): Promise<string> {
+  try {
+    let result: {
+      success: boolean;
+      data?: { availableBalance?: number; currency?: string };
+    };
+
+    if (provider === "mtn") {
+      const { MTNProvider } =
+        require("../services/mobilemoney/providers/mtn.js") as typeof import("../services/mobilemoney/providers/mtn");
+      result = await withTimeout(
+        new MTNProvider().getOperationalBalance(),
+        timeoutMs,
+      );
+    } else if (provider === "airtel") {
+      const { AirtelService } =
+        require("../services/mobilemoney/providers/airtel.js") as typeof import("../services/mobilemoney/providers/airtel");
+      result = await withTimeout(
+        new AirtelService().getOperationalBalance() as Promise<typeof result>,
+        timeoutMs,
+      );
+    } else {
+      return "N/A";
+    }
+
+    const available = result.data?.availableBalance;
+    if (!result.success || typeof available !== "number") {
+      return "N/A";
+    }
+    return `${available.toLocaleString("en-US", { maximumFractionDigits: 2 })} ${result.data?.currency ?? ""}`.trim();
+  } catch {
+    return "N/A";
+  }
+}
+
+/** Queries every registered provider in parallel for status, balance and latency. */
+export async function collectProviderHealth(): Promise<ProviderHealthRow[]> {
+  const { DEFAULT_PROVIDERS, pingProvider } =
+    require("../services/mobilemoney/providers/healthCheck.js") as typeof import("../services/mobilemoney/providers/healthCheck");
+
+  return Promise.all(
+    DEFAULT_PROVIDERS.map(async (config): Promise<ProviderHealthRow> => {
+      const health = await pingProvider(config);
+      const balance =
+        health.status === "up"
+          ? await fetchProviderBalance(config.name, config.timeoutMs)
+          : "N/A";
+      return {
+        provider: config.name,
+        status: health.status === "up" ? "UP" : "DOWN",
+        balance,
+        latency:
+          health.responseTime === null ? "-" : `${health.responseTime} ms`,
+      };
+    }),
+  );
+}
+
 type ActivePool = { end: () => Promise<void> };
 type ActiveQueue = { close: () => Promise<void> };
 
@@ -89,7 +183,14 @@ Usage:
 Commands:
   setup                    Interactive setup for database and Stellar credentials.
   retry-batch <batch_id>   Retry all failed or stuck transactions for a specific batch ID (UUID).
+  verify-report <report> <signature> [public-key-file]  Verify a signed settlement report.
   dashboard                Render an active terminal overview of node CPU, memory, and queue lengths.
+  provider:health          Show status, balance and latency for every mobile money provider.
+  dlq:replay               Inspect dead-lettered jobs and re-enqueue them with failure counters reset.
+                           Flags: --queue <name> --error-match <text|/regex/> --limit <n> (default 50) --dry-run
+  provider:test-connectivity Test outbound HTTPS connectivity and auth for MTN, Orange, Airtel, M-Pesa, Moov.
+                           Exits non-zero if a primary provider is DOWN (MOMO_PRIMARY_PROVIDERS, default: mtn,airtel).
+  float:check              Display real-time float account balances across all telecom partners (MTN, Orange, Airtel, M-Pesa, EcoCash).
 
 Options:
   --help, -h             Show this help information.
@@ -106,7 +207,121 @@ export async function runCli(args: string[]): Promise<void> {
     return;
   }
 
+  if (command === "verify-report") {
+    const reportPath = args[1];
+    const signaturePath = args[2];
+    const publicKeyPath = args[3];
+    if (!reportPath || !signaturePath) {
+      printError(
+        "Usage: momo-cli verify-report <report> <signature> [public-key-file]",
+        undefined,
+        CLI_ERROR_CODES.MissingArgument,
+      );
+      process.exitCode = 1;
+      return;
+    }
+
+    try {
+      const { readFile } = await import("node:fs/promises");
+      const publicKey = publicKeyPath
+        ? await readFile(publicKeyPath, "utf8")
+        : process.env.ANCHOR_REPORT_PUBLIC_KEY;
+      if (!publicKey) {
+        throw new Error(
+          "Set ANCHOR_REPORT_PUBLIC_KEY or provide a public-key file",
+        );
+      }
+
+      const [report, signature] = await Promise.all([
+        readFile(reportPath),
+        readFile(signaturePath, "utf8"),
+      ]);
+      const { verifyReport, sha256Report } =
+        await import("../security/reportSigner.js");
+      if (!verifyReport(report, signature, publicKey)) {
+        printError("Report signature verification failed.");
+        process.exitCode = 1;
+        return;
+      }
+      printSuccess(
+        `Report signature verified. SHA-256: ${sha256Report(report)}`,
+      );
+      process.exitCode = 0;
+    } catch (error) {
+      printError("Unable to verify report", error);
+      process.exitCode = 1;
+    }
+    return;
+  }
+
+  if (command === "provider:health") {
+    try {
+      const rows = await collectProviderHealth();
+
+      console.log(`${formatCliHeading("Mobile Money Provider Health")}\n`);
+      console.log(
+        formatTable(
+          ["Provider", "Status", "Balance", "Latency"],
+          rows.map((row) => [
+            row.provider,
+            row.status,
+            row.balance,
+            row.latency,
+          ]),
+        ),
+      );
+
+      const primary = getPrimaryProviders();
+      console.log(`\nPrimary providers: ${primary.join(", ")}`);
+
+      const downPrimary = rows
+        .filter(
+          (row) => row.status === "DOWN" && primary.includes(row.provider),
+        )
+        .map((row) => row.provider);
+      if (downPrimary.length > 0) {
+        printError(
+          `Primary provider(s) DOWN: ${downPrimary.join(", ")}`,
+          undefined,
+          CLI_ERROR_CODES.ProviderDown,
+        );
+        process.exitCode = 1;
+        return;
+      }
+      printSuccess("All primary providers are UP.");
+    } catch (err) {
+      printError(
+        "Unable to check provider health",
+        err,
+        CLI_ERROR_CODES.ExecutionFailed,
+      );
+      process.exitCode = 1;
+    }
+    return;
+  }
+
+  if (command === "provider:test-connectivity") {
+    try {
+      const { executeTestConnectivity } =
+        await import("../../cli/src/commands/testConnectivity.js");
+      const isJson = process.argv.includes("--json");
+      const { hasAuthFailure, table } = await executeTestConnectivity({
+        json: isJson,
+      });
+      if (!isJson) {
+        console.log(table);
+      }
+      process.exitCode = hasAuthFailure ? 1 : 0;
+    } catch (error) {
+      printError("Unable to test provider connectivity", error);
+      process.exitCode = 1;
+    }
+    return;
+  }
+
   if (command === "dashboard") {
+    const { getQueueStatsAggregate } =
+      await import("../queue/queueDepthMetrics.js");
     console.clear();
     console.log("Starting Interactive CLI System Status Dashboard...");
     console.log("Press Ctrl+C to exit.\n");
@@ -170,6 +385,41 @@ export async function runCli(args: string[]): Promise<void> {
     return new Promise<void>(() => undefined);
   }
 
+  if (command === "dlq:replay") {
+    const { parseDlqReplayArgs, runDlqReplay, DlqReplayArgError, DLQ_REPLAY_USAGE } =
+      await import("../../cli/src/commands/dlqReplay.js");
+
+    let options;
+    try {
+      options = parseDlqReplayArgs(args.slice(1));
+    } catch (err) {
+      if (err instanceof DlqReplayArgError) {
+        printError(err.message, undefined, CLI_ERROR_CODES.MissingArgument);
+        console.log(DLQ_REPLAY_USAGE);
+        process.exitCode = 1;
+        return;
+      }
+      throw err;
+    }
+
+    const dlq = await import("../queue/dlq.js");
+    try {
+      const result = await runDlqReplay(options, {
+        list: (filter) => dlq.listDlqEntries(filter),
+        replay: (entry, job) =>
+          dlq.replayDlqEntry(entry as import("../queue/dlq").DlqEntry, job),
+      });
+      process.exitCode = result.exitCode;
+    } catch (err) {
+      printError("Unable to replay DLQ jobs", err, CLI_ERROR_CODES.ExecutionFailed);
+      process.exitCode = 1;
+    } finally {
+      await dlq.closeReplayQueues().catch(() => undefined);
+      await dlq.deadLetterQueue.close().catch(() => undefined);
+    }
+    return;
+  }
+
   if (command === "retry-batch") {
     if (!batchId) {
       printError(
@@ -194,14 +444,11 @@ export async function runCli(args: string[]): Promise<void> {
       return;
     }
 
-    const [{ pool }, queueModule, transactionQueueModule] = await Promise.all([
-      import("../config/database.js"),
-      import("../queue/index.js"),
-      import("../queue/transactionQueue.js"),
-    ]);
+    const { pool } = require("../config/database.js");
+    const queueModule = require("../queue/index.js");
     const { addTransactionJob } = queueModule;
     activePool = pool;
-    activeTransactionQueue = transactionQueueModule.transactionQueue;
+    activeTransactionQueue = queueModule.transactionQueue ?? null;
 
     console.log(`Searching for transactions in batch ${batchId}...`);
 
@@ -227,16 +474,12 @@ export async function runCli(args: string[]): Promise<void> {
 
       const total = transactions.length;
       const completed = transactions.filter(
-        (t) => t.status === TransactionStatus.Completed,
+        (t) => t.status === "completed",
       ).length;
-      const failed = transactions.filter(
-        (t) => t.status === TransactionStatus.Failed,
-      ).length;
-      const pending = transactions.filter(
-        (t) => t.status === TransactionStatus.Pending,
-      ).length;
+      const failed = transactions.filter((t) => t.status === "failed").length;
+      const pending = transactions.filter((t) => t.status === "pending").length;
       const cancelled = transactions.filter(
-        (t) => t.status === TransactionStatus.Cancelled,
+        (t) => t.status === "cancelled",
       ).length;
 
       console.log(`\nBatch Summary:`);
@@ -247,9 +490,7 @@ export async function runCli(args: string[]): Promise<void> {
       console.log(`  Cancelled: ${cancelled}`);
 
       const retriable = transactions.filter(
-        (t) =>
-          t.status === TransactionStatus.Failed ||
-          t.status === TransactionStatus.Pending,
+        (t) => t.status === "failed" || t.status === "pending",
       );
 
       if (retriable.length === 0) {
@@ -266,7 +507,7 @@ export async function runCli(args: string[]): Promise<void> {
 
         await pool.query(
           "UPDATE transactions SET status = $1, retry_count = retry_count + 1, updated_at = CURRENT_TIMESTAMP WHERE id = $2",
-          [TransactionStatus.Pending, tx.id],
+          ["pending", tx.id],
         );
 
         await addTransactionJob({
@@ -297,6 +538,21 @@ export async function runCli(args: string[]): Promise<void> {
     return;
   }
 
+  if (command === "float:check") {
+    try {
+      const { executeFloatCheck } = await import(
+        "../../cli/src/commands/floatCheck"
+      );
+      const isJson = args.includes("--json");
+      await executeFloatCheck({ json: isJson });
+      process.exitCode = 0;
+    } catch (error) {
+      printError("Unable to execute float:check", error);
+      process.exitCode = 1;
+    }
+    return;
+  }
+
   printError(
     `Unknown command "${command}".`,
     undefined,
@@ -314,7 +570,11 @@ if (require.main === module) {
       await activePool?.end().catch(() => undefined);
       if (process.argv[2] === "retry-batch") {
         await activeTransactionQueue?.close().catch(() => undefined);
-      } else if (process.argv[2] === "dashboard") {
+      } else if (
+        process.argv[2] === "dashboard" ||
+        process.argv[2] === "provider:health" ||
+        process.argv[2] === "dlq:replay"
+      ) {
         process.exit(process.exitCode || 0);
       }
     }

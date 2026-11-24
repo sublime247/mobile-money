@@ -11,6 +11,7 @@ interface KycLimitChecker {
   checkTransactionLimit(
     userId: string,
     transactionAmount: number,
+    currency?: string,
   ): Promise<LimitCheckResult>;
 }
 
@@ -46,6 +47,10 @@ function buildLimitExceededResponse(
       remainingLimit: limitCheck.remainingLimit,
       message,
       upgradeAvailable: limitCheck.upgradeAvailable,
+      dailyLimitUsd: limitCheck.dailyLimitUsd,
+      monthlyLimitUsd: limitCheck.monthlyLimitUsd,
+      currentDailyTotalUsd: limitCheck.currentDailyTotalUsd,
+      currentMonthlyTotalUsd: limitCheck.currentMonthlyTotalUsd,
     },
   };
 }
@@ -100,10 +105,11 @@ export async function enforceKycCheck(
     return { allowed: false };
   }
 
-  const limitCheck = await limitChecker.checkTransactionLimit(
-    userId,
-    transactionAmount,
-  );
+  const currency =
+    typeof req.body?.currency === "string" ? req.body.currency : undefined;
+  const limitCheck = currency
+    ? await limitChecker.checkTransactionLimit(userId, transactionAmount, currency)
+    : await limitChecker.checkTransactionLimit(userId, transactionAmount);
 
   if (!limitCheck.allowed) {
     const statusCode = limitCheck.dailyLimit > 0 ? 403 : 400;

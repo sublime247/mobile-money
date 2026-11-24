@@ -3,9 +3,15 @@ import { Request, Response } from "express";
 import crypto from "crypto";
 import { PaymentLinkModel } from "../models/paymentLink";
 import { TransactionModel, TransactionStatus } from "../models/transaction";
+import { KYCService } from "../services/kyc/kycService";
+import { TransactionLimitService } from "../services/transactionLimit/transactionLimitService";
 
 const paymentLinkModel = new PaymentLinkModel();
 const transactionModel = new TransactionModel();
+const transactionLimitService = new TransactionLimitService(
+  new KYCService(),
+  transactionModel,
+);
 
 async function addTransactionJob(data: any, options?: any) {
   const queue = require("../queue/transactionQueue.js");
@@ -170,10 +176,26 @@ export async function processPaymentHandler(
         .json({ error: "This one-time payment link has already been used" });
     }
 
+    const limitCheck = await transactionLimitService.checkTransactionLimit(
+      link.merchantId,
+      Number(link.amount),
+      link.currency,
+    );
+    if (!limitCheck.allowed) {
+      return res.status(403).json({
+        code: "TRANSACTION_LIMIT_EXCEEDED",
+        error: limitCheck.message || "Transaction limit exceeded",
+        upgradeAvailable: limitCheck.upgradeAvailable ?? false,
+        dailyLimitUsd: limitCheck.dailyLimitUsd,
+        monthlyLimitUsd: limitCheck.monthlyLimitUsd,
+      });
+    }
+
     // Create deposit transaction in the database
     const transaction = await transactionModel.create({
       type: "deposit",
       amount: link.amount,
+      currency: link.currency,
       phoneNumber,
       provider,
       stellarAddress: link.stellarAddress,
@@ -181,10 +203,11 @@ export async function processPaymentHandler(
       tags: ["payment-link"],
       notes: link.description || `Payment via link token ${token}`,
       userId: link.merchantId,
-      idempotencyKey: null,
-      idempotencyExpiresAt: null,
       locationMetadata: null,
     });
+    if (!transaction) {
+      return res.status(500).json({ error: "Failed to create payment transaction" });
+    }
 
     // Mark payment link as used if one-time
     if (link.isOneTime) {
@@ -687,6 +710,10 @@ function getLandingPageTemplate(data: {
       <div id="error-box" class="error-msg"></div>
       
       <form id="payment-form" action="/pay/${data.token}/process" method="POST">
+        <div aria-hidden="true" style="display:none">
+          <label for="company-fax">Company fax</label>
+          <input type="text" id="company-fax" name="company_fax" tabindex="-1" autocomplete="off">
+        </div>
         <div class="form-group">
           <label class="form-label" for="phone">Phone Number</label>
           <div class="input-wrapper">

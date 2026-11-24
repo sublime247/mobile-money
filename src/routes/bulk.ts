@@ -1,3 +1,4 @@
+import { geoIpFilter } from "../middleware/geoIpFilter";
 import logger from "../utils/logger";
 import { Router, Request, Response, NextFunction } from "express";
 import { authenticateToken } from "../middleware/auth";
@@ -10,6 +11,7 @@ import { MobileMoneyService } from "../services/mobilemoney/mobileMoneyService";
 import { StellarService } from "../services/stellar/stellarService";
 import { notifyTransactionWebhook, WebhookService } from "../services/webhook";
 import { checkAccountStatusStrict } from "../middleware/checkAccountStatus";
+import { optionalIdempotency } from "../middleware/idempotency";
 import highThroughputService, {
   PaymentOptions,
 } from "../services/stellar/highThroughputService";
@@ -252,8 +254,10 @@ export const bulkRoutes = Router();
 bulkRoutes.post(
   "/",
   authenticateToken,
+  geoIpFilter,
   checkAccountStatusStrict,
   upload.single("file"),
+  optionalIdempotency,
   async (req: Request, res: Response) => {
     if (!req.file) {
       throw createError(
@@ -359,3 +363,22 @@ bulkRoutes.get("/:jobId", (req: Request, res: Response) => {
     ...(job.completedAt && { completedAt: job.completedAt }),
   });
 });
+
+bulkRoutes.post(
+  "/batch-payout/trigger",
+  authenticateToken,
+  async (req: Request, res: Response) => {
+    const { executeProviderBatchPayout } = await import(
+      "../queue/payoutBatchWorker.js"
+    );
+    const provider = (req.body?.provider || "mtn").toLowerCase();
+    const result = await executeProviderBatchPayout(provider);
+
+    return res.status(200).json({
+      success: result.success,
+      provider,
+      totalProcessed: result.totalProcessed,
+      triggeredAt: new Date().toISOString(),
+    });
+  },
+);

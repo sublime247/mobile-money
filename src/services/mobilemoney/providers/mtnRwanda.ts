@@ -1,7 +1,9 @@
-import axios, { AxiosInstance, AxiosError, AxiosResponse } from "axios";
+import { AxiosInstance, AxiosError, AxiosResponse } from "axios";
+import { createProviderHttpClient } from "./providerHttpClient";
 import logger from "../../../utils/logger";
 import { maskPII } from "../../../utils/masking";
 import { formatPhoneForProvider } from "../../../utils/phoneUtils";
+import { attachTelcoTracingInterceptor } from "../../../utils/telcoTracing";
 
 // ============================================================================
 // TYPES & INTERFACES
@@ -43,7 +45,7 @@ export class MTNRwandaProvider {
 
   constructor(config: MTNRwandaProviderConfig) {
     this.config = config;
-    this.client = axios.create({
+    this.client = createProviderHttpClient("mtn_rwanda", {
       baseURL: config.sandboxBaseUrl || config.baseUrl,
       timeout: config.requestTimeoutMs || 30000,
       headers: {
@@ -51,6 +53,7 @@ export class MTNRwandaProvider {
         "X-Reference-Id": this.generateReferenceId(),
       },
     });
+    attachTelcoTracingInterceptor(this.client);
   }
 
   private generateReferenceId(): string {

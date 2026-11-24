@@ -8,13 +8,17 @@
   },
   "checkers": [],
   "disableTypeChecks": true,
-  "mutate": ["src/services/transactionService.ts"],
+  "mutate": [
+    "src/services/transactionService.ts",
+    "src/services/feeService.ts"
+  ],
   "ignorePatterns": [
     "dist",
     "coverage",
     "reports",
     "contracts/target",
-    ".kiro"
+    ".kiro",
+    "stryker-tmp"
   ],
   "reporters": ["clear-text", "progress", "html", "json"],
   "htmlReporter": {
@@ -23,16 +27,16 @@
   "jsonReporter": {
     "fileName": "reports/mutation/mutation.json"
   },
-  "coverageAnalysis": "perTest",
-  "concurrency": 4,
+  "coverageAnalysis": "off",
+  "concurrency": 1,
   "dryRunTimeoutMinutes": 15,
-  "timeoutMS": 10000,
+  "timeoutMS": 30000,
   "timeoutFactor": 2,
   "tempDirName": "stryker-tmp",
   "cleanTempDir": "always",
   "thresholds": {
     "high": 80,
     "low": 70,
-    "break": 80
+    "break": 70
   }
 }

@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import express, { Request, Response, NextFunction } from "express";
 import webhookRoutes from "./routes/webhook";
 import { config } from "./config/env";
@@ -16,7 +17,7 @@ app.use(
 
 // ── HTTP request / response logging ─────────────────────────────────────────
 // Logs every inbound request and its outcome as a structured JSON line.
-// Sensitive headers (Authorization, etc.) are redacted by the pino logger.
+// Sensitive fields (Authorization, passwords, PINs, ...) are redacted by the pino logger.
 app.use((req: Request, res: Response, next: NextFunction) => {
   const startMs = Date.now();
 
@@ -37,12 +38,17 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     );
   });
 
+  // Every request gets a correlation ID (propagated or generated) so all log
+  // lines it produces carry `correlationId`.
   const traceId = req.headers["x-request-id"] as string | undefined;
-  if (traceId) {
-    requestContext.run({ trace_id: traceId }, () => next());
-  } else {
-    next();
-  }
+  const incoming = req.headers["x-correlation-id"];
+  const correlationId =
+    (Array.isArray(incoming) ? incoming[0] : incoming) || randomUUID();
+  res.setHeader("X-Correlation-ID", correlationId);
+  requestContext.run(
+    { trace_id: traceId ?? correlationId, correlation_id: correlationId },
+    () => next(),
+  );
 });
 
 app.get("/", (_req: Request, res: Response) => {

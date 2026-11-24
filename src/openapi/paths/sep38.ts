@@ -3,8 +3,8 @@
  *
  * All four SEP-38 endpoints are documented here:
  *  GET  /sep38/info      — List supported asset pairs
- *  GET  /sep38/prices    — Indicative price for a pair
- *  GET  /sep38/price     — Alias: single pair price
+ *  GET  /sep38/prices    — FX discovery: indicative prices across all buy assets
+ *  GET  /sep38/price     — Indicative price for one specific sell/buy pair
  *  POST /sep38/quote     — Create a firm, Redis-backed quote
  *  GET  /sep38/quote/:id — Retrieve a stored quote by ID
  */
@@ -14,6 +14,7 @@ import { registry } from "../registry";
 import {
   Sep38InfoResponseSchema,
   Sep38PriceResponseSchema,
+  Sep38PricesResponseSchema,
   Sep38QuoteRequestSchema,
   Sep38QuoteSchema,
 } from "../schemas/sep38";
@@ -49,30 +50,36 @@ registry.registerPath({
   method: "get",
   path: "/sep38/prices",
   tags: [TAG],
-  summary: "Get indicative price for an asset pair",
+  summary: "FX discovery — indicative prices across all supported buy assets",
   description:
-    "Returns a live, indicative exchange rate for the requested sell_asset → buy_asset pair. " +
-    "Rates include a small market spread and may fluctuate. Use POST /sep38/quote to lock in a firm rate.",
+    "Given a sell_asset and sell_amount, returns the indicative price for every supported " +
+    "buy_asset — Stellar assets (XLM, USDC, EURC) and mobile-money fiat corridors " +
+    "(KES, NGN, GHS, XOF, XAF, ...). Pass buy_asset to narrow the result to a single asset. " +
+    "Use GET /sep38/price for a firm amount breakdown on one specific pair.",
   request: {
     query: z.object({
       sell_asset: z.string().openapi({
-        example: "iso4217:XAF",
+        example: "iso4217:KES",
         description: "Asset to sell (SEP-38 format).",
       }),
-      buy_asset: z.string().openapi({
+      sell_amount: z.string().openapi({
+        example: "1000",
+        description: "Amount of sell_asset to price.",
+      }),
+      buy_asset: z.string().optional().openapi({
         example:
           "stellar:USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
-        description: "Asset to buy (SEP-38 format).",
+        description: "Optional — narrow the discovery result to a single buy_asset.",
       }),
     }),
   },
   responses: {
     200: {
-      description: "Indicative price",
-      content: { "application/json": { schema: Sep38PriceResponseSchema } },
+      description: "Indicative prices across supported buy assets",
+      content: { "application/json": { schema: Sep38PricesResponseSchema } },
     },
     400: {
-      description: "Missing or unsupported asset pair",
+      description: "Missing or invalid sell_asset / sell_amount / buy_asset",
       content: { "application/json": { schema: ErrorResponseSchema } },
     },
     500: {
@@ -88,9 +95,11 @@ registry.registerPath({
   method: "get",
   path: "/sep38/price",
   tags: [TAG],
-  summary: "Get indicative price for a single asset pair (singular alias)",
+  summary: "Get indicative price for a single asset pair",
   description:
-    "Identical to GET /sep38/prices — provided for clients that expect the singular form.",
+    "Returns a live, indicative exchange rate for the requested sell_asset → buy_asset pair. " +
+    "Rates include a small market spread and may fluctuate. Use POST /sep38/quote to lock in a firm rate. " +
+    "Use GET /sep38/prices to discover rates across all supported buy assets for a sell_asset.",
   request: {
     query: z.object({
       sell_asset: z.string().openapi({

@@ -1,0 +1,43 @@
+meta {
+  name: "SEP-12 Submit Customer KYC Data"
+  type: http
+  seq: 2
+}
+
+put {
+  url: {{base_url}}/sep12/customer
+  body: json
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  Authorization: Bearer {{jwt_token}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "account": "{{stellar_public_key}}",
+    "first_name": "Amina",
+    "last_name": "Diallo",
+    "email_address": "amina.diallo@example.com",
+    "mobile_number": "+221770000000"
+  }
+}
+
+script:pre-request {
+  // Guard: authenticated requests need a SEP-10 (or login) token.
+  const token = bru.getEnvVar("jwt_token");
+  if (!token) {
+    throw new Error(
+      "jwt_token is empty — run 'SEP-10 Sign Challenge & Get Token' (01-auth) first."
+    );
+  }
+}
+
+tests {
+  test("KYC information accepted", function() {
+    expect([200, 202]).to.include(res.getStatus());
+  });
+}

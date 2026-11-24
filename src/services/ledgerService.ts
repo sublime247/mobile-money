@@ -1,9 +1,16 @@
-import { Pool } from "pg";
+import { Pool, PoolClient } from "pg";
 import { pool } from "../config/database";
 import { SupportedCurrency, currencyService, BASE_CURRENCY } from "./currency";
 import { UserModel } from "../models/users";
 import { notifySlackAlert } from "./loggers";
 import { createPagerDutyService } from "./pagerDutyService";
+import {
+  UnbalancedLedgerException,
+  assertLedgerBalanced,
+  recordUnbalancedAttempt,
+} from "./ledgerInvariant";
+
+export { UnbalancedLedgerException } from "./ledgerInvariant";
 
 /**
  * Double-Entry Ledger Service
@@ -81,40 +88,30 @@ export interface LedgerEntryPage {
 
 const DEFAULT_LEDGER_ENTRY_LIMIT = 100;
 const MAX_LEDGER_ENTRY_LIMIT = 500;
-const LEDGER_BALANCE_TOLERANCE = 0.0000001;
 
-const validateLedgerEntries = (entries: LedgerEntry[]): void => {
+const validateLedgerEntries = (
+  entries: LedgerEntry[],
+  referenceNumber?: string,
+): void => {
   if (!entries || entries.length < 2) {
     throw new Error("At least 2 entries required for double-entry");
   }
 
-  const { totalDebits, totalCredits } = entries.reduce(
-    (totals, entry, index) => {
-      const debitAmount = entry.debit_amount || 0;
-      const creditAmount = entry.credit_amount || 0;
-      const hasDebit = debitAmount > 0;
-      const hasCredit = creditAmount > 0;
+  entries.forEach((entry, index) => {
+    const hasDebit = (entry.debit_amount || 0) > 0;
+    const hasCredit = (entry.credit_amount || 0) > 0;
 
-      if (hasDebit === hasCredit) {
-        throw new Error(
-          `Ledger entry ${index + 1} must have exactly one non-zero amount`,
-        );
-      }
+    if (hasDebit === hasCredit) {
+      throw new Error(
+        `Ledger entry ${index + 1} must have exactly one non-zero amount`,
+      );
+    }
+  });
 
-      totals.totalDebits += debitAmount;
-      totals.totalCredits += creditAmount;
-      return totals;
-    },
-    { totalDebits: 0, totalCredits: 0 },
-  );
+  // Exact sum(debits) == sum(credits) to 7 decimal places (no float tolerance).
+  const { totalDebits } = assertLedgerBalanced(entries, referenceNumber);
 
-  if (Math.abs(totalDebits - totalCredits) > LEDGER_BALANCE_TOLERANCE) {
-    throw new Error(
-      `Transaction not balanced: debits=${totalDebits} credits=${totalCredits}`,
-    );
-  }
-
-  if (totalDebits <= LEDGER_BALANCE_TOLERANCE) {
+  if (Number(totalDebits) <= 0) {
     throw new Error("Transaction amounts cannot be zero");
   }
 };
@@ -179,6 +176,90 @@ export const decodeLedgerEntryCursor = (cursor: string): LedgerEntryCursor => {
   }
 };
 
+// ---------------------------------------------------------------------------
+// Customer wallet balances with optimistic locking (#2291)
+// ---------------------------------------------------------------------------
+
+/** Retries after the first attempt when a wallet version conflict occurs. */
+export const WALLET_UPDATE_MAX_RETRIES = 3;
+
+export interface CustomerWallet {
+  id: string;
+  user_id: string;
+  currency: string;
+  /** Decimal string, exactly as stored (DECIMAL(20,7)). */
+  balance: string;
+  version: number;
+}
+
+/**
+ * The wallet changed between our read and our write (its version moved on).
+ * Thrown once retries are exhausted; the caller may retry the whole request.
+ */
+export class ConcurrentModificationError extends Error {
+  constructor(
+    readonly userId: string,
+    readonly currency: string,
+    readonly attempts: number,
+  ) {
+    super(
+      `Wallet ${userId}/${currency} was modified concurrently; gave up after ${attempts} attempt(s)`,
+    );
+    this.name = "ConcurrentModificationError";
+  }
+}
+
+/**
+ * Backward/issue-compatible alias for optimistic-lock conflicts (#2478).
+ */
+export class OptimisticLockException extends ConcurrentModificationError {
+  constructor(userId: string, currency: string, attempts: number) {
+    super(userId, currency, attempts);
+    this.name = "OptimisticLockException";
+  }
+}
+
+export class InsufficientFundsError extends Error {
+  constructor(
+    readonly userId: string,
+    readonly currency: string,
+    readonly balance: string,
+    readonly requested: string,
+  ) {
+    super(
+      `Insufficient funds in wallet ${userId}/${currency}: balance ${balance}, requested ${requested}`,
+    );
+    this.name = "InsufficientFundsError";
+  }
+}
+
+export class WalletNotFoundError extends Error {
+  constructor(
+    readonly userId: string,
+    readonly currency: string,
+  ) {
+    super(`No ${currency} wallet for user ${userId}`);
+    this.name = "WalletNotFoundError";
+  }
+}
+
+const DECIMAL_AMOUNT_PATTERN = /^\d{1,13}(\.\d{1,7})?$/;
+
+/**
+ * Validate an amount and return it as a decimal string. Strings are preferred
+ * so no float rounding touches the value; numbers are accepted for
+ * convenience and must already fit the column's 7 decimal places.
+ */
+function toWalletAmount(amount: string | number): string {
+  const text = typeof amount === "number" ? String(amount) : amount.trim();
+  if (!DECIMAL_AMOUNT_PATTERN.test(text) || /^0+(\.0+)?$/.test(text)) {
+    throw new Error(`Invalid wallet amount: ${amount}`);
+  }
+  return text;
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 export class LedgerService {
   private pool: Pool;
 
@@ -199,7 +280,20 @@ export class LedgerService {
     currency?: SupportedCurrency,
     conversionRate?: number,
   ): Promise<PostedEntry[]> {
-    validateLedgerEntries(entries);
+    // Reject unbalanced journals before any database work, and leave an audit trail.
+    try {
+      validateLedgerEntries(entries, referenceNumber);
+    } catch (error) {
+      if (error instanceof UnbalancedLedgerException) {
+        await recordUnbalancedAttempt(error, {
+          referenceNumber,
+          transactionId,
+          postedBy,
+          entries,
+        });
+      }
+      throw error;
+    }
 
     // Attach currency metadata if provided
     const enrichedEntries =
@@ -241,6 +335,34 @@ export class LedgerService {
       }));
     } catch (error) {
       await client.query("ROLLBACK");
+
+      // Defence in depth: post_transaction() enforces the same invariant in SQL.
+      if (
+        !(error instanceof UnbalancedLedgerException) &&
+        error instanceof Error &&
+        /not balanced/i.test(error.message)
+      ) {
+        const totals = entries.reduce(
+          (t, e) => ({
+            d: t.d + (e.debit_amount || 0),
+            c: t.c + (e.credit_amount || 0),
+          }),
+          { d: 0, c: 0 },
+        );
+        const exception = new UnbalancedLedgerException(
+          totals.d.toFixed(7),
+          totals.c.toFixed(7),
+          (totals.d - totals.c).toFixed(7),
+          referenceNumber,
+        );
+        await recordUnbalancedAttempt(exception, {
+          referenceNumber,
+          transactionId,
+          postedBy,
+          entries,
+        });
+        throw exception;
+      }
       throw error;
     } finally {
       client.release();
@@ -547,15 +669,120 @@ export class LedgerService {
   }
 
   /**
+   * Fetch a customer's wallet for one currency, or null if none exists.
+   */
+  async getWallet(
+    userId: string,
+    currency: string,
+  ): Promise<CustomerWallet | null> {
+    const result = await this.pool.query<CustomerWallet>(
+      `SELECT id, user_id, currency, balance::text AS balance, version
+         FROM customer_wallets
+        WHERE user_id = $1 AND currency = $2`,
+      [userId, currency],
+    );
+    return result.rows[0] ?? null;
+  }
+
+  /**
+   * Deduct `amount` from a customer's wallet. Safe under concurrent
+   * withdrawals: see applyWalletDelta.
+   *
+   * @throws InsufficientFundsError, WalletNotFoundError,
+   *         ConcurrentModificationError (after WALLET_UPDATE_MAX_RETRIES)
+   */
+  async debitWallet(
+    userId: string,
+    currency: string,
+    amount: string | number,
+    client?: PoolClient,
+  ): Promise<CustomerWallet> {
+    return this.applyWalletDelta(userId, currency, amount, -1, client);
+  }
+
+  /** Add `amount` to a customer's wallet (optimistically locked). */
+  async creditWallet(
+    userId: string,
+    currency: string,
+    amount: string | number,
+    client?: PoolClient,
+  ): Promise<CustomerWallet> {
+    return this.applyWalletDelta(userId, currency, amount, 1, client);
+  }
+
+  /**
+   * Optimistic-locking read-modify-write of a wallet balance.
+   *
+   * 1. Read the balance and its `version`, and decide sufficiency against
+   *    that snapshot.
+   * 2. `UPDATE ... SET version = version + 1 WHERE id = $id AND version = $read`.
+   *    If another writer committed in between, the version no longer matches,
+   *    no row is updated, and nothing is written based on a stale balance.
+   * 3. On such a conflict, back off briefly and retry from step 1, up to
+   *    WALLET_UPDATE_MAX_RETRIES times, then throw ConcurrentModificationError.
+   *
+   * Pass `client` to run inside a caller's transaction. Use READ COMMITTED
+   * (the default): under REPEATABLE READ a retry would re-read the same
+   * snapshot, and Postgres raises a serialization error instead.
+   */
+  private async applyWalletDelta(
+    userId: string,
+    currency: string,
+    amount: string | number,
+    sign: 1 | -1,
+    client?: PoolClient,
+  ): Promise<CustomerWallet> {
+    const value = toWalletAmount(amount);
+    const db = client ?? this.pool;
+    const maxAttempts = WALLET_UPDATE_MAX_RETRIES + 1;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const read = await db.query<CustomerWallet & { sufficient: boolean }>(
+        `SELECT id, user_id, currency, balance::text AS balance, version,
+                balance + ($3::numeric * $4) >= 0 AS sufficient
+           FROM customer_wallets
+          WHERE user_id = $1 AND currency = $2`,
+        [userId, currency, value, sign],
+      );
+      const wallet = read.rows[0];
+      if (!wallet) throw new WalletNotFoundError(userId, currency);
+      if (!wallet.sufficient) {
+        throw new InsufficientFundsError(userId, currency, wallet.balance, value);
+      }
+
+      const updated = await db.query<CustomerWallet>(
+        `UPDATE customer_wallets
+            SET balance    = balance + ($2::numeric * $3),
+                version    = version + 1,
+                updated_at = CURRENT_TIMESTAMP
+          WHERE id = $1 AND version = $4
+          RETURNING id, user_id, currency, balance::text AS balance, version`,
+        [wallet.id, value, sign, wallet.version],
+      );
+      if (updated.rowCount === 1) return updated.rows[0];
+
+      if (attempt < maxAttempts) {
+        // Jittered backoff so colliding writers don't retry in lockstep.
+        await sleep(Math.random() * 10 * attempt);
+      }
+    }
+
+    throw new OptimisticLockException(userId, currency, maxAttempts);
+  }
+
+  /**
    * Get account balance as of a specific date
    */
   async getAccountBalance(
     accountCode: string,
     asOfDate?: Date,
   ): Promise<number> {
+    // Same DATE-parameter timezone concern as getTrialBalance above —
+    // pass an explicit UTC "YYYY-MM-DD" string, not a raw JS Date.
+    const dateParam = (asOfDate ?? new Date()).toISOString().slice(0, 10);
     const result = await this.pool.query(
       "SELECT get_account_balance($1, $2) as balance",
-      [accountCode, asOfDate || new Date()],
+      [accountCode, dateParam],
     );
     return parseFloat(result.rows[0].balance);
   }
@@ -591,9 +818,18 @@ export class LedgerService {
    * Get trial balance (all account balances at a point in time)
    */
   async getTrialBalance(asOfDate?: Date): Promise<TrialBalance[]> {
+    // get_trial_balance's p_as_of_date parameter is a plain SQL DATE (no
+    // time/timezone component). Passing a JS Date object directly here lets
+    // the pg driver's timezone-sensitive serialization shift the calendar
+    // date by ±1 day depending on the server process's local timezone
+    // offset relative to UTC — especially near midnight. Extracting the
+    // UTC calendar date as an explicit "YYYY-MM-DD" string removes that
+    // ambiguity: the caller's intended calendar date (e.g. CLI --date=)
+    // is always what gets sent, regardless of server timezone.
+    const dateParam = (asOfDate ?? new Date()).toISOString().slice(0, 10);
     const result = await this.pool.query(
       "SELECT * FROM get_trial_balance($1)",
-      [asOfDate || new Date()],
+      [dateParam],
     );
     return result.rows.map((row) => ({
       account_code: row.account_code,

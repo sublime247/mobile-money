@@ -17,6 +17,11 @@ import {
 } from "../services/stellar/hsmService";
 import { GetObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { getS3Client, s3Config, getSignedObjectUrl } from "../config/s3";
+import { kycSanitizeBody } from "../validators/kycSanitizer";
+import {
+  extractAndVerifyIdentity,
+  IdentityVerification,
+} from "../services/compliance/ocrService";
 
 const COMPLIANCE_OFFICER_ROLE = "compliance_officer";
 const REDACTED_FILE_URL = "[REDACTED]";
@@ -32,7 +37,7 @@ function validateUploadFile(file: Express.Multer.File): {
     "image/png",
   ];
   const allowedExtensions = [".pdf", ".jpeg", ".jpg", ".png"];
-  const maxSize = 5 * 1024 * 1024;
+  const maxSize = 10 * 1024 * 1024; // 10MB in bytes (#1943)
   const filename = String(file.originalname || "").toLowerCase();
 
   const hasAllowedMimeType = allowedMimeTypes.includes(file.mimetype);
@@ -95,22 +100,22 @@ export const createKYCRoutes = (db: Pool): Router => {
   // All remaining KYC routes require authentication
   router.use(authenticateToken);
 
-  // Applicant management
-  router.post("/applicants", kycController.createApplicant);
+  // Applicant management (inputs sanitized — issue #1973)
+  router.post("/applicants", kycSanitizeBody, kycController.createApplicant);
   router.get("/applicants/:applicantId", kycController.getApplicant);
   router.get(
     "/applicants/:applicantId/status",
     kycController.getVerificationStatus,
   );
 
-  // Document upload (legacy - base64)
-  router.post("/documents", kycController.uploadDocument);
+  // Document upload (legacy - base64, sanitized)
+  router.post("/documents", kycSanitizeBody, kycController.uploadDocument);
 
   // File upload to S3
   router.post(
     "/documents/upload",
-    annotateDocumentVisibility,
     upload.single("document"),
+    annotateDocumentVisibility,
     async (req: Request, res: Response) => {
       try {
         const userId = req.jwtUser?.userId;
@@ -143,12 +148,19 @@ export const createKYCRoutes = (db: Pool): Router => {
           rawExpiryDate !== null &&
           rawExpiryDate !== ""
         ) {
-          const isValidExpiry = validateExpiryDate(rawExpiryDate);
-          if (!isValidExpiry) {
+          const d = new Date(rawExpiryDate);
+          if (isNaN(d.getTime())) {
             throw createError(
               ERROR_CODES.INVALID_INPUT,
-              "Invalid expiry date",
-              { error: "Invalid expiry date" }
+              "Invalid expiry date format",
+              { error: "Invalid expiry date format" },
+            );
+          }
+          if (d.getTime() <= Date.now()) {
+            throw createError(
+              ERROR_CODES.INVALID_INPUT,
+              "Document has expired",
+              { error: "Document has expired" },
             );
           }
         }
@@ -259,14 +271,75 @@ export const createKYCRoutes = (db: Pool): Router => {
           fileBuffer: req.file.buffer,
         });
 
-        const canViewRaw = Boolean(res.locals.canViewRawKycUploads);
+        const documentType = String(document_type || "").toLowerCase();
+        const isIdentityDocument =
+          documentType === "passport" ||
+          documentType === "national_id" ||
+          documentType === "national_identity_card";
+        let ocrVerification:
+          | (IdentityVerification & { status: "checked" | "manual_review" })
+          | undefined;
+
+        if (isIdentityDocument) {
+          try {
+            if (
+              req.file.mimetype !== "image/jpeg" &&
+              req.file.mimetype !== "image/jpg" &&
+              req.file.mimetype !== "image/png"
+            ) {
+              throw new Error("OCR supports identity document photos only");
+            }
+
+            const applicant = await kycService.getApplicant(applicant_id);
+            if (!applicant.first_name || !applicant.last_name || !applicant.dob) {
+              throw new Error("Submitted identity details are incomplete");
+            }
+
+            const verification = await extractAndVerifyIdentity(
+              req.file.buffer,
+              req.file.mimetype,
+              {
+                fullName: `${applicant.first_name} ${applicant.last_name}`,
+                dateOfBirth: applicant.dob,
+              },
+            );
+            ocrVerification = {
+              ...verification,
+              status: verification.manualReviewRequired
+                ? "manual_review"
+                : "checked",
+            };
+          } catch (error) {
+            logger.warn(
+              { error, applicantId: applicant_id, documentId: documentResult.rows[0].id },
+              "KYC OCR verification requires manual review",
+            );
+            ocrVerification = {
+              nameSimilarity: 0,
+              dateOfBirthMatches: false,
+              manualReviewRequired: true,
+              status: "manual_review",
+            };
+          }
+
+          if (ocrVerification.manualReviewRequired) {
+            await db.query(
+              `UPDATE kyc_applicants
+               SET verification_status = 'review', updated_at = NOW()
+               WHERE user_id = $1 AND applicant_id = $2`,
+              [userId, applicant_id],
+            );
+          }
+        }
+
+        const canViewRaw = canViewRawKycUploads(req) || Boolean(res.locals.canViewRawKycUploads);
         let responseFileUrl: string = REDACTED_FILE_URL;
 
         if (canViewRaw && uploadResult.key) {
           try {
-            responseFileUrl = await getSignedObjectUrl(uploadResult.key);
+            responseFileUrl = (await getSignedObjectUrl(uploadResult.key)) || uploadResult.fileUrl;
           } catch {
-            responseFileUrl = REDACTED_FILE_URL;
+            responseFileUrl = uploadResult.fileUrl || REDACTED_FILE_URL;
           }
         }
 
@@ -278,6 +351,7 @@ export const createKYCRoutes = (db: Pool): Router => {
             file_url: responseFileUrl,
             applicant_id,
             uploaded_at: documentResult.rows[0].created_at,
+            ocr_verification: ocrVerification,
           },
         });
       } catch (error) {

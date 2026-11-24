@@ -12,6 +12,6 @@ DROP INDEX IF EXISTS idx_transactions_stellar_address;
 DROP INDEX IF EXISTS idx_transactions_status;
 DROP INDEX IF EXISTS idx_users_kyc_level;
 DROP INDEX IF EXISTS idx_users_phone_number;
-DROP TABLE IF EXISTS transactions;
-DROP TABLE IF EXISTS users;
+DROP TABLE IF EXISTS transactions CASCADE;
+DROP TABLE IF EXISTS users CASCADE;
 

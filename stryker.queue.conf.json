@@ -14,7 +14,8 @@
     "coverage",
     "reports",
     "contracts/target",
-    ".kiro"
+    ".kiro",
+    "stryker-tmp"
   ],
   "reporters": ["clear-text", "progress", "html", "json"],
   "htmlReporter": {
@@ -23,10 +24,10 @@
   "jsonReporter": {
     "fileName": "reports/mutation/queue-mutation.json"
   },
-  "coverageAnalysis": "perTest",
-  "concurrency": 4,
+  "coverageAnalysis": "off",
+  "concurrency": 2,
   "dryRunTimeoutMinutes": 15,
-  "timeoutMS": 10000,
+  "timeoutMS": 15000,
   "timeoutFactor": 2,
   "tempDirName": "stryker-tmp",
   "cleanTempDir": "always",

@@ -1,9 +1,13 @@
-import axios, { AxiosError } from "axios";
+import { AxiosError } from "axios";
+import { providerHttp } from "../providerStatus";
 import { randomUUID } from "crypto";
 import { getConfigValue } from "../../config/appConfig";
 import logger from "../../utils/logger";
 import { maskPII } from "../../utils/masking";
 import { BaseProvider, ProviderAuthConfig } from "./baseProvider";
+import { resolveMoovErrorFromResponse } from "./errors/moovErrorMatrix";
+
+const http = providerHttp("moov-ci");
 
 const DEFAULT_AUTH_PATH = "/oauth/token";
 const DEFAULT_DEPOSIT_PUSH_PATH = "/payments/deposit";
@@ -109,7 +113,7 @@ export class MoovCoteDivoireProvider extends BaseProvider {
       throw new Error("Moov Côte d'Ivoire API configuration is incomplete");
     }
 
-    const response = await axios.post<MoovTokenResponse>(
+    const response = await http.post<MoovTokenResponse>(
       joinUrl(this.baseUrl, this.authPath),
       { grant_type: "client_credentials" },
       {
@@ -163,7 +167,7 @@ export class MoovCoteDivoireProvider extends BaseProvider {
     const startedAt = Date.now();
     try {
       const accessToken = await this.getAccessToken();
-      const response = await axios.post(
+      const response = await http.post(
         joinUrl(this.baseUrl, this.depositPushPath),
         {
           amount: numericAmount,
@@ -197,6 +201,15 @@ export class MoovCoteDivoireProvider extends BaseProvider {
     } catch (error: unknown) {
       const statusCode =
         error instanceof AxiosError ? error.response?.status : undefined;
+      const responseBody =
+        error instanceof AxiosError
+          ? (error.response?.data as Record<string, unknown> | undefined)
+          : undefined;
+      const providerCode =
+        (responseBody?.code as string | undefined) ??
+        (responseBody?.error_code as string | undefined);
+
+      const mapped = resolveMoovErrorFromResponse(providerCode, statusCode);
 
       logger.error(
         maskPII({
@@ -204,6 +217,8 @@ export class MoovCoteDivoireProvider extends BaseProvider {
           phoneNumber: normalizedPhoneNumber,
           durationMs: Date.now() - startedAt,
           statusCode,
+          providerCode,
+          mappedErrorCode: mapped?.errorCode,
         }),
         "Moov Côte d'Ivoire deposit push failed",
       );
@@ -211,7 +226,7 @@ export class MoovCoteDivoireProvider extends BaseProvider {
       return {
         success: false,
         referenceId: requestId,
-        error: "Moov Côte d'Ivoire deposit push failed",
+        error: mapped?.message ?? "Moov Côte d'Ivoire deposit push failed",
       };
     }
   }

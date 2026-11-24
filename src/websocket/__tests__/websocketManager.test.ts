@@ -130,10 +130,12 @@ describe("WebSocketManager", () => {
       id: "tx-1",
       status: "completed",
       userId: "user-123",
+      correlationId: "payment-correlation",
     });
 
     expect(JSON.parse(client.send.mock.calls[0][0] as string)).toEqual({
       type: "transaction.updated",
+      correlation_id: "payment-correlation",
       data: { transactionId: "tx-1" },
     });
 
@@ -153,7 +155,7 @@ describe("WebSocketManager", () => {
 
     client.send.mockClear();
 
-    const transactionModel = MockTransactionModel.mock.instances[0] as {
+    const transactionModel = MockTransactionModel.mock.results[0].value as {
       findById: jest.Mock;
     };
     transactionModel.findById.mockResolvedValue({
@@ -296,13 +298,17 @@ describe("WebSocketManager", () => {
     await manager.redisReady;
     connectClient(client);
 
+    client.send.mockClear();
+
     // Simulate receiving a message from another instance via Redis Pub/Sub
+    expect(subscriberCallback).toEqual(expect.any(Function));
     if (subscriberCallback) {
       const incomingMessage = JSON.stringify({
         transactionId: "tx-other-instance",
         userId: "user-scaling",
         message: {
           type: "transaction.updated",
+          correlation_id: "remote-payment-request",
           data: {
             transactionId: "tx-other-instance",
           },
@@ -315,6 +321,7 @@ describe("WebSocketManager", () => {
     // Verify the message was delivered to the local client
     expect(JSON.parse(client.send.mock.calls[0][0] as string)).toEqual({
       type: "transaction.updated",
+      correlation_id: "remote-payment-request",
       data: { transactionId: "tx-other-instance" },
     });
 
@@ -436,14 +443,26 @@ describe("WebSocketManager", () => {
     client.handlers.get("message")?.(
       JSON.stringify({
         type: "subscribe",
-        data: { transactionId: "tx-sub-123" },
+        data: { transactionId: "tx-sub-123", correlation_id: "subscribe-correlation" },
       }),
     );
+
+    expect(JSON.parse(client.send.mock.calls[0][0] as string)).toEqual({
+      type: "subscribe.ack",
+      correlation_id: "subscribe-correlation",
+      data: { transactionId: "tx-sub-123" },
+    });
 
     // Broadcast to that transaction ID
     await manager.broadcastTransactionUpdate({
       id: "tx-sub-123",
       status: "processing",
+      correlationId: "payment-correlation",
+    });
+
+    expect(JSON.parse(client.send.mock.calls[1][0] as string)).toMatchObject({
+      type: "transaction.updated",
+      correlation_id: "payment-correlation",
     });
 
     // Verify the message was published to Redis

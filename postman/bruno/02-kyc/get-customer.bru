@@ -1,0 +1,42 @@
+meta {
+  name: "SEP-12 Get Customer KYC Status"
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{base_url}}/sep12/customer?account={{stellar_public_key}}
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  Authorization: Bearer {{jwt_token}}
+}
+
+script:pre-request {
+  // Guard: authenticated requests need a SEP-10 (or login) token.
+  const token = bru.getEnvVar("jwt_token");
+  if (!token) {
+    throw new Error(
+      "jwt_token is empty — run 'SEP-10 Sign Challenge & Get Token' (01-auth) first."
+    );
+  }
+}
+
+tests {
+  test("customer record returned", function() {
+    expect([200, 404]).to.include(res.getStatus());
+  });
+  test("status is one of the SEP-12 states", function() {
+    const body = res.getBody();
+    if (body && body.status) {
+      expect(["ACCEPTED", "PROCESSING", "NEEDS_INFO", "REJECTED"]).to.include(body.status);
+    }
+  });
+}
+
+docs {
+  404 means no KYC record exists yet for this account.
+}

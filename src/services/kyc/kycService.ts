@@ -40,4 +40,10 @@ export class KYCService {
       createdAt: row.created_at,
     };
   }
+
+  async screenCustomer(fullName: string) {
+    const { screenCustomerName } = await import("../../compliance/sanctionsMatcher");
+    return screenCustomerName(fullName);
+  }
 }
+

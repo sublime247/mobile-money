@@ -104,9 +104,9 @@ describe("verifyMtnCallbackSignature", () => {
   });
 
   describe("valid signatures", () => {
-    it("calls next() for a valid base64 HMAC signature using rawBody", async () => {
+    it("calls next() for a valid hex HMAC signature using rawBody", async () => {
       const rawBody = Buffer.from(PAYLOAD);
-      const sig = hmacBase64(PAYLOAD, SECRET);
+      const sig = hmacHex(PAYLOAD, SECRET).slice("sha256=".length);
       const req = makeReq({
         headers: { "x-callback-signature": sig },
         rawBody,
@@ -135,7 +135,7 @@ describe("verifyMtnCallbackSignature", () => {
 
     it("falls back to req.body when rawBody is absent", async () => {
       const body = { status: "SUCCESSFUL" };
-      const sig = hmacBase64(JSON.stringify(body), SECRET);
+      const sig = hmacHex(JSON.stringify(body), SECRET);
       const req = makeReq({
         headers: { "x-callback-signature": sig },
         body,
@@ -157,7 +157,7 @@ describe("verifyMtnCallbackSignature", () => {
       });
 
       const rawBody = Buffer.from(PAYLOAD);
-      const sig = hmacBase64(PAYLOAD, SECRET);
+      const sig = hmacHex(PAYLOAD, SECRET);
       const req = makeReq({
         headers: { "x-mtn-signature": sig },
         rawBody,
@@ -167,6 +167,28 @@ describe("verifyMtnCallbackSignature", () => {
       await verifyMtnCallbackSignature(req, makeRes(), next);
 
       expect(next).toHaveBeenCalled();
+    });
+  });
+
+  describe("fixed encoding (issue #1792)", () => {
+    it("rejects a base64-encoded signature even without the sha256= prefix", async () => {
+      // Previously, an unprefixed header made the middleware compute its
+      // expected value in base64 too, so a base64 digest of the correct
+      // body/secret was wrongly accepted as valid. The encoding MTN signs
+      // with (hex) must not be dictated by what the caller sends.
+      const rawBody = Buffer.from(PAYLOAD);
+      const sig = hmacBase64(PAYLOAD, SECRET);
+      const req = makeReq({
+        headers: { "x-callback-signature": sig },
+        rawBody,
+      });
+      const next: NextFunction = jest.fn();
+
+      await expect(
+        verifyMtnCallbackSignature(req, makeRes(), next),
+      ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+
+      expect(next).not.toHaveBeenCalled();
     });
   });
 

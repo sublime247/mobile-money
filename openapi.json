@@ -1,0 +1,5683 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Mobile Money Bridge API",
+    "version": "1.0.0",
+    "description": "API for bridging mobile money providers (MTN, Airtel, Orange) with the Stellar network. This spec is generated at runtime from Zod schemas — it is always in sync with validation logic.",
+    "contact": {
+      "name": "API Support"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000",
+      "description": "Local development server"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Auth",
+      "description": "Authentication and token management"
+    },
+    {
+      "name": "Transactions",
+      "description": "Mobile money ↔ Stellar transactions"
+    },
+    {
+      "name": "Vaults",
+      "description": "Savings vaults"
+    },
+    {
+      "name": "Contacts",
+      "description": "Saved payment contacts"
+    },
+    {
+      "name": "Fees",
+      "description": "Fee configuration"
+    },
+    {
+      "name": "Fee Strategies",
+      "description": "Dynamic fee strategy engine"
+    },
+    {
+      "name": "KYC",
+      "description": "Know Your Customer identity verification"
+    },
+    {
+      "name": "HTLC",
+      "description": "Hash Time-Locked Contracts on Stellar"
+    },
+    {
+      "name": "Prices",
+      "description": "Historical price data"
+    },
+    {
+      "name": "SEP-38 Quotes",
+      "description": "SEP-38 Quote & Price Stream protocol — firm quotes locked in Redis"
+    },
+    {
+      "name": "SEP-30 Key Recovery",
+      "description": "SEP-30 Multi-Sig Key Recovery — M-of-N cryptographic recovery sessions with full audit trail"
+    },
+    {
+      "name": "Health",
+      "description": "Server health and uptime checks"
+    },
+    {
+      "name": "Disputes",
+      "description": "Transaction dispute management"
+    },
+    {
+      "name": "Webhooks",
+      "description": "Outbound webhook event delivery"
+    },
+    {
+      "name": "Admin",
+      "description": "Administrative endpoints"
+    },
+    {
+      "name": "Compliance",
+      "description": "Regulatory compliance checks"
+    },
+    {
+      "name": "GraphQL",
+      "description": "GraphQL API endpoints"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "JWT Bearer token obtained via POST /api/auth/login. Include as: Authorization: Bearer <token>. Tokens expire after 24 hours; use POST /api/auth/refresh to rotate."
+      },
+      "apiKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key",
+        "description": "API key for admin-level operations. Include as: X-API-Key: <key>. Admin API keys are generated via the dashboard and grant full access to admin endpoints."
+      }
+    },
+    "schemas": {
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "example": "Validation failed"
+          },
+          "message": {
+            "type": "string",
+            "example": "Amount must be a positive number"
+          }
+        },
+        "required": ["error"],
+        "description": "Standard error envelope"
+      },
+      "Pagination": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "example": 50
+          },
+          "offset": {
+            "type": "integer",
+            "example": 0
+          },
+          "hasMore": {
+            "type": "boolean",
+            "example": false
+          }
+        },
+        "required": ["limit", "offset", "hasMore"]
+      },
+      "RegisterRequest": {
+        "type": "object",
+        "properties": {
+          "phone_number": {
+            "type": "string",
+            "minLength": 1,
+            "example": "+237670000000"
+          },
+          "password": {
+            "type": "string",
+            "minLength": 12,
+            "example": "Str0ng!Pass#2024",
+            "description": "Minimum 12 characters, must include uppercase, lowercase, and a special character."
+          }
+        },
+        "required": ["phone_number", "password"]
+      },
+      "LoginRequest": {
+        "type": "object",
+        "properties": {
+          "phone_number": {
+            "type": "string",
+            "example": "+237670000000"
+          },
+          "password": {
+            "type": "string",
+            "example": "Str0ng!Pass#2024"
+          }
+        },
+        "required": ["phone_number", "password"]
+      },
+      "LoginResponse": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "example": "Login successful"
+          },
+          "token": {
+            "type": "string",
+            "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+          },
+          "refreshToken": {
+            "type": "string",
+            "example": "dGhpcyBpcyBhIHJlZnJlc2ggdG9rZW4..."
+          },
+          "user": {
+            "type": "object",
+            "properties": {
+              "userId": {
+                "type": "string",
+                "format": "uuid",
+                "example": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+              },
+              "email": {
+                "type": "string",
+                "example": "+237670000000"
+              },
+              "role": {
+                "type": "string",
+                "example": "user"
+              },
+              "permissions": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "example": ["read:transactions"]
+              }
+            },
+            "required": ["userId", "email", "role", "permissions"]
+          }
+        },
+        "required": ["message", "token", "refreshToken", "user"]
+      },
+      "RefreshTokenRequest": {
+        "type": "object",
+        "properties": {
+          "refreshToken": {
+            "type": "string",
+            "example": "dGhpcyBpcyBhIHJlZnJlc2ggdG9rZW4..."
+          }
+        },
+        "required": ["refreshToken"]
+      },
+      "TokenVerifyRequest": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+          }
+        },
+        "required": ["token"]
+      },
+      "TransactionRequest": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "number",
+            "minimum": 0,
+            "exclusiveMinimum": true,
+            "maximum": 100000000,
+            "example": 5000,
+            "description": "Transaction amount in the smallest currency unit (e.g., XAF, no decimals). Minimum 100, maximum 1,000,000 per transaction."
+          },
+          "phoneNumber": {
+            "type": "string",
+            "pattern": "^\\+?\\d{10,15}$",
+            "example": "+237670000000",
+            "description": "Mobile money phone number in E.164 format (+237670000000) or local format. Must match the mobile money provider's network."
+          },
+          "provider": {
+            "type": "string",
+            "enum": ["mtn", "airtel", "orange"],
+            "example": "mtn",
+            "description": "Target mobile money provider. Must match the phone number's network."
+          },
+          "stellarAddress": {
+            "type": "string",
+            "pattern": "^G[A-Z2-7]{55}$",
+            "example": "GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN",
+            "description": "Destination Stellar public key (G...). Must be a valid ed25519 Stellar account. The user must trust the anchor's asset before receiving."
+          },
+          "userId": {
+            "type": "string",
+            "format": "uuid",
+            "example": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+            "description": "The authenticated user's UUID. Inferred from the JWT token; may be omitted for admin-initiated transactions."
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 256,
+            "example": "School fees payment",
+            "description": "Optional human-readable memo or reference for the transaction. Max 256 characters."
+          }
+        },
+        "required": [
+          "amount",
+          "phoneNumber",
+          "provider",
+          "stellarAddress",
+          "userId"
+        ],
+        "description": "Request payload to initiate a mobile money deposit or withdrawal. Amount is in the local fiat currency (XAF)."
+      },
+      "TransactionResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": true,
+            "description": "Indicates whether the request was accepted for processing."
+          },
+          "transactionId": {
+            "type": "string",
+            "format": "uuid",
+            "example": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+            "description": "Unique transaction identifier (UUID v4). Use this ID for subsequent status checks."
+          },
+          "referenceNumber": {
+            "type": "string",
+            "example": "TXN-20240425-001",
+            "description": "Human-readable reference number. Format: TXN-YYYYMMDD-NNN for deposits, WTH-YYYYMMDD-NNN for withdrawals."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "processing",
+              "completed",
+              "failed",
+              "cancelled",
+              "review",
+              "pending_review",
+              "dispute",
+              "reversed",
+              "clawed_back"
+            ],
+            "example": "pending",
+            "description": "Current status of the transaction. New transactions start as 'pending' and move to 'processing' once submitted to the provider."
+          },
+          "amount": {
+            "type": "number",
+            "example": 5000,
+            "description": "Transaction amount as submitted."
+          },
+          "provider": {
+            "type": "string",
+            "example": "mtn",
+            "description": "Mobile money provider handling this transaction."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2024-04-25T10:00:00.000Z",
+            "description": "ISO 8601 timestamp of when the transaction was created."
+          }
+        },
+        "required": [
+          "success",
+          "transactionId",
+          "referenceNumber",
+          "status",
+          "amount",
+          "provider",
+          "createdAt"
+        ],
+        "description": "Response returned after successfully initiating a deposit or withdrawal request."
+      },
+      "TransactionDetail": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+            "description": "Unique transaction identifier (UUID v4)."
+          },
+          "referenceNumber": {
+            "type": "string",
+            "example": "TXN-20240425-001",
+            "description": "Human-readable reference number assigned by the system."
+          },
+          "type": {
+            "type": "string",
+            "enum": ["deposit", "withdraw"],
+            "example": "deposit",
+            "description": "Direction of the transaction. 'deposit' = mobile money → Stellar, 'withdraw' = Stellar → mobile money."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "processing",
+              "completed",
+              "failed",
+              "cancelled",
+              "review",
+              "pending_review",
+              "dispute",
+              "reversed",
+              "clawed_back"
+            ],
+            "example": "completed",
+            "description": "Current lifecycle status. Terminal states: completed, failed, cancelled."
+          },
+          "amount": {
+            "type": "number",
+            "minimum": 0,
+            "exclusiveMinimum": true,
+            "example": 5000,
+            "description": "Transaction amount in the local currency."
+          },
+          "fee": {
+            "type": "number",
+            "minimum": 0,
+            "example": 50,
+            "description": "Fee deducted from the amount for processing. Only present after fee calculation."
+          },
+          "provider": {
+            "type": "string",
+            "example": "mtn",
+            "description": "Mobile money provider handling this transaction."
+          },
+          "phoneNumber": {
+            "type": "string",
+            "example": "+237670000000",
+            "description": "Mobile money phone number associated with the transaction."
+          },
+          "stellarAddress": {
+            "type": "string",
+            "example": "GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN",
+            "description": "Stellar account address involved in the transfer."
+          },
+          "stellarTransactionHash": {
+            "type": "string",
+            "example": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+            "description": "Stellar network transaction hash. Populated once the on-chain operation completes."
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 256,
+            "example": "School fees payment",
+            "description": "User-provided memo attached to this transaction."
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            },
+            "description": "Arbitrary key-value metadata attached to the transaction by the caller."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2024-04-25T10:00:00.000Z",
+            "description": "ISO 8601 timestamp of when the transaction was created."
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2024-04-25T10:05:00.000Z",
+            "description": "ISO 8601 timestamp of the last status update."
+          }
+        },
+        "required": [
+          "id",
+          "referenceNumber",
+          "type",
+          "status",
+          "amount",
+          "provider",
+          "phoneNumber",
+          "stellarAddress",
+          "createdAt",
+          "updatedAt"
+        ],
+        "description": "Full detail of a single transaction, including Stellar on-chain reference when available."
+      },
+      "TransactionListResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": true
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TransactionDetail"
+            }
+          },
+          "pagination": {
+            "type": "object",
+            "properties": {
+              "total": {
+                "type": "integer",
+                "minimum": 0,
+                "example": 120,
+                "description": "Total number of transactions matching the query filters."
+              },
+              "limit": {
+                "type": "integer",
+                "minimum": 0,
+                "exclusiveMinimum": true,
+                "example": 20,
+                "description": "Maximum number of results returned in this page."
+              },
+              "offset": {
+                "type": "integer",
+                "minimum": 0,
+                "example": 0,
+                "description": "Offset used for this page (offset-based pagination)."
+              }
+            },
+            "required": ["total", "limit", "offset"]
+          }
+        },
+        "required": ["success", "data", "pagination"],
+        "description": "Paginated list of transactions with metadata."
+      },
+      "UpdateNotesRequest": {
+        "type": "object",
+        "properties": {
+          "notes": {
+            "type": "string",
+            "maxLength": 256,
+            "example": "Updated payment note: rent for March",
+            "description": "New notes text. Replaces any existing notes. Max 256 characters."
+          }
+        },
+        "required": ["notes"],
+        "description": "Request to update the notes/memo on an existing transaction."
+      },
+      "MetadataRequest": {
+        "type": "object",
+        "properties": {
+          "metadata": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            },
+            "example": {
+              "category": "utilities",
+              "invoiceId": "INV-001"
+            },
+            "description": "Key-value metadata to attach. Keys are strings, values can be any JSON-compatible type."
+          }
+        },
+        "required": ["metadata"],
+        "description": "Request to set or merge metadata on a transaction."
+      },
+      "DeleteMetadataKeysRequest": {
+        "type": "object",
+        "properties": {
+          "keys": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "example": ["category", "invoiceId"],
+            "description": "Array of metadata keys to remove from the transaction."
+          }
+        },
+        "required": ["keys"],
+        "description": "Request to delete specific metadata keys from a transaction."
+      },
+      "CreateVaultRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "example": "Emergency Fund"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 1000,
+            "example": "Savings for emergencies"
+          },
+          "targetAmount": {
+            "type": "string",
+            "pattern": "^\\d+(\\.\\d{1,7})?$",
+            "example": "1000.00",
+            "description": "Target savings amount (decimal string)"
+          }
+        },
+        "required": ["name"]
+      },
+      "UpdateVaultRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "example": "Emergency Fund v2"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 1000,
+            "example": "Updated description"
+          },
+          "targetAmount": {
+            "type": "string",
+            "pattern": "^\\d+(\\.\\d{1,7})?$",
+            "example": "2000.00"
+          },
+          "isActive": {
+            "type": "boolean",
+            "example": true
+          }
+        }
+      },
+      "VaultTransferRequest": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "string",
+            "pattern": "^\\d+(\\.\\d{1,7})?$",
+            "example": "250.00",
+            "description": "Amount to deposit or withdraw"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["deposit", "withdraw"],
+            "example": "deposit"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 500,
+            "example": "Monthly savings"
+          }
+        },
+        "required": ["amount", "type"]
+      },
+      "Vault": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+          },
+          "userId": {
+            "type": "string",
+            "format": "uuid",
+            "example": "b2c3d4e5-f6a7-8901-bcde-f12345678901"
+          },
+          "name": {
+            "type": "string",
+            "example": "Emergency Fund"
+          },
+          "description": {
+            "type": "string",
+            "example": "Savings for emergencies"
+          },
+          "balance": {
+            "type": "string",
+            "example": "500.00"
+          },
+          "targetAmount": {
+            "type": "string",
+            "example": "1000.00"
+          },
+          "isActive": {
+            "type": "boolean",
+            "example": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2024-04-25T10:00:00.000Z"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2024-04-25T10:05:00.000Z"
+          }
+        },
+        "required": [
+          "id",
+          "userId",
+          "name",
+          "balance",
+          "isActive",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "VaultResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/Vault"
+          }
+        },
+        "required": ["success", "data"]
+      },
+      "VaultListResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": true
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Vault"
+            }
+          }
+        },
+        "required": ["success", "data"]
+      },
+      "CreateContactRequest": {
+        "type": "object",
+        "properties": {
+          "destinationType": {
+            "type": "string",
+            "enum": ["phone", "stellar"],
+            "example": "phone"
+          },
+          "destinationValue": {
+            "type": "string",
+            "minLength": 1,
+            "example": "+237670000000",
+            "description": "E.164 phone number or Stellar public key depending on destinationType"
+          },
+          "nickname": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "example": "Mom"
+          }
+        },
+        "required": ["destinationType", "destinationValue", "nickname"]
+      },
+      "UpdateContactRequest": {
+        "type": "object",
+        "properties": {
+          "destinationType": {
+            "type": "string",
+            "enum": ["phone", "stellar"],
+            "example": "stellar"
+          },
+          "destinationValue": {
+            "type": "string",
+            "minLength": 1,
+            "example": "GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN"
+          },
+          "nickname": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "example": "Dad"
+          }
+        }
+      },
+      "Contact": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+          },
+          "userId": {
+            "type": "string",
+            "format": "uuid",
+            "example": "b2c3d4e5-f6a7-8901-bcde-f12345678901"
+          },
+          "destinationType": {
+            "type": "string",
+            "enum": ["phone", "stellar"],
+            "example": "phone"
+          },
+          "destinationValue": {
+            "type": "string",
+            "example": "+237670000000"
+          },
+          "nickname": {
+            "type": "string",
+            "example": "Mom"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2024-04-25T10:00:00.000Z"
+          }
+        },
+        "required": [
+          "id",
+          "userId",
+          "destinationType",
+          "destinationValue",
+          "nickname",
+          "createdAt"
+        ]
+      },
+      "CreateFeeConfigRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "example": "Standard Fee"
+          },
+          "description": {
+            "type": "string",
+            "example": "Default fee for all users"
+          },
+          "feePercentage": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100,
+            "example": 1.5
+          },
+          "feeMinimum": {
+            "type": "number",
+            "minimum": 0,
+            "example": 50
+          },
+          "feeMaximum": {
+            "type": "number",
+            "minimum": 0,
+            "example": 5000
+          }
+        },
+        "required": ["name", "feePercentage", "feeMinimum", "feeMaximum"]
+      },
+      "FeeEstimateRequest": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "number",
+            "minimum": 0,
+            "exclusiveMinimum": true,
+            "example": 10000
+          },
+          "userId": {
+            "type": "string",
+            "format": "uuid",
+            "example": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+          },
+          "transactionType": {
+            "type": "string",
+            "enum": ["send", "deposit", "withdraw", "payment"],
+            "example": "deposit"
+          }
+        },
+        "required": ["amount"]
+      },
+      "FeeEstimateResponse": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "number",
+            "example": 10000
+          },
+          "fee": {
+            "type": "number",
+            "example": 150
+          },
+          "netAmount": {
+            "type": "number",
+            "example": 9850
+          },
+          "feePercentage": {
+            "type": "number",
+            "example": 1.5
+          }
+        },
+        "required": ["amount", "fee", "netAmount", "feePercentage"]
+      },
+      "VolumeTier": {
+        "type": "object",
+        "properties": {
+          "minAmount": {
+            "type": "number",
+            "minimum": 0,
+            "example": 0
+          },
+          "maxAmount": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 0,
+            "exclusiveMinimum": true,
+            "example": 100000
+          },
+          "feePercentage": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100,
+            "example": 2
+          },
+          "flatAmount": {
+            "type": "number",
+            "minimum": 0,
+            "example": 100
+          }
+        },
+        "required": ["minAmount", "maxAmount"]
+      },
+      "CreateFeeStrategyRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "example": "Weekend Discount"
+          },
+          "description": {
+            "type": "string",
+            "example": "Reduced fees on weekends"
+          },
+          "strategyType": {
+            "type": "string",
+            "enum": ["flat", "percentage", "time_based", "volume_based"],
+            "example": "percentage"
+          },
+          "scope": {
+            "type": "string",
+            "enum": ["user", "provider", "global"],
+            "example": "global"
+          },
+          "feePercentage": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100,
+            "example": 1
+          },
+          "flatAmount": {
+            "type": "number",
+            "minimum": 0,
+            "example": 50
+          },
+          "volumeTiers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VolumeTier"
+            }
+          }
+        },
+        "required": ["name", "strategyType", "scope"]
+      },
+      "KYCAddress": {
+        "type": "object",
+        "properties": {
+          "street": {
+            "type": "string",
+            "minLength": 1,
+            "example": "123 Main St"
+          },
+          "town": {
+            "type": "string",
+            "minLength": 1,
+            "example": "Douala"
+          },
+          "postcode": {
+            "type": "string",
+            "minLength": 1,
+            "example": "00237"
+          },
+          "country": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 3,
+            "example": "CMR",
+            "description": "ISO 3166-1 alpha-3"
+          },
+          "state": {
+            "type": "string",
+            "example": "Littoral"
+          },
+          "building_number": {
+            "type": "string",
+            "example": "12"
+          },
+          "flat_number": {
+            "type": "string"
+          }
+        },
+        "required": ["street", "town", "postcode", "country"]
+      },
+      "CreateKYCApplicantRequest": {
+        "type": "object",
+        "properties": {
+          "first_name": {
+            "type": "string",
+            "minLength": 1,
+            "example": "Jean"
+          },
+          "last_name": {
+            "type": "string",
+            "minLength": 1,
+            "example": "Dupont"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "example": "jean.dupont@example.com"
+          },
+          "dob": {
+            "type": "string",
+            "example": "1990-01-15",
+            "description": "YYYY-MM-DD"
+          },
+          "phone_number": {
+            "type": "string",
+            "example": "+237670000000"
+          },
+          "address": {
+            "$ref": "#/components/schemas/KYCAddress"
+          }
+        },
+        "required": ["first_name", "last_name"]
+      },
+      "KYCApplicantResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": true
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "applicantId": {
+                "type": "string",
+                "example": "applicant_abc123"
+              },
+              "status": {
+                "type": "string",
+                "enum": ["pending", "approved", "rejected", "review"],
+                "example": "pending"
+              }
+            },
+            "required": ["applicantId", "status"]
+          }
+        },
+        "required": ["success", "data"]
+      },
+      "UploadKYCDocumentRequest": {
+        "type": "object",
+        "properties": {
+          "applicant_id": {
+            "type": "string",
+            "example": "applicant_abc123"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "passport",
+              "driving_license",
+              "national_identity_card",
+              "residence_permit"
+            ],
+            "example": "passport"
+          },
+          "side": {
+            "type": "string",
+            "enum": ["front", "back"],
+            "example": "front"
+          },
+          "filename": {
+            "type": "string",
+            "minLength": 1,
+            "example": "passport_front.jpg"
+          },
+          "data": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Base64-encoded document image"
+          }
+        },
+        "required": ["applicant_id", "type", "filename", "data"]
+      },
+      "KYCRejectionReason": {
+        "type": "string",
+        "enum": [
+          "Blurry ID",
+          "Expired ID",
+          "Name Mismatch",
+          "Address Mismatch",
+          "Selfie Mismatch",
+          "Unsupported Document Type",
+          "Fraudulent Document",
+          "Incomplete Information",
+          "Other"
+        ]
+      },
+      "RejectKYCRequest": {
+        "type": "object",
+        "properties": {
+          "rejection_reason": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/KYCRejectionReason"
+              },
+              {
+                "example": "Blurry ID"
+              }
+            ]
+          },
+          "notes": {
+            "type": "string",
+            "example": "The ID is too blurry to read the expiration date."
+          }
+        },
+        "required": ["rejection_reason"]
+      },
+      "HtlcLockRequest": {
+        "type": "object",
+        "properties": {
+          "senderAddress": {
+            "type": "string",
+            "example": "GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN"
+          },
+          "receiverAddress": {
+            "type": "string",
+            "example": "GBVVJJWVHSN5BKPKODEOQHKZXQMQFZAZDXQMQFZAZDXQMQFZAZDXQMQ"
+          },
+          "tokenAddress": {
+            "type": "string",
+            "example": "USDC"
+          },
+          "amount": {
+            "type": "string",
+            "example": "100.00"
+          },
+          "hashlock": {
+            "type": "string",
+            "minLength": 64,
+            "maxLength": 64,
+            "example": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "description": "64-char hex hash"
+          },
+          "timelock": {
+            "type": "number",
+            "example": 1714000000,
+            "description": "Unix timestamp"
+          },
+          "contractId": {
+            "type": "string",
+            "example": "contract_abc123"
+          }
+        },
+        "required": [
+          "senderAddress",
+          "receiverAddress",
+          "tokenAddress",
+          "amount",
+          "hashlock",
+          "timelock",
+          "contractId"
+        ]
+      },
+      "HtlcClaimRequest": {
+        "type": "object",
+        "properties": {
+          "claimerAddress": {
+            "type": "string",
+            "example": "GBVVJJWVHSN5BKPKODEOQHKZXQMQFZAZDXQMQFZAZDXQMQFZAZDXQMQ"
+          },
+          "preimage": {
+            "type": "string",
+            "minLength": 64,
+            "maxLength": 64,
+            "example": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "description": "64-char hex preimage"
+          },
+          "contractId": {
+            "type": "string",
+            "example": "contract_abc123"
+          }
+        },
+        "required": ["claimerAddress", "preimage", "contractId"]
+      },
+      "HtlcRefundRequest": {
+        "type": "object",
+        "properties": {
+          "refunderAddress": {
+            "type": "string",
+            "example": "GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN"
+          },
+          "contractId": {
+            "type": "string",
+            "example": "contract_abc123"
+          }
+        },
+        "required": ["refunderAddress", "contractId"]
+      },
+      "HtlcTransactionResponse": {
+        "type": "object",
+        "properties": {
+          "xdr": {
+            "type": "string",
+            "description": "Base64-encoded Stellar XDR transaction envelope"
+          },
+          "hash": {
+            "type": "string",
+            "description": "Hex-encoded transaction hash"
+          }
+        },
+        "required": ["xdr", "hash"]
+      },
+      "PriceSnapshot": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "1"
+          },
+          "base": {
+            "type": "string",
+            "example": "XLM"
+          },
+          "quote": {
+            "type": "string",
+            "example": "USD"
+          },
+          "price": {
+            "type": "number",
+            "example": 0.1234
+          },
+          "recordedAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2024-04-25T10:00:00.000Z"
+          }
+        },
+        "required": ["id", "base", "quote", "price", "recordedAt"]
+      },
+      "PriceListResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PriceSnapshot"
+            }
+          },
+          "count": {
+            "type": "integer",
+            "example": 48
+          }
+        },
+        "required": ["data", "count"]
+      },
+      "Sep38AssetPair": {
+        "type": "object",
+        "properties": {
+          "sell_asset": {
+            "type": "string",
+            "minLength": 1,
+            "example": "iso4217:XAF",
+            "description": "SEP-38 asset identifier. Format: \"iso4217:<CODE>\" for fiat, \"stellar:XLM\" for native XLM, or \"stellar:<CODE>:<ISSUER>\" for Stellar assets."
+          },
+          "buy_asset": {
+            "type": "string",
+            "minLength": 1,
+            "example": "iso4217:XAF",
+            "description": "SEP-38 asset identifier. Format: \"iso4217:<CODE>\" for fiat, \"stellar:XLM\" for native XLM, or \"stellar:<CODE>:<ISSUER>\" for Stellar assets."
+          }
+        },
+        "required": ["sell_asset", "buy_asset"],
+        "description": "A supported sell → buy asset pair."
+      },
+      "Sep38InfoResponse": {
+        "type": "object",
+        "properties": {
+          "assets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Sep38AssetPair"
+            },
+            "description": "All supported asset conversion pairs."
+          }
+        },
+        "required": ["assets"]
+      },
+      "Sep38PricesResponse": {
+        "type": "object",
+        "properties": {
+          "buy_assets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Sep38PriceItem"
+            },
+            "description": "Indicative price for sell_asset against every supported buy_asset (or just the requested one, if buy_asset was provided)."
+          }
+        },
+        "required": ["buy_assets"],
+        "description": "Indicative FX discovery prices for a sell_asset."
+      },
+      "Sep38PriceItem": {
+        "type": "object",
+        "properties": {
+          "asset": {
+            "type": "string",
+            "minLength": 1,
+            "example": "iso4217:XAF",
+            "description": "SEP-38 asset identifier. Format: \"iso4217:<CODE>\" for fiat, \"stellar:XLM\" for native XLM, or \"stellar:<CODE>:<ISSUER>\" for Stellar assets."
+          },
+          "price": {
+            "type": "string",
+            "example": "129.5000000",
+            "description": "Units of this asset per 1 unit of sell_asset."
+          },
+          "decimals": {
+            "type": "integer",
+            "example": 7
+          }
+        },
+        "required": ["asset", "price", "decimals"]
+      },
+      "Sep38PriceResponse": {
+        "type": "object",
+        "properties": {
+          "sell_asset": {
+            "type": "string",
+            "minLength": 1,
+            "example": "iso4217:XAF",
+            "description": "SEP-38 asset identifier. Format: \"iso4217:<CODE>\" for fiat, \"stellar:XLM\" for native XLM, or \"stellar:<CODE>:<ISSUER>\" for Stellar assets."
+          },
+          "buy_asset": {
+            "type": "string",
+            "minLength": 1,
+            "example": "iso4217:XAF",
+            "description": "SEP-38 asset identifier. Format: \"iso4217:<CODE>\" for fiat, \"stellar:XLM\" for native XLM, or \"stellar:<CODE>:<ISSUER>\" for Stellar assets."
+          },
+          "price": {
+            "type": "string",
+            "example": "650.1234567",
+            "description": "Units of buy_asset per 1 unit of sell_asset."
+          },
+          "fee_percent": {
+            "type": "string",
+            "example": "0.50",
+            "description": "Percentage fee applied to this conversion."
+          },
+          "fee_fixed": {
+            "type": "string",
+            "example": "0.0000000",
+            "description": "Fixed fee in sell_asset units."
+          },
+          "fee": {
+            "$ref": "#/components/schemas/Sep38Fee"
+          }
+        },
+        "required": [
+          "sell_asset",
+          "buy_asset",
+          "price",
+          "fee_percent",
+          "fee_fixed",
+          "fee"
+        ],
+        "description": "Indicative or firm price for an asset pair."
+      },
+      "Sep38Fee": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "string",
+            "example": "0.0025000",
+            "description": "Total fee, in sell_asset units."
+          },
+          "asset": {
+            "type": "string",
+            "minLength": 1,
+            "example": "iso4217:XAF",
+            "description": "The asset the fee is denominated in (sell_asset)."
+          },
+          "details": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Sep38FeeDetail"
+            },
+            "description": "Itemized breakdown of the fee total."
+          }
+        },
+        "required": ["total", "asset", "details"],
+        "description": "SEP-38 fee breakdown for a price or quote."
+      },
+      "Sep38FeeDetail": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "percentage_fee"
+          },
+          "amount": {
+            "type": "string",
+            "example": "0.0025000"
+          },
+          "description": {
+            "type": "string",
+            "example": "0.50% conversion fee, in sell_asset units."
+          }
+        },
+        "required": ["name", "amount"]
+      },
+      "Sep38QuoteRequest": {
+        "type": "object",
+        "properties": {
+          "sell_asset": {
+            "type": "string",
+            "minLength": 1,
+            "example": "iso4217:XAF",
+            "description": "SEP-38 asset identifier. Format: \"iso4217:<CODE>\" for fiat, \"stellar:XLM\" for native XLM, or \"stellar:<CODE>:<ISSUER>\" for Stellar assets."
+          },
+          "buy_asset": {
+            "type": "string",
+            "minLength": 1,
+            "example": "iso4217:XAF",
+            "description": "SEP-38 asset identifier. Format: \"iso4217:<CODE>\" for fiat, \"stellar:XLM\" for native XLM, or \"stellar:<CODE>:<ISSUER>\" for Stellar assets."
+          },
+          "sell_amount": {
+            "type": "string",
+            "pattern": "^\\d+(\\.\\d{1,7})?$",
+            "example": "10000",
+            "description": "Amount to sell. Provide exactly one of sell_amount or buy_amount."
+          },
+          "buy_amount": {
+            "type": "string",
+            "pattern": "^\\d+(\\.\\d{1,7})?$",
+            "example": "15.3000000",
+            "description": "Amount to receive. Provide exactly one of sell_amount or buy_amount."
+          },
+          "ttl": {
+            "type": "integer",
+            "minimum": 0,
+            "exclusiveMinimum": true,
+            "maximum": 300,
+            "example": 60,
+            "description": "Quote lifetime in seconds (1–300). Defaults to 60."
+          }
+        },
+        "required": ["sell_asset", "buy_asset"]
+      },
+      "Sep38Quote": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2024-04-25T10:01:00.000Z"
+          },
+          "sell_asset": {
+            "type": "string",
+            "minLength": 1,
+            "example": "iso4217:XAF",
+            "description": "SEP-38 asset identifier. Format: \"iso4217:<CODE>\" for fiat, \"stellar:XLM\" for native XLM, or \"stellar:<CODE>:<ISSUER>\" for Stellar assets."
+          },
+          "buy_asset": {
+            "type": "string",
+            "minLength": 1,
+            "example": "iso4217:XAF",
+            "description": "SEP-38 asset identifier. Format: \"iso4217:<CODE>\" for fiat, \"stellar:XLM\" for native XLM, or \"stellar:<CODE>:<ISSUER>\" for Stellar assets."
+          },
+          "sell_amount": {
+            "type": "string",
+            "pattern": "^\\d+(\\.\\d{1,7})?$",
+            "example": "10000.0000000"
+          },
+          "buy_amount": {
+            "type": "string",
+            "pattern": "^\\d+(\\.\\d{1,7})?$",
+            "example": "10000.0000000"
+          },
+          "price": {
+            "type": "string",
+            "example": "650.1234567"
+          },
+          "fee_percent": {
+            "type": "string",
+            "example": "0.50"
+          },
+          "fee_fixed": {
+            "type": "string",
+            "example": "0.0000000"
+          },
+          "fee": {
+            "$ref": "#/components/schemas/Sep38Fee"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2024-04-25T10:00:00.000Z"
+          }
+        },
+        "required": [
+          "id",
+          "expires_at",
+          "sell_asset",
+          "buy_asset",
+          "sell_amount",
+          "buy_amount",
+          "price",
+          "fee_percent",
+          "fee_fixed",
+          "fee",
+          "created_at"
+        ],
+        "description": "A firm, time-locked SEP-38 quote."
+      },
+      "Sep30RecoverySession": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+          },
+          "managedKeyId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "requiredApprovals": {
+            "type": "integer",
+            "example": 2
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "collecting_approvals",
+              "awaiting_completion",
+              "completed",
+              "rejected"
+            ],
+            "description": "FSM state: pending → collecting_approvals → awaiting_completion → completed | rejected"
+          },
+          "approvedBy": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 56,
+              "maxLength": 56,
+              "example": "GABC...XYZ",
+              "description": "56-character Stellar public key (G...)"
+            },
+            "description": "List of signer public keys that have submitted valid signatures"
+          },
+          "requestedNewAddress": {
+            "type": "string",
+            "nullable": true,
+            "minLength": 56,
+            "maxLength": 56,
+            "example": "GABC...XYZ",
+            "description": "Optional custom Stellar address to rotate to. NULL = generate fresh keypair."
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2024-04-25T10:30:00.000Z"
+          },
+          "completedAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time"
+          },
+          "rejectedReason": {
+            "type": "string",
+            "nullable": true
+          },
+          "newPublicKey": {
+            "type": "string",
+            "nullable": true,
+            "minLength": 56,
+            "maxLength": 56,
+            "example": "GABC...XYZ",
+            "description": "56-character Stellar public key (G...)"
+          },
+          "oldPublicKey": {
+            "type": "string",
+            "nullable": true,
+            "minLength": 56,
+            "maxLength": 56,
+            "example": "GABC...XYZ",
+            "description": "56-character Stellar public key (G...)"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "managedKeyId",
+          "requiredApprovals",
+          "state",
+          "approvedBy",
+          "expiresAt",
+          "createdAt",
+          "updatedAt"
+        ],
+        "description": "Multi-sig key recovery session tracking state, approvals, and audit info."
+      },
+      "Sep30ManagedKey": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "publicKey": {
+            "type": "string",
+            "minLength": 56,
+            "maxLength": 56,
+            "example": "GABC...XYZ",
+            "description": "56-character Stellar public key (G...)"
+          },
+          "recoveryThreshold": {
+            "type": "integer",
+            "example": 2
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "userId",
+          "publicKey",
+          "recoveryThreshold",
+          "isActive",
+          "createdAt",
+          "updatedAt"
+        ],
+        "description": "An AES-256-GCM-encrypted Stellar keypair."
+      },
+      "Sep30RecoverySigner": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "managedKeyId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "signerPublicKey": {
+            "type": "string",
+            "minLength": 56,
+            "maxLength": 56,
+            "example": "GABC...XYZ",
+            "description": "56-character Stellar public key (G...)"
+          },
+          "signerLabel": {
+            "type": "string",
+            "example": "My phone key"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "managedKeyId",
+          "signerPublicKey",
+          "signerLabel",
+          "createdAt"
+        ]
+      },
+      "Sep30KeyRotationResult": {
+        "type": "object",
+        "properties": {
+          "newPublicKey": {
+            "type": "string",
+            "minLength": 56,
+            "maxLength": 56,
+            "example": "GABC...XYZ",
+            "description": "56-character Stellar public key (G...)"
+          },
+          "oldPublicKey": {
+            "type": "string",
+            "minLength": 56,
+            "maxLength": 56,
+            "example": "GABC...XYZ",
+            "description": "56-character Stellar public key (G...)"
+          },
+          "rotatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "sessionId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": ["newPublicKey", "oldPublicKey", "rotatedAt"]
+      },
+      "Sep30AuditLogEntry": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sessionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "eventType": {
+            "type": "string",
+            "example": "signer_approved"
+          },
+          "signerPublicKey": {
+            "type": "string",
+            "nullable": true,
+            "minLength": 56,
+            "maxLength": 56,
+            "example": "GABC...XYZ",
+            "description": "56-character Stellar public key (G...)"
+          },
+          "fromState": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "pending",
+              "collecting_approvals",
+              "awaiting_completion",
+              "completed",
+              "rejected",
+              null
+            ]
+          },
+          "toState": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "collecting_approvals",
+              "awaiting_completion",
+              "completed",
+              "rejected"
+            ]
+          },
+          "metadata": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": {
+              "nullable": true
+            }
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "ipAddress": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": ["id", "sessionId", "eventType", "toState", "occurredAt"]
+      },
+      "Sep30CreateKeyRequest": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "format": "uuid",
+            "example": "user-uuid-here"
+          },
+          "recoveryThreshold": {
+            "type": "integer",
+            "minimum": 1,
+            "example": 2
+          }
+        },
+        "required": ["userId"]
+      },
+      "Sep30OpenSessionRequest": {
+        "type": "object",
+        "properties": {
+          "requestedNewAddress": {
+            "type": "string",
+            "minLength": 56,
+            "maxLength": 56,
+            "example": "GABC...XYZ",
+            "description": "Optional: rotate to a specific Stellar address instead of generating a fresh one."
+          }
+        }
+      },
+      "Sep30ApproveRequest": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "signerPublicKey": {
+            "type": "string",
+            "minLength": 56,
+            "maxLength": 56,
+            "example": "GABC...XYZ",
+            "description": "56-character Stellar public key (G...)"
+          },
+          "token": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Raw token from the /initiate response."
+          },
+          "signature": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Base64 Stellar signature of the token bytes made with the signer's private key."
+          }
+        },
+        "required": ["sessionId", "signerPublicKey", "token", "signature"]
+      },
+      "Sep30KeyList": {
+        "type": "object",
+        "properties": {
+          "keys": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Sep30ManagedKey"
+            }
+          }
+        },
+        "required": ["keys"]
+      },
+      "Sep30ThresholdResponse": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "keyId": {
+            "type": "string"
+          },
+          "newThreshold": {
+            "type": "number"
+          }
+        },
+        "required": ["message", "keyId", "newThreshold"]
+      },
+      "Sep30UpdateThresholdRequest": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "newThreshold": {
+            "type": "integer",
+            "minimum": 1,
+            "example": 2
+          }
+        },
+        "required": ["userId", "newThreshold"]
+      },
+      "Sep30AddSignerRequest": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "signerPublicKey": {
+            "type": "string",
+            "minLength": 56,
+            "maxLength": 56
+          },
+          "signerLabel": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "example": "My phone key"
+          }
+        },
+        "required": ["userId", "signerPublicKey", "signerLabel"]
+      },
+      "Sep30SignerList": {
+        "type": "object",
+        "properties": {
+          "signers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Sep30RecoverySigner"
+            }
+          }
+        },
+        "required": ["signers"]
+      },
+      "Sep30OpenSessionResponse": {
+        "type": "object",
+        "properties": {
+          "session": {
+            "$ref": "#/components/schemas/Sep30RecoverySession"
+          },
+          "instructions": {
+            "type": "string"
+          }
+        },
+        "required": ["session", "instructions"]
+      },
+      "Sep30InitiateResponse": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "Raw hex token to sign with your Stellar private key."
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "sessionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "instructions": {
+            "type": "string"
+          }
+        },
+        "required": ["token", "expiresAt", "sessionId", "instructions"]
+      },
+      "Sep30InitiateRequest": {
+        "type": "object",
+        "properties": {
+          "signerPublicKey": {
+            "type": "string",
+            "minLength": 56,
+            "maxLength": 56
+          },
+          "sessionId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID from /session. Required for multi-signer flows."
+          }
+        },
+        "required": ["signerPublicKey"]
+      },
+      "Sep30ApproveResponse": {
+        "type": "object",
+        "properties": {
+          "approved": {
+            "type": "boolean"
+          },
+          "session": {
+            "$ref": "#/components/schemas/Sep30RecoverySession"
+          },
+          "nextStep": {
+            "type": "string"
+          }
+        },
+        "required": ["approved", "session", "nextStep"]
+      },
+      "Sep30CompleteRequest": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": ["sessionId"]
+      },
+      "Sep30CancelResponse": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "sessionId": {
+            "type": "string"
+          }
+        },
+        "required": ["message", "sessionId"]
+      },
+      "Sep30CancelRequest": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "reason": {
+            "type": "string",
+            "example": "User cancelled"
+          }
+        },
+        "required": ["sessionId"]
+      },
+      "Sep30SessionList": {
+        "type": "object",
+        "properties": {
+          "sessions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Sep30RecoverySession"
+            }
+          }
+        },
+        "required": ["sessions"]
+      },
+      "Sep30AuditLogResponse": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "log": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Sep30AuditLogEntry"
+            }
+          }
+        },
+        "required": ["sessionId", "log"]
+      },
+      "Sep30RotateRequest": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": ["userId"]
+      }
+    },
+    "parameters": {}
+  },
+  "paths": {
+    "/api/auth/register": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Register a new user",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "User registered successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "example": "User registered successfully"
+                    },
+                    "userId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "example": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                    }
+                  },
+                  "required": ["message", "userId"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Authenticate and receive JWT tokens",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Account locked due to too many failed attempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/refresh": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Rotate refresh token and issue new access token",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshTokenRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Token rotation successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "example": "Token rotation successful"
+                    },
+                    "token": {
+                      "type": "string"
+                    },
+                    "refreshToken": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["message", "token", "refreshToken"]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or expired refresh token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/verify": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Verify a JWT token",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenVerifyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Token is valid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "valid": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "payload": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "nullable": true
+                      }
+                    }
+                  },
+                  "required": ["valid", "payload"]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token invalid or expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "tags": ["Auth"],
+        "summary": "Get current authenticated user",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current user info",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "user": {
+                      "type": "object",
+                      "properties": {
+                        "userId": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "email": {
+                          "type": "string"
+                        },
+                        "role": {
+                          "type": "string"
+                        },
+                        "permissions": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "total_deposited": {
+                          "type": "string"
+                        },
+                        "total_withdrawn": {
+                          "type": "string"
+                        },
+                        "current_balance": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "userId",
+                        "email",
+                        "role",
+                        "permissions",
+                        "total_deposited",
+                        "total_withdrawn",
+                        "current_balance"
+                      ]
+                    },
+                    "tokenInfo": {
+                      "type": "object",
+                      "properties": {
+                        "issuedAt": {
+                          "type": "number"
+                        },
+                        "expiresAt": {
+                          "type": "number"
+                        }
+                      }
+                    }
+                  },
+                  "required": ["user", "tokenInfo"]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/transactions/deposit": {
+      "post": {
+        "tags": ["Transactions"],
+        "summary": "Initiate a mobile money deposit to Stellar",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransactionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Deposit initiated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error or limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/transactions/withdraw": {
+      "post": {
+        "tags": ["Transactions"],
+        "summary": "Initiate a Stellar withdrawal to mobile money",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransactionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Withdrawal initiated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error or limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/transactions": {
+      "get": {
+        "tags": ["Transactions"],
+        "summary": "List transactions with pagination",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "exclusiveMinimum": true,
+              "maximum": 100,
+              "example": 20
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "nullable": true,
+              "minimum": 0,
+              "example": 0
+            },
+            "required": false,
+            "name": "offset",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "Cursor for backward pagination"
+            },
+            "required": false,
+            "description": "Cursor for backward pagination",
+            "name": "before",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "Cursor for forward pagination"
+            },
+            "required": false,
+            "description": "Cursor for forward pagination",
+            "name": "after",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list of transactions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/transactions/{id}": {
+      "get": {
+        "tags": ["Transactions"],
+        "summary": "Get a single transaction by ID",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "example": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Transaction details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Transaction not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/transactions/{id}/invoice": {
+      "get": {
+        "tags": ["Transactions"],
+        "summary": "Download a completed transaction invoice as a PDF",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "example": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "Set to 0 to display inline instead of downloading"
+            },
+            "required": false,
+            "description": "Set to 0 to display inline instead of downloading",
+            "name": "download",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "PDF invoice generated",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invoice download only available for completed transactions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Transaction not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/transactions/{id}/cancel": {
+      "post": {
+        "tags": ["Transactions"],
+        "summary": "Cancel a pending transaction",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "example": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Transaction cancelled"
+          },
+          "400": {
+            "description": "Cannot cancel transaction in current state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Transaction not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/transactions/{id}/notes": {
+      "patch": {
+        "tags": ["Transactions"],
+        "summary": "Update transaction notes",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateNotesRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Notes updated"
+          },
+          "404": {
+            "description": "Transaction not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/transactions/{id}/metadata": {
+      "put": {
+        "tags": ["Transactions"],
+        "summary": "Replace transaction metadata",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MetadataRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Metadata replaced"
+          },
+          "404": {
+            "description": "Transaction not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": ["Transactions"],
+        "summary": "Merge transaction metadata keys",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MetadataRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Metadata merged"
+          },
+          "404": {
+            "description": "Transaction not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": ["Transactions"],
+        "summary": "Delete specific metadata keys from a transaction",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteMetadataKeysRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Metadata keys deleted"
+          },
+          "404": {
+            "description": "Transaction not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/sandbox/transactions/{id}/simulate": {
+      "post": {
+        "tags": ["Transactions"],
+        "summary": "Simulate advancing a sandbox transaction status and dispatch webhook",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": ["SUCCESS", "FAILED", "completed", "failed"]
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Transaction simulation completed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "transactionId": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "previousStatus": {
+                      "type": "string"
+                    },
+                    "webhookDispatched": {
+                      "type": "boolean"
+                    },
+                    "event": {
+                      "type": "string"
+                    },
+                    "payload": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "nullable": true
+                      }
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "transactionId",
+                    "status",
+                    "previousStatus",
+                    "webhookDispatched",
+                    "event",
+                    "payload"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - Production API key rejected for sandbox simulation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/vaults": {
+      "post": {
+        "tags": ["Vaults"],
+        "summary": "Create a new savings vault",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateVaultRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Vault created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VaultResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Vault name already exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": ["Vaults"],
+        "summary": "List all vaults for the authenticated user",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"],
+              "example": "false"
+            },
+            "required": false,
+            "name": "includeInactive",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of vaults",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VaultListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/vaults/balance-summary": {
+      "get": {
+        "tags": ["Vaults"],
+        "summary": "Get aggregated balance summary across all vaults",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Balance summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "totalBalance": {
+                          "type": "string",
+                          "example": "1500.00"
+                        },
+                        "vaultCount": {
+                          "type": "integer",
+                          "example": 3
+                        }
+                      },
+                      "required": ["totalBalance", "vaultCount"]
+                    }
+                  },
+                  "required": ["success", "data"]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/vaults/{vaultId}": {
+      "get": {
+        "tags": ["Vaults"],
+        "summary": "Get a vault by ID",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "example": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+            },
+            "required": true,
+            "name": "vaultId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Vault details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VaultResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Vault not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": ["Vaults"],
+        "summary": "Update a vault",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "vaultId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateVaultRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Vault updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VaultResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Vault not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": ["Vaults"],
+        "summary": "Delete a vault",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "vaultId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Vault deleted"
+          },
+          "400": {
+            "description": "Cannot delete vault (non-zero balance)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Vault not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/vaults/{vaultId}/transfer": {
+      "post": {
+        "tags": ["Vaults"],
+        "summary": "Deposit or withdraw funds from a vault",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "vaultId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VaultTransferRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Transfer completed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "vault": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "nullable": true
+                          }
+                        },
+                        "transaction": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "nullable": true
+                          }
+                        }
+                      },
+                      "required": ["vault", "transaction"]
+                    }
+                  },
+                  "required": ["success", "data"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Insufficient funds or validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Vault not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/vaults/{vaultId}/transactions": {
+      "get": {
+        "tags": ["Vaults"],
+        "summary": "List transactions for a vault",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "vaultId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "exclusiveMinimum": true,
+              "maximum": 100,
+              "example": 50
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "nullable": true,
+              "minimum": 0,
+              "example": 0
+            },
+            "required": false,
+            "name": "offset",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Vault transaction history",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "nullable": true
+                        }
+                      }
+                    },
+                    "pagination": {
+                      "$ref": "#/components/schemas/Pagination"
+                    }
+                  },
+                  "required": ["success", "data", "pagination"]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Vault not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/contacts": {
+      "post": {
+        "tags": ["Contacts"],
+        "summary": "Create a new contact",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateContactRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Contact created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Contact"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": ["Contacts"],
+        "summary": "List contacts for the authenticated user",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of contacts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Contact"
+                      }
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/contacts/{id}": {
+      "get": {
+        "tags": ["Contacts"],
+        "summary": "Get a contact by ID",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "example": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Contact details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Contact"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Contact not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": ["Contacts"],
+        "summary": "Update a contact",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateContactRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Contact updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Contact"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Contact not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": ["Contacts"],
+        "summary": "Delete a contact",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Contact deleted"
+          },
+          "404": {
+            "description": "Contact not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/fees/estimate": {
+      "post": {
+        "tags": ["Fees"],
+        "summary": "Estimate fee for a transaction amount",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeeEstimateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Fee breakdown",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeeEstimateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/fees": {
+      "get": {
+        "tags": ["Fees"],
+        "summary": "List all fee configurations (admin)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of fee configurations",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "feePercentage": {
+                            "type": "number"
+                          },
+                          "feeMinimum": {
+                            "type": "number"
+                          },
+                          "feeMaximum": {
+                            "type": "number"
+                          },
+                          "isActive": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "feePercentage",
+                          "feeMinimum",
+                          "feeMaximum",
+                          "isActive"
+                        ]
+                      }
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Fees"],
+        "summary": "Create a fee configuration (admin)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateFeeConfigRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Fee configuration created"
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/fee-strategies/calculate": {
+      "post": {
+        "tags": ["Fee Strategies"],
+        "summary": "Calculate fee using the strategy engine",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeeEstimateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Calculated fee",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeeEstimateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/fee-strategies": {
+      "get": {
+        "tags": ["Fee Strategies"],
+        "summary": "List all fee strategies (admin)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of fee strategies"
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Fee Strategies"],
+        "summary": "Create a fee strategy (admin)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateFeeStrategyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Fee strategy created"
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/fee-strategies/{id}": {
+      "get": {
+        "tags": ["Fee Strategies"],
+        "summary": "Get a fee strategy by ID (admin)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Fee strategy details"
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": ["Fee Strategies"],
+        "summary": "Update a fee strategy (admin)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateFeeStrategyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Fee strategy updated"
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": ["Fee Strategies"],
+        "summary": "Delete a fee strategy (admin)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Fee strategy deleted"
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/fee-strategies/{id}/activate": {
+      "post": {
+        "tags": ["Fee Strategies"],
+        "summary": "Activate a fee strategy (admin)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Strategy activated"
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/fee-strategies/{id}/deactivate": {
+      "post": {
+        "tags": ["Fee Strategies"],
+        "summary": "Deactivate a fee strategy (admin)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Strategy deactivated"
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/kyc/applicants": {
+      "post": {
+        "tags": ["KYC"],
+        "summary": "Create a KYC applicant",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateKYCApplicantRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Applicant created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KYCApplicantResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/kyc/documents": {
+      "post": {
+        "tags": ["KYC"],
+        "summary": "Upload a KYC identity document",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UploadKYCDocumentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Document uploaded"
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/kyc/status": {
+      "get": {
+        "tags": ["KYC"],
+        "summary": "Get KYC status for the authenticated user",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "KYC status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "level": {
+                      "type": "string",
+                      "enum": ["none", "basic", "full"],
+                      "example": "basic"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": ["pending", "approved", "rejected", "review"],
+                      "example": "approved"
+                    }
+                  },
+                  "required": ["level", "status"]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/htlc/lock": {
+      "post": {
+        "tags": ["HTLC"],
+        "summary": "Build a Stellar HTLC lock transaction",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HtlcLockRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Lock transaction XDR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HtlcTransactionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/htlc/claim": {
+      "post": {
+        "tags": ["HTLC"],
+        "summary": "Build a Stellar HTLC claim transaction",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HtlcClaimRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Claim transaction XDR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HtlcTransactionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/htlc/refund": {
+      "post": {
+        "tags": ["HTLC"],
+        "summary": "Build a Stellar HTLC refund transaction",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HtlcRefundRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Refund transaction XDR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HtlcTransactionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/htlc/{contractId}": {
+      "get": {
+        "tags": ["HTLC"],
+        "summary": "Get HTLC contract state",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "contract_abc123"
+            },
+            "required": true,
+            "name": "contractId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "HTLC contract state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "nullable": true
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error fetching state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/prices/latest": {
+      "get": {
+        "tags": ["Prices"],
+        "summary": "Get the latest price snapshot for a currency pair",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": ["USD", "XLM", "XAF"],
+              "example": "XLM"
+            },
+            "required": true,
+            "name": "base",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": ["USD", "XLM", "XAF"],
+              "example": "USD"
+            },
+            "required": true,
+            "name": "quote",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Latest price snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceSnapshot"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No price data for this pair",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/prices/history": {
+      "get": {
+        "tags": ["Prices"],
+        "summary": "Get price history for a currency pair within a date range",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": ["USD", "XLM", "XAF"],
+              "example": "XLM"
+            },
+            "required": true,
+            "name": "base",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": ["USD", "XLM", "XAF"],
+              "example": "USD"
+            },
+            "required": true,
+            "name": "quote",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "example": "2024-04-01T00:00:00.000Z"
+            },
+            "required": true,
+            "name": "from",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "example": "2024-04-25T23:59:59.000Z"
+            },
+            "required": true,
+            "name": "to",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "exclusiveMinimum": true,
+              "maximum": 1000,
+              "example": 100
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Price history",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/prices/at": {
+      "get": {
+        "tags": ["Prices"],
+        "summary": "Get the price nearest to a specific point in time",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": ["USD", "XLM", "XAF"],
+              "example": "XLM"
+            },
+            "required": true,
+            "name": "base",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": ["USD", "XLM", "XAF"],
+              "example": "USD"
+            },
+            "required": true,
+            "name": "quote",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "example": "2024-04-15T12:00:00.000Z"
+            },
+            "required": true,
+            "name": "at",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Nearest price snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceSnapshot"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No price data found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sep38/info": {
+      "get": {
+        "tags": ["SEP-38 Quotes"],
+        "summary": "List supported asset pairs",
+        "description": "Returns all asset pairs that this anchor supports for conversion. Wallets use this to discover which currencies they can convert between.",
+        "responses": {
+          "200": {
+            "description": "Supported asset pairs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sep38InfoResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sep38/prices": {
+      "get": {
+        "tags": ["SEP-38 Quotes"],
+        "summary": "FX discovery — indicative prices across all supported buy assets",
+        "description": "Given a sell_asset and sell_amount, returns the indicative price for every supported buy_asset — Stellar assets (XLM, USDC, EURC) and mobile-money fiat corridors (KES, NGN, GHS, XOF, XAF, ...). Pass buy_asset to narrow the result to a single asset. Use GET /sep38/price for a firm amount breakdown on one specific pair.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "iso4217:KES",
+              "description": "Asset to sell (SEP-38 format)."
+            },
+            "required": true,
+            "description": "Asset to sell (SEP-38 format).",
+            "name": "sell_asset",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "example": "1000",
+              "description": "Amount of sell_asset to price."
+            },
+            "required": true,
+            "description": "Amount of sell_asset to price.",
+            "name": "sell_amount",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "example": "stellar:USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
+              "description": "Optional — narrow the discovery result to a single buy_asset."
+            },
+            "required": false,
+            "description": "Optional — narrow the discovery result to a single buy_asset.",
+            "name": "buy_asset",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Indicative prices across supported buy assets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sep38PricesResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing or invalid sell_asset / sell_amount / buy_asset",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Rate unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sep38/price": {
+      "get": {
+        "tags": ["SEP-38 Quotes"],
+        "summary": "Get indicative price for a single asset pair",
+        "description": "Returns a live, indicative exchange rate for the requested sell_asset → buy_asset pair. Rates include a small market spread and may fluctuate. Use POST /sep38/quote to lock in a firm rate. Use GET /sep38/prices to discover rates across all supported buy assets for a sell_asset.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "iso4217:XAF",
+              "description": "Asset to sell (SEP-38 format)."
+            },
+            "required": true,
+            "description": "Asset to sell (SEP-38 format).",
+            "name": "sell_asset",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "example": "stellar:USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
+              "description": "Asset to buy (SEP-38 format)."
+            },
+            "required": true,
+            "description": "Asset to buy (SEP-38 format).",
+            "name": "buy_asset",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Indicative price",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sep38PriceResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing or unsupported asset pair",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Rate unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sep38/quote": {
+      "post": {
+        "tags": ["SEP-38 Quotes"],
+        "summary": "Create a firm quote (locked in Redis for TTL seconds)",
+        "description": "Generates a firm, time-locked quote for a specific asset conversion. The quote is stored in Redis and guaranteed for the duration of its TTL (default 60 s, max 300 s). Provide either sell_amount (amount you send) or buy_amount (amount you want to receive).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Sep38QuoteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Firm quote created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sep38Quote"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error or unsupported asset pair",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unable to generate quote",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sep38/quote/{id}": {
+      "get": {
+        "tags": ["SEP-38 Quotes"],
+        "summary": "Retrieve a stored quote by ID",
+        "description": "Looks up a previously created quote from Redis. Returns 404 if the quote was never created, and 410 if it has expired.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "example": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Active quote",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sep38Quote"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid quote ID format",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Quote not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Quote has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sep30/keys": {
+      "post": {
+        "tags": ["SEP-30 Key Recovery"],
+        "summary": "Create a new managed Stellar key for a user",
+        "description": "Generates a fresh Stellar keypair, encrypts the secret with AES-256-GCM, and stores it. The plaintext secret never leaves the server.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Sep30CreateKeyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Key created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sep30ManagedKey"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": ["SEP-30 Key Recovery"],
+        "summary": "List managed keys for a user",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "example": "user-uuid-here"
+            },
+            "required": true,
+            "name": "userId",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Managed keys (no secrets)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sep30KeyList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing userId",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sep30/keys/{keyId}/threshold": {
+      "patch": {
+        "tags": ["SEP-30 Key Recovery"],
+        "summary": "Update the M-of-N recovery threshold for a managed key",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "example": "key-uuid-here"
+            },
+            "required": true,
+            "name": "keyId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Sep30UpdateThresholdRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Threshold updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sep30ThresholdResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sep30/keys/{keyId}/signers": {
+      "post": {
+        "tags": ["SEP-30 Key Recovery"],
+        "summary": "Register a recovery signer",
+        "description": "Adds a guardian or device key that can participate in M-of-N recovery.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "example": "key-uuid-here"
+            },
+            "required": true,
+            "name": "keyId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Sep30AddSignerRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Signer registered",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sep30RecoverySigner"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid key or validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": ["SEP-30 Key Recovery"],
+        "summary": "List recovery signers",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "example": "key-uuid-here"
+            },
+            "required": true,
+            "name": "keyId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "userId",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Recovery signers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sep30SignerList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sep30/keys/{keyId}/recovery/session": {
+      "post": {
+        "tags": ["SEP-30 Key Recovery"],
+        "summary": "[Step 0] Open a new multi-sig recovery session",
+        "description": "Creates a recovery session in state `pending`. Each signer calls /initiate and /approve independently, referencing this session ID. Once M-of-N approvals are collected the session advances to `awaiting_completion` and /complete can be called.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "example": "key-uuid-here"
+            },
+            "required": true,
+            "name": "keyId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Sep30OpenSessionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Session opened",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sep30OpenSessionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Active session already exists or validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sep30/keys/{keyId}/recovery/initiate": {
+      "post": {
+        "tags": ["SEP-30 Key Recovery"],
+        "summary": "[Step 1] Issue a challenge token to a recovery signer",
+        "description": "Generates a cryptographically random token. The signer must sign the raw token bytes with their Stellar private key and submit the base64 signature to /approve.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "example": "key-uuid-here"
+            },
+            "required": true,
+            "name": "keyId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Sep30InitiateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Challenge token issued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sep30InitiateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Signer not registered",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sep30/keys/{keyId}/recovery/approve": {
+      "post": {
+        "tags": ["SEP-30 Key Recovery"],
+        "summary": "[Step 2] Submit cryptographic proof — signer approves recovery",
+        "description": "Verifies the Stellar signature over the challenge token. Adds the signer to the `approved_by` list. When `approved_by.length >= required_approvals`, session advances to `awaiting_completion`.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "example": "key-uuid-here"
+            },
+            "required": true,
+            "name": "keyId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Sep30ApproveRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Approval recorded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sep30ApproveResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid signature or session state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Signature verification failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sep30/keys/{keyId}/recovery/complete": {
+      "post": {
+        "tags": ["SEP-30 Key Recovery"],
+        "summary": "[Step 3] Finalise recovery and rotate the key",
+        "description": "Rotates the managed key to a new keypair (or the pre-specified address), marks the old key inactive, and closes the session as `completed`. Only callable when session.state === \"awaiting_completion\".",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "example": "key-uuid-here"
+            },
+            "required": true,
+            "name": "keyId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Sep30CompleteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Key rotated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sep30KeyRotationResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Session not in awaiting_completion state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Session expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sep30/keys/{keyId}/recovery/cancel": {
+      "post": {
+        "tags": ["SEP-30 Key Recovery"],
+        "summary": "Cancel an in-progress recovery session",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "example": "key-uuid-here"
+            },
+            "required": true,
+            "name": "keyId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Sep30CancelRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Session cancelled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sep30CancelResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Session already in terminal state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sep30/keys/{keyId}/recovery/sessions": {
+      "get": {
+        "tags": ["SEP-30 Key Recovery"],
+        "summary": "List all recovery sessions for a managed key",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "example": "key-uuid-here"
+            },
+            "required": true,
+            "name": "keyId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "userId",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "collecting_approvals",
+                "awaiting_completion",
+                "completed",
+                "rejected"
+              ]
+            },
+            "required": false,
+            "name": "state",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Recovery sessions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sep30SessionList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sep30/keys/{keyId}/recovery/sessions/{sessionId}": {
+      "get": {
+        "tags": ["SEP-30 Key Recovery"],
+        "summary": "Get a specific recovery session",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "example": "key-uuid-here"
+            },
+            "required": true,
+            "name": "keyId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "example": "session-uuid-here"
+            },
+            "required": true,
+            "name": "sessionId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Recovery session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sep30RecoverySession"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Session not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sep30/keys/{keyId}/recovery/sessions/{sessionId}/audit": {
+      "get": {
+        "tags": ["SEP-30 Key Recovery"],
+        "summary": "Get the full audit log for a recovery session",
+        "description": "Returns every state transition, signer approval, and metadata event.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "example": "key-uuid-here"
+            },
+            "required": true,
+            "name": "keyId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "example": "session-uuid-here"
+            },
+            "required": true,
+            "name": "sessionId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Audit log",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sep30AuditLogResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sep30/keys/{keyId}/rotate": {
+      "post": {
+        "tags": ["SEP-30 Key Recovery"],
+        "summary": "Planned key rotation (owner-initiated, no recovery required)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "example": "key-uuid-here"
+            },
+            "required": true,
+            "name": "keyId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Sep30RotateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Key rotated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sep30KeyRotationResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

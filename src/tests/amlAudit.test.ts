@@ -172,7 +172,7 @@ describe("AML Audit Dashboard", () => {
       expect(res.json).toHaveBeenCalled();
       const response = (res.json as jest.Mock).mock.calls[0][0];
       expect(response).toHaveProperty("data");
-      expect(response).toHaveProperty("total");
+      expect(response).toHaveProperty("pagination.total");
       expect(response).toHaveProperty("pendingReview");
     });
 

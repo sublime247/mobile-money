@@ -1,0 +1,24 @@
+meta {
+  name: "SEP-38 Indicative Price Query"
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{base_url}}/sep38/prices?sell_asset=iso4217:XAF&buy_asset=stellar:USDC:{{stellar_public_key}}
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+}
+
+tests {
+  test("price returned", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("response is an object", function() {
+    expect(res.getBody()).to.be.an("object");
+  });
+}

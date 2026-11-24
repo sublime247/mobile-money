@@ -184,6 +184,21 @@ describe("syncWorker — processSyncJob", () => {
         job.data.payload,
       );
       expect(mockAccountingService.syncToQuickBooks).not.toHaveBeenCalled();
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.objectContaining({
+          queueName: "accounting-sync",
+          queueSource: "bullmq",
+          syncId: "sync-001",
+          transactionId: "tx-001",
+          platform: "xero",
+          latencyMs: expect.any(Number),
+        }),
+        "Successfully synced transaction to accounting platform",
+      );
+      expect(mockSpan.setTag).toHaveBeenCalledWith(
+        "queue.request_latency_ms",
+        expect.any(Number),
+      );
     });
   });
 
@@ -210,6 +225,17 @@ describe("syncWorker — processSyncJob", () => {
 
       await expect(processSyncJob(job)).rejects.toThrow("QB rate limited");
       expect(job.discard).not.toHaveBeenCalled();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          isTransient: true,
+          attempt: 1,
+          maxAttempts: 5,
+          error: "QB rate limited",
+          latencyMs: expect.any(Number),
+        }),
+        "Transient error during accounting sync - will retry with backoff",
+      );
+      expect(mockSpan.setTag).toHaveBeenCalledWith("error", expect.anything());
     });
 
     it("re-throws NetworkError from xero sync", async () => {
@@ -221,6 +247,16 @@ describe("syncWorker — processSyncJob", () => {
 
       await expect(processSyncJob(job)).rejects.toThrow("Xero network failure");
       expect(job.discard).not.toHaveBeenCalled();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          isTransient: true,
+          attempt: 1,
+          maxAttempts: 5,
+          error: "Xero network failure",
+          latencyMs: expect.any(Number),
+        }),
+        "Transient error during accounting sync - will retry with backoff",
+      );
     });
   });
 
@@ -234,6 +270,17 @@ describe("syncWorker — processSyncJob", () => {
 
       await expect(processSyncJob(job)).rejects.toThrow("invalid payload");
       expect(job.discard).toHaveBeenCalledTimes(1);
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          isPermanent: true,
+          attempt: 1,
+          maxAttempts: 5,
+          error: "invalid payload",
+          latencyMs: expect.any(Number),
+        }),
+        "Permanent error during accounting sync - moving to retry queue",
+      );
+      expect(mockSpan.setTag).toHaveBeenCalledWith("error", expect.anything());
     });
 
     it("does not enqueue retry when attempts remain", async () => {

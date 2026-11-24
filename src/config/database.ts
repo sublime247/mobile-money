@@ -2,9 +2,15 @@ import logger from "../utils/logger";
 import { Pool, QueryConfig, QueryResult, QueryResultRow, PoolClient } from "pg";
 import { auditService } from "../services/auditlogService";
 import { isReadOnlyQuery } from "../utils/readOnlyDetector";
-import { dbReplicaLagSeconds, dbReplicaReadEnabled } from "../utils/metrics";
+import {
+  dbReplicaLagSeconds,
+  dbReplicaReadEnabled,
+  emitPoolMetrics,
+} from "../utils/metrics";
 import { startDeadlockDetector } from "./deadlockDetector";
 import { IS_SANDBOX, SANDBOX_DATABASE_URL, DATABASE_URL, DR_DATABASE_URL } from "./env";
+import { isTransientDatabaseConnectionError } from "./databaseErrors";
+import { getDbRoutingContext } from "../middleware/readReplicaRouting";
 
 
 const isDRMode = (): boolean => !!DR_DATABASE_URL;
@@ -36,7 +42,7 @@ const PRIMARY_POOL_MAX_RETRIES = parseInt(
   10,
 );
 const MAX_CONNECTIONS = parseInt(
-  process.env.DB_MAX_CONNECTIONS || "50",
+  process.env.DB_MAX_CONNECTIONS || "30",
   10,
 );
 const POOL_MAX_USES = parseInt(
@@ -48,17 +54,27 @@ const QUERY_TIMEOUT_MS = parseInt(
   10,
 );
 const STATEMENT_TIMEOUT_MS = parseInt(
-  process.env.DB_STATEMENT_TIMEOUT_MS || "10000",
+  process.env.DB_STATEMENT_TIMEOUT_MS || "15000",
   10,
 );
 const POOL_ALLOW_EXIT_ON_IDLE =
   process.env.DB_POOL_ALLOW_EXIT_ON_IDLE === "true";
 const POOL_IDLE_TIMEOUT_MS = parseInt(
-  process.env.DB_POOL_IDLE_TIMEOUT_MS || "15000",
+  process.env.DB_POOL_IDLE_TIMEOUT_MS || "30000",
   10,
 );
 const POOL_CONNECTION_TIMEOUT_MS = parseInt(
   process.env.DB_POOL_CONNECTION_TIMEOUT_MS || "5000",
+  10,
+);
+// Enables TCP keepalive on pool sockets so broken idle connections (e.g. a
+// NAT/firewall or failover silently dropping the TCP session) are detected
+// and reset at the OS level, instead of surfacing as a hang the next time a
+// worker tries to use that connection (#2377).
+const POOL_KEEP_ALIVE =
+  process.env.DB_POOL_KEEP_ALIVE !== "false";
+const POOL_KEEP_ALIVE_INITIAL_DELAY_MS = parseInt(
+  process.env.DB_POOL_KEEP_ALIVE_INITIAL_DELAY_MS || "10000",
   10,
 );
 const REPLICA_IDLE_TIMEOUT_MS = parseInt(
@@ -122,28 +138,6 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function isTransientDatabaseError(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-
-  const candidate = error as { code?: string; message?: string };
-  const code = candidate.code?.toUpperCase() ?? "";
-  const message = candidate.message?.toLowerCase() ?? "";
-
-  return (
-    code === "ECONNRESET" ||
-    code === "ECONNREFUSED" ||
-    code === "ETIMEDOUT" ||
-    code === "57P01" ||
-    code === "08006" ||
-    code === "40P01" ||
-    message.includes("connection terminated") ||
-    message.includes("terminated unexpectedly") ||
-    message.includes("connection lost") ||
-    message.includes("disconnect") ||
-    message.includes("timeout") ||
-    message.includes("socket")
-  );
-}
 
 /**
  * Sanitizes a SQL query by removing sensitive data patterns
@@ -284,88 +278,99 @@ class SlowQueryPool extends Pool {
  * continue operating once the database becomes available again.
  */
 let primaryPoolQuery: (...args: any[]) => Promise<any>;
-let primaryPoolConnect: () => Promise<PoolClient>;
 let isPrimaryPoolReconnecting = false;
 let primaryPoolReconnectAttempt = 0;
 let primaryPoolReconnectPromise: Promise<void> | null = null;
+
+/**
+ * Shared implementation behind `pool.query`: slow-query logging, PII access
+ * auditing, transient-error retry on the primary and, when `allowReplica` is
+ * set, automatic replica routing for read-only statements issued while
+ * handling a GET/HEAD request (#2290).
+ */
+async function runQuery(args: any[], allowReplica: boolean): Promise<any> {
+  const queryConfig = args[0];
+  const values = args[1];
+  const startTime = process.hrtime.bigint();
+  const queryString =
+    typeof queryConfig === "string" ? queryConfig : (queryConfig?.text ?? "");
+  const queryParams =
+    typeof queryConfig === "string" ? values : queryConfig?.values;
+
+  try {
+    const replicaResult =
+      allowReplica && shouldRouteToReplica(queryString, args)
+        ? await queryReplica(args)
+        : null;
+    const result =
+      replicaResult ??
+      (await executeWithRetry(() => primaryPoolQuery(...args), "query"));
+    const endTime = process.hrtime.bigint();
+    const durationMs = Number(endTime - startTime) / 1e6;
+    if (durationMs > SLOW_QUERY_THRESHOLD_MS) {
+      logSlowQuery(queryString, durationMs, queryParams);
+    }
+
+    if (
+      queryString.toUpperCase().includes("FROM USERS") ||
+      queryString.toUpperCase().includes("UPDATE USERS")
+    ) {
+      const isSelect = queryString.toUpperCase().startsWith("SELECT");
+      const isUpdate = queryString.toUpperCase().startsWith("UPDATE");
+
+      if (isSelect || isUpdate) {
+        let targetId = "unknown";
+        if (queryParams && queryParams.length > 0) {
+          targetId = queryParams[queryParams.length - 1];
+        }
+
+        setImmediate(() => {
+          auditService
+            .logPIIAccess({
+              adminId: "system-admin",
+              targetId: String(targetId),
+              resource: "users",
+              metadata: {
+                query: sanitizeQuery(queryString),
+                isUpdate,
+              },
+            })
+            .catch((err) =>
+              logger.error("[PII Audit Interceptor] Failed:", err),
+            );
+        });
+      }
+    }
+
+    return result;
+  } catch (error) {
+    const endTime = process.hrtime.bigint();
+    const durationMs = Number(endTime - startTime) / 1e6;
+    if (durationMs > SLOW_QUERY_THRESHOLD_MS) {
+      logSlowQuery(queryString, durationMs, queryParams);
+    }
+    throw error;
+  }
+}
 
 function attachPrimaryPoolRecovery(poolInstance: Pool): void {
   const originalQuery = poolInstance.query.bind(poolInstance);
   const originalConnect = poolInstance.connect.bind(poolInstance);
 
   primaryPoolQuery = originalQuery;
-  primaryPoolConnect = originalConnect;
 
   const wrappedPool = poolInstance as Pool & {
     query: (...args: any[]) => Promise<any>;
-    connect: () => Promise<PoolClient>;
   };
 
-  wrappedPool.query = async (...args: any[]): Promise<any> => {
-    const queryConfig = args[0];
-    const values = args[1];
-    const startTime = process.hrtime.bigint();
-    const queryString =
-      typeof queryConfig === "string" ? queryConfig : (queryConfig?.text ?? "");
-    const queryParams =
-      typeof queryConfig === "string" ? values : queryConfig?.values;
+  wrappedPool.query = (...args: any[]): Promise<any> => runQuery(args, true);
 
-    try {
-      const result = await executeWithRetry(
-        () => primaryPoolQuery(...args),
-        "query",
-      );
-      const endTime = process.hrtime.bigint();
-      const durationMs = Number(endTime - startTime) / 1e6;
-      if (durationMs > SLOW_QUERY_THRESHOLD_MS) {
-        logSlowQuery(queryString, durationMs, queryParams);
-      }
-
-      if (
-        queryString.toUpperCase().includes("FROM USERS") ||
-        queryString.toUpperCase().includes("UPDATE USERS")
-      ) {
-        const isSelect = queryString.toUpperCase().startsWith("SELECT");
-        const isUpdate = queryString.toUpperCase().startsWith("UPDATE");
-
-        if (isSelect || isUpdate) {
-          let targetId = "unknown";
-          if (queryParams && queryParams.length > 0) {
-            targetId = queryParams[queryParams.length - 1];
-          }
-
-          setImmediate(() => {
-            auditService
-              .logPIIAccess({
-                adminId: "system-admin",
-                targetId: String(targetId),
-                resource: "users",
-                metadata: {
-                  query: sanitizeQuery(queryString),
-                  isUpdate,
-                },
-              })
-              .catch((err) =>
-                logger.error("[PII Audit Interceptor] Failed:", err),
-              );
-          });
-        }
-      }
-
-      return result;
-    } catch (error) {
-      const endTime = process.hrtime.bigint();
-      const durationMs = Number(endTime - startTime) / 1e6;
-      if (durationMs > SLOW_QUERY_THRESHOLD_MS) {
-        logSlowQuery(queryString, durationMs, queryParams);
-      }
-      throw error;
-    }
-  };
-
-  wrappedPool.connect = async (): Promise<PoolClient> => {
-    return executeWithRetry(() => primaryPoolConnect(), "connect");
-  };
+  // pg-pool's own query implementation checks out clients with a callback.
+  // Leave that path to pg so query-level recovery can retry it as a whole.
+  wrappedPool.connect = ((callback?: Parameters<Pool["connect"]>[0]) => {
+    if (callback) return originalConnect(callback);
+    return executeWithRetry(() => originalConnect(), "connect");
+  }) as Pool["connect"];
 }
 
 async function verifyPrimaryPoolHealth(): Promise<void> {
@@ -395,7 +400,10 @@ async function executeWithRetry<T>(
     } catch (error) {
       lastError = error;
 
-      if (!isTransientDatabaseError(error) || attempt === PRIMARY_POOL_MAX_RETRIES - 1) {
+      if (
+        !isTransientDatabaseConnectionError(error) ||
+        attempt === PRIMARY_POOL_MAX_RETRIES - 1
+      ) {
         throw error;
       }
 
@@ -439,23 +447,271 @@ function schedulePrimaryPoolReconnect(error: unknown): void {
   });
 }
 
+/**
+ * Error listener for PostgreSQL connection pools.
+ * Gracefully handles client disconnects, server restarts (e.g. ECONNRESET, 57P01),
+ * drains the dead connection from the pool, and schedules reconnection without
+ * crashing the process.
+ */
+export function handlePoolError(
+  err: Error & { code?: string },
+  client?: PoolClient,
+): void {
+  const isTransient = isTransientDatabaseConnectionError(err);
+  const errorCode = err.code || "UNKNOWN";
+
+  logger.warn(
+    `[Database] Connection pool client error [code=${errorCode}]: ${err.message}`,
+    {
+      errorCode,
+      isTransient,
+      errorName: err.name,
+      message: err.message,
+    },
+  );
+
+  emitPoolMetrics(pool, "primary");
+
+  // If a specific client errored, drain it from the pool so pg discards it.
+  if (client && typeof client.release === "function") {
+    try {
+      client.release(err);
+    } catch (releaseErr) {
+      logger.debug(
+        "[Database] Error releasing failed client from pool:",
+        releaseErr,
+      );
+    }
+  }
+
+  if (isTransient) {
+    schedulePrimaryPoolReconnect(err);
+  }
+}
+
+const DB_HEALTH_CHECK_TIMEOUT_MS = parseInt(
+  process.env.DB_HEALTH_CHECK_TIMEOUT_MS || "2000",
+  10,
+);
+const DB_HEALTH_CHECK_INTERVAL_MS = parseInt(
+  process.env.DB_HEALTH_CHECK_INTERVAL_MS || "15000",
+  10,
+);
+
+let poolHealthCheckTimer: NodeJS.Timeout | null = null;
+
+/**
+ * Performs a lightweight health check ping (SELECT 1) against the database pool.
+ * Emits active, idle, and waiting connection metrics, and triggers automatic
+ * pool recovery if the ping encounters a disconnect or error.
+ *
+ * @param targetPool - Pool instance to ping (defaults to primary pool)
+ * @returns true if the ping succeeded, false if unhealthy/disconnected
+ */
+export async function pingDatabasePool(
+  targetPool: Pool = pool,
+): Promise<boolean> {
+  if (!targetPool) {
+    return false;
+  }
+
+  emitPoolMetrics(targetPool, "primary");
+
+  let client: PoolClient | null = null;
+  let connectPromise: Promise<PoolClient> | null = null;
+  try {
+    connectPromise = targetPool.connect();
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(
+        () => reject(new Error("Database pool ping connection timeout")),
+        DB_HEALTH_CHECK_TIMEOUT_MS,
+      );
+    });
+
+    client = await Promise.race([connectPromise, timeoutPromise]);
+
+    await client.query("SELECT 1");
+    emitPoolMetrics(targetPool, "primary");
+    return true;
+  } catch (error) {
+    logger.warn("[Database] Pool health check ping failed:", error);
+    if (!client && connectPromise) {
+      void connectPromise
+        .then((lateClient) => {
+          try {
+            lateClient.release(error as Error);
+          } catch {
+            // Ignore late-connect release errors
+          }
+        })
+        .catch(() => {
+          // Connection already failed; nothing to drain
+        });
+    }
+    if (isTransientDatabaseConnectionError(error)) {
+      schedulePrimaryPoolReconnect(error);
+    }
+    return false;
+  } finally {
+    if (client) {
+      try {
+        client.release();
+      } catch {
+        // Ignore release errors during ping teardown
+      }
+    }
+    emitPoolMetrics(targetPool, "primary");
+  }
+}
+
+/**
+ * Starts background pool health check ping loop.
+ */
+export function startPoolHealthCheck(
+  intervalMs = DB_HEALTH_CHECK_INTERVAL_MS,
+): void {
+  if (poolHealthCheckTimer) {
+    clearInterval(poolHealthCheckTimer);
+  }
+  poolHealthCheckTimer = setInterval(() => {
+    void pingDatabasePool();
+  }, intervalMs);
+  if (typeof poolHealthCheckTimer.unref === "function") {
+    poolHealthCheckTimer.unref();
+  }
+}
+
+/**
+ * Stops background pool health check ping loop.
+ */
+export function stopPoolHealthCheck(): void {
+  if (poolHealthCheckTimer) {
+    clearInterval(poolHealthCheckTimer);
+    poolHealthCheckTimer = null;
+  }
+}
+
+export const DB_POOL_WAIT_ALERT_MS = parseInt(
+  process.env.DB_POOL_WAIT_ALERT_MS || "2000",
+  10,
+);
+
+const poolWaitStartedAt = new WeakMap<object, number>();
+const instrumentedPools = new WeakSet<object>();
+
+export const attachPoolSaturationListeners = (
+  poolInstance: Pool,
+  poolName = "primary",
+) => {
+  if (instrumentedPools.has(poolInstance as object)) return;
+  instrumentedPools.add(poolInstance as object);
+
+  const emit = () => emitPoolMetrics(poolInstance, poolName);
+  const pendingStarts: number[] = [];
+
+  const onAcquire = (client: unknown) => {
+    if (client && typeof client === "object") {
+      const started =
+        poolWaitStartedAt.get(client as object) ?? pendingStarts.shift();
+      if (started !== undefined) {
+        poolWaitStartedAt.delete(client as object);
+        const waitMs = Date.now() - started;
+        if (waitMs > DB_POOL_WAIT_ALERT_MS) {
+          const total = (poolInstance as any).totalCount ?? 0;
+          const idle = (poolInstance as any).idleCount ?? 0;
+          logger.warn(
+            {
+              pool: poolName,
+              waitMs,
+              thresholdMs: DB_POOL_WAIT_ALERT_MS,
+              waiting: (poolInstance as any).waitingCount ?? 0,
+              active: Math.max(0, total - idle),
+            },
+            "db_pool_wait_exceeded",
+          );
+        }
+      }
+    }
+    emit();
+  };
+
+  poolInstance.on("acquire", onAcquire);
+  poolInstance.on("release", emit);
+  poolInstance.on("connect", emit);
+  poolInstance.on("remove", emit);
+  poolInstance.on("error", emit);
+
+  const originalConnect = poolInstance.connect.bind(poolInstance) as any;
+  (poolInstance as any).connect = (...args: any[]) => {
+    const start = Date.now();
+    pendingStarts.push(start);
+    const markClient = (client: any) => {
+      if (client && typeof client === "object") poolWaitStartedAt.set(client, start);
+      return client;
+    };
+    if (args.length > 0 && typeof args[0] === "function") {
+      const cb = args[0];
+      args[0] = (err: unknown, client: any, release: any) => {
+        if (err) {
+          const idx = pendingStarts.indexOf(start);
+          if (idx >= 0) pendingStarts.splice(idx, 1);
+        } else {
+          markClient(client);
+        }
+        cb(err, client, release);
+      };
+      return originalConnect(...args);
+    }
+    const maybePromise = originalConnect(...args);
+    if (maybePromise && typeof maybePromise.then === "function") {
+      return maybePromise.then(
+        (client: any) => markClient(client),
+        (err: unknown) => {
+          const idx = pendingStarts.indexOf(start);
+          if (idx >= 0) pendingStarts.splice(idx, 1);
+          throw err;
+        },
+      );
+    }
+    return maybePromise;
+  };
+};
+
 async function reconnectPrimaryPool(): Promise<void> {
   try {
     const previousPool = pool;
     const nextPool = new Pool(getPoolOptions());
 
-    nextPool.on("error", (err) => {
-      logger.error("[Database] Primary pool error", err);
-      schedulePrimaryPoolReconnect(err);
+    nextPool.on("error", (err, client) => {
+      handlePoolError(err, client);
     });
 
+    attachPoolSaturationListeners(nextPool, "primary");
     attachPrimaryPoolRecovery(nextPool);
-    await verifyPrimaryPoolHealth();
+    const isHealthy = await pingDatabasePool(nextPool);
+    if (!isHealthy) {
+      nextPool.end().catch((drainErr) => {
+        logger.debug(
+          "[Database] Ignored error while ending failed replacement pool:",
+          drainErr,
+        );
+      });
+      throw new Error("New pool instance health check failed during reconnect");
+    }
 
     pool = nextPool;
-    await previousPool.end();
     primaryPoolReconnectAttempt = 0;
     logger.info("[Database] Primary pool reconnected successfully");
+
+    // Automatically drain dead connections from previous pool
+    if (previousPool && typeof previousPool.end === "function") {
+      previousPool.end().catch((drainErr) => {
+        logger.debug(
+          "[Database] Ignored error while draining previous pool:",
+          drainErr,
+        );
+      });
+    }
   } catch (error) {
     logger.error("[Database] Primary pool reconnect failed", error);
     setTimeout(() => {
@@ -475,6 +731,8 @@ function getPoolOptions(overrides: Partial<{
   allowExitOnIdle: boolean;
   query_timeout: number;
   statement_timeout: number;
+  keepAlive: boolean;
+  keepAliveInitialDelayMillis: number;
 }> = {}): object {
   return {
     connectionString: IS_SANDBOX
@@ -489,6 +747,10 @@ function getPoolOptions(overrides: Partial<{
     allowExitOnIdle: overrides.allowExitOnIdle ?? POOL_ALLOW_EXIT_ON_IDLE,
     query_timeout: overrides.query_timeout ?? QUERY_TIMEOUT_MS,
     statement_timeout: overrides.statement_timeout ?? STATEMENT_TIMEOUT_MS,
+    keepAlive: overrides.keepAlive ?? POOL_KEEP_ALIVE,
+    keepAliveInitialDelayMillis:
+      overrides.keepAliveInitialDelayMillis ??
+      POOL_KEEP_ALIVE_INITIAL_DELAY_MS,
   };
 }
 
@@ -499,11 +761,11 @@ function startPoolMonitor(monitoredPool?: Pool): void {
 function createPrimaryPool(): Pool {
   const newPool = new Pool(getPoolOptions());
 
-  newPool.on("error", (err) => {
-    logger.error("[Database] Primary pool error", err);
-    schedulePrimaryPoolReconnect(err);
+  newPool.on("error", (err, client) => {
+    handlePoolError(err, client);
   });
 
+  attachPoolSaturationListeners(newPool, "primary");
   currentPoolMax = POOL_DEFAULT_MAX;
   attachPrimaryPoolRecovery(newPool);
 
@@ -523,13 +785,21 @@ export async function getPoolClient() {
 
 /**
  * Read replica connection pool – handles SELECT queries to take load off the
- * primary. If READ_REPLICA_URL is not configured, falls back to the primary.
+ * primary (e.g. GET /api/v1/reports/* and dashboard analytics, #2378). Falls
+ * back to the primary when no replica is configured or reachable.
  *
- * Multiple replica URLs can be provided as a comma-separated list in
- * READ_REPLICA_URL. The pool load-balances across all replicas via round-robin.
+ * Multiple replica URLs can be provided as a comma-separated list in either
+ * DATABASE_READ_URL (preferred name, #2378) or the legacy READ_REPLICA_URL.
+ * DATABASE_READ_URL takes precedence when both are set. The pool
+ * load-balances across all replicas via round-robin.
  */
-const replicaUrls: string[] = process.env.READ_REPLICA_URL
-  ? process.env.READ_REPLICA_URL.split(",").map((url) => url.trim())
+const replicaUrls: string[] = (
+  process.env.DATABASE_READ_URL || process.env.READ_REPLICA_URL
+)
+  ? (process.env.DATABASE_READ_URL || process.env.READ_REPLICA_URL || "")
+      .split(",")
+      .map((url) => url.trim())
+      .filter(Boolean)
   : [];
 
 const REPLICA_SYNC_LAG_THRESHOLD_SECONDS = (() => {
@@ -538,6 +808,12 @@ const REPLICA_SYNC_LAG_THRESHOLD_SECONDS = (() => {
   );
   return Number.isFinite(threshold) ? threshold : 5;
 })();
+/**
+ * Route read-only `pool.query` calls made while serving GET/HEAD requests to
+ * a replica (#2290). Set DB_REPLICA_ROUTE_GET=false to keep them on primary.
+ * Has no effect unless READ_REPLICA_URL is configured.
+ */
+const REPLICA_ROUTE_GET_REQUESTS = process.env.DB_REPLICA_ROUTE_GET !== "false";
 const REPLICA_LAG_MONITOR_INTERVAL_MS = (() => {
   const interval = parseInt(
     process.env.REPLICA_LAG_MONITOR_INTERVAL_MS || "10000",
@@ -551,13 +827,29 @@ type ReplicaStatus = {
   enabled: boolean;
   healthy: boolean;
   lagSeconds: number | null;
+  /** pg_last_wal_replay_lsn() from the last successful probe (#2484). */
+  walReplayLsn: string | null;
 };
 
-const replicaStatuses: ReplicaStatus[] = replicaUrls.map((url) => ({
+/** Replica URLs with any password masked, for logs, metrics and APIs. */
+function redactConnectionString(url: string): string {
+  try {
+    const parsed = new URL(url);
+    if (parsed.password) parsed.password = "***";
+    return parsed.toString();
+  } catch {
+    return "<unparseable replica url>";
+  }
+}
+
+const replicaLabels: string[] = replicaUrls.map(redactConnectionString);
+
+const replicaStatuses: ReplicaStatus[] = replicaLabels.map((url) => ({
   url,
   enabled: true,
   healthy: true,
   lagSeconds: null,
+  walReplayLsn: null,
 }));
 
 // Build an individual Pool for each replica URL
@@ -576,8 +868,20 @@ const replicaPools: Pool[] = replicaUrls.map(
     }),
 );
 
+// An idle replica client dying (failover, restart, network blip) emits
+// `error` on its pool; without a listener that would crash the process.
+replicaPools.forEach((replicaPool, idx) => {
+  replicaPool.on("error", (err) => {
+    logger.warn(
+      `[Database] Replica pool client error (${replicaLabels[idx]}): ${err.message}`,
+    );
+    markReplicaUnavailable(idx);
+  });
+});
+
 // Track which replica to use next for round-robin load balancing
 let replicaIndex = 0;
+let replicaLagMonitorTimer: NodeJS.Timeout | null = null;
 
 function getActiveReplicaIndices(): number[] {
   return replicaStatuses
@@ -587,67 +891,167 @@ function getActiveReplicaIndices(): number[] {
 }
 
 /**
- * Return the next replica pool in round-robin order.
- * Returns null if no replica pools are configured.
+ * Return the index of the next healthy replica in round-robin order, or null
+ * when none is configured or all are disabled.
  */
-function getNextReplicaPool(): Pool | null {
+function getNextReplicaIndex(): number | null {
   const activeIndices = getActiveReplicaIndices();
   if (activeIndices.length === 0) return null;
   const selectedIndex = activeIndices[replicaIndex % activeIndices.length];
   replicaIndex += 1;
-  return replicaPools[selectedIndex];
+  return selectedIndex;
+}
+
+/**
+ * Take a replica out of rotation immediately, so later reads don't each pay
+ * a connection timeout. The lag monitor re-enables it once it answers again.
+ */
+function markReplicaUnavailable(idx: number): void {
+  const status = replicaStatuses[idx];
+  if (!status) return;
+  replicaStatuses[idx] = { ...status, healthy: false, enabled: false };
+  dbReplicaReadEnabled.labels(status.url).set(0);
+}
+
+/**
+ * Run a query on the next healthy replica. Resolves null (never rejects) when
+ * no replica is usable or the replica fails, so the caller can fall back to
+ * the primary. Connection-level failures also evict the replica; statement
+ * errors (e.g. a function that writes, rejected by a read-only standby) don't,
+ * since the replica itself is fine.
+ */
+async function queryReplica(args: any[]): Promise<any | null> {
+  const idx = getNextReplicaIndex();
+  if (idx === null) return null;
+
+  let client: PoolClient | null = null;
+  try {
+    client = await replicaPools[idx].connect();
+    const result = await client.query(...(args as [any, any]));
+    client.release();
+    return result;
+  } catch (err) {
+    const connectionLost = isTransientDatabaseConnectionError(err);
+    // Destroy a broken client instead of handing it back to the pool.
+    client?.release(connectionLost ? (err as Error) : undefined);
+    if (connectionLost || !client) markReplicaUnavailable(idx);
+    logger.warn(
+      `[Database] Replica query failed on ${replicaLabels[idx]}, falling back to primary`,
+      err,
+    );
+    return null;
+  }
+}
+
+/**
+ * Acquire a dedicated client for a read-only transaction (#2483).
+ *
+ * Prefers a healthy replica and falls back to the primary when none is
+ * configured or reachable. The caller owns the client and must always release
+ * it; `withReadOnlyTransaction()` does that in a `finally` block.
+ */
+export async function getReadClient(): Promise<PoolClient> {
+  const idx = getNextReplicaIndex();
+  if (idx !== null) {
+    try {
+      return await replicaPools[idx].connect();
+    } catch (err) {
+      markReplicaUnavailable(idx);
+      logger.warn(
+        `[Database] Replica client acquisition failed for ${replicaLabels[idx]}; using primary for read-only transaction`,
+        err,
+      );
+    }
+  }
+  return pool.connect();
+}
+
+/** Whether a `pool.query` call should be served by a replica. */
+function shouldRouteToReplica(queryString: string, args: any[]): boolean {
+  if (!REPLICA_ROUTE_GET_REQUESTS || replicaPools.length === 0) return false;
+  // Callback-style calls expect the primary pool's callback semantics.
+  if (typeof args[args.length - 1] === "function") return false;
+  if (!getDbRoutingContext()?.useReplicaPool) return false;
+  return isReadOnlyQuery(queryString);
 }
 
 async function refreshReplicaStatus(idx: number): Promise<void> {
-  const url = replicaUrls[idx];
+  const url = replicaLabels[idx];
   let healthy = false;
   let lagSeconds: number | null = null;
+  let walReplayLsn: string | null = null;
   let client: PoolClient | null = null;
 
   try {
     client = await replicaPools[idx].connect();
+    // #2484: the existing lag probe now also reports the last replayed LSN,
+    // so health endpoints can expose both time- and position-based progress
+    // without opening a second connection per request.
     const query = `
-      SELECT CASE
-        WHEN pg_is_in_recovery() THEN EXTRACT(EPOCH FROM (now() - pg_last_xact_replay_timestamp()))
-        ELSE 0
-      END AS lag_seconds
+      SELECT
+        CASE
+          WHEN pg_is_in_recovery()
+          THEN EXTRACT(EPOCH FROM (now() - pg_last_xact_replay_timestamp()))
+          ELSE 0
+        END AS lag_seconds,
+        CASE
+          WHEN pg_is_in_recovery() THEN pg_last_wal_replay_lsn()::text
+        END AS wal_replay_lsn
     `;
-    const result = await client.query<{ lag_seconds: number | null }>(query);
+    const result = await client.query<{
+      lag_seconds: number | null;
+      wal_replay_lsn: string | null;
+    }>(query);
     lagSeconds = result.rows?.[0]?.lag_seconds ?? null;
+    walReplayLsn = result.rows?.[0]?.wal_replay_lsn ?? null;
     healthy = true;
   } catch (error) {
     healthy = false;
     lagSeconds = null;
-    console.warn(`Replica health check failed for ${url}:`, error);
+    walReplayLsn = null;
+    logger.warn(`[Database] Replica health check failed for ${url}:`, error);
   } finally {
-    client?.release();
+    client?.release(healthy ? undefined : true);
   }
 
   const enabled =
     healthy &&
     lagSeconds !== null &&
     lagSeconds <= REPLICA_SYNC_LAG_THRESHOLD_SECONDS;
-  replicaStatuses[idx] = { url, enabled, healthy, lagSeconds };
+  replicaStatuses[idx] = { url, enabled, healthy, lagSeconds, walReplayLsn };
 
   dbReplicaLagSeconds.labels(url).set(lagSeconds ?? 0);
   dbReplicaReadEnabled.labels(url).set(enabled ? 1 : 0);
+  emitPoolMetrics(replicaPools[idx], `replica_${idx}`);
 }
 
 async function refreshAllReplicaStatuses(): Promise<void> {
   await Promise.all(replicaUrls.map((_, idx) => refreshReplicaStatus(idx)));
 }
 
-function startReplicaLagMonitor(): void {
+export function startReplicaLagMonitor(
+  intervalMs = REPLICA_LAG_MONITOR_INTERVAL_MS,
+): void {
   if (replicaUrls.length === 0) return;
+  stopReplicaLagMonitor();
   void refreshAllReplicaStatuses();
-  setInterval(() => {
+  replicaLagMonitorTimer = setInterval(() => {
     void refreshAllReplicaStatuses();
-  }, REPLICA_LAG_MONITOR_INTERVAL_MS);
+  }, intervalMs);
+  replicaLagMonitorTimer.unref?.();
+}
+
+export function stopReplicaLagMonitor(): void {
+  if (replicaLagMonitorTimer) {
+    clearInterval(replicaLagMonitorTimer);
+    replicaLagMonitorTimer = null;
+  }
 }
 
 if (process.env.NODE_ENV !== "test") {
   startReplicaLagMonitor();
   startDeadlockDetector(pool);
+  startPoolHealthCheck();
 }
 
 /**
@@ -661,25 +1065,49 @@ if (process.env.NODE_ENV !== "test") {
 export async function queryRead<T extends import("pg").QueryResultRow = any>(
   text: string,
   params?: unknown[],
+  signal?: AbortSignal,
 ): Promise<import("pg").QueryResult<T>> {
-  const replicaPool = getNextReplicaPool();
+  const query = async (): Promise<import("pg").QueryResult<T>> => {
+    const replicaResult = await queryReplica([text, params]);
+    if (replicaResult) return replicaResult;
 
-  if (replicaPool) {
-    let client: PoolClient | null = null;
-    try {
-      client = await replicaPool.connect();
-      const result = await client.query<T>(text, params);
-      return result;
-    } catch (err) {
-      // Log replica failure and fall back to primary
-      console.warn("Read replica query failed, falling back to primary:", err);
-    } finally {
-      client?.release();
-    }
+    // Fall back: use primary pool (which goes through PgBouncer)
+    return runQuery([text, params], false);
+  };
+
+  return signal ? raceWithAbortSignal(query(), signal) : query();
+}
+
+/**
+ * Races `promise` against `signal` aborting. Does not cancel the underlying
+ * work server-side (the `pg` pool has no cheap way to do that mid-flight);
+ * this exists so a caller — most importantly `requestTimeout` middleware —
+ * stops waiting on the query the instant the request's deadline passes,
+ * rather than discovering the abort only after the query eventually
+ * resolves on its own.
+ */
+function raceWithAbortSignal<T>(
+  promise: Promise<T>,
+  signal: AbortSignal,
+): Promise<T> {
+  if (signal.aborted) {
+    return Promise.reject(new Error("Query aborted before it started"));
   }
 
-  // Fall back: use primary pool (which goes through PgBouncer)
-  return pool.query<T>(text, params);
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(new Error("Query aborted: request timed out"));
+    signal.addEventListener("abort", onAbort, { once: true });
+
+    promise
+      .then((result) => {
+        signal.removeEventListener("abort", onAbort);
+        resolve(result);
+      })
+      .catch((err) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(err);
+      });
+  });
 }
 
 /**
@@ -707,54 +1135,45 @@ export async function queryTransactionLogRead<T extends import("pg").QueryResult
 export async function queryWrite<T extends import("pg").QueryResultRow = any>(
   text: string,
   params?: unknown[],
+  signal?: AbortSignal,
 ): Promise<import("pg").QueryResult<T>> {
-  return pool.query<T>(text, params);
+  // Explicitly primary: bypasses GET-request replica routing, so callers can
+  // use it for reads that must see the latest committed data.
+  const query = () => runQuery([text, params], false);
+  return signal ? raceWithAbortSignal(query(), signal) : query();
+}
+
+export interface ReplicaPoolStatus {
+  url: string;
+  healthy: boolean;
+  enabled: boolean;
+  lagSeconds: number | null;
+  walReplayLsn: string | null;
+  totalConnections: number;
+  idleConnections: number;
+  waitingClients: number;
 }
 
 /**
- * Health check for all replica pools.
- * Returns an array of status objects – useful for monitoring endpoints.
+ * Snapshot of every replica as last observed by the lag monitor (or by a
+ * failed query), plus live pool counters. Cheap: no database round trip.
  */
-export async function checkReplicaHealth(): Promise<
-  {
-    url: string;
-    healthy: boolean;
-    enabled: boolean;
-    lagSeconds: number | null;
-  }[]
-> {
-  return Promise.all(
-    replicaUrls.map(async (url, idx) => {
-      let client: PoolClient | null = null;
-      let healthy = false;
-      let lagSeconds: number | null = null;
+export function getReplicaPoolStatus(): ReplicaPoolStatus[] {
+  return replicaStatuses.map((status, idx) => ({
+    ...status,
+    totalConnections: replicaPools[idx].totalCount,
+    idleConnections: replicaPools[idx].idleCount,
+    waitingClients: replicaPools[idx].waitingCount,
+  }));
+}
 
-      try {
-        client = await replicaPools[idx].connect();
-        const query = `
-          SELECT CASE
-            WHEN pg_is_in_recovery() THEN EXTRACT(EPOCH FROM (now() - pg_last_xact_replay_timestamp()))
-            ELSE 0
-          END AS lag_seconds
-        `;
-        const result = await client.query<{ lag_seconds: number | null }>(
-          query,
-        );
-        lagSeconds = result.rows?.[0]?.lag_seconds ?? null;
-        healthy = true;
-      } catch {
-        healthy = false;
-      } finally {
-        client?.release();
-      }
-
-      const enabled =
-        healthy &&
-        lagSeconds !== null &&
-        lagSeconds <= REPLICA_SYNC_LAG_THRESHOLD_SECONDS;
-      return { url, healthy, enabled, lagSeconds };
-    }),
-  );
+/**
+ * Health check for all replica pools: probes each replica now, updates the
+ * routing state, and returns the result – useful for monitoring endpoints.
+ */
+export async function checkReplicaHealth(): Promise<ReplicaPoolStatus[]> {
+  await refreshAllReplicaStatuses();
+  return getReplicaPoolStatus();
 }
 
 /**
@@ -795,20 +1214,37 @@ export async function getPgBouncerStats(): Promise<{
         "postgresql://user:password@localhost:6432/pgbouncer",
     });
 
-    const result = await pgbouncerPool.query(
-      "SELECT sum(cl_active) as active, sum(cl_idle) as idle, sum(sv_active) as sv_active, sum(sv_idle) as sv_idle FROM pgbouncer.client_lookup;",
-    );
+    // PgBouncer's admin console only understands its own SHOW commands, not
+    // arbitrary SQL (there is no queryable `pgbouncer.client_lookup` table —
+    // querying it fails with "invalid command ... use SHOW HELP"). SHOW
+    // CLIENTS lists every client-facing connection (state: active/idle);
+    // SHOW SERVERS lists every connection PgBouncer holds to the real
+    // Postgres server on the other side of the pool.
+    const [clients, servers] = await Promise.all([
+      pgbouncerPool.query("SHOW CLIENTS;"),
+      pgbouncerPool.query("SHOW SERVERS;"),
+    ]);
 
     await pgbouncerPool.end();
 
-    const row = result.rows[0] || {};
+    const clientActive = clients.rows.filter(
+      (r: { state?: string }) => r.state === "active",
+    ).length;
+    const clientIdle = clients.rows.filter(
+      (r: { state?: string }) => r.state === "idle",
+    ).length;
+    const serverActive = servers.rows.filter(
+      (r: { state?: string }) => r.state === "active",
+    ).length;
+    const serverIdle = servers.rows.filter(
+      (r: { state?: string }) => r.state === "idle",
+    ).length;
+
     return {
-      activeConnections: parseInt(row.sv_active || 0),
-      idleConnections: parseInt(row.sv_idle || 0),
-      totalConnections:
-        parseInt(row.sv_active || 0) + parseInt(row.sv_idle || 0),
-      clientConnections:
-        parseInt(row.cl_active || 0) + parseInt(row.cl_idle || 0),
+      activeConnections: serverActive,
+      idleConnections: serverIdle,
+      totalConnections: serverActive + serverIdle,
+      clientConnections: clientActive + clientIdle,
     };
   } catch (err) {
     console.warn("Failed to get PgBouncer stats:", err);
@@ -844,12 +1280,17 @@ export async function queryWithContext<
   text: string,
   params?: unknown[],
 ): Promise<import("pg").QueryResult<T>> {
-  // Check for HTTP method-based routing context
-  if (req?.dbRouting?.useReplicaPool) {
-    return queryRead<T>(text, params);
+  const routing = req?.dbRouting;
+  if (routing) {
+    // GET/HEAD: only read-only statements may go to a replica; anything that
+    // writes stays on primary even inside a GET handler. Write requests read
+    // from primary too, so they see their own changes.
+    return routing.useReplicaPool && isReadOnlyQuery(text)
+      ? queryRead<T>(text, params)
+      : queryWrite<T>(text, params);
   }
 
-  // Fall back to SQL query-based routing
+  // No HTTP context: fall back to SQL query-based routing
   return querySmart<T>(text, params);
 }
 
@@ -889,10 +1330,7 @@ export async function getPoolStats(): Promise<{
     url: string;
     description: string;
   };
-  replicas: Array<{
-    url: string;
-    healthy: boolean;
-  }>;
+  replicas: ReplicaPoolStatus[];
 }> {
   const replicaStats = await checkReplicaHealth();
 

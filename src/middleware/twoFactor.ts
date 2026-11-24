@@ -7,6 +7,7 @@ import {
 } from "../auth/2fa";
 import {
   twoFactorRateLimiter,
+  MAX_ATTEMPTS,
   type TwoFactorRateLimitHeaders,
 } from "../services/twoFactorRateLimiter";
 // import { getUserById } from "../services/userService";
@@ -105,8 +106,11 @@ export function requireTwoFactor(
         }
 
         // 4. Verification failed - increment count
-        const newCount = await twoFactorRateLimiter.incrementFailures(user.id);
-        const triesLeft = Math.max(0, 3 - newCount);
+        const newCount = await twoFactorRateLimiter.incrementFailures(
+          user.id,
+          user.email,
+        );
+        const triesLeft = Math.max(0, MAX_ATTEMPTS - newCount);
         const headers = await twoFactorRateLimiter.getRateLimitHeaders(user.id);
         applyTwoFactorRateLimitHeaders(res, headers);
 
@@ -237,7 +241,7 @@ export function optionalTwoFactor(
         }
 
         // Failed attempt
-        await twoFactorRateLimiter.incrementFailures(user.id);
+        await twoFactorRateLimiter.incrementFailures(user.id, user.email);
       }
 
       // If 2FA is enabled but not verified, still allow operation with warning

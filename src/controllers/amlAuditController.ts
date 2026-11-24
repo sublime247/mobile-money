@@ -6,10 +6,23 @@ import { UserModel } from "../models/users";
 import { pool } from "../config/database";
 import { encryptAES, decryptAES, deriveKey } from "../utils/encryption";
 import { env } from "../config/env";
+import { amlVelocityService } from "../services/amlVelocityService";
+import { evaluateCustomerRisk } from "../compliance/riskTier";
 
 const amlAlertModel = new AMLAlertModel();
 const transactionModel = new TransactionModel();
 const userModel = new UserModel();
+
+function containsPepScreeningRule(ruleHits: unknown): boolean {
+  const hits = Array.isArray(ruleHits) ? ruleHits : [ruleHits];
+  return hits.some(
+    (hit) =>
+      typeof hit === "object" &&
+      hit !== null &&
+      "rule" in hit &&
+      hit.rule === "pep_screening",
+  );
+}
 
 /**
  * List AML alerts with filtering and pagination
@@ -116,28 +129,16 @@ export const listAmlAlertsForAudit = async (
 
     const result = await amlAlertModel.list(filter);
 
-    const limitVal = filter.limit ?? 50;
-    const pagination: any = {
+    const cursorFor = (alert: (typeof result.alerts)[number] | undefined) =>
+      alert ? Buffer.from(`${alert.createdAt}|${alert.id}`).toString("base64") : null;
+    const pagination = {
       total: result.total,
-      limit: limitVal,
+      limit: filter.limit ?? 50,
+      ...(!filter.before && !filter.after && { offset: filter.offset ?? 0 }),
+      before: cursorFor(result.alerts[0]),
+      after: cursorFor(result.alerts[result.alerts.length - 1]),
+      hasMore: result.hasMore ?? false,
     };
-
-    if (before || after || filter.before || filter.after) {
-      pagination.before = result.alerts.length
-        ? Buffer.from(
-            `${result.alerts[0].createdAt}|${result.alerts[0].id}`,
-          ).toString("base64")
-        : null;
-      pagination.after = result.alerts.length
-        ? Buffer.from(
-            `${result.alerts[result.alerts.length - 1].createdAt}|${result.alerts[result.alerts.length - 1].id}`,
-          ).toString("base64")
-        : null;
-      pagination.hasMore = result.hasMore ?? false;
-    } else {
-      pagination.offset = filter.offset ?? 0;
-      pagination.hasMore = result.hasMore ?? false;
-    }
 
     res.json({
       data: result.alerts,
@@ -169,9 +170,12 @@ export const getAmlAlertDetails = async (
       return;
     }
 
-    // Fetch related transaction
-    const transaction = await transactionModel.findById(alert.transactionId);
-    if (!transaction) {
+    // Customer-level compliance alerts, such as PEP matches, are not tied to
+    // a transaction.
+    const transaction = alert.transactionId
+      ? await transactionModel.findById(alert.transactionId)
+      : null;
+    if (alert.transactionId && !transaction) {
       res.status(404).json({ error: "Related transaction not found" });
       return;
     }
@@ -184,18 +188,20 @@ export const getAmlAlertDetails = async (
 
     res.json({
       alert,
-      transaction: {
-        id: transaction.id,
-        referenceNumber: transaction.referenceNumber,
-        type: transaction.type,
-        amount: transaction.amount,
-        phoneNumber: transaction.phoneNumber,
-        provider: transaction.provider,
-        status: transaction.status,
-        createdAt: transaction.createdAt,
-        tags: transaction.tags,
-        metadata: transaction.metadata,
-      },
+      transaction: transaction
+        ? {
+            id: transaction.id,
+            referenceNumber: transaction.referenceNumber,
+            type: transaction.type,
+            amount: transaction.amount,
+            phoneNumber: transaction.phoneNumber,
+            provider: transaction.provider,
+            status: transaction.status,
+            createdAt: transaction.createdAt,
+            tags: transaction.tags,
+            metadata: transaction.metadata,
+          }
+        : null,
       user: user
         ? {
             id: user.id,
@@ -261,13 +267,91 @@ export const reviewAmlAlert = async (
       return;
     }
 
+    if (containsPepScreeningRule(updated.ruleHits)) {
+      await evaluateCustomerRisk(updated.userId);
+    }
+
+    // A dismissed (false-positive) alert releases a transaction held in
+    // PENDING_REVIEW, unless another alert on it is still awaiting review.
+    let released = false;
+    if (status === "dismissed") {
+      const open = await pool.query(
+        `SELECT 1 FROM aml_alerts
+         WHERE transaction_id = $1 AND status = 'pending_review' AND id <> $2
+         LIMIT 1`,
+        [updated.transactionId, alertId],
+      );
+      if (open.rowCount === 0) {
+        released = await amlVelocityService.resolveHold(
+          updated.transactionId,
+          "release",
+          req.jwtUser.userId,
+        );
+      }
+    }
+
     res.json({
       message: "AML alert reviewed successfully",
       alert: updated,
+      transactionReleased: released,
     });
   } catch (error) {
     logger.error("Failed to review AML alert:", error);
     res.status(500).json({ error: "Failed to review AML alert" });
+  }
+};
+
+/**
+ * Release or reject a transaction held in PENDING_REVIEW by AML velocity monitoring
+ * POST /api/audit/aml/alerts/:alertId/hold
+ * Body: { decision: "release" | "reject" }
+ */
+export const resolveHeldTransaction = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const { alertId } = req.params;
+    const { decision } = req.body;
+
+    if (!req.jwtUser?.userId) {
+      res.status(401).json({ error: "Authentication required" });
+      return;
+    }
+
+    if (decision !== "release" && decision !== "reject") {
+      res.status(400).json({
+        error: "Invalid decision",
+        message: "decision must be one of: release, reject",
+      });
+      return;
+    }
+
+    const alert = await amlAlertModel.findById(alertId);
+    if (!alert) {
+      res.status(404).json({ error: "AML alert not found" });
+      return;
+    }
+
+    const resolved = await amlVelocityService.resolveHold(
+      alert.transactionId,
+      decision,
+      req.jwtUser.userId,
+    );
+    if (!resolved) {
+      res.status(409).json({
+        error: "Transaction is not in pending_review",
+      });
+      return;
+    }
+
+    res.json({
+      message: `Held transaction ${decision === "release" ? "released" : "rejected"}`,
+      transactionId: alert.transactionId,
+    });
+  } catch (error) {
+    logger.error("Failed to resolve held transaction:", error);
+    res.status(500).json({ error: "Failed to resolve held transaction" });
   }
 };
 

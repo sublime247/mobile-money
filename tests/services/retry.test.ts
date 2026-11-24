@@ -15,6 +15,35 @@ describe("retry service", () => {
       expect(isTransientError(new Error("Wrong number timeout"))).toBe(false);
       expect(isTransientError(new Error("Bad request timeout"))).toBe(false);
     });
+
+    it("treats retryable database lock and timeout errors as transient", () => {
+      expect(
+        isTransientError(
+          Object.assign(new Error("deadlock detected"), { code: "40P01" }),
+        ),
+      ).toBe(true);
+      expect(
+        isTransientError(
+          Object.assign(new Error("canceling statement due to lock timeout"), {
+            code: "55P03",
+          }),
+        ),
+      ).toBe(true);
+      expect(
+        isTransientError(
+          Object.assign(new Error("canceling statement due to statement timeout"), {
+            code: "57014",
+          }),
+        ),
+      ).toBe(true);
+      expect(
+        isTransientError({
+          originalError: Object.assign(new Error("could not obtain lock on row"), {
+            code: "55P03",
+          }),
+        }),
+      ).toBe(true);
+    });
   });
 
   describe("withRetry", () => {
@@ -153,6 +182,24 @@ describe("retry service", () => {
           error: expect.any(Error),
         }),
       );
+    });
+
+    it("retries retryable database lock errors and eventually succeeds", async () => {
+      let calls = 0;
+      const fn = jest.fn(async () => {
+        calls++;
+        if (calls < 3) {
+          throw Object.assign(new Error("canceling statement due to lock timeout"), {
+            code: "55P03",
+          });
+        }
+        return "ok";
+      });
+
+      await expect(
+        withRetry(fn, { maxAttempts: 3, baseDelayMs: 0 }),
+      ).resolves.toBe("ok");
+      expect(fn).toHaveBeenCalledTimes(3);
     });
   });
 });

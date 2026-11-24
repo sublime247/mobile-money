@@ -11,6 +11,9 @@ jest.mock("../../utils/metrics", () => ({
   horizonNodeFailuresTotal: { inc: jest.fn(), set: jest.fn() },
   horizonNodeHealth: { inc: jest.fn(), set: jest.fn() },
   horizonRequestFailoverTotal: { inc: jest.fn(), set: jest.fn() },
+  horizonFailoverAlertsTotal: { inc: jest.fn(), set: jest.fn() },
+  horizonProbeLatencySeconds: { inc: jest.fn(), observe: jest.fn() },
+  horizonCircuitBreakerState: { inc: jest.fn(), set: jest.fn() },
 }));
 
 // Replace the real Horizon.Server with controllable fakes keyed by URL.

@@ -20,6 +20,8 @@ function buildSignature(payload: string, secret: string): string {
   return createHmac("sha256", secret).update(payload).digest("base64");
 }
 
+const FRESH_TIMESTAMP = String(Math.floor(Date.now() / 1000));
+
 describe("Orange Madagascar Callback Routes", () => {
   let app: Application;
 
@@ -45,6 +47,7 @@ describe("Orange Madagascar Callback Routes", () => {
       const response = await request(app)
         .post("/api/orange-madagascar/callback")
         .set("X-Callback-Signature", signature)
+        .set("X-Orange-Timestamp", FRESH_TIMESTAMP)
         .send(payload)
         .expect(200);
 
@@ -66,6 +69,7 @@ describe("Orange Madagascar Callback Routes", () => {
       const response = await request(app)
         .post("/api/orange-madagascar/callback")
         .set("X-Callback-Signature", signature)
+        .set("X-Orange-Timestamp", FRESH_TIMESTAMP)
         .send(payload)
         .expect(200);
 
@@ -99,6 +103,7 @@ describe("Orange Madagascar Callback Routes", () => {
       const response = await request(app)
         .post("/api/orange-madagascar/callback")
         .set("X-Callback-Signature", signature)
+        .set("X-Orange-Timestamp", FRESH_TIMESTAMP)
         .send(payload)
         .expect(400);
 
@@ -113,6 +118,7 @@ describe("Orange Madagascar Callback Routes", () => {
       const response = await request(app)
         .post("/api/orange-madagascar/callback")
         .set("X-Callback-Signature", signature)
+        .set("X-Orange-Timestamp", FRESH_TIMESTAMP)
         .send(payload)
         .expect(400);
 
@@ -135,6 +141,7 @@ describe("Orange Madagascar Callback Routes", () => {
       const response = await request(app)
         .post("/api/orange-madagascar/callback/batch")
         .set("X-Callback-Signature", signature)
+        .set("X-Orange-Timestamp", FRESH_TIMESTAMP)
         .send(payload)
         .expect(200);
 
@@ -149,6 +156,7 @@ describe("Orange Madagascar Callback Routes", () => {
       const response = await request(app)
         .post("/api/orange-madagascar/callback/batch")
         .set("X-Callback-Signature", signature)
+        .set("X-Orange-Timestamp", FRESH_TIMESTAMP)
         .send(payload)
         .expect(400);
 

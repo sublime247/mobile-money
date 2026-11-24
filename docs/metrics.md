@@ -153,3 +153,23 @@ To add new metrics calculations:
 3. Implement Redis caching with appropriate key prefix
 4. Add endpoint to `src/routes/admin.ts`
 5. Follow existing pattern for error handling and response format
+
+### USSD push payments
+
+`ussd_push_requests_total{provider,country,status}` records M-Pesa STK and
+MTN collection prompts. Status values are `dispatched`, `success`, `failed`,
+and `timeout`. Use the terminal statuses when computing completion rates.
+An accepted prompt with no observed result after five minutes counts as a
+timeout. In-process correlation suppresses callback and polling duplicates
+within five minutes. M-Pesa uses `KE`. MTN uses the payer's international
+number or the deployment's optional `MTN_COUNTRY_CODE` (ISO 3166-1 alpha-2).
+Unattributed MTN events use `unknown`.
+
+### Kubernetes health probes
+
+Use `GET /health/liveness` for the process probe and
+`GET /health/readiness` for the dependency probe. Readiness returns a status
+matrix for PostgreSQL, Redis and Horizon, with a two-second deadline per
+probe. PostgreSQL and Redis failures return HTTP 503. Horizon connectivity
+and ledger sync are reported in the matrix while queued work can still be
+accepted.

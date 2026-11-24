@@ -1,5 +1,6 @@
 import {
   Asset,
+  BASE_FEE,
   FeeBumpTransaction,
   Keypair,
   Memo,
@@ -13,6 +14,8 @@ import {
   getNetworkPassphrase,
   getStellarServer,
 } from "../config/stellar";
+import { hasTrustline } from "./trustlines";
+import { enforceSep8Approval, Sep8ClientOptions } from "./sep8";
 
 type StellarOperation = Parameters<TransactionBuilder["addOperation"]>[0];
 type StellarTimebounds = { minTime: string; maxTime: string };
@@ -101,8 +104,16 @@ function getFeePayerKeypair(): Keypair {
 
 async function getTransactionBaseFee(): Promise<number> {
   const server = getStellarServer();
-  const fetchedBaseFee = await server.fetchBaseFee();
-  return getConfiguredBaseFee(Number(fetchedBaseFee));
+  try {
+    const feeStats = await server.feeStats();
+    const dynamicBaseFee = Number(
+      feeStats.fee_charged?.p90 || feeStats.last_ledger_base_fee || 100,
+    );
+    return getConfiguredBaseFee(dynamicBaseFee);
+  } catch (error) {
+    const fetchedBaseFee = await server.fetchBaseFee();
+    return getConfiguredBaseFee(Number(fetchedBaseFee));
+  }
 }
 
 async function buildInnerTransaction(
@@ -145,6 +156,115 @@ export const wrapInFeeBump = (
   );
 };
 
+export const DEFAULT_PENDING_FEE_BUMP_MULTIPLIER = 1.5;
+
+export interface PendingFeeBumpOptions {
+  feePayerKeypair?: Keypair;
+  multiplier?: number;
+  maxFee?: number;
+  minIncrementStroops?: number;
+}
+
+export interface PendingFeeBumpResult {
+  envelope: string;
+  originalFee: number;
+  fee: number;
+  baseFee: number;
+  innerTransactionHash: string;
+  feeBumpTransactionHash: string;
+  feePayer: string;
+}
+
+export const calculatePendingFeeBumpBaseFee = (
+  originalFee: number,
+  operationCount: number,
+  options: PendingFeeBumpOptions = {},
+): number => {
+  const multiplier = options.multiplier ?? DEFAULT_PENDING_FEE_BUMP_MULTIPLIER;
+  const maxFee = options.maxFee ?? getFeeBumpConfig().maxFeePerTransaction;
+  const minIncrement = options.minIncrementStroops ?? Number(BASE_FEE);
+  const innerOperations = Math.max(1, Math.floor(operationCount));
+  const chargedOperations = getChargedOperationCount(innerOperations);
+
+  if (!Number.isFinite(originalFee) || originalFee <= 0) {
+    throw new Error("Original transaction fee must be positive");
+  }
+  if (!Number.isFinite(multiplier) || multiplier <= 1) {
+    throw new Error("Fee bump multiplier must be greater than 1");
+  }
+
+  const innerBaseFee = Math.ceil(originalFee / innerOperations);
+  const minimumBaseFee = Math.max(Number(BASE_FEE), innerBaseFee);
+  const desiredFee = Math.max(
+    Math.ceil(originalFee * multiplier),
+    originalFee + minIncrement,
+  );
+  const minimumFee = Math.max(
+    originalFee + minIncrement,
+    minimumBaseFee * chargedOperations,
+  );
+
+  let baseFee = Math.max(
+    minimumBaseFee,
+    Math.ceil(desiredFee / chargedOperations),
+  );
+
+  if (baseFee * chargedOperations > maxFee) {
+    baseFee = Math.floor(maxFee / chargedOperations);
+  }
+
+  if (baseFee < minimumBaseFee || baseFee * chargedOperations < minimumFee) {
+    throw new Error(
+      `Fee bump fee ${minimumFee} stroops exceeds max allowed ${maxFee}`,
+    );
+  }
+
+  return baseFee;
+};
+
+export const createFeeBumpForPendingTransaction = (
+  transaction: Transaction | string,
+  options: PendingFeeBumpOptions = {},
+): PendingFeeBumpResult => {
+  const innerTransaction =
+    typeof transaction === "string"
+      ? (TransactionBuilder.fromXDR(
+          transaction,
+          getNetworkPassphrase(),
+        ) as Transaction)
+      : transaction;
+
+  if (innerTransaction instanceof FeeBumpTransaction) {
+    throw new Error("Transaction is already a fee bump transaction");
+  }
+
+  const feePayerKeypair = options.feePayerKeypair ?? getFeePayerKeypair();
+  const originalFee = Number(innerTransaction.fee);
+  const baseFee = calculatePendingFeeBumpBaseFee(
+    originalFee,
+    innerTransaction.operations.length,
+    options,
+  );
+  const feeBumpTransaction = wrapInFeeBump(
+    innerTransaction,
+    feePayerKeypair,
+    baseFee,
+  );
+  feeBumpTransaction.sign(feePayerKeypair);
+
+  return {
+    envelope: feeBumpTransaction.toEnvelope().toXDR("base64"),
+    originalFee,
+    fee: Number(feeBumpTransaction.fee),
+    baseFee,
+    innerTransactionHash: Buffer.from(innerTransaction.hash()).toString("hex"),
+    feeBumpTransactionHash: Buffer.from(feeBumpTransaction.hash()).toString(
+      "hex",
+    ),
+    feePayer: feePayerKeypair.publicKey(),
+  };
+};
+
 export const buildTransactionWithFeeBump = async (
   options: FeeBumpOptions,
 ): Promise<FeeBumpResult> => {
@@ -169,7 +289,9 @@ export const buildTransactionWithFeeBump = async (
   if (!enableFeeBump) {
     return {
       envelope: innerTransaction.toEnvelope().toXDR("base64"),
-      innerTransactionHash: Buffer.from(innerTransaction.hash()).toString("hex"),
+      innerTransactionHash: Buffer.from(innerTransaction.hash()).toString(
+        "hex",
+      ),
       feeBumpTransactionHash: "",
       fee: Number(innerTransaction.fee),
       usedFeeBump: false,
@@ -191,7 +313,9 @@ export const buildTransactionWithFeeBump = async (
   return {
     envelope: feeBumpTransaction.toEnvelope().toXDR("base64"),
     innerTransactionHash: Buffer.from(innerTransaction.hash()).toString("hex"),
-    feeBumpTransactionHash: Buffer.from(feeBumpTransaction.hash()).toString("hex"),
+    feeBumpTransactionHash: Buffer.from(feeBumpTransaction.hash()).toString(
+      "hex",
+    ),
     fee: Number(feeBumpTransaction.fee),
     usedFeeBump: true,
   };
@@ -282,13 +406,29 @@ function validateEnvelopeFeeLimit(
   }
 }
 
+export interface SubmitTransactionOptions {
+  /**
+   * Injectable network dependencies for the SEP-08 approval gate. Supplying
+   * these replaces HTTP calls but never disables the gate for regulated
+   * assets.
+   */
+  sep8?: Sep8ClientOptions;
+}
+
 export const submitTransaction = async (
   envelope: string,
+  options: SubmitTransactionOptions = {},
 ): Promise<SubmitTransactionResult> => {
   const server = getStellarServer();
 
   try {
-    const transaction = parseTransactionEnvelope(envelope);
+    // Regulated assets must be approved before network submission (#2432).
+    // The gate is a no-op for native/non-regulated assets; a revised XDR is
+    // returned here and replaces the envelope submitted below.
+    const approval = await enforceSep8Approval(envelope, options.sep8);
+    const approvedEnvelope = approval.envelope;
+
+    const transaction = parseTransactionEnvelope(approvedEnvelope);
     validateEnvelopeFeeLimit(transaction);
 
     const response = await server.submitTransaction(transaction);
@@ -300,7 +440,7 @@ export const submitTransaction = async (
     return {
       success: true,
       transactionHash: response.hash,
-      envelope,
+      envelope: approvedEnvelope,
       feeCharged: Number(
         (response as { fee_charged?: number | string }).fee_charged ??
           transaction.fee,
@@ -335,15 +475,33 @@ export const createSimplePaymentWithFeeBump = async (
   const stellarAsset =
     asset === "native" ? Asset.native() : new Asset(asset.code, asset.issuer);
 
+  const operations: StellarOperation[] = [];
+
+  // Auto-inject changeTrust operation if trustline is missing for non-native assets
+  if (!stellarAsset.isNative()) {
+    const trustlineExists = await hasTrustline(destination, stellarAsset);
+    if (!trustlineExists) {
+      operations.push(
+        Operation.changeTrust({
+          asset: stellarAsset,
+          limit: amount,
+          source: destination,
+        }) as StellarOperation,
+      );
+    }
+  }
+
+  operations.push(
+    Operation.payment({
+      destination,
+      asset: stellarAsset,
+      amount,
+    }) as StellarOperation,
+  );
+
   return buildTransactionWithFeeBump({
     sourceAccount,
-    operations: [
-      Operation.payment({
-        destination,
-        asset: stellarAsset,
-        amount,
-      }) as StellarOperation,
-    ],
+    operations,
     memo: memo ? Memo.text(memo) : undefined,
   });
 };
@@ -381,6 +539,8 @@ export default {
   buildTransactionWithFeeBump,
   submitTransaction,
   wrapInFeeBump,
+  calculatePendingFeeBumpBaseFee,
+  createFeeBumpForPendingTransaction,
   estimateFee,
   calculateMaxFee,
   createSimplePaymentWithFeeBump,

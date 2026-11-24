@@ -1,0 +1,19 @@
+---
+title: 'List Transactions'
+api: 'GET /v1/transactions'
+description: 'List transactions with filtering and pagination'
+---
+
+Retrieves a paginated list of transactions.
+
+### Query Parameters
+
+<ParamField query="status" type="string">
+  Filter by transaction status (e.g., `COMPLETED`, `PENDING`).
+</ParamField>
+<ParamField query="limit" type="integer">
+  Number of records to return (default: 20, max: 100).
+</ParamField>
+<ParamField query="cursor" type="string">
+  Pagination cursor.
+</ParamField>

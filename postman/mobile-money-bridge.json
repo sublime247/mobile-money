@@ -1,0 +1,948 @@
+{
+  "info": {
+    "_postman_id": "b7c29a1e-8419-4822-bfb2-9d7a6e1358ef",
+    "name": "Mobile Money Bridge API",
+    "description": "Comprehensive integration test collection for Mobile Money to Stellar Bridge API. Covers SEP-10 Auth (with pre-request auto-signing script), SEP-12 KYC, SEP-38 Quotes, SEP-24 Interactive Deposits & Withdrawals, and Core Transactions.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "stellar_public_key",
+      "value": "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
+      "type": "string"
+    },
+    {
+      "key": "stellar_secret_key",
+      "value": "SBWJ7XKY5Q6H7T4E3XRPYZW3210ABCDEF1234567890ABCDEF1234567",
+      "type": "string"
+    },
+    {
+      "key": "home_domain",
+      "value": "localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "jwt_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "challenge_xdr",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "quote_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "transaction_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "user_id",
+      "value": "mock-user-uuid-1",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Auth",
+      "description": "SEP-10 Stellar challenge-response authentication and JWT session management",
+      "item": [
+        {
+          "name": "SEP-10: Request Challenge Transaction",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "pm.test(\"Response contains challenge transaction XDR\", function () {",
+                  "    pm.expect(jsonData.transaction).to.be.a('string');",
+                  "    pm.environment.set(\"challenge_xdr\", jsonData.transaction);",
+                  "    pm.collectionVariables.set(\"challenge_xdr\", jsonData.transaction);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/sep10/auth?account={{stellar_public_key}}&home_domain={{home_domain}}",
+              "host": ["{{base_url}}"],
+              "path": ["sep10", "auth"],
+              "query": [
+                {
+                  "key": "account",
+                  "value": "{{stellar_public_key}}"
+                },
+                {
+                  "key": "home_domain",
+                  "value": "{{home_domain}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "SEP-10: Auto-Sign Challenge & Exchange for JWT",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Automated SEP-10 Challenge signing pre-request script",
+                  "var pubKey = pm.environment.get(\"stellar_public_key\") || pm.collectionVariables.get(\"stellar_public_key\");",
+                  "var secKey = pm.environment.get(\"stellar_secret_key\") || pm.collectionVariables.get(\"stellar_secret_key\");",
+                  "var baseUrl = pm.environment.get(\"base_url\") || pm.collectionVariables.get(\"base_url\");",
+                  "var homeDomain = pm.environment.get(\"home_domain\") || pm.collectionVariables.get(\"home_domain\");",
+                  "",
+                  "// Check if we need to fetch a fresh challenge",
+                  "var currentChallenge = pm.environment.get(\"challenge_xdr\") || pm.collectionVariables.get(\"challenge_xdr\");",
+                  "",
+                  "if (!currentChallenge) {",
+                  "    pm.sendRequest({",
+                  "        url: baseUrl + '/sep10/auth?account=' + pubKey + '&home_domain=' + homeDomain,",
+                  "        method: 'GET'",
+                  "    }, function (err, res) {",
+                  "        if (!err && res.code === 200) {",
+                  "            var data = res.json();",
+                  "            pm.environment.set(\"challenge_xdr\", data.transaction);",
+                  "            pm.collectionVariables.set(\"challenge_xdr\", data.transaction);",
+                  "        }",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "pm.test(\"JWT token received and stored\", function () {",
+                  "    pm.expect(jsonData.token).to.be.a('string');",
+                  "    pm.environment.set(\"jwt_token\", jsonData.token);",
+                  "    pm.collectionVariables.set(\"jwt_token\", jsonData.token);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"transaction\": \"{{challenge_xdr}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/sep10/auth",
+              "host": ["{{base_url}}"],
+              "path": ["sep10", "auth"]
+            }
+          }
+        },
+        {
+          "name": "Standard Login (Phone / OTP)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Login successful\", function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "if (data.token) {",
+                  "    pm.environment.set(\"jwt_token\", data.token);",
+                  "    pm.collectionVariables.set(\"jwt_token\", data.token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"phone_number\": \"+237670000000\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Verify Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Token is valid\", function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 204]);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"token\": \"{{jwt_token}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/verify",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "verify"]
+            }
+          }
+        },
+        {
+          "name": "Get Current User Profile (Me)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "if (data.id || data.userId) {",
+                  "    var id = data.id || data.userId;",
+                  "    pm.environment.set(\"user_id\", id);",
+                  "    pm.collectionVariables.set(\"user_id\", id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/auth/me",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "me"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. KYC",
+      "description": "SEP-12 KYC customer identity verification and document submission",
+      "item": [
+        {
+          "name": "SEP-12: Get Customer KYC Status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.test(\"Customer record has valid status\", function () {",
+                  "    pm.expect(data.status).to.be.oneOf(['ACCEPTED', 'PROCESSING', 'NEEDS_INFO', 'REJECTED']);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/sep12/customer?account={{stellar_public_key}}",
+              "host": ["{{base_url}}"],
+              "path": ["sep12", "customer"],
+              "query": [
+                {
+                  "key": "account",
+                  "value": "{{stellar_public_key}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "SEP-12: Submit Customer KYC Data",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"KYC information accepted\", function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 202]);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"account\": \"{{stellar_public_key}}\",\n    \"first_name\": \"Amina\",\n    \"last_name\": \"Diallo\",\n    \"email_address\": \"amina.diallo@example.com\",\n    \"mobile_number\": \"+221770000000\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/sep12/customer",
+              "host": ["{{base_url}}"],
+              "path": ["sep12", "customer"]
+            }
+          }
+        },
+        {
+          "name": "Upload KYC Document",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Upload status accepted\", function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 202]);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"userId\": \"{{user_id}}\",\n    \"documentType\": \"national_id\",\n    \"documentNumber\": \"SN-12345678\",\n    \"issuingCountry\": \"SN\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/kyc/upload",
+              "host": ["{{base_url}}"],
+              "path": ["api", "kyc", "upload"]
+            }
+          }
+        },
+        {
+          "name": "Check User KYC Status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/kyc/status/{{user_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "kyc", "status", "{{user_id}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Quotes",
+      "description": "SEP-38 exchange rate discovery, firm quote reservations, and fee calculations",
+      "item": [
+        {
+          "name": "SEP-38: Get Info & Asset Pairs",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.test(\"Contains supported asset assets\", function () {",
+                  "    pm.expect(data.assets).to.be.an('array');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/sep38/info",
+              "host": ["{{base_url}}"],
+              "path": ["sep38", "info"]
+            }
+          }
+        },
+        {
+          "name": "SEP-38: Indicative Price Query",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.test(\"Price response includes total_price or buy_amount\", function () {",
+                  "    pm.expect(data).to.be.an('object');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/sep38/prices?sell_asset=iso4217:XAF&buy_asset=stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
+              "host": ["{{base_url}}"],
+              "path": ["sep38", "prices"],
+              "query": [
+                {
+                  "key": "sell_asset",
+                  "value": "iso4217:XAF"
+                },
+                {
+                  "key": "buy_asset",
+                  "value": "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "SEP-38: Request Firm Quote",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Quote created successfully\", function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "if (data.id) {",
+                  "    pm.environment.set(\"quote_id\", data.id);",
+                  "    pm.collectionVariables.set(\"quote_id\", data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"context\": \"sep24\",\n    \"sell_asset\": \"iso4217:XAF\",\n    \"buy_asset\": \"stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5\",\n    \"sell_amount\": \"50000\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/sep38/quote",
+              "host": ["{{base_url}}"],
+              "path": ["sep38", "quote"]
+            }
+          }
+        },
+        {
+          "name": "SEP-38: Get Firm Quote by ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.test(\"Quote contains expiration timestamp\", function () {",
+                  "    pm.expect(data.expires_at).to.be.a('string');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/sep38/quote/{{quote_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["sep38", "quote", "{{quote_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Pre-flight Fee Estimation",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.test(\"Fee estimation details returned\", function () {",
+                  "    pm.expect(data).to.be.an('object');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"amount\": 25000,\n    \"transactionType\": \"deposit\",\n    \"senderPhone\": \"+237670000000\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/fees/estimate",
+              "host": ["{{base_url}}"],
+              "path": ["api", "fees", "estimate"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Deposits",
+      "description": "SEP-24 interactive deposit initiation and core mobile money collections",
+      "item": [
+        {
+          "name": "SEP-24: Get Deposit & Withdrawal Info",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.test(\"Deposit enabled assets declared\", function () {",
+                  "    pm.expect(data.deposit).to.be.an('object');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/sep24/info",
+              "host": ["{{base_url}}"],
+              "path": ["sep24", "info"]
+            }
+          }
+        },
+        {
+          "name": "SEP-24: Initiate Interactive Deposit",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.test(\"Returns interactive webview URL and transaction ID\", function () {",
+                  "    pm.expect(data.url).to.be.a('string');",
+                  "    pm.expect(data.id).to.be.a('string');",
+                  "    pm.environment.set(\"transaction_id\", data.id);",
+                  "    pm.collectionVariables.set(\"transaction_id\", data.id);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"asset_code\": \"USDC\",\n    \"account\": \"{{stellar_public_key}}\",\n    \"amount\": \"50.00\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/sep24/transactions/deposit/interactive",
+              "host": ["{{base_url}}"],
+              "path": ["sep24", "transactions", "deposit", "interactive"]
+            }
+          }
+        },
+        {
+          "name": "SEP-24: Query Transaction Status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.test(\"Transaction status object returned\", function () {",
+                  "    pm.expect(data.transaction).to.be.an('object');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/sep24/transaction?id={{transaction_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["sep24", "transaction"],
+              "query": [
+                {
+                  "key": "id",
+                  "value": "{{transaction_id}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Core: Direct Mobile Money Collection (Deposit)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Deposit transaction submitted\", function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 202]);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "if (data.id || data.reference) {",
+                  "    var ref = data.id || data.reference;",
+                  "    pm.environment.set(\"transaction_id\", ref);",
+                  "    pm.collectionVariables.set(\"transaction_id\", ref);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "idemp-dep-{{$guid}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"provider\": \"mtn\",\n    \"amount\": 10000,\n    \"phoneNumber\": \"+237670000000\",\n    \"currency\": \"XAF\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/transactions/deposit",
+              "host": ["{{base_url}}"],
+              "path": ["api", "transactions", "deposit"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Withdrawals",
+      "description": "SEP-24 interactive withdrawal initiation and core mobile money payouts",
+      "item": [
+        {
+          "name": "SEP-24: Initiate Interactive Withdrawal",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.test(\"Returns interactive webview URL for withdrawal\", function () {",
+                  "    pm.expect(data.url).to.be.a('string');",
+                  "    pm.expect(data.id).to.be.a('string');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"asset_code\": \"USDC\",\n    \"account\": \"{{stellar_public_key}}\",\n    \"amount\": \"25.00\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/sep24/transactions/withdraw/interactive",
+              "host": ["{{base_url}}"],
+              "path": ["sep24", "transactions", "withdraw", "interactive"]
+            }
+          }
+        },
+        {
+          "name": "Core: Direct Mobile Money Payout (Withdrawal)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Payout request accepted\", function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 202]);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "idemp-with-{{$guid}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"provider\": \"mtn\",\n    \"amount\": 5000,\n    \"phoneNumber\": \"+237670000000\",\n    \"currency\": \"XAF\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/transactions/withdraw",
+              "host": ["{{base_url}}"],
+              "path": ["api", "transactions", "withdraw"]
+            }
+          }
+        },
+        {
+          "name": "Core: Get Transaction Details",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/transactions/{{transaction_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "transactions", "{{transaction_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Core: List Transaction History",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.test(\"History array returned\", function () {",
+                  "    pm.expect(data).to.be.an('array');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/transactions",
+              "host": ["{{base_url}}"],
+              "path": ["api", "transactions"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -601,4 +601,40 @@ router.get(
   },
 );
 
+/**
+ * GET /api/fees/fee?operation=deposit&asset_code=USDC&amount=100.00
+ * Return a client-friendly breakdown from the active fee configuration.
+ */
+router.get("/fee", async (req: Request, res: Response) => {
+  const operation = String(req.query.operation ?? "deposit");
+  const assetCode = String(req.query.asset_code ?? "").trim().toUpperCase();
+  const amount = Number(req.query.amount);
+
+  if (!["deposit", "withdrawal"].includes(operation) || !/^[A-Z0-9]{1,12}$/.test(assetCode) || !Number.isFinite(amount) || amount <= 0) {
+    res.status(400).json({ success: false, error: "operation, asset_code, and a positive amount are required" });
+    return;
+  }
+
+  try {
+    const configuration = await feeService.getActiveConfiguration();
+    const percentageFee = Number((amount * (configuration.feePercentage / 100)).toFixed(2));
+    const fee = Math.min(Math.max(percentageFee, configuration.feeMinimum), configuration.feeMaximum);
+    const fixedFee = Number(Math.max(0, fee - percentageFee).toFixed(2));
+
+    res.json({
+      success: true,
+      data: {
+        operation,
+        asset_code: assetCode,
+        amount,
+        fee: Number(fee.toFixed(2)),
+        fixed_fee: fixedFee,
+        percentage_fee: percentageFee,
+        network_fee: 0,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: "Failed to estimate fee" });
+  }
+});
 export default router;

@@ -4,7 +4,10 @@ import {
   type PhoneNumber,
 } from "libphonenumber-js";
 
-export type MobileProvider = "mtn" | "airtel" | "orange" | "vodacom" | "tigo";
+export type { CountryCode };
+
+export type MobileProvider =
+  "mtn" | "airtel" | "orange" | "vodacom" | "tigo" | "moov";
 export type PhoneOutputFormat =
   "e164" | "national" | "international" | "rfc3966";
 
@@ -29,9 +32,41 @@ export interface ParsedPhoneInfo {
  * These are common prefixes for regions like Uganda/Rwanda/Cameroon/Ghana/Tanzania/Ivory Coast/Senegal.
  */
 export const PROVIDER_PREFIXES: Record<MobileProvider, string[]> = {
-  mtn: ["23767", "23768", "25677", "25678", "23324", "23354", "23355", "23359"],
-  airtel: ["23766", "25670", "25675", "23326", "23356", "23357", "25473", "25475", "25478", "25410", "25411"],
-  orange: ["23765", "23769", "22507", "22177"],
+  mtn: [
+    "23767",
+    "23768",
+    "25677",
+    "25678",
+    "23324",
+    "23354",
+    "23355",
+    "23359",
+    // Côte d'Ivoire MTN (#2276): national prefixes 05/5, E.164 +225 0501...
+    "22505",
+    // Senegal MTN is not an operating carrier here; no +221 MTN prefix exists.
+  ],
+  airtel: [
+    "23766",
+    "25670",
+    "25675",
+    "23326",
+    "23356",
+    "23357",
+    "25473",
+    "25475",
+    "25478",
+    "25410",
+    "25411",
+  ],
+  orange: [
+    "23765",
+    "23769",
+    // Côte d'Ivoire Orange (#2276): national prefixes 07/7, E.164 +225 0707...
+    "22507",
+    // Senegal Orange (#2276): national prefixes 77 and 78, E.164 +221 77.../78...
+    "22177",
+    "22178",
+  ],
   vodacom: [
     "255740",
     "255762",
@@ -56,6 +91,9 @@ export const PROVIDER_PREFIXES: Record<MobileProvider, string[]> = {
     "255754",
     "255755",
   ],
+  // Moov Money (#2276): currently only verified for Côte d'Ivoire, national
+  // prefixes 01/1, E.164 +225 0101...
+  moov: ["22501"],
 };
 
 export const PROVIDER_PHONE_FORMATS: Record<
@@ -80,6 +118,10 @@ export const PROVIDER_PHONE_FORMATS: Record<
   },
   tigo: {
     defaultRegion: "TZ",
+    output: "e164",
+  },
+  moov: {
+    defaultRegion: "CI",
     output: "e164",
   },
 };
@@ -200,7 +242,10 @@ export function formatPhoneNumber(
 /**
  * Detect mobile operator based on phone number prefix matching.
  */
-export function detectProvider(phoneNumber: string): MobileProvider | null {
+export function detectProvider(
+  phoneNumber: string,
+  countryOverride?: CountryCode,
+): MobileProvider | null {
   if (typeof phoneNumber !== "string") return null;
   const sanitized = phoneNumber.replace(/\D/g, "");
 
@@ -210,17 +255,32 @@ export function detectProvider(phoneNumber: string): MobileProvider | null {
     }
   }
 
+  // If not matching directly, try resolving with countryOverride or default region
+  if (countryOverride) {
+    const parsed = parseFlexiblePhoneNumber(phoneNumber, countryOverride);
+    if (parsed?.isValid()) {
+      const fullDigits = parsed.number.replace(/^\+/, "");
+      for (const [provider, prefixes] of Object.entries(PROVIDER_PREFIXES)) {
+        if (prefixes.some((prefix) => fullDigits.startsWith(prefix))) {
+          return provider as MobileProvider;
+        }
+      }
+    }
+  }
+
   return null;
 }
 
 /**
  * Validates if a phone number belongs to the specified provider.
- * @param phoneNumber E.164 formatted number (e.g., +25677...)
+ * @param phoneNumber E.164 or national formatted number
  * @param provider The provider selected in the request
+ * @param countryOverride Optional country code override (e.g., 'UG', 'GH', 'TZ', 'CM', 'KE', 'CI', 'SN')
  */
 export function validatePhoneProviderMatch(
   phoneNumber: string,
   provider: string,
+  countryOverride?: CountryCode,
 ): { valid: boolean; error?: string } {
   if (typeof phoneNumber !== "string" || !phoneNumber.trim()) {
     return { valid: false, error: "Phone number is required" };
@@ -237,7 +297,19 @@ export function validatePhoneProviderMatch(
     return { valid: false, error: `Unsupported provider: ${provider}` };
   }
 
-  const isMatch = prefixes.some((prefix) => sanitized.startsWith(prefix));
+  let isMatch = prefixes.some((prefix) => sanitized.startsWith(prefix));
+
+  if (!isMatch) {
+    const region =
+      countryOverride ||
+      PROVIDER_PHONE_FORMATS[targetProvider]?.defaultRegion ||
+      "CM";
+    const parsed = parseFlexiblePhoneNumber(phoneNumber, region);
+    if (parsed?.isValid()) {
+      const fullDigits = parsed.number.replace(/^\+/, "");
+      isMatch = prefixes.some((prefix) => fullDigits.startsWith(prefix));
+    }
+  }
 
   if (!isMatch) {
     return {
@@ -250,13 +322,74 @@ export function validatePhoneProviderMatch(
 }
 
 /**
+ * CEMAC/WAEMU country codes covered by strict E.164 normalization (#1963).
+ * Region codes are ISO 3166-1 alpha-2, matching libphonenumber-js's CountryCode type.
+ */
+export const CEMAC_WAEMU_REGIONS = [
+  "CM",
+  "SN",
+  "CI",
+  "NG",
+  "KE",
+  "GH",
+] as const;
+export type CemacWaemuRegion = (typeof CEMAC_WAEMU_REGIONS)[number];
+
+const CEMAC_WAEMU_REGION_SET: ReadonlySet<string> = new Set(
+  CEMAC_WAEMU_REGIONS,
+);
+
+/**
+ * Strictly validate and normalize a phone number to E.164 for one of the
+ * CEMAC/WAEMU countries this platform serves: Cameroon (+237), Senegal
+ * (+221), Ivory Coast (+225), Nigeria (+234), Kenya (+254), Ghana (+233).
+ *
+ * Whitespace, dashes, parentheses and a local leading zero are stripped
+ * automatically (via {@link parseFlexiblePhoneNumber}). Validity and length
+ * are delegated to libphonenumber-js's own numbering-plan metadata, which is
+ * kept up to date upstream — this function does not hand-roll a second,
+ * potentially stale prefix table for validation.
+ *
+ * Carrier detection (MTN/Orange/Moov/Safaricom) is a separate concern; see
+ * {@link detectProvider}. This platform only has verified carrier-prefix
+ * data for Cameroon, Ghana, and single prefixes for Ivory Coast and Senegal
+ * (`PROVIDER_PREFIXES`) — Nigeria, Moov, and Safaricom prefixes are not
+ * encoded anywhere in this codebase, so `detectProvider` correctly returns
+ * `null` for those rather than guessing at unverified numbering-plan data.
+ *
+ * @throws {Error} if the region is not one of the supported CEMAC/WAEMU
+ * countries, or if the number is not a valid number for that region.
+ */
+export function normalizeCemacWaemuE164(
+  phoneNumber: string,
+  region: CemacWaemuRegion,
+): string {
+  if (!CEMAC_WAEMU_REGION_SET.has(region)) {
+    throw new Error(
+      `Unsupported region for CEMAC/WAEMU E.164 normalization: ${region}`,
+    );
+  }
+
+  const parsed = parseFlexiblePhoneNumber(phoneNumber, region);
+  if (!parsed || !parsed.isValid() || parsed.country !== region) {
+    throw new Error(
+      `Invalid phone number for region ${region}: ${phoneNumber}`,
+    );
+  }
+
+  return parsed.number;
+}
+
+/**
  * Format a phone number according to provider-specific payload requirements.
  * Airtel payouts in particular may require a national-format MSISDN in some
  * regions, so we normalize user input before building the request payload.
+ * Accepts an optional countryOverride to allow overriding the default provider region.
  */
 export function formatPhoneForProvider(
   phoneNumber: string,
   provider: string,
+  countryOverride?: CountryCode,
 ): string {
   if (typeof provider !== "string") {
     throw new Error(`Unsupported provider: ${provider}`);
@@ -269,10 +402,94 @@ export function formatPhoneForProvider(
     throw new Error(`Unsupported provider: ${provider}`);
   }
 
-  const parsed = parseFlexiblePhoneNumber(phoneNumber, config.defaultRegion);
-  if (!parsed) {
+  const region = countryOverride || config.defaultRegion;
+  const parsed = parseFlexiblePhoneNumber(phoneNumber, region);
+  if (!parsed || !parsed.isValid()) {
     throw new Error(`Invalid phone number for ${provider}: ${phoneNumber}`);
   }
 
   return config.output === "national" ? parsed.nationalNumber : parsed.number;
+}
+
+export interface CleanMoMoBackupResult {
+  valid: boolean;
+  cleanPhoneNumber?: string;
+  provider?: MobileProvider | null;
+  country?: CountryCode;
+  error?: string;
+}
+
+export interface CleanMoMoBackupOptions {
+  expectedProvider?: string;
+  defaultRegion?: CountryCode;
+  enforceProviderMatch?: boolean;
+}
+
+/**
+ * Validates, cleans, and normalizes a MoMo (Mobile Money) backup phone number.
+ * 
+ * Ensures:
+ * 1. Input is non-empty and well-formed.
+ * 2. Parses to valid E.164 standard.
+ * 3. Cannot be identical to the primary phone number (if primary is provided).
+ * 4. Detects or verifies that the phone number is tied to a supported MoMo provider.
+ */
+export function cleanMoMoBackupNumber(
+  backupPhoneNumber: string,
+  primaryPhoneNumber?: string,
+  options?: CleanMoMoBackupOptions,
+): CleanMoMoBackupResult {
+  if (typeof backupPhoneNumber !== "string" || !backupPhoneNumber.trim()) {
+    return { valid: false, error: "Backup phone number is required" };
+  }
+
+  const region = options?.defaultRegion || "CM";
+  const parsed = parseFlexiblePhoneNumber(backupPhoneNumber, region);
+  if (!parsed || !parsed.isValid()) {
+    return { valid: false, error: "Invalid backup phone number format" };
+  }
+
+  const cleanBackup = parsed.number;
+
+  if (
+    primaryPhoneNumber &&
+    typeof primaryPhoneNumber === "string" &&
+    primaryPhoneNumber.trim()
+  ) {
+    const parsedPrimary = parseFlexiblePhoneNumber(primaryPhoneNumber, region);
+    const cleanPrimary = parsedPrimary?.isValid()
+      ? parsedPrimary.number
+      : primaryPhoneNumber.trim().replace(/\s+/g, "");
+    if (cleanBackup === cleanPrimary) {
+      return {
+        valid: false,
+        error: "Backup phone number cannot be the same as primary phone number",
+      };
+    }
+  }
+
+  const detected = detectProvider(cleanBackup, parsed.country);
+
+  if (options?.expectedProvider) {
+    const match = validatePhoneProviderMatch(
+      cleanBackup,
+      options.expectedProvider,
+      parsed.country,
+    );
+    if (!match.valid && options.enforceProviderMatch) {
+      return {
+        valid: false,
+        error:
+          match.error ||
+          `Phone number does not match expected provider ${options.expectedProvider}`,
+      };
+    }
+  }
+
+  return {
+    valid: true,
+    cleanPhoneNumber: cleanBackup,
+    provider: detected,
+    country: parsed.country,
+  };
 }

@@ -8,6 +8,8 @@ import { promisify } from "util";
 import { Transaction, WebhookDeliveryUpdate } from "../models/transaction";
 import { enqueueWebhookRetry } from "../queue/webhookRetryQueue";
 import { signWebhookPayload } from "../crypto/webhookSigning";
+import { validateWebhookUrl } from "../security/ssrf";
+import { createWebhookSignature } from "../utils/webhookSigner";
 
 const gzipAsync = promisify(gzip);
 
@@ -83,6 +85,14 @@ interface WebhookServiceOptions {
   webhookSecret?: string;
   maxAttempts?: number;
   baseDelayMs?: number;
+  /**
+   * Per-request timeout for outbound webhook deliveries, in milliseconds.
+   * Applied via AbortController so a hung/unresponsive endpoint can't block
+   * the caller indefinitely — this matters most for processOutbox, where
+   * entries are delivered sequentially and one stuck connection would
+   * otherwise stall every entry behind it in the batch.
+   */
+  timeoutMs?: number;
   sleep?: (ms: number) => Promise<void>;
   now?: () => Date;
   logger?: WebhookLogger;
@@ -166,6 +176,7 @@ export class WebhookService {
   private readonly ed25519SigningKey: string | undefined;
   private readonly maxAttempts: number;
   private readonly baseDelayMs: number;
+  private readonly timeoutMs: number;
   private readonly sleepImpl: (ms: number) => Promise<void>;
   private readonly now: () => Date;
   private readonly logger: WebhookLogger;
@@ -181,6 +192,7 @@ export class WebhookService {
       options.ed25519SigningKey ?? process.env.WEBHOOK_ED25519_SIGNING_KEY;
     this.maxAttempts = options.maxAttempts ?? 3;
     this.baseDelayMs = options.baseDelayMs ?? 500;
+    this.timeoutMs = options.timeoutMs ?? 10_000;
     this.sleepImpl = options.sleep ?? wait;
     this.now = options.now ?? (() => new Date());
     this.logger = options.logger ?? console;
@@ -192,6 +204,21 @@ export class WebhookService {
 
   getWebhookUrl(): string {
     return this.webhookUrl;
+  }
+
+  /**
+   * Strict SSRF check on the configured destination. Returns the rejection
+   * message when the URL must not be contacted, otherwise `null`. Re-run for
+   * every delivery so a destination that changed (or was stored before this
+   * guard existed) can never reach a private address.
+   */
+  private async checkDestination(): Promise<string | null> {
+    try {
+      await validateWebhookUrl(this.webhookUrl);
+      return null;
+    } catch (err: unknown) {
+      return err instanceof Error ? err.message : String(err);
+    }
   }
 
   getWebhookSecret(): string {
@@ -288,6 +315,18 @@ export class WebhookService {
       };
     }
 
+    const destinationError = await this.checkDestination();
+    if (destinationError) {
+      this.logger.warn(`[webhook] ${destinationError}`);
+      return {
+        status: "skipped",
+        attempts: 0,
+        lastAttemptAt: null,
+        deliveredAt: null,
+        lastError: destinationError,
+      };
+    }
+
     const payload = this.buildPayload(event, transaction);
     const validation = webhookPayloadSchema.safeParse(payload);
     if (!validation.success) {
@@ -318,6 +357,7 @@ export class WebhookService {
           headers: {
             "Content-Type": "application/json",
             "X-Webhook-Signature": signature,
+            ...createWebhookSignature(rawPayload, this.webhookSecret),
             ...extraHeaders,
           },
           body: body as any,
@@ -387,6 +427,18 @@ export class WebhookService {
       };
     }
 
+    const destinationError = await this.checkDestination();
+    if (destinationError) {
+      this.logger.warn(`[webhook] ${destinationError}`);
+      return {
+        status: "skipped",
+        attempts: 0,
+        lastAttemptAt: null,
+        deliveredAt: null,
+        lastError: destinationError,
+      };
+    }
+
     const payload = this.buildFlatPayload(event, transaction);
     const validation = flatWebhookPayloadSchema.safeParse(payload);
     if (!validation.success) {
@@ -417,6 +469,7 @@ export class WebhookService {
           headers: {
             "Content-Type": "application/json",
             "X-Webhook-Signature": signature,
+            ...createWebhookSignature(rawPayload, this.webhookSecret),
             ...extraHeaders,
           },
           body: body as any,
@@ -474,15 +527,24 @@ export class WebhookService {
       const { body, extraHeaders } = await prepareBody(rawPayload, useCompress);
       const now = this.now();
 
+      const abortController = new AbortController();
+      const timeoutHandle = setTimeout(
+        () => abortController.abort(),
+        this.timeoutMs,
+      );
+
       try {
+        await validateWebhookUrl(this.webhookUrl);
         const response = await this.fetchImpl(this.webhookUrl, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             "X-Webhook-Signature": signature,
+            ...createWebhookSignature(rawPayload, this.webhookSecret),
             ...extraHeaders,
           },
           body: body as any,
+          signal: abortController.signal,
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         this.logger.log(
@@ -534,6 +596,8 @@ export class WebhookService {
         this.logger.warn(
           `[webhook-outbox] Failed to deliver entry=${entry.id} attempt=${attempts}/${entry.maxAttempts}: ${errorMessage}`,
         );
+      } finally {
+        clearTimeout(timeoutHandle);
       }
     }
 

@@ -178,4 +178,85 @@ describe("multisigCallbacks route", () => {
       "system",
     );
   });
+
+  describe("Extended Multi-Signature Auth Flow Verification Scenarios", () => {
+    it("rejects callback with 400 when required payload fields are missing", async () => {
+      const response = await request(app).post("/api/multisig/callback").send({
+        requestId: REQUEST_ID,
+        signerId: "signer-1",
+        // missing signature and payload
+      });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toBe("Missing required fields");
+      expect(mockService.getRequestById).not.toHaveBeenCalled();
+    });
+
+    it("rejects an inactive signer even if they are in the configuration", async () => {
+      const inactiveSigner = {
+        ...registeredSigner,
+        signer_id: "inactive-signer",
+        is_active: false,
+      };
+      mockService.getRequestById.mockResolvedValueOnce(pendingRequest as any);
+      mockService.getSigners.mockResolvedValueOnce([inactiveSigner] as any);
+
+      const response = await request(app).post("/api/multisig/callback").send({
+        requestId: REQUEST_ID,
+        signerId: "inactive-signer",
+        signature: "valid-sig-format",
+        payload: "test-payload",
+      });
+
+      expect(response.status).toBe(401);
+      expect(response.body.error).toBe("Signer not authorized");
+      expect(mockService.verifyWebhookSignature).not.toHaveBeenCalled();
+    });
+
+    it("handles partial approval where threshold is not yet met without executing payout", async () => {
+      mockService.getRequestById.mockResolvedValueOnce(pendingRequest as any);
+      mockService.getSigners.mockResolvedValueOnce([registeredSigner] as any);
+      mockService.verifyWebhookSignature.mockReturnValueOnce(true);
+      mockService.addSignature.mockResolvedValueOnce({
+        success: true,
+        message: "Signature added successfully. 1 of 2 required signatures collected.",
+        fullyApproved: false,
+      });
+
+      const response = await request(app).post("/api/multisig/callback").send({
+        requestId: REQUEST_ID,
+        signerId: "signer-1",
+        signature: "valid-sig",
+        payload: "test-payload",
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.status).toBe("pending_signatures");
+      expect(response.body.fullyApproved).toBe(false);
+      expect(mockService.executeApprovedRequest).not.toHaveBeenCalled();
+    });
+
+    it("returns 400 when addSignature fails (e.g. duplicate signature from same signer)", async () => {
+      mockService.getRequestById.mockResolvedValueOnce(pendingRequest as any);
+      mockService.getSigners.mockResolvedValueOnce([registeredSigner] as any);
+      mockService.verifyWebhookSignature.mockReturnValueOnce(true);
+      mockService.addSignature.mockResolvedValueOnce({
+        success: false,
+        message: "Signer has already signed this request",
+        fullyApproved: false,
+      });
+
+      const response = await request(app).post("/api/multisig/callback").send({
+        requestId: REQUEST_ID,
+        signerId: "signer-1",
+        signature: "valid-sig",
+        payload: "test-payload",
+      });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toBe("Signer has already signed this request");
+      expect(mockService.executeApprovedRequest).not.toHaveBeenCalled();
+    });
+  });
 });

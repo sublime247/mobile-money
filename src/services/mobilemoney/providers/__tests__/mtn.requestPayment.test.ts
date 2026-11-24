@@ -124,4 +124,33 @@ describe("MTNProvider.requestPayment — MTN Cameroon integration", () => {
       /^[0-9a-f-]{36}$/,
     );
   });
+
+  it("refreshes the token and retries once when MTN returns 401", async () => {
+    let tokenCalls = 0;
+    const payAuthHeaders: string[] = [];
+    (axiosMock.post as jest.Mock).mockImplementation(
+      async (url: string, _body?: unknown, config?: any) => {
+        if (String(url).includes("/collection/token/")) {
+          tokenCalls += 1;
+          return {
+            data: { access_token: `tok-${tokenCalls}`, expires_in: 3600 },
+          };
+        }
+        payAuthHeaders.push(config.headers.Authorization);
+        if (payAuthHeaders.length === 1) {
+          throw Object.assign(new Error("Unauthorized"), {
+            response: { status: 401 },
+          });
+        }
+        return { status: 202, data: {} };
+      },
+    );
+    const provider = new MTNProvider();
+
+    const result = await provider.requestPayment("+237670000001", "5000");
+
+    expect(result.success).toBe(true);
+    expect(tokenCalls).toBe(2);
+    expect(payAuthHeaders).toEqual(["Bearer tok-1", "Bearer tok-2"]);
+  });
 });
