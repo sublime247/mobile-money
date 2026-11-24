@@ -6,6 +6,7 @@ import {
 } from "../services/alertService";
 import logger from "../utils/logger";
 import { queueOptions } from "./config";
+import { buildWebhookRetryJobOptions } from "./webhookQueue";
 
 export const WEBHOOK_RETRY_QUEUE_NAME = "webhook-callback-retries";
 
@@ -24,16 +25,12 @@ export const webhookRetryQueue = new Queue<WebhookRetryJobData>(
   queueOptions,
 );
 
-const MAX_ATTEMPTS = Number(process.env.WEBHOOK_RETRY_MAX_ATTEMPTS ?? 5);
-// Base delay for exponential backoff in ms (default 30s → 30s, 60s, 120s, 240s, 480s)
-const BASE_DELAY_MS = Number(process.env.WEBHOOK_RETRY_BASE_DELAY_MS ?? 30_000);
-
 export async function enqueueWebhookRetry(
   data: WebhookRetryJobData,
 ): Promise<void> {
+  // Full-jitter exponential backoff (#2563) — see ./webhookQueue.ts.
   await webhookRetryQueue.add("deliver", data, {
-    attempts: MAX_ATTEMPTS,
-    backoff: { type: "exponential", delay: BASE_DELAY_MS },
+    ...buildWebhookRetryJobOptions(),
     removeOnComplete: { count: 200, age: 7 * 24 * 3600 },
     removeOnFail: { count: 500, age: 30 * 24 * 3600 },
   });

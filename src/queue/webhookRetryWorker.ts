@@ -6,6 +6,7 @@ import logger from "../utils/logger";
 import { queueOptions, getWebhookRetryWorkerConcurrency } from "./config";
 import { capturePersistentFailure } from "./dlq";
 import { notifyDlqRetryLimitExceeded } from "./dlqNotifier";
+import { webhookWorkerSettings } from "./webhookQueue";
 
 let webhookRetryWorker: Worker<WebhookRetryJobData> | null = null;
 
@@ -91,6 +92,8 @@ export function startWebhookRetryWorker(): void {
     {
       ...queueOptions,
       concurrency: getWebhookRetryWorkerConcurrency(),
+      // Full-jitter exponential backoff for retries (#2563).
+      settings: webhookWorkerSettings(),
     },
   );
 
@@ -105,8 +108,8 @@ export function startWebhookRetryWorker(): void {
     );
 
     if (job) {
-      // No-ops until attemptsMade reaches the job's configured max (5 by
-      // default via WEBHOOK_RETRY_MAX_ATTEMPTS), at which point the
+      // No-ops until attemptsMade reaches the job's configured max (8
+      // by default via WEBHOOK_RETRY_MAX_ATTEMPTS), at which point the
       // exhausted job is moved to the dead-letter queue for inspection.
       capturePersistentFailure(job).catch((dlqError) =>
         logger.error(
