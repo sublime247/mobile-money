@@ -5,8 +5,9 @@ extern crate std;
 use super::*;
 use soroban_sdk::{
     contract, contractimpl, symbol_short,
-    testutils::{Address as _, Ledger},
+    testutils::{Address as _, Events, Ledger},
     token::{Client as TokenClient, StellarAssetClient},
+    xdr::{ContractEventBody, ScMap, ScVal},
     Env,
 };
 
@@ -255,4 +256,82 @@ fn test_swap_reverts_on_non_positive_amounts() {
         fx.client.try_swap(&fx.caller, &zero_min),
         Err(Ok(SwapError::InvalidAmount))
     );
+}
+
+/// Read a `u32` field from the most recent contract event's data map.
+fn last_event_u32(env: &Env, field: &str) -> Option<u32> {
+    let events = env.events().all();
+    let event = events.events().last()?;
+    let ContractEventBody::V0(body) = &event.body;
+    let ScVal::Map(Some(ScMap(entries))) = &body.data else {
+        return None;
+    };
+    entries
+        .iter()
+        .find_map(|entry| match (&entry.key, &entry.val) {
+            (ScVal::Symbol(key), ScVal::U32(value)) if key.0.as_slice() == field.as_bytes() => {
+                Some(*value)
+            }
+            _ => None,
+        })
+}
+
+// ── Out-of-tolerance executions ────────────────────────────────────────────
+
+#[test]
+fn test_swap_reverts_when_first_hop_exceeds_tolerance() {
+    // Hop 1 pays 98 % of its quote, below the 99 % floor the router enforces.
+    let fx = setup(9_800, 9_900);
+    let params = fx.params(fx.two_hop_path(), 1_000_000, 900_000, 20);
+
+    let res = fx.client.try_swap(&fx.caller, &params);
+    assert_eq!(res, Err(Ok(SwapError::SlippageExceeded)));
+
+    let caller_balance = TokenClient::new(&fx.env, &fx.asset_a).balance(&fx.caller);
+    assert_eq!(caller_balance, 1_000_000);
+}
+
+#[test]
+fn test_swap_reverts_just_past_tolerance() {
+    // Hop 2 quotes 980_100 and its floor is 970_299. Paying 9_800 bps of the
+    // hop input yields 970_200, just under that floor.
+    let fx = setup(9_900, 9_800);
+    let params = fx.params(fx.two_hop_path(), 1_000_000, 900_000, 20);
+
+    let res = fx.client.try_swap(&fx.caller, &params);
+    assert_eq!(res, Err(Ok(SwapError::SlippageExceeded)));
+}
+
+// ── SwapExecuted event ─────────────────────────────────────────────────────
+
+#[test]
+fn test_event_reports_zero_slippage_at_quote() {
+    let fx = setup(9_900, 9_900);
+    let params = fx.params(fx.two_hop_path(), 1_000_000, 900_000, 20);
+
+    fx.client.swap(&fx.caller, &params);
+    assert_eq!(last_event_u32(&fx.env, "slippage_bps"), Some(0));
+}
+
+#[test]
+fn test_event_reports_effective_slippage_within_tolerance() {
+    // Hop 2 pays 970_299 against a quote of 980_100: exactly 100 bps short.
+    let fx = setup(9_900, 9_801);
+    let params = fx.params(fx.two_hop_path(), 1_000_000, 900_000, 20);
+
+    fx.client.swap(&fx.caller, &params);
+    assert_eq!(last_event_u32(&fx.env, "slippage_bps"), Some(100));
+}
+
+#[test]
+fn test_event_slippage_is_worst_hop_not_sum() {
+    // Hop 1 pays 985_000 against a 990_000 quote (50 bps short). Hop 2 pays
+    // 966_285 against 975_150 (90 bps short). The event reports the worst hop
+    // (90), not the 140 total.
+    let fx = setup(9_850, 9_810);
+    let params = fx.params(fx.two_hop_path(), 1_000_000, 900_000, 20);
+
+    let out = fx.client.swap(&fx.caller, &params);
+    assert_eq!(out, 966_285);
+    assert_eq!(last_event_u32(&fx.env, "slippage_bps"), Some(90));
 }
