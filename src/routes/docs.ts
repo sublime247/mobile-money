@@ -134,7 +134,7 @@ docsRouter.all("/sandbox/*", (req: Request, res: Response) => {
       body: req.body,
     },
   });
-}
+});
 
 // ---------------------------------------------------------------------------
 // Signed download endpoint — issue #2461
@@ -202,7 +202,6 @@ docsRouter.post("/sign", requireAuth, (req: Request, res: Response) => {
   });
 
   res.json({ url, expiresAt: expiresAt ?? Math.floor(Date.now() / 1000) + 900 });
-});
 });
 
 // Swagger UI options with Try it Out enabled
