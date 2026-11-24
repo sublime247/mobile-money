@@ -3,8 +3,8 @@
 #![allow(deprecated)]
 
 use soroban_sdk::{
-    contract, contracterror, contractevent, contractimpl, contracttype, token, Address, Env,
-    IntoVal, Symbol, Vec,
+    contract, contracterror, contractevent, contractimpl, contracttype, panic_with_error, token,
+    Address, Env, IntoVal, Symbol, Vec,
 };
 
 // ── Error types ──────────────────────────────────────────────
@@ -22,6 +22,11 @@ pub enum RouterError {
     PoolNotFound = 7,
     ContractPaused = 8,
     NotEmergencyAdmin = 9,
+    /// A protected entrypoint was re-entered while a previous invocation was
+    /// still in flight.
+    ReentrancyGuard = 10,
+    /// The caller is not allowed to invoke this entrypoint.
+    Unauthorized = 11,
 }
 
 // ── Liquidity Pool ────────────────────────────────────────────
@@ -81,6 +86,57 @@ pub struct ContractPaused {
 pub struct ContractUnpaused {
     #[topic]
     pub admin: Address,
+}
+
+#[contractevent(topics = ["PayoutExecuted"])]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PayoutExecuted {
+    #[topic]
+    pub token: Address,
+    #[topic]
+    pub recipient: Address,
+    pub amount: i128,
+}
+
+// ── Reentrancy guard ──────────────────────────────────────────
+
+/// Instance-storage key for the reentrancy lock. Present only while a
+/// protected entrypoint is executing.
+pub(crate) const REENTRANCY_KEY: &str = "REENTRANCY_LOCK";
+
+/// Non-reentrant guard held for the duration of an external payout entrypoint.
+///
+/// Acquiring the guard sets a status flag in instance storage; any nested call
+/// into a protected method while the flag is set panics with
+/// `RouterError::ReentrancyGuard`, reverting the whole transaction. The flag is
+/// cleared in `Drop`, so it is released on every exit path: normal return,
+/// early `Err` return (e.g. a slippage or transfer failure surfaced as an
+/// error), and unwinding. A panic inside a host call (such as a failing token
+/// transfer) additionally rolls back the frame's storage writes, so the flag
+/// can never be left behind for the next caller.
+///
+/// Soroban's host currently rejects re-entry into a contract that is already
+/// on the call stack; this guard is defence-in-depth on top of that rule and
+/// also protects cross-entrypoint reentrancy (e.g. `route_payment` →
+/// `execute_payout`).
+pub(crate) struct ReentrancyGuard<'a> {
+    env: &'a Env,
+}
+
+impl<'a> ReentrancyGuard<'a> {
+    pub(crate) fn enter(env: &'a Env) -> Self {
+        if env.storage().instance().has(&REENTRANCY_KEY) {
+            panic_with_error!(env, RouterError::ReentrancyGuard);
+        }
+        env.storage().instance().set(&REENTRANCY_KEY, &true);
+        Self { env }
+    }
+}
+
+impl Drop for ReentrancyGuard<'_> {
+    fn drop(&mut self) {
+        self.env.storage().instance().remove(&REENTRANCY_KEY);
+    }
 }
 
 // ── Router Contract ───────────────────────────────────────────
@@ -393,13 +449,115 @@ impl Router {
         min_amount_out: i128,
         deadline: u32,
     ) -> Result<i128, RouterError> {
+        let _guard = ReentrancyGuard::enter(&env);
+        caller.require_auth();
+        Self::swap_and_settle(
+            &env,
+            &caller,
+            &caller,
+            &path,
+            &asset_in,
+            &asset_out,
+            amount_in,
+            min_amount_out,
+            deadline,
+        )
+    }
+
+    // ── route_payment (non-reentrant) ─────────────────────────
+
+    /// Route a payment from `caller` to `recipient` along `path`, converting
+    /// `asset_in` into `asset_out`. The final output is paid to `recipient`.
+    pub fn route_payment(
+        env: Env,
+        caller: Address,
+        recipient: Address,
+        path: Vec<Address>,
+        asset_in: Address,
+        asset_out: Address,
+        amount_in: i128,
+        min_amount_out: i128,
+        deadline: u32,
+    ) -> Result<i128, RouterError> {
+        let _guard = ReentrancyGuard::enter(&env);
+        caller.require_auth();
+        Self::swap_and_settle(
+            &env,
+            &caller,
+            &recipient,
+            &path,
+            &asset_in,
+            &asset_out,
+            amount_in,
+            min_amount_out,
+            deadline,
+        )
+    }
+
+    // ── execute_payout (non-reentrant) ────────────────────────
+
+    /// Pay `amount` of `token` held by the router out to `recipient`.
+    /// Restricted to the router owner.
+    pub fn execute_payout(
+        env: Env,
+        caller: Address,
+        token: Address,
+        recipient: Address,
+        amount: i128,
+    ) -> Result<(), RouterError> {
+        let _guard = ReentrancyGuard::enter(&env);
         caller.require_auth();
         Self::ensure_not_paused(&env)?;
 
-        soroban_sdk::assert_with_error!(&env, amount_in > 0, RouterError::InvalidAmount);
-        soroban_sdk::assert_with_error!(&env, min_amount_out > 0, RouterError::InvalidAmount);
+        let state: RouterState = env
+            .storage()
+            .instance()
+            .get(&ROUTER_STATE_KEY)
+            .expect("not initialized");
+        if caller != state.owner {
+            return Err(RouterError::Unauthorized);
+        }
+        if amount <= 0 {
+            return Err(RouterError::InvalidAmount);
+        }
+
+        token::Client::new(&env, &token).transfer(
+            &env.current_contract_address(),
+            &recipient,
+            &amount,
+        );
+
+        PayoutExecuted {
+            token,
+            recipient,
+            amount,
+        }
+        .publish(&env);
+        Ok(())
+    }
+
+    /// Returns true while a protected entrypoint holds the reentrancy lock.
+    pub fn reentrancy_guard_active(env: Env) -> bool {
+        env.storage().instance().has(&REENTRANCY_KEY)
+    }
+
+    fn swap_and_settle(
+        env: &Env,
+        caller: &Address,
+        recipient: &Address,
+        path: &Vec<Address>,
+        asset_in: &Address,
+        asset_out: &Address,
+        amount_in: i128,
+        min_amount_out: i128,
+        deadline: u32,
+    ) -> Result<i128, RouterError> {
+        Self::ensure_not_paused(env)?;
+
+        soroban_sdk::assert_with_error!(env, amount_in > 0, RouterError::InvalidAmount);
+        soroban_sdk::assert_with_error!(env, min_amount_out > 0, RouterError::InvalidAmount);
         soroban_sdk::assert_with_error!(
-            &env,
+            env,
             env.ledger().sequence() < deadline,
             RouterError::DeadlineReached
         );
@@ -415,7 +573,7 @@ impl Router {
         }
 
         // Resolve each hop to its concrete pool, verifying continuity
-        let mut resolved_pools = Vec::new(&env);
+        let mut resolved_pools = Vec::new(env);
         let mut current_asset = asset_in.clone();
 
         for pool_addr in path.iter() {
@@ -433,19 +591,19 @@ impl Router {
             }
         }
 
-        if current_asset != asset_out {
+        if current_asset != *asset_out {
             return Err(RouterError::RouteNotFound);
         }
 
         // Transfer input tokens from caller to this contract
-        let input_token = token::Client::new(&env, &asset_in);
-        input_token.transfer(&caller, env.current_contract_address(), &amount_in);
+        let input_token = token::Client::new(env, asset_in);
+        input_token.transfer(caller, env.current_contract_address(), &amount_in);
 
         // Execute each hop atomically through the pool contracts
         let mut current_amount = amount_in;
 
         for pool in resolved_pools.iter() {
-            let output_amount = Self::check_slippage(&env, &pool, current_amount, &state)?;
+            let output_amount = Self::check_slippage(env, &pool, current_amount, &state)?;
             current_amount = output_amount;
         }
 
@@ -454,12 +612,12 @@ impl Router {
             return Err(RouterError::SlippageExceeded);
         }
 
-        // Transfer output tokens to the caller (recipient)
-        let output_token = token::Client::new(&env, &asset_out);
-        output_token.transfer(&env.current_contract_address(), &caller, &current_amount);
+        // Transfer output tokens to the recipient
+        let output_token = token::Client::new(env, asset_out);
+        output_token.transfer(&env.current_contract_address(), recipient, &current_amount);
 
         env.events().publish(
-            (Symbol::new(&env, "SwapExecuted"), caller),
+            (Symbol::new(env, "SwapExecuted"), caller.clone()),
             (amount_in, current_amount),
         );
 
