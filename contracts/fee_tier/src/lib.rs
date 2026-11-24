@@ -549,6 +549,8 @@ fn validate_tiers(tiers: &Vec<Tier>) -> Result<(), FeeTierError> {
     Ok(())
 }
 
+#[cfg(test)]
+mod test;
 
 // ── Test utilities ───────────────────────────────────────────────────────────
 
