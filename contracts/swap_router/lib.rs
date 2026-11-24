@@ -68,17 +68,25 @@ pub struct SwapParams {
     pub deadline: u32,
 }
 
-/// Emitted once a swap has settled: who funded it and what came out.
+/// Emitted once a swap has settled: who funded it, what was swapped and how
+/// far execution drifted from the pools' quotes.
 #[contractevent(topics = ["swap_executed"])]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SwapExecuted {
     /// Address that authorised and funded the swap.
     #[topic]
     pub caller: Address,
+    /// Input token taken from the caller (first hop's `asset_in`).
+    pub token_in: Address,
+    /// Output token delivered to the recipient (last hop's `asset_out`).
+    pub token_out: Address,
     /// Exact amount taken from the caller.
     pub amount_in: i128,
     /// Amount delivered to the recipient.
     pub amount_out: i128,
+    /// Largest per-hop shortfall against the pool quote, in basis points.
+    /// Zero when every hop executed at or above its quote.
+    pub slippage_bps: u32,
 }
 
 #[contract]
@@ -126,8 +134,10 @@ impl SwapRouter {
         input_token.transfer(&caller, env.current_contract_address(), &current_amount);
 
         // Execute each hop with per-hop slippage protection.
+        let mut slippage_bps: u32 = 0;
         for step in params.path.iter() {
-            let hop_min = Self::hop_minimum(&env, &step, current_amount)?;
+            let expected = Self::hop_quote(&env, &step, current_amount)?;
+            let hop_min = Self::hop_floor(expected)?;
 
             let amount_out: i128 = env.invoke_contract(
                 &step.pool,
@@ -147,6 +157,7 @@ impl SwapRouter {
             if amount_out < hop_min {
                 return Err(SwapError::SlippageExceeded);
             }
+            slippage_bps = slippage_bps.max(Self::shortfall_bps(expected, amount_out)?);
             current_amount = amount_out;
         }
 
@@ -166,8 +177,11 @@ impl SwapRouter {
 
         env.events().publish_event(&SwapExecuted {
             caller,
+            token_in: first_step.asset_in,
+            token_out: last_step.asset_out,
             amount_in: params.amount_in,
             amount_out: current_amount,
+            slippage_bps,
         });
 
         Ok(current_amount)
@@ -192,9 +206,8 @@ impl SwapRouter {
         current
     }
 
-    /// Ask `step.pool` for its expected output and derive the per-hop
-    /// minimum: the quoted amount minus [`MAX_HOP_SLIPPAGE_BPS`] of headroom.
-    fn hop_minimum(env: &Env, step: &SwapStep, amount_in: i128) -> Result<i128, SwapError> {
+    /// Ask `step.pool` for the output it expects for `amount_in`.
+    fn hop_quote(env: &Env, step: &SwapStep, amount_in: i128) -> Result<i128, SwapError> {
         if amount_in <= 0 {
             return Err(SwapError::InvalidAmount);
         }
@@ -213,7 +226,12 @@ impl SwapRouter {
         if expected <= 0 {
             return Err(SwapError::InvalidAmount);
         }
+        Ok(expected)
+    }
 
+    /// Per-hop minimum: the quoted amount minus [`MAX_HOP_SLIPPAGE_BPS`] of
+    /// headroom. Never zero, so dust inputs stay bound.
+    fn hop_floor(expected: i128) -> Result<i128, SwapError> {
         let keep = BPS
             .checked_sub(MAX_HOP_SLIPPAGE_BPS as i128)
             .ok_or(SwapError::InvalidAmount)?;
@@ -224,6 +242,19 @@ impl SwapRouter {
 
         // Never hand a pool a zero minimum — dust inputs must still be bound.
         Ok(if floor > 0 { floor } else { 1 })
+    }
+
+    /// Shortfall of `actual` against `expected`, in basis points (0 when the
+    /// hop met or beat its quote).
+    fn shortfall_bps(expected: i128, actual: i128) -> Result<u32, SwapError> {
+        if actual >= expected {
+            return Ok(0);
+        }
+        let shortfall = (expected - actual)
+            .checked_mul(BPS)
+            .and_then(|value| value.checked_div(expected))
+            .ok_or(SwapError::InvalidAmount)?;
+        u32::try_from(shortfall).map_err(|_| SwapError::InvalidAmount)
     }
 }
 
