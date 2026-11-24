@@ -8,6 +8,16 @@ import {
   horizonProbeLatencySeconds,
   horizonRequestFailoverTotal,
 } from "../utils/metrics";
+import {
+  DEFAULT_MAX_LEDGER_LAG,
+  DEFAULT_MAX_RESPONSE_MS,
+  assessNodeHealth,
+  defaultRootFetcher,
+  findTipLedger,
+  probeHorizonRoot,
+  type HorizonRootFetcher,
+  type RootProbeSample,
+} from "./horizonHealthChecker";
 
 /**
  * Horizon client rotation & automated failover.
@@ -22,6 +32,12 @@ import {
  * …) and builder chains (`server.transactions().forAccount(id).call()`) are
  * recorded and replayed against the next healthy node when the active one fails,
  * so existing call sites get failover without any code changes.
+ *
+ * Active probes check each node's root endpoint for latency and ledger lag
+ * (see `horizonHealthChecker.ts`). A node that is slow or more than
+ * `maxLedgerLag` ledgers behind the pool tip is removed from the preferred
+ * rotation until a later probe passes. Traffic only reaches such a node when
+ * no preferred node is available.
  */
 
 // Server methods that perform network I/O directly and should be retried.
@@ -98,6 +114,8 @@ export interface HorizonNode {
   url: string;
   server: StellarSdk.Horizon.Server;
   breaker: NodeCircuitBreaker;
+  /** False while the latest probe judged the node slow or lagging. */
+  probeHealthy: boolean;
 }
 
 export interface HealthProbeResult {
@@ -105,13 +123,13 @@ export interface HealthProbeResult {
   ok: boolean;
   latencyMs: number;
   status?: number;
+  ledger?: number;
+  ledgerLag?: number;
   error?: string;
 }
 
-export type HorizonHealthProbe = (
-  url: string,
-  timeoutMs: number,
-) => Promise<{ status: number }>;
+/** Transport used by health probes. Same shape as {@link HorizonRootFetcher}. */
+export type HorizonHealthProbe = HorizonRootFetcher;
 
 export interface HorizonPoolConfig {
   /** Consecutive failover-eligible failures before a node is taken out of rotation. */
@@ -120,8 +138,10 @@ export interface HorizonPoolConfig {
   cooldownMs: number;
   /** How often active health probes run. */
   probeIntervalMs: number;
-  /** A probe slower than this is treated as a failure. */
+  /** A probe slower than this (ms) marks the node unhealthy. */
   latencyThresholdMs: number;
+  /** A node more than this many ledgers behind the tip is marked unhealthy. */
+  maxLedgerLag: number;
   /** Timeout applied to an individual probe request. */
   probeTimeoutMs: number;
   /** Overridable probe transport (used by tests). */
@@ -139,10 +159,17 @@ const DEFAULT_CONFIG: HorizonPoolConfig = {
     10,
   ),
   latencyThresholdMs: parseInt(
-    process.env.HORIZON_LATENCY_THRESHOLD_MS || "2000",
+    process.env.HORIZON_LATENCY_THRESHOLD_MS || String(DEFAULT_MAX_RESPONSE_MS),
     10,
   ),
-  probeTimeoutMs: parseInt(process.env.HORIZON_PROBE_TIMEOUT_MS || "2000", 10),
+  maxLedgerLag: parseInt(
+    process.env.HORIZON_MAX_LEDGER_LAG || String(DEFAULT_MAX_LEDGER_LAG),
+    10,
+  ),
+  probeTimeoutMs: parseInt(
+    process.env.HORIZON_PROBE_TIMEOUT_MS || String(DEFAULT_MAX_RESPONSE_MS),
+    10,
+  ),
 };
 
 /**
@@ -197,13 +224,6 @@ export function isFailoverEligible(error: unknown): boolean {
   return false;
 }
 
-const defaultHealthProbe: HorizonHealthProbe = async (url, timeoutMs) => {
-  const response = await fetch(`${url.replace(/\/+$/, "")}/health`, {
-    signal: AbortSignal.timeout(timeoutMs),
-  });
-  return { status: response.status };
-};
-
 export class HorizonPool {
   private readonly nodes: HorizonNode[];
   private readonly config: HorizonPoolConfig;
@@ -227,6 +247,7 @@ export class HorizonPool {
         this.config.maxConsecutiveFailures,
         this.config.cooldownMs,
       ),
+      probeHealthy: true,
     }));
     // Initialise health gauge so all nodes are visible in Prometheus.
     for (const node of this.nodes) {
@@ -241,10 +262,10 @@ export class HorizonPool {
   }
 
   /**
-   * Build the ordered list of nodes to try for one request: healthy nodes
-   * first (round-robin starting at the cursor), then any down nodes as a
-   * last resort so the pool degrades gracefully instead of failing hard when
-   * every node is in cooldown (half-open probing).
+   * Build the ordered list of nodes to try for one request: preferred nodes
+   * first (round-robin starting at the cursor), then the rest as a last resort
+   * so the pool degrades gracefully instead of failing hard. A node is
+   * preferred when its breaker is closed and its latest probe passed.
    */
   private candidateOrder(): HorizonNode[] {
     const now = Date.now();
@@ -252,9 +273,11 @@ export class HorizonPool {
     for (let i = 0; i < this.nodes.length; i++) {
       rotated.push(this.nodes[(this.cursor + i) % this.nodes.length]);
     }
-    const healthy = rotated.filter((n) => !n.breaker.isDown(now));
-    const down = rotated.filter((n) => n.breaker.isDown(now));
-    return healthy.length > 0 ? [...healthy, ...down] : rotated;
+    const isPreferred = (n: HorizonNode) =>
+      n.probeHealthy && !n.breaker.isDown(now);
+    const preferred = rotated.filter(isPreferred);
+    const rest = rotated.filter((n) => !isPreferred(n));
+    return preferred.length > 0 ? [...preferred, ...rest] : rotated;
   }
 
   private markSuccess(node: HorizonNode): void {
@@ -386,66 +409,104 @@ export class HorizonPool {
     return this.candidateOrder()[0].server;
   }
 
-  async probeNode(node: HorizonNode): Promise<HealthProbeResult> {
-    const startedAt = Date.now();
-    try {
-      const probe = this.config.probe ?? defaultHealthProbe;
-      const response = await probe(node.url, this.config.probeTimeoutMs);
-      const latencyMs = Date.now() - startedAt;
+  private sampleNode(node: HorizonNode): Promise<RootProbeSample> {
+    return probeHorizonRoot(
+      node.url,
+      this.config.probeTimeoutMs,
+      this.config.probe ?? defaultRootFetcher,
+    );
+  }
 
-      if (response.status >= 500) {
-        throw Object.assign(
-          new Error(`Health probe returned ${response.status}`),
-          {
-            response: { status: response.status },
-          },
-        );
-      }
-      if (latencyMs > this.config.latencyThresholdMs) {
-        throw new Error(
-          `Health probe latency ${latencyMs}ms exceeds ${this.config.latencyThresholdMs}ms`,
-        );
-      }
+  /**
+   * Probe one node. Without `tipLedger` the node is only checked for latency
+   * and its own ledger is treated as the tip, so no lag is charged.
+   */
+  async probeNode(
+    node: HorizonNode,
+    tipLedger?: number,
+  ): Promise<HealthProbeResult> {
+    const sample = await this.sampleNode(node);
+    return this.applyProbe(node, sample, tipLedger);
+  }
 
-      horizonProbeLatencySeconds.observe(
-        { node: node.url, status: "success" },
-        latencyMs / 1000,
-      );
+  /** Judge a probe sample and update the node's routing state. */
+  private applyProbe(
+    node: HorizonNode,
+    sample: RootProbeSample,
+    tipLedger: number | undefined,
+  ): HealthProbeResult {
+    const assessment = assessNodeHealth(sample, tipLedger, {
+      maxResponseMs: this.config.latencyThresholdMs,
+      maxLedgerLag: this.config.maxLedgerLag,
+    });
+
+    horizonProbeLatencySeconds.observe(
+      { node: node.url, status: assessment.healthy ? "success" : "failure" },
+      sample.latencyMs / 1000,
+    );
+
+    if (assessment.healthy) {
+      node.probeHealthy = true;
       this.markSuccess(node);
-      return { node: node.url, ok: true, latencyMs, status: response.status };
-    } catch (error) {
-      const latencyMs = Date.now() - startedAt;
-      const errorType =
-        latencyMs > this.config.latencyThresholdMs
-          ? "latency"
-          : classifyError(error);
-      horizonProbeLatencySeconds.observe(
-        { node: node.url, status: "failure" },
-        latencyMs / 1000,
-      );
-      this.markFailure(node, "health_probe", error, errorType);
-      return {
-        node: node.url,
-        ok: false,
-        latencyMs,
-        status: (error as { response?: { status?: number } })?.response?.status,
-        error: error instanceof Error ? error.message : String(error),
-      };
+    } else {
+      node.probeHealthy = false;
+      horizonNodeHealth.set({ node: node.url }, 0);
+      const reason = assessment.reason ?? "network";
+      if (reason === "latency" || reason === "ledger_lag") {
+        // Reachable but degraded: move traffic away without spending the
+        // circuit-breaker budget that tracks hard failures.
+        horizonNodeFailuresTotal.inc({ node: node.url, error_type: reason });
+        logger.warn(
+          {
+            horizon_node: node.url,
+            reason,
+            latency_ms: sample.latencyMs,
+            ledger_lag: assessment.ledgerLag,
+            tip_ledger: tipLedger,
+          },
+          "Horizon node degraded, removed from preferred rotation",
+        );
+      } else {
+        this.markFailure(
+          node,
+          "health_probe",
+          new Error(sample.error ?? reason),
+          reason,
+        );
+      }
     }
+
+    return {
+      node: node.url,
+      ok: assessment.healthy,
+      latencyMs: sample.latencyMs,
+      status: sample.status,
+      ledger: sample.ledger,
+      ledgerLag: assessment.ledgerLag,
+      error: assessment.healthy
+        ? undefined
+        : (sample.error ?? assessment.reason),
+    };
   }
 
   async runHealthProbeCycle(): Promise<HealthProbeResult[]> {
     if (this.probeInFlight) return this.probeInFlight;
     this.probeInFlight = Promise.all(
-      this.nodes.map((node) => this.probeNode(node)),
+      this.nodes.map((node) => this.sampleNode(node)),
     )
-      .then((results) => {
+      .then((samples) => {
+        // The tip is the highest ledger any node reported this cycle.
+        const tip = findTipLedger(samples);
+        const results = this.nodes.map((node, i) =>
+          this.applyProbe(node, samples[i], tip),
+        );
         logger.debug(
           {
             horizon_nodes: results.map((result) => ({
               node: result.node,
               ok: result.ok,
               latency_ms: result.latencyMs,
+              ledger_lag: result.ledgerLag,
             })),
           },
           "Horizon health probe cycle complete",

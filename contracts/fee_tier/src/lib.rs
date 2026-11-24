@@ -14,9 +14,16 @@
 //! | 1    | 1,000     | 10%      |
 //! | 2    | 5,000     | 25%      |
 //! | 3    | 10,000    | 50%      |
+//!
+//! Merchants can also earn a volume discount. The admin records each user's
+//! trailing 30-day volume with [`FeeTierContract::record_volume`], which maps it
+//! through a piecewise-linear curve ([`CurvePoint`]) and tracks the result in a
+//! [`TierState`]. A demotion is held back for [`GRACE_PERIOD_SECS`] so a
+//! temporary dip in volume does not raise the user's fees immediately.
 
 use soroban_sdk::{
-    contract, contractclient, contracterror, contractimpl, contracttype, vec, Address, Env, Vec,
+    contract, contractclient, contracterror, contractevent, contractimpl, contracttype, vec,
+    Address, Env, Vec,
 };
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -29,6 +36,12 @@ pub const MAX_DISCOUNT_BPS: u32 = 5_000;
 pub const MAX_TIERS: u32 = 10;
 /// Largest supported token decimals (10^18 fits comfortably in i128).
 const MAX_DECIMALS: u32 = 18;
+/// Ceiling on the combined discount, whether it comes from staking or volume.
+pub const MAX_TOTAL_DISCOUNT_BPS: u32 = 6_000;
+/// Upper bound on volume curve points.
+pub const MAX_CURVE_POINTS: u32 = 10;
+/// How long a demoted volume tier keeps its preferential rate (7 days).
+pub const GRACE_PERIOD_SECS: u64 = 7 * 24 * 60 * 60;
 
 const TTL_THRESHOLD: u32 = 518_400;
 const TTL_EXTEND_TO: u32 = 1_036_800;
@@ -58,6 +71,13 @@ pub enum FeeTierError {
     InvalidFee = 4,
     /// Token decimals out of supported range.
     InvalidDecimals = 5,
+    /// Volume curve is empty, too long, not strictly increasing by volume,
+    /// non-monotonic in discount, or exceeds [`MAX_TOTAL_DISCOUNT_BPS`].
+    InvalidCurve = 6,
+    /// Volume must not be negative.
+    InvalidVolume = 7,
+    /// Arithmetic overflow while interpolating the volume curve.
+    Overflow = 8,
 }
 
 // ── Types & storage ──────────────────────────────────────────────────────────
@@ -69,6 +89,44 @@ pub enum FeeTierError {
 pub struct Tier {
     pub min_stake: i128,
     pub discount_bps: u32,
+}
+
+/// A breakpoint on the volume discount curve. The curve is anchored at
+/// `(0, 0)` and linearly interpolated between breakpoints. Above the last
+/// breakpoint the discount stays flat.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CurvePoint {
+    /// Trailing 30-day volume at which this discount applies.
+    pub volume: i128,
+    pub discount_bps: u32,
+}
+
+/// Per-user volume tier state. Updated by every evaluation.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TierState {
+    /// 1-based volume tier currently held (0 for none).
+    pub held_tier: u32,
+    /// Discount in basis points granted by the held tier.
+    pub held_discount_bps: u32,
+    /// Ledger timestamp of the most recent evaluation.
+    pub tier_evaluated_at: u64,
+    /// When a pending demotion takes effect. 0 when no grace period is running.
+    pub grace_period_expires_at: u64,
+}
+
+/// Emitted each time a user's volume tier is evaluated.
+#[contractevent(topics = ["fee_tier_updated"])]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FeeTierUpdated {
+    /// Account whose tier was evaluated.
+    #[topic]
+    pub user: Address,
+    /// Held volume tier index (0 for none).
+    pub tier: u32,
+    /// Fee charged in basis points of the standard fee (10,000 = no discount).
+    pub effective_fee_bps: u32,
 }
 
 /// Result of applying a user's tier to a standard fee.
@@ -90,6 +148,9 @@ pub enum DataKey {
     Admin,
     Staking,
     Tiers,
+    VolumeCurve,
+    Volume(Address),
+    TierState(Address),
 }
 
 // ── Contract ─────────────────────────────────────────────────────────────────
@@ -133,10 +194,31 @@ impl FeeTierContract {
             },
         ];
 
+        let curve = vec![
+            &env,
+            CurvePoint {
+                volume: 1_000 * unit,
+                discount_bps: 500,
+            },
+            CurvePoint {
+                volume: 10_000 * unit,
+                discount_bps: 2_000,
+            },
+            CurvePoint {
+                volume: 50_000 * unit,
+                discount_bps: 4_000,
+            },
+            CurvePoint {
+                volume: 100_000 * unit,
+                discount_bps: 6_000,
+            },
+        ];
+
         let storage = env.storage().instance();
         storage.set(&DataKey::Admin, &admin);
         storage.set(&DataKey::Staking, &staking_contract);
         storage.set(&DataKey::Tiers, &tiers);
+        storage.set(&DataKey::VolumeCurve, &curve);
         storage.extend_ttl(TTL_THRESHOLD, TTL_EXTEND_TO);
         Ok(())
     }
@@ -172,6 +254,78 @@ impl FeeTierContract {
             .ok_or(FeeTierError::NotInitialised)
     }
 
+    /// Replace the volume discount curve. Breakpoints must have strictly
+    /// increasing volume, a positive non-decreasing discount, and no discount
+    /// above [`MAX_TOTAL_DISCOUNT_BPS`].
+    pub fn set_volume_curve(env: Env, points: Vec<CurvePoint>) -> Result<(), FeeTierError> {
+        Self::require_admin(&env)?;
+        validate_curve(&points)?;
+        env.storage().instance().set(&DataKey::VolumeCurve, &points);
+        Ok(())
+    }
+
+    /// Current volume discount curve.
+    pub fn get_volume_curve(env: Env) -> Result<Vec<CurvePoint>, FeeTierError> {
+        Self::curve(&env)
+    }
+
+    /// Record `user`'s trailing 30-day volume and re-evaluate their tier.
+    ///
+    /// The contract stores the value as given; the caller is responsible for
+    /// computing the 30-day window. Emits [`FeeTierUpdated`].
+    pub fn record_volume(env: Env, user: Address, volume: i128) -> Result<(), FeeTierError> {
+        Self::require_admin(&env)?;
+        if volume < 0 {
+            return Err(FeeTierError::InvalidVolume);
+        }
+        env.storage()
+            .instance()
+            .set(&DataKey::Volume(user.clone()), &volume);
+        Self::evaluate_tier(env, user)?;
+        Ok(())
+    }
+
+    /// Last recorded trailing volume for `user` (0 when never recorded).
+    pub fn get_volume(env: Env, user: Address) -> i128 {
+        Self::volume_of(&env, &user)
+    }
+
+    /// Stored volume tier state for `user`, if they have been evaluated.
+    pub fn get_tier_state(env: Env, user: Address) -> Option<TierState> {
+        Self::state_of(&env, &user)
+    }
+
+    /// Re-evaluate `user`'s volume tier at the current ledger time.
+    ///
+    /// Anyone may call this, for example a keeper that wants a lapsed grace
+    /// period to be recorded. Returns the held volume tier and emits
+    /// [`FeeTierUpdated`].
+    pub fn evaluate_tier(env: Env, user: Address) -> Result<u32, FeeTierError> {
+        let now = env.ledger().timestamp();
+        let curve = Self::curve(&env)?;
+        let volume = Self::volume_of(&env, &user);
+        let (volume_tier, volume_bps) = tier_for_volume(&curve, volume)?;
+
+        let prev = Self::state_of(&env, &user).unwrap_or(TierState {
+            held_tier: 0,
+            held_discount_bps: 0,
+            tier_evaluated_at: now,
+            grace_period_expires_at: 0,
+        });
+        let next = next_state(prev, volume_tier, volume_bps, now);
+        env.storage()
+            .instance()
+            .set(&DataKey::TierState(user.clone()), &next);
+
+        let effective = Self::effective_volume_bps(&env, &user)?;
+        env.events().publish_event(&FeeTierUpdated {
+            user,
+            tier: next.held_tier,
+            effective_fee_bps: BPS_DENOMINATOR as u32 - effective,
+        });
+        Ok(next.held_tier)
+    }
+
     /// `user`'s staked balance as reported by the staking contract.
     pub fn get_staked_balance(env: Env, user: Address) -> Result<i128, FeeTierError> {
         let staking = Self::get_staking_contract(env.clone())?;
@@ -191,11 +345,16 @@ impl FeeTierContract {
     }
 
     /// Apply `user`'s discount to `standard_fee` and return the breakdown.
+    ///
+    /// The discount is the larger of the staking tier discount and the volume
+    /// discount, capped at [`MAX_TOTAL_DISCOUNT_BPS`].
     pub fn quote(env: Env, user: Address, standard_fee: i128) -> Result<FeeQuote, FeeTierError> {
         if standard_fee < 0 {
             return Err(FeeTierError::InvalidFee);
         }
-        let (tier, discount_bps) = Self::resolve(&env, &user)?;
+        let (tier, stake_bps) = Self::resolve(&env, &user)?;
+        let volume_bps = Self::effective_volume_bps(&env, &user)?;
+        let discount_bps = stake_bps.max(volume_bps).min(MAX_TOTAL_DISCOUNT_BPS);
         // Floor the discount so rounding never undercharges the protocol.
         let discount = standard_fee * discount_bps as i128 / BPS_DENOMINATOR;
         Ok(FeeQuote {
@@ -238,6 +397,40 @@ impl FeeTierContract {
             .ok_or(FeeTierError::NotInitialised)
     }
 
+    fn curve(env: &Env) -> Result<Vec<CurvePoint>, FeeTierError> {
+        env.storage()
+            .instance()
+            .get(&DataKey::VolumeCurve)
+            .ok_or(FeeTierError::NotInitialised)
+    }
+
+    fn volume_of(env: &Env, user: &Address) -> i128 {
+        env.storage()
+            .instance()
+            .get(&DataKey::Volume(user.clone()))
+            .unwrap_or(0)
+    }
+
+    fn state_of(env: &Env, user: &Address) -> Option<TierState> {
+        env.storage()
+            .instance()
+            .get(&DataKey::TierState(user.clone()))
+    }
+
+    /// Volume discount in effect for `user` right now. While a grace period is
+    /// running the held discount is kept. Once it lapses, the discount comes
+    /// from the current volume alone.
+    fn effective_volume_bps(env: &Env, user: &Address) -> Result<u32, FeeTierError> {
+        if let Some(state) = Self::state_of(env, user) {
+            let now = env.ledger().timestamp();
+            if state.grace_period_expires_at != 0 && now < state.grace_period_expires_at {
+                return Ok(state.held_discount_bps);
+            }
+        }
+        let curve = Self::curve(env)?;
+        curve_discount_bps(&curve, Self::volume_of(env, user))
+    }
+
     /// Returns `(tier_number, discount_bps)` for `user`.
     fn resolve(env: &Env, user: &Address) -> Result<(u32, u32), FeeTierError> {
         let tiers = Self::tiers(env)?;
@@ -259,6 +452,84 @@ fn tier_for_stake(tiers: &Vec<Tier>, staked: i128) -> (u32, u32) {
     result
 }
 
+/// Piecewise-linear discount for `volume`, interpolated over `curve` with an
+/// implicit `(0, 0)` anchor. Rounds down so the protocol never undercharges.
+fn curve_discount_bps(curve: &Vec<CurvePoint>, volume: i128) -> Result<u32, FeeTierError> {
+    let (mut x0, mut y0): (i128, i128) = (0, 0);
+    for point in curve.iter() {
+        let (x1, y1) = (point.volume, point.discount_bps as i128);
+        if volume < x1 {
+            let span = (y1 - y0)
+                .checked_mul(volume - x0)
+                .ok_or(FeeTierError::Overflow)?;
+            return Ok((y0 + span / (x1 - x0)) as u32);
+        }
+        x0 = x1;
+        y0 = y1;
+    }
+    Ok(y0 as u32)
+}
+
+/// Volume tier index (count of breakpoints `volume` has reached) and the
+/// discount at that volume.
+fn tier_for_volume(curve: &Vec<CurvePoint>, volume: i128) -> Result<(u32, u32), FeeTierError> {
+    let tier = curve.iter().filter(|p| volume >= p.volume).count() as u32;
+    Ok((tier, curve_discount_bps(curve, volume)?))
+}
+
+/// Advance a volume tier state. Upgrades and same-tier evaluations apply at
+/// once and cancel any running grace period. A drop starts a grace period,
+/// keeps the held rate during it, and demotes once it has lapsed.
+fn next_state(prev: TierState, volume_tier: u32, volume_bps: u32, now: u64) -> TierState {
+    if volume_tier >= prev.held_tier {
+        return TierState {
+            held_tier: volume_tier,
+            held_discount_bps: volume_bps,
+            tier_evaluated_at: now,
+            grace_period_expires_at: 0,
+        };
+    }
+    if prev.grace_period_expires_at == 0 {
+        return TierState {
+            held_tier: prev.held_tier,
+            held_discount_bps: prev.held_discount_bps,
+            tier_evaluated_at: now,
+            grace_period_expires_at: now + GRACE_PERIOD_SECS,
+        };
+    }
+    if now < prev.grace_period_expires_at {
+        return TierState {
+            tier_evaluated_at: now,
+            ..prev
+        };
+    }
+    TierState {
+        held_tier: volume_tier,
+        held_discount_bps: volume_bps,
+        tier_evaluated_at: now,
+        grace_period_expires_at: 0,
+    }
+}
+
+fn validate_curve(points: &Vec<CurvePoint>) -> Result<(), FeeTierError> {
+    if points.is_empty() || points.len() > MAX_CURVE_POINTS {
+        return Err(FeeTierError::InvalidCurve);
+    }
+    let (mut prev_volume, mut prev_bps): (i128, u32) = (0, 0);
+    for point in points.iter() {
+        if point.volume <= prev_volume
+            || point.discount_bps == 0
+            || point.discount_bps < prev_bps
+            || point.discount_bps > MAX_TOTAL_DISCOUNT_BPS
+        {
+            return Err(FeeTierError::InvalidCurve);
+        }
+        prev_volume = point.volume;
+        prev_bps = point.discount_bps;
+    }
+    Ok(())
+}
+
 fn validate_tiers(tiers: &Vec<Tier>) -> Result<(), FeeTierError> {
     if tiers.is_empty() || tiers.len() > MAX_TIERS {
         return Err(FeeTierError::InvalidTiers);
@@ -277,6 +548,9 @@ fn validate_tiers(tiers: &Vec<Tier>) -> Result<(), FeeTierError> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod test;
 
 // ── Test utilities ───────────────────────────────────────────────────────────
 
