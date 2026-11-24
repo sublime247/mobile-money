@@ -48,7 +48,7 @@ const TEST_WEB_AUTH_DOMAIN = "https://test.example.com";
 const TEST_HOME_DOMAIN = "test.example.com";
 
 function createTestService(
-  overrides?: Record<string, string | number>,
+  overrides?: Record<string, unknown>,
 ): Sep10Service {
   return new Sep10Service({
     signingKey: serverKeypair.secret(),
@@ -67,7 +67,7 @@ function createTestService(
  */
 function createTestServiceWithMockedServer(
   mockServer: any,
-  overrides?: Record<string, string | number>,
+  overrides?: Record<string, unknown>,
 ): Sep10Service {
   return new Sep10Service(
     {
@@ -318,7 +318,9 @@ describe("SEP-10 Stellar Authentication", () => {
       });
 
       it("should use homeDomain in manageData key when provided", async () => {
-        const service = createTestService();
+        const service = createTestService({
+          additionalHomeDomains: ["custom.domain.com"],
+        });
         const challenge = await service.generateChallenge(
           clientKeypair.publicKey(),
           "custom.domain.com",
@@ -1014,7 +1016,9 @@ describe("SEP-10 Stellar Authentication", () => {
     beforeEach(() => {
       const mockAccount = createMockAccountSingleSig(clientKeypair.publicKey());
       const mockServer = createMockHorizonServer(mockAccount);
-      service = createTestServiceWithMockedServer(mockServer);
+      service = createTestServiceWithMockedServer(mockServer, {
+        additionalHomeDomains: ["custom.example.com"],
+      });
       app = express();
       app.use(express.json());
       app.use("/auth", createSep10Router(service));

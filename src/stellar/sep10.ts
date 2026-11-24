@@ -63,6 +63,11 @@ export interface Sep10Config {
   challengeExpiresIn: number;
   jwtExpiresIn: string;
   homeDomain: string;
+  /**
+   * Extra home domains this server issues tokens for, besides `homeDomain`.
+   * A challenge request naming any other `home_domain` is rejected.
+   */
+  additionalHomeDomains?: string[];
 }
 
 export function getSep10Config(): Sep10Config {
@@ -96,11 +101,12 @@ export function getSep10Config(): Sep10Config {
     challengeExpiresIn: 900, // 15 minutes
     jwtExpiresIn: "1h",
     homeDomain: process.env.STELLAR_HOME_DOMAIN || "api.mobilemoney.com",
+    additionalHomeDomains: (process.env.STELLAR_ADDITIONAL_HOME_DOMAINS || "")
+      .split(",")
+      .map((d) => d.trim().toLowerCase())
+      .filter(Boolean),
   };
 }
-
-const clientDomainCache = new Map<string, { signingKey: string; fetchedAt: number }>();
-const CACHE_TTL_MS = 15 * 60 * 1000;
 
 /**
  * Read raw signature bytes from a decorated signature.
@@ -134,45 +140,140 @@ function readDecoratedSignature(
   throw new Error("Unreadable signature");
 }
 
+// ============================================================================
+// Client attribution (client_domain) verification
+// ============================================================================
+
+const clientDomainCache = new Map<
+  string,
+  { signingKey: string; fetchedAt: number }
+>();
+const CACHE_TTL_MS = 15 * 60 * 1000;
+const STELLAR_TOML_FETCH_TIMEOUT_MS = 5000;
+/** SEP-1 caps stellar.toml at 100KB. */
+const STELLAR_TOML_MAX_BYTES = 100 * 1024;
+
+const DOMAIN_LABEL = "[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?";
+const CLIENT_DOMAIN_PATTERN = new RegExp(
+  `^(?:${DOMAIN_LABEL}\\.)+[a-z]{2,63}$`,
+);
+const LOCAL_DOMAIN_PATTERN = /^(?:localhost|127\.0\.0\.1)(?::\d{1,5})?$/;
+
+/** Clear the stellar.toml signing-key cache (used by tests). */
+export function clearClientDomainCache(): void {
+  clientDomainCache.clear();
+}
+
+function isLocalDomain(domain: string): boolean {
+  return LOCAL_DOMAIN_PATTERN.test(domain);
+}
+
+/**
+ * Parse and normalise the `client_domain` challenge parameter.
+ *
+ * SEP-10 defines it as a bare domain: schemes, paths, query strings,
+ * credentials and ports are rejected so the value cannot be used to point the
+ * stellar.toml lookup at an arbitrary URL. `localhost` / `127.0.0.1` (with an
+ * optional port) are allowed for local development.
+ */
+export function parseClientDomain(raw: unknown): string {
+  if (typeof raw !== "string") {
+    throw new Error("Invalid client_domain: must be a string");
+  }
+  const domain = raw.trim().toLowerCase();
+  if (!domain || domain.length > 253) {
+    throw new Error("Invalid client_domain: must be a valid domain name");
+  }
+  if (!CLIENT_DOMAIN_PATTERN.test(domain) && !isLocalDomain(domain)) {
+    throw new Error(
+      `Invalid client_domain: ${JSON.stringify(raw)} is not a valid domain name`,
+    );
+  }
+  return domain;
+}
+
+/**
+ * Extract the top-level `SIGNING_KEY` from a stellar.toml document.
+ *
+ * Only the document root is considered: keys inside a table (e.g. a
+ * `[[CURRENCIES]]` entry) and commented-out lines are ignored, and the key
+ * name is matched case-sensitively as SEP-1 requires. Returns `null` when no
+ * valid ed25519 public key is published.
+ */
+export function parseStellarTomlSigningKey(toml: string): string | null {
+  for (const rawLine of toml.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) continue;
+    // First table header ends the root table.
+    if (line.startsWith("[")) break;
+
+    const match = line.match(
+      /^SIGNING_KEY\s*=\s*(?:"([^"]*)"|'([^']*)')\s*(?:#.*)?$/,
+    );
+    if (!match) continue;
+
+    const value = (match[1] ?? match[2] ?? "").trim();
+    return StellarSdk.StrKey.isValidEd25519PublicKey(value) ? value : null;
+  }
+  return null;
+}
+
+/**
+ * Resolve the client domain's SEP-10 signing key from its published
+ * `https://<client_domain>/.well-known/stellar.toml`.
+ */
 export async function fetchClientDomainSigningKey(
   clientDomain: string,
   fetchFn?: typeof fetch,
 ): Promise<string> {
-  const normalizedDomain = clientDomain.toLowerCase().trim();
+  let normalizedDomain: string;
+  try {
+    normalizedDomain = parseClientDomain(clientDomain);
+  } catch (error: any) {
+    throw new Error(`Client domain verification failed: ${error.message}`);
+  }
+
   const cached = clientDomainCache.get(normalizedDomain);
   if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
     return cached.signingKey;
   }
 
-  const protocol =
-    normalizedDomain.startsWith("localhost") || normalizedDomain.includes("127.0.0.1")
-      ? "http"
-      : "https";
+  const protocol = isLocalDomain(normalizedDomain) ? "http" : "https";
   const url = `${protocol}://${normalizedDomain}/.well-known/stellar.toml`;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () => controller.abort(),
+    STELLAR_TOML_FETCH_TIMEOUT_MS,
+  );
 
   try {
     const customFetch = fetchFn || globalThis.fetch;
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
-
-    const response = await customFetch(url, { signal: controller.signal });
-    clearTimeout(timeout);
+    const response = await customFetch(url, {
+      signal: controller.signal,
+      redirect: "error",
+    });
 
     if (!response.ok) {
       throw new Error(`HTTP ${response.status} fetching stellar.toml`);
     }
 
     const text = await response.text();
-    const match =
-      text.match(/SIGNING_KEY\s*=\s*["']?([G][A-Z0-9]{55})["']?/i) ||
-      text.match(/URI_REQUEST_SIGNER\s*=\s*["']?([G][A-Z0-9]{55})["']?/i);
-
-    if (!match || !match[1]) {
-      throw new Error(`No SIGNING_KEY found in ${normalizedDomain}/.well-known/stellar.toml`);
+    if (Buffer.byteLength(text, "utf8") > STELLAR_TOML_MAX_BYTES) {
+      throw new Error("stellar.toml exceeds the 100KB size limit");
     }
 
-    const signingKey = match[1];
-    clientDomainCache.set(normalizedDomain, { signingKey, fetchedAt: Date.now() });
+    const signingKey = parseStellarTomlSigningKey(text);
+    if (!signingKey) {
+      throw new Error(
+        `No valid SIGNING_KEY found in ${normalizedDomain}/.well-known/stellar.toml`,
+      );
+    }
+
+    clientDomainCache.set(normalizedDomain, {
+      signingKey,
+      fetchedAt: Date.now(),
+    });
     return signingKey;
   } catch (error: any) {
     logger.warn(
@@ -182,7 +283,27 @@ export async function fetchClientDomainSigningKey(
     throw new Error(
       `Client domain verification failed: ${error.message || "Unable to fetch SIGNING_KEY"}`,
     );
+  } finally {
+    clearTimeout(timeout);
   }
+}
+
+/**
+ * Check that `transaction` carries a valid signature from `publicKey`.
+ */
+function isSignedBy(
+  transaction: StellarSdk.Transaction,
+  publicKey: string,
+): boolean {
+  const keypair = StellarSdk.Keypair.fromPublicKey(publicKey);
+  const txHash = Buffer.from(transaction.hash());
+  return transaction.signatures.some((sig) => {
+    try {
+      return keypair.verify(txHash, readDecoratedSignature(sig));
+    } catch {
+      return false;
+    }
+  });
 }
 
 // ============================================================================
@@ -220,6 +341,31 @@ export class Sep10Service {
 
   getServerPublicKey(): string {
     return this.serverKeypair.publicKey();
+  }
+
+  /** Home domains this server will issue challenges and tokens for. */
+  getAllowedHomeDomains(): string[] {
+    return [
+      this.config.homeDomain,
+      ...(this.config.additionalHomeDomains || []),
+    ].map((d) => d.trim().toLowerCase());
+  }
+
+  /**
+   * Resolve the `home_domain` challenge parameter against the configured
+   * HOME_DOMAIN(s). Defaults to the primary home domain when omitted.
+   */
+  resolveHomeDomain(homeDomain?: string): string {
+    if (homeDomain === undefined || homeDomain === "") {
+      return this.config.homeDomain;
+    }
+    const normalized = homeDomain.trim().toLowerCase();
+    if (!this.getAllowedHomeDomains().includes(normalized)) {
+      throw new Error(
+        `Invalid home_domain: ${homeDomain} is not served by this server`,
+      );
+    }
+    return normalized;
   }
 
   /**
@@ -420,13 +566,19 @@ export class Sep10Service {
       throw new Error("Invalid Stellar public key");
     }
 
-    // Verify client domain against its stellar.toml if provided (#1946)
-    let clientDomainSigningKey: string | null = null;
-    if (clientDomain) {
-      clientDomainSigningKey = await fetchClientDomainSigningKey(clientDomain, fetchFn);
-    }
+    const domain = this.resolveHomeDomain(homeDomain);
 
-    const domain = homeDomain || this.config.homeDomain;
+    // Client attribution: resolve the client domain's published SIGNING_KEY
+    // from its stellar.toml before issuing a challenge (#1946, #2426).
+    let normalizedClientDomain: string | null = null;
+    let clientDomainSigningKey: string | null = null;
+    if (clientDomain !== undefined && clientDomain !== "") {
+      normalizedClientDomain = parseClientDomain(clientDomain);
+      clientDomainSigningKey = await fetchClientDomainSigningKey(
+        normalizedClientDomain,
+        fetchFn,
+      );
+    }
     const now = Math.floor(Date.now() / 1000);
     // v16+ rejects inverted timebounds (minTime > maxTime) at build time, so a
     // non-positive expiry yields valid bounds whose maxTime is already in the past
@@ -476,13 +628,14 @@ export class Sep10Service {
       }),
     );
 
-    // Add client_domain operation if requested (#1946)
-    if (clientDomain) {
+    // Add client_domain operation if requested. Per SEP-10 its source is the
+    // client domain's SIGNING_KEY, which must also sign the challenge.
+    if (normalizedClientDomain && clientDomainSigningKey) {
       builder = builder.addOperation(
         StellarSdk.Operation.manageData({
           name: "client_domain",
-          value: clientDomain,
-          source: clientPublicKey,
+          value: normalizedClientDomain,
+          source: clientDomainSigningKey,
         }),
       );
     }
@@ -571,6 +724,16 @@ export class Sep10Service {
       );
     }
 
+    // The first operation must be `<home_domain> auth` for a HOME_DOMAIN this
+    // server actually serves.
+    const firstOpName = String((firstOp as any).name || "");
+    const authenticatedHomeDomain = firstOpName.endsWith(" auth")
+      ? firstOpName.slice(0, -" auth".length).toLowerCase()
+      : "";
+    if (!this.getAllowedHomeDomains().includes(authenticatedHomeDomain)) {
+      throw new Error("Invalid home domain in challenge transaction");
+    }
+
     // Verify server signature (always required for SEP-10)
     const txHash = transaction.hash();
     const serverSigned = transaction.signatures.some((sig) => {
@@ -612,25 +775,35 @@ export class Sep10Service {
       );
     }
 
-    // Verify client domain signature if client_domain operation is present (#1946)
-    const clientDomainOp = transaction.operations.find(
+    // Client attribution: when a client_domain operation is present, its
+    // source must be the SIGNING_KEY published in that domain's stellar.toml
+    // and the challenge must carry that key's signature (#1946, #2426).
+    const clientDomainOps = transaction.operations.filter(
       (op: any) => op.type === "manageData" && op.name === "client_domain",
-    ) as any;
-    if (clientDomainOp && clientDomainOp.value) {
-      const clientDomainStr = clientDomainOp.value.toString("utf8");
-      const clientDomainSigningKey = await fetchClientDomainSigningKey(clientDomainStr, fetchFn);
-      const clientDomainKeypair = StellarSdk.Keypair.fromPublicKey(clientDomainSigningKey);
-      const domainSigned = transaction.signatures.some((sig) => {
-        try {
-          return clientDomainKeypair.verify(
-            Buffer.from(txHash),
-            readDecoratedSignature(sig),
-          );
-        } catch {
-          return false;
-        }
-      });
-      if (!domainSigned) {
+    ) as any[];
+    if (clientDomainOps.length > 1) {
+      throw new Error("Challenge must contain at most one client_domain operation");
+    }
+    const clientDomainOp = clientDomainOps[0];
+    if (clientDomainOp) {
+      if (!clientDomainOp.value) {
+        throw new Error("client_domain operation must have a value");
+      }
+      const clientDomainStr = parseClientDomain(
+        Buffer.from(clientDomainOp.value).toString("utf8"),
+      );
+      const clientDomainSigningKey = await fetchClientDomainSigningKey(
+        clientDomainStr,
+        fetchFn,
+      );
+
+      if (clientDomainOp.source !== clientDomainSigningKey) {
+        throw new Error(
+          `client_domain operation source does not match ${clientDomainStr} SIGNING_KEY`,
+        );
+      }
+
+      if (!isSignedBy(transaction, clientDomainSigningKey)) {
         throw new Error(
           `Transaction is not signed by client domain SIGNING_KEY (${clientDomainSigningKey})`,
         );
@@ -638,7 +811,7 @@ export class Sep10Service {
     }
 
     // Issue a JWT token
-    return this.issueToken(clientPublicKey);
+    return this.issueToken(clientPublicKey, authenticatedHomeDomain);
   }
 
   /**
@@ -647,7 +820,10 @@ export class Sep10Service {
    * @param clientPublicKey - The Stellar public key of the authenticated client
    * @returns JWT token response
    */
-  issueToken(clientPublicKey: string): Sep10TokenResponse {
+  issueToken(
+    clientPublicKey: string,
+    homeDomain: string = this.config.homeDomain,
+  ): Sep10TokenResponse {
     const iat = Math.floor(Date.now() / 1000);
     const exp = iat + 3600; // 1 hour from now
 
@@ -657,7 +833,7 @@ export class Sep10Service {
       iat,
       exp,
       jti: uuidv4(),
-      home_domain: this.config.homeDomain,
+      home_domain: homeDomain,
     };
 
     const token = jwt.sign(payload, this.config.jwtSecret, {
