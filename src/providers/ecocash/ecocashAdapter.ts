@@ -24,7 +24,9 @@ const http = providerHttp("ecocash");
  * caller can update the database once EcoCash reports a terminal state.
  */
 
-export type EcoCashWallet = "USD" | "ZWL";
+export type EcoCashWallet = "USD" | "ZWL" | "ZIG" | "ZiG";
+
+export { EcoCashClient } from "./ecocashClient";
 
 export interface EcoCashDisbursementResult {
   success: boolean;
