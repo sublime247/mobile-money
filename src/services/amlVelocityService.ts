@@ -1,5 +1,8 @@
+import axios from "axios";
 import { pool } from "../config/database";
+import { redisClient } from "../config/redis";
 import logger from "../utils/logger";
+import { sendAlert } from "./alertService";
 import {
   amlService,
   type AMLAlert,
@@ -289,3 +292,307 @@ export class AMLVelocityService {
 }
 
 export const amlVelocityService = new AMLVelocityService();
+
+// ---------------------------------------------------------------------------
+// Recipient velocity (anti-smurfing): per phone number, 24h sliding window.
+// ---------------------------------------------------------------------------
+
+export interface RecipientVelocityConfig {
+  /** Sliding window length. Defaults to 24 hours. */
+  windowMs: number;
+  /** Transfers allowed per window; the (maxTransfers + 1)th breaches. */
+  maxTransfers: number;
+  /** Maximum fiat (XAF) volume per window for one recipient. */
+  corridorMaxXaf: number;
+  /** When true, transfers to a flagged recipient are held until the window expires. */
+  autoHold: boolean;
+}
+
+export interface RecipientVelocityEvaluation {
+  breached: boolean;
+  reasons: string[];
+  projectedCount: number;
+  projectedVolume: number;
+}
+
+export interface RecipientVelocityResult {
+  held: boolean;
+  evaluation?: RecipientVelocityEvaluation;
+}
+
+/** Minimal storage contract so the window logic can be tested without Redis. */
+export interface RecipientVelocityStore {
+  /** Removes entries scored before `windowStart` and returns the remaining members. */
+  pruneAndList(key: string, windowStart: number): Promise<string[]>;
+  add(key: string, member: string, score: number, ttlMs: number): Promise<void>;
+  setHold(key: string, ttlMs: number): Promise<void>;
+  hasHold(key: string): Promise<boolean>;
+}
+
+export const RECIPIENT_VELOCITY_KEY_PREFIX = "aml:recipient:velocity:";
+export const RECIPIENT_HOLD_KEY_PREFIX = "aml:recipient:hold:";
+
+const DAY_MS = 24 * HOUR_MS;
+
+export function getRecipientVelocityConfig(): RecipientVelocityConfig {
+  return {
+    windowMs: numberFromEnv("AML_RECIPIENT_WINDOW_MS", DAY_MS),
+    maxTransfers: numberFromEnv("AML_RECIPIENT_MAX_TRANSFERS", 10),
+    corridorMaxXaf: numberFromEnv("AML_RECIPIENT_CORRIDOR_MAX_XAF", 5_000_000),
+    autoHold: process.env.AML_RECIPIENT_AUTO_HOLD === "true",
+  };
+}
+
+export function isRecipientVelocityEnabled(): boolean {
+  return process.env.AML_RECIPIENT_VELOCITY_ENABLED !== "false";
+}
+
+export function normalizeRecipientPhone(phone: string): string {
+  return phone.replace(/\s+/g, "");
+}
+
+/**
+ * Pure rule: would the next transfer push the recipient past the transfer
+ * count or the corridor volume limit inside the current window?
+ */
+export function evaluateRecipientVelocity(input: {
+  priorCount: number;
+  priorVolume: number;
+  amount: number;
+  config: Pick<RecipientVelocityConfig, "maxTransfers" | "corridorMaxXaf">;
+}): RecipientVelocityEvaluation {
+  const { priorCount, priorVolume, amount, config } = input;
+  const projectedCount = priorCount + 1;
+  const projectedVolume = priorVolume + amount;
+  const reasons: string[] = [];
+
+  if (projectedCount > config.maxTransfers) {
+    reasons.push(
+      `Recipient received ${projectedCount} transfers in the rolling window (limit ${config.maxTransfers})`,
+    );
+  }
+  if (projectedVolume > config.corridorMaxXaf) {
+    reasons.push(
+      `Recipient rolling volume ${projectedVolume} XAF exceeds corridor maximum ${config.corridorMaxXaf} XAF`,
+    );
+  }
+
+  return {
+    breached: reasons.length > 0,
+    reasons,
+    projectedCount,
+    projectedVolume,
+  };
+}
+
+/** Member format: `<transactionId>|<amount>`. The id makes writes idempotent. */
+function encodeRecipientMember(transactionId: string, amount: number): string {
+  return `${transactionId}|${amount}`;
+}
+
+function decodeRecipientMember(member: string): { id: string; amount: number } {
+  const separator = member.lastIndexOf("|");
+  return {
+    id: member.slice(0, separator),
+    amount: Number(member.slice(separator + 1)),
+  };
+}
+
+/** Redis-backed sliding window using a sorted set scored by timestamp. */
+export function createRedisRecipientVelocityStore(
+  client: typeof redisClient = redisClient,
+): RecipientVelocityStore {
+  return {
+    async pruneAndList(key, windowStart) {
+      const results = (await client
+        .multi()
+        .zRemRangeByScore(key, 0, windowStart)
+        .zRangeByScore(key, windowStart, "+inf")
+        .exec()) as unknown as [unknown, string[]];
+      return results[1] ?? [];
+    },
+    async add(key, member, score, ttlMs) {
+      await client
+        .multi()
+        .zAdd(key, [{ score, value: member }])
+        .pExpire(key, ttlMs)
+        .exec();
+    },
+    async setHold(key, ttlMs) {
+      await client.set(key, "1", { PX: ttlMs });
+    },
+    async hasHold(key) {
+      return Number(await client.exists(key)) > 0;
+    },
+  };
+}
+
+/** Sends the Slack alert and, when a routing key is configured, a PagerDuty event. */
+export async function dispatchRecipientVelocityAlert(params: {
+  transactionId: string;
+  maskedRecipient: string;
+  reasons: string[];
+  projectedCount: number;
+  projectedVolume: number;
+}): Promise<void> {
+  const summary = `AML recipient velocity breach: ${params.reasons.join("; ")}`;
+
+  try {
+    await sendAlert(
+      {
+        transactionId: params.transactionId,
+        provider: "aml-recipient-velocity",
+        error: summary,
+        severity: "critical",
+        meta: {
+          recipient: params.maskedRecipient,
+          transfers24h: params.projectedCount,
+          volumeXaf: params.projectedVolume,
+        },
+      },
+      { cooldownMs: 0 },
+    );
+  } catch (error) {
+    logger.error({ error }, "[AML-RECIPIENT] Slack alert dispatch failed");
+  }
+
+  const routingKey = process.env.PAGERDUTY_ROUTING_KEY;
+  if (!routingKey) return;
+
+  try {
+    await axios.post(
+      "https://events.pagerduty.com/v2/enqueue",
+      {
+        routing_key: routingKey,
+        event_action: "trigger",
+        dedup_key: `aml-recipient-${params.transactionId}`,
+        payload: {
+          summary,
+          timestamp: new Date().toISOString(),
+          severity: "critical",
+          source: "mobile-money-aml",
+          custom_details: {
+            transactionId: params.transactionId,
+            recipient: params.maskedRecipient,
+            transfers24h: params.projectedCount,
+            volumeXaf: params.projectedVolume,
+          },
+        },
+      },
+      { timeout: 5000 },
+    );
+  } catch (error) {
+    logger.error({ error }, "[AML-RECIPIENT] PagerDuty event dispatch failed");
+  }
+}
+
+export class RecipientVelocityMonitor {
+  private readonly transactionModel = new TransactionModel();
+
+  constructor(
+    private readonly store: RecipientVelocityStore = createRedisRecipientVelocityStore(),
+  ) {}
+
+  /**
+   * Records a transfer against the recipient's window and evaluates it.
+   * A breach holds this transfer, raises a critical alert, and (when
+   * AML_RECIPIENT_AUTO_HOLD=true) holds later transfers to the same recipient
+   * until the window expires. Infrastructure errors are thrown to the caller,
+   * which fails open like the other AML pre-dispatch checks.
+   */
+  async check(
+    transaction: { id: string; phoneNumber: string; amount: number },
+    options: {
+      config?: RecipientVelocityConfig;
+      now?: number;
+      notify?: typeof dispatchRecipientVelocityAlert;
+    } = {},
+  ): Promise<RecipientVelocityResult> {
+    if (!isRecipientVelocityEnabled()) return { held: false };
+
+    const phone = normalizeRecipientPhone(transaction.phoneNumber);
+    if (!phone || !Number.isFinite(transaction.amount)) return { held: false };
+
+    const config = options.config ?? getRecipientVelocityConfig();
+    const now = options.now ?? Date.now();
+    const velocityKey = `${RECIPIENT_VELOCITY_KEY_PREFIX}${phone}`;
+    const holdKey = `${RECIPIENT_HOLD_KEY_PREFIX}${phone}`;
+
+    const members = await this.store.pruneAndList(velocityKey, now - config.windowMs);
+    const seen = new Set<string>();
+    let priorCount = 0;
+    let priorVolume = 0;
+    for (const member of members) {
+      const decoded = decodeRecipientMember(member);
+      if (decoded.id === transaction.id || seen.has(decoded.id)) continue;
+      seen.add(decoded.id);
+      priorCount += 1;
+      priorVolume += decoded.amount;
+    }
+
+    const alreadyRecorded = members.some(
+      (member) => decodeRecipientMember(member).id === transaction.id,
+    );
+    if (!alreadyRecorded) {
+      await this.store.add(
+        velocityKey,
+        encodeRecipientMember(transaction.id, transaction.amount),
+        now,
+        config.windowMs,
+      );
+    }
+
+    const evaluation = evaluateRecipientVelocity({
+      priorCount,
+      priorVolume,
+      amount: transaction.amount,
+      config,
+    });
+
+    const autoHeld = config.autoHold && (await this.store.hasHold(holdKey));
+    if (!evaluation.breached && !autoHeld) {
+      return { held: false, evaluation };
+    }
+
+    if (evaluation.breached && config.autoHold) {
+      await this.store.setHold(holdKey, config.windowMs);
+    }
+
+    const held = await this.transactionModel.updateStatus(
+      transaction.id,
+      TransactionStatus.PendingReview,
+      undefined,
+      [TransactionStatus.Pending],
+    );
+    if (!held) {
+      logger.warn(
+        { transactionId: transaction.id },
+        "[AML-RECIPIENT] Could not move transaction to pending_review; status already changed",
+      );
+      return { held: false, evaluation };
+    }
+
+    if (evaluation.breached) {
+      const notify = options.notify ?? dispatchRecipientVelocityAlert;
+      await notify({
+        transactionId: transaction.id,
+        maskedRecipient: `***${phone.slice(-4)}`,
+        reasons: evaluation.reasons,
+        projectedCount: evaluation.projectedCount,
+        projectedVolume: evaluation.projectedVolume,
+      });
+    }
+
+    logger.info(
+      {
+        transactionId: transaction.id,
+        breached: evaluation.breached,
+        autoHeld,
+      },
+      "[AML-RECIPIENT] Transaction held by recipient velocity monitor",
+    );
+    return { held: true, evaluation };
+  }
+}
+
+export const recipientVelocityMonitor = new RecipientVelocityMonitor();

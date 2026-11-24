@@ -170,6 +170,8 @@ function makeReq(overrides: Partial<Request["body"]> = {}): Partial<Request> {
     headers: {},
     header: jest.fn().mockReturnValue(undefined),
     query: {},
+    // The controller reads the caller from the JWT middleware, not the body.
+    jwtUser: { userId: "user-1" },
   } as unknown as Partial<Request>;
 }
 

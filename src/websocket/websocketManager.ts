@@ -11,6 +11,13 @@ import {
   serializeTransactionUpdate,
   type WebSocketMessage,
 } from "./eventEmitter";
+import {
+  WS_CLOSE_TOKEN_EXPIRED,
+  WS_CLOSE_UNAUTHORIZED_TOPIC,
+  authorizeTransactionTopic,
+  buildTransactionTopic,
+  scheduleTokenExpiry,
+} from "./topicAuthorizer";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -40,6 +47,7 @@ interface AuthenticatedWebSocket extends WebSocket {
   userId?: string;
   subscriptions: Set<string>;
   missedPings: number; // tracks consecutive missed pongs
+  expiryTimer?: ReturnType<typeof setTimeout> | null; // closes the socket at JWT exp
 }
 
 // ---------------------------------------------------------------------------
@@ -131,6 +139,12 @@ export class WebSocketManager {
         }
 
         client.userId = candidateUserId;
+
+        // Disconnect when the token expires so a stale session cannot keep streaming.
+        client.expiryTimer = scheduleTokenExpiry(decoded.exp, () => {
+          console.log(`WebSocket token expired, closing client: ${candidateUserId}`);
+          client.close(WS_CLOSE_TOKEN_EXPIRED, "Token expired");
+        });
       } catch {
         client.close(1008, "Invalid or expired token");
         return;
@@ -214,6 +228,32 @@ export class WebSocketManager {
           });
           break;
         }
+        // Scoped authorization: the caller must own the transaction behind transaction:{id}.
+        const topic = buildTransactionTopic(payload.transactionId);
+        const authorization = await authorizeTransactionTopic({
+          topic,
+          userId: client.userId ?? "",
+          findOwnedTransaction: (transactionId, userId) =>
+            this.transactionModel.findById(transactionId, userId),
+        });
+        if (authorization.allowed === false) {
+          logger.warn(
+            { clientId, topic, reason: authorization.reason },
+            "WebSocket subscription rejected by topic authorizer",
+          );
+          this.sendToClient(client, {
+            type: "error",
+            correlation_id: correlationId ?? null,
+            data: {
+              message: "Subscription not authorized for this topic",
+              code: authorization.reason,
+              topic,
+            },
+          });
+          client.close(WS_CLOSE_UNAUTHORIZED_TOPIC, "Unauthorized topic");
+          break;
+        }
+
         this.subscribe(clientId, payload.transactionId);
         this.sendToClient(client, {
           type: "subscribe.ack",
@@ -425,6 +465,8 @@ export class WebSocketManager {
     for (const transactionId of client.subscriptions) {
       this.subscriptions.get(transactionId)?.delete(clientId);
     }
+    if (client.expiryTimer) clearTimeout(client.expiryTimer);
+    client.expiryTimer = null;
     this.leaveUserRoom(client.userId, clientId);
     this.clients.delete(clientId);
     console.log(`WebSocket client disconnected: ${clientId}`);

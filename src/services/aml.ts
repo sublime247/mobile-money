@@ -20,7 +20,7 @@ export type AMLRule =
   | "sanction_match"
   | "dynamic_profile_score"
   | "threshold_structuring"
-  | "smurfing_velocity";
+  | "smurfing_velocity"
   | "velocity_threshold";
 
 export interface AMLTransactionLocation {

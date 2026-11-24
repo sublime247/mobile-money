@@ -17,6 +17,9 @@ import logger from "../utils/logger";
  *   POST   /api/admin/withdrawals/:id/sign        — Add my signature (admin, must be a registered signer)
  *   POST   /api/admin/withdrawals/:id/execute     — Execute once fully approved (admin)
  *   POST   /api/admin/withdrawals/:id/cancel      — Cancel after the time-lock expires (admin)
+ *   GET    /api/admin/withdrawals/maker-checker/:id        — Dual-approval status (admin)
+ *   POST   /api/admin/withdrawals/maker-checker/:id/approve — Approve as TREASURY_ADMIN, not the maker (admin)
+ *   POST   /api/admin/withdrawals/maker-checker/:id/cancel  — Maker cancels a pending request (admin)
  */
 
 import { Router, Request, Response } from "express";
@@ -26,8 +29,34 @@ import { authenticateToken } from "../middleware/auth";
 import { requirePermission } from "../middleware/rbac";
 import { ERROR_CODES } from "../constants/errorCodes";
 import { createError } from "../middleware/errorHandler";
+import { currencyService } from "../services/currency";
+import {
+  MakerCheckerError,
+  makerCheckerService,
+  requiresDualApproval,
+} from "../services/makerCheckerService";
 
 const router = Router();
+
+/**
+ * USD value of a XAF withdrawal. Returns NaN when the rate is unavailable so
+ * the caller fails closed and routes the request through dual approval.
+ */
+function withdrawalAmountUsd(amountXaf: number): number {
+  try {
+    return currencyService.convertToBase(amountXaf, "XAF").convertedAmount;
+  } catch {
+    return Number.NaN;
+  }
+}
+
+const MAKER_CHECKER_STATUS: Record<MakerCheckerError["code"], number> = {
+  NOT_FOUND: 404,
+  NOT_PENDING: 409,
+  SELF_APPROVAL: 403,
+  NOT_TREASURY_ADMIN: 403,
+  NOT_MAKER: 403,
+};
 
 router.use(authenticateToken, requirePermission("admin:system"));
 
@@ -70,13 +99,30 @@ function signingPayloadFor(request: {
 
 /**
  * POST /api/admin/withdrawals
- * Request a withdrawal. Always creates a pending multi-sig approval
- * request — rejected outright if no active multi-sig configuration exists
- * for the account, rather than allowing an unprotected withdrawal.
+ * Request a withdrawal. Withdrawals at or above the USD dual-approval
+ * threshold (fails closed when the rate is unknown) are parked as
+ * PENDING_APPROVAL (202) until a distinct TREASURY_ADMIN approves them via
+ * POST /maker-checker/:id/approve. Other withdrawals create a multi-sig
+ * approval request, rejected outright if no active configuration exists.
  */
 router.post("/", async (req: Request, res: Response) => {
   try {
     const data = createWithdrawalSchema.parse(req.body);
+
+    // Treasury withdrawals at or above the USD threshold need a distinct
+    // TREASURY_ADMIN to approve them before they enter the multisig flow.
+    const amountUsd = withdrawalAmountUsd(data.amountXaf);
+    if (requiresDualApproval(amountUsd)) {
+      const pending = await makerCheckerService.initiate({
+        makerId: req.jwtUser!.userId!,
+        amountUsd,
+        payload: data as unknown as Record<string, unknown>,
+      });
+      return res.status(202).json({
+        success: true,
+        data: { ...pending, requiresApproval: true },
+      });
+    }
 
     const withdrawalRequest =
       await multisigCustodyLedgerService.requestWithdrawal(
@@ -125,6 +171,115 @@ router.get("/pending/mine", async (req: Request, res: Response) => {
     );
   }
 });
+
+/**
+ * GET /api/admin/withdrawals/maker-checker/:id
+ * Status of a dual-approval treasury withdrawal.
+ */
+router.get("/maker-checker/:id", async (req: Request, res: Response) => {
+  const request = await makerCheckerService.getRequest(String(req.params.id));
+  if (!request) {
+    return res.status(404).json({
+      success: false,
+      error: { code: "NOT_FOUND", message: "Approval request not found" },
+    });
+  }
+  return res.json({ success: true, data: request });
+});
+
+/**
+ * POST /api/admin/withdrawals/maker-checker/:id/approve
+ * A TREASURY_ADMIN other than the maker approves the request. The withdrawal
+ * then enters the multisig custody flow, recorded against the approval.
+ */
+router.post(
+  "/maker-checker/:id/approve",
+  async (req: Request, res: Response) => {
+    try {
+      const approved = await makerCheckerService.approve(
+        String(req.params.id),
+        {
+          userId: req.jwtUser!.userId!,
+          roles: req.jwtUser?.role ? [req.jwtUser.role] : [],
+        },
+      );
+
+      const data = approved.payload as z.infer<typeof createWithdrawalSchema>;
+      const withdrawalRequest =
+        await multisigCustodyLedgerService.requestWithdrawal(
+          data.accountType,
+          data.accountId,
+          data.amountXaf,
+          data.destination,
+          approved.makerId,
+          {
+            ...(data.metadata ?? {}),
+            treasuryApproval: {
+              requestId: approved.id,
+              makerId: approved.makerId,
+              checkerId: approved.checkerId,
+            },
+          },
+        );
+
+      return res.status(201).json({
+        success: true,
+        data: {
+          ...withdrawalRequest,
+          signingPayload: signingPayloadFor(withdrawalRequest),
+        },
+      });
+    } catch (error: any) {
+      if (error instanceof MakerCheckerError) {
+        return res.status(MAKER_CHECKER_STATUS[error.code]).json({
+          success: false,
+          error: { code: error.code, message: error.message },
+        });
+      }
+      logger.error("[AdminWithdrawals] approve error:", error);
+      throw createError(
+        ERROR_CODES.INTERNAL_ERROR,
+        "Failed to approve withdrawal",
+      );
+    }
+  },
+);
+
+/**
+ * POST /api/admin/withdrawals/maker-checker/:id/cancel
+ * The initiating admin cancels a withdrawal that is still pending approval.
+ */
+router.post(
+  "/maker-checker/:id/cancel",
+  async (req: Request, res: Response) => {
+    try {
+      const { reason } = cancelWithdrawalSchema.parse(req.body);
+      const cancelled = await makerCheckerService.cancel(
+        String(req.params.id),
+        req.jwtUser!.userId!,
+        reason,
+      );
+      return res.json({ success: true, data: cancelled });
+    } catch (error: any) {
+      if (error instanceof MakerCheckerError) {
+        return res.status(MAKER_CHECKER_STATUS[error.code]).json({
+          success: false,
+          error: { code: error.code, message: error.message },
+        });
+      }
+      if (error.name === "ZodError") {
+        throw createError(ERROR_CODES.INVALID_INPUT, "Validation error", {
+          details: error.errors,
+        });
+      }
+      logger.error("[AdminWithdrawals] cancel maker-checker error:", error);
+      throw createError(
+        ERROR_CODES.INTERNAL_ERROR,
+        "Failed to cancel withdrawal",
+      );
+    }
+  },
+);
 
 /**
  * GET /api/admin/withdrawals/:id

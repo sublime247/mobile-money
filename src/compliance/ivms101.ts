@@ -79,6 +79,10 @@ export interface IVMS101NaturalPerson {
   name: { nameIdentifiers: IVMS101NaturalPersonNameId[] };
   geographicAddress?: IVMS101Address[];
   nationalIdentification?: IVMS101NationalIdentifier;
+  dateAndPlaceOfBirth?: { dateOfBirth: string; placeOfBirth?: string };
+}
+
+/**
  * IVMS 101 Data Builder and Validator
  * Implements FATF Travel Rule standard (InterVASP Messaging Standard 101)
  * Issue #2335
