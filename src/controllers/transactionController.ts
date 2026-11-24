@@ -24,7 +24,10 @@ import {
 } from "../config/providers";
 import type { TransactionJobData } from "../queue/transactionQueue";
 import { amlService } from "../services/aml";
-import { amlVelocityService } from "../services/amlVelocityService";
+import {
+  amlVelocityService,
+  recipientVelocityMonitor,
+} from "../services/amlVelocityService";
 import {
   generateFlaggedTransactionComplianceReport,
   generateHighValueTransactionComplianceReport,
@@ -459,6 +462,36 @@ async function applyAMLVelocityHold(transaction: Transaction): Promise<boolean> 
   }
 }
 
+/**
+ * Per-recipient anti-smurfing check (24h transfer count and corridor volume
+ * per phone number). Runs for every transfer, including those without a user
+ * id, so the recipient window always reflects reality. Fails open on
+ * infrastructure errors (e.g. Redis unavailable).
+ */
+async function applyRecipientVelocityHold(
+  transaction: Transaction,
+): Promise<boolean> {
+  const amount = Number(transaction.amount);
+  if (!transaction.phoneNumber || !Number.isFinite(amount) || amount < 0) {
+    return false;
+  }
+
+  try {
+    const result = await recipientVelocityMonitor.check({
+      id: transaction.id,
+      phoneNumber: transaction.phoneNumber,
+      amount,
+    });
+    return result.held;
+  } catch (error) {
+    logger.error(
+      `Recipient velocity check failed for transaction ${transaction.id}:`,
+      error,
+    );
+    return false;
+  }
+}
+
 async function monitorTransactionForAML(
   transaction: Transaction,
 ): Promise<void> {
@@ -875,7 +908,11 @@ async function processTransactionRequest(
             void applyTravelRule(transaction);
             await applySEP08Verification(transaction);
 
-            if (await applyAMLVelocityHold(transaction)) {
+            // Evaluate both velocity checks so each records the transfer in its window.
+            const userVelocityHeld = await applyAMLVelocityHold(transaction);
+            const recipientVelocityHeld =
+              await applyRecipientVelocityHold(transaction);
+            if (userVelocityHeld || recipientVelocityHeld) {
               return {
                 ...buildTransactionResponse(transaction),
                 status: TransactionStatus.PendingReview,
