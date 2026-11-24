@@ -8,9 +8,30 @@ import { PostgresSep24TransactionStore } from "./sep24Store";
 
 import { sep6InfoResponseSchema, Sep6InfoResponse } from "../schemas/sep6";
 import { validateCemacRib } from "../utils/bankValidator";
+import { buildDynamicSep6Info } from "./sep6InfoBuilder";
+import { checkMobileMoneyHealth } from "../services/mobilemoney/providers/healthCheck";
+
+/**
+ * Provider health for live /info rail status. Probe failures return undefined,
+ * which keeps every rail enabled rather than failing the discovery endpoint.
+ */
+const loadProviderHealth = async () => {
+  try {
+    const health = await checkMobileMoneyHealth();
+    return health.providers;
+  } catch (error: any) {
+    logger.warn(
+      { error: error?.message },
+      "[SEP-6 Info] Provider health unavailable; advertising rails as enabled",
+    );
+    return undefined;
+  }
+};
 
 export interface Sep6AssetConfig {
   asset_code: string;
+  /** Mobile money provider backing this rail; used for live /info availability. */
+  provider?: string;
   deposits_enabled?: boolean;
   withdrawals_enabled?: boolean;
   min_amount?: number;
@@ -128,11 +149,15 @@ export const createSep6Router = (db: Pool): Router => {
    * Returns supported assets and required fields for deposit/withdrawal,
    * parsed and validated against sep6InfoResponseSchema.
    */
-  sep6Router.get("/info", (req: Request, res: Response) => {
+  sep6Router.get("/info", async (req: Request, res: Response) => {
     try {
       const config = getSep6Config();
-      const payload = buildSep6InfoPayload(config);
-      const validated = sep6InfoResponseSchema.parse(payload);
+      const assetCode =
+        typeof req.query.asset_code === "string" ? req.query.asset_code : undefined;
+      const validated = buildDynamicSep6Info(config, {
+        assetCode,
+        providerHealth: await loadProviderHealth(),
+      });
       return res.json(validated);
     } catch (error: any) {
       logger.error(

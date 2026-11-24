@@ -8,11 +8,17 @@ import {
   validateSep6CorridorConfig,
 } from "../stellar/sep6";
 import { sep6InfoResponseSchema } from "../schemas/sep6";
+import {
+  buildDynamicSep6Info,
+  evaluateRailStatus,
+} from "../stellar/sep6InfoBuilder";
 
 export {
   createSep6Router,
   getSep6Config,
   buildSep6InfoPayload,
+  buildDynamicSep6Info,
+  evaluateRailStatus,
   validateSep6CorridorConfig,
   sep6InfoResponseSchema,
 };
