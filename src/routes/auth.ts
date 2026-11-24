@@ -55,6 +55,7 @@ import {
   getPendingVerificationId,
 } from "../services/deviceVerification";
 import { extractFingerprint } from "../middleware/fingerprint";
+import { issueCsrfToken } from "../middleware/csrfProtection";
 import { getCurrentRequestIp } from "../services/loginAnomaly";
 import { trackLoginSession } from "../services/userSessionTracking";
 import { userSessionModel } from "../models/userSession";
@@ -367,10 +368,14 @@ authRoutes.post(
           : (req.headers["user-agent"] ?? null),
       });
 
+      // Double Submit Cookie CSRF token for browser sessions (#2565).
+      const csrfToken = issueCsrfToken(res);
+
       res.json({
         message: "Login successful",
         token,
         refreshToken,
+        csrfToken,
         user: {
           userId: user.id,
           email: user.phone_number,

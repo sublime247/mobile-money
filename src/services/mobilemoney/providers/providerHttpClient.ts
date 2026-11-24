@@ -10,6 +10,9 @@
  *    headers/body, status code and response headers/body are sanitized
  *    (src/utils/payloadSanitizer.ts), capped at 32KB each, and written to
  *    `provider_error_logs`. The original error is always re-thrown unchanged.
+ *  - per-provider circuit breaker (src/providers/baseProvider.ts): trips OPEN
+ *    above a 50% error rate over 30s and fast-fails with a 503 until a
+ *    HALF_OPEN trial succeeds after the 60s cooldown.
  */
 import axios, {
   type AxiosError,
@@ -29,6 +32,7 @@ import {
 } from "../../providerErrorLogService";
 import { monitorProviderClient } from "../../providerStatus";
 import { getCurrentCorrelationId } from "../../../middleware/correlationId";
+import { attachCircuitBreakerInterceptor } from "../../../providers/baseProvider";
 
 type ErrorRecorder = (snapshot: ProviderErrorSnapshot) => Promise<void>;
 
@@ -140,6 +144,10 @@ export function createProviderHttpClient(
   options: ProviderErrorInterceptorOptions = {},
 ): AxiosInstance {
   const client = axios.create(config);
+  // Attached first so its request hook runs last (Axios runs request
+  // interceptors LIFO): only calls that are really about to hit the gateway
+  // take the circuit-breaker permit (#2571).
+  attachCircuitBreakerInterceptor(client, provider);
   attachCorrelationIdInterceptor(client);
   attachProviderErrorInterceptor(client, provider, options);
   return monitorProviderClient(provider, client);

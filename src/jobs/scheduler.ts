@@ -22,6 +22,7 @@ import { runCrossChainMonitorJob } from "./crossChainMonitorJob";
 import { runDailySettlementJob } from "./dailySettlementJob";
 import { runPartnerCommissionJob } from "./partnerCommissionJob";
 import { runFxRevaluationJob } from "./fxRevaluationJob";
+import { runDynamicSpreadJob, DYNAMIC_SPREAD_CRON } from "./dynamicSpreadJob";
 import { runDailyProviderReconciliation } from "./providerReconciliationJob";
 import { runReconciliationJob } from "./reconciliationJob";
 import { runLedgerReconciliationJob } from "./ledgerReconciliationJob";
@@ -163,6 +164,12 @@ const JOBS: JobConfig[] = [
     // 1st of every month at 03:00 UTC — marks foreign float to market and posts unrealized FX gain/loss
     schedule: process.env.FX_REVALUATION_CRON || "0 3 1 * *",
     handler: runFxRevaluationJob,
+  },
+  {
+    name: "dynamic-fx-spread",
+    // Every 15 minutes — re-indexes 24h pair volatility and publishes SEP-38 spread tiers to Redis
+    schedule: DYNAMIC_SPREAD_CRON,
+    handler: runDynamicSpreadJob,
   },
   {
     name: "provider-reconciliation",
