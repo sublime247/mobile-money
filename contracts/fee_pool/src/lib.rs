@@ -15,11 +15,17 @@
 //! providers, weighted by their liquidity/uptime/transaction-count tier.
 
 use soroban_sdk::{
-    contract, contracterror, contractevent, contractimpl, contracttype, token, Address, Env, Map,
+    contract, contracterror, contractevent, contractimpl, contracttype, symbol_short, token,
+    Address, Env, Map, Symbol,
 };
 
 /// Basis-point denominator (100%).
 pub const BPS_DENOMINATOR: i128 = 10_000;
+
+/// Advance-notice period for a protocol fee change: 48 hours in seconds.
+/// Liquidity providers and merchants must get this long between proposal and
+/// activation (issue #2422).
+pub const FEE_UPDATE_TIMELOCK_SECONDS: u64 = 48 * 60 * 60;
 
 // ── Error types ──────────────────────────────────────────────────────────────
 
@@ -45,9 +51,21 @@ pub enum FeePoolError {
     NoFeesAvailable = 8,
     /// Distribution period not yet elapsed.
     DistributionTooSoon = 9,
+    /// No fee update has been proposed.
+    NoPendingFeeUpdate = 10,
+    /// The proposed fee update is still inside its 48-hour notice period.
+    FeeUpdateTimelockActive = 11,
 }
 
 // ── State ────────────────────────────────────────────────────────────────────
+
+/// A fee-bps change waiting out its 48-hour advance-notice period.
+#[contracttype]
+#[derive(Clone, Debug, PartialEq)]
+pub struct PendingFeeUpdate {
+    pub new_fee_bps: u32,
+    pub executable_at: u64,
+}
 
 /// Wallet metrics for a liquidity provider.
 #[contracttype]
@@ -98,11 +116,43 @@ pub struct FeesAccumulated {
     pub provider_cut: i128,
 }
 
+/// Emitted when an admin proposes a protocol fee change, with both the
+/// currently effective bps and the proposed value, plus activation time.
+#[contractevent(topics = ["fee_pool", "fee_update_proposed"])]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FeeUpdateProposed {
+    #[topic]
+    pub admin: Address,
+    pub old_fee_bps: u32,
+    pub new_fee_bps: u32,
+    pub executable_at: u64,
+}
+
+/// Emitted when the notice period has elapsed and the new bps takes effect.
+#[contractevent(topics = ["fee_pool", "fee_update_applied"])]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FeeUpdateApplied {
+    #[topic]
+    pub admin: Address,
+    pub old_fee_bps: u32,
+    pub new_fee_bps: u32,
+}
+
+/// Emitted when an admin cancels a pending fee change before it activates.
+#[contractevent(topics = ["fee_pool", "fee_update_cancelled"])]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FeeUpdateCancelled {
+    #[topic]
+    pub admin: Address,
+    pub cancelled_fee_bps: u32,
+}
+
 // ── Storage keys ──────────────────────────────────────────────────────────────
 
 const STATE: &str = "STATE";
 const PROVIDERS: &str = "PROVIDERS";
 const TOTAL_SHARES: &str = "TOTAL_SHARES";
+const PENDING_FEE: Symbol = symbol_short!("PEND_FEE");
 
 // ── Contract ─────────────────────────────────────────────────────────────────
 
@@ -131,10 +181,7 @@ impl FeePoolContract {
     ) {
         admin.require_auth();
 
-        assert!(
-            !env.storage().instance().has(&STATE),
-            "already initialised"
-        );
+        assert!(!env.storage().instance().has(&STATE), "already initialised");
 
         assert!(fee_bps <= 10_000, "fee basis points must be in [0, 10000]");
 
@@ -159,6 +206,115 @@ impl FeePoolContract {
         env.storage().instance().set(&TOTAL_SHARES, &0i128);
 
         env.storage().instance().extend_ttl(1000, 10000);
+    }
+
+    // ── fee update timelock ───────────────────────────────────────────────────
+
+    /// Return the pending fee update, if any.
+    pub fn get_pending_fee_update(env: Env) -> Option<PendingFeeUpdate> {
+        env.storage().instance().get(&PENDING_FEE)
+    }
+
+    /// Admin-only: propose a new protocol fee in basis points. The change
+    /// cannot take effect until `FEE_UPDATE_TIMELOCK_SECONDS` have elapsed;
+    /// LPs and merchants therefore get 48 hours of advance notice.
+    pub fn propose_fee_update(env: Env, new_fee_bps: u32) -> Result<(), FeePoolError> {
+        let state: FeePoolState = env
+            .storage()
+            .instance()
+            .get(&STATE)
+            .ok_or(FeePoolError::NotInitialised)?;
+        state.admin.require_auth();
+
+        if new_fee_bps > BPS_DENOMINATOR as u32 {
+            return Err(FeePoolError::InvalidFeeBps);
+        }
+
+        let old_fee_bps = state.fee_bps;
+        let executable_at = env
+            .ledger()
+            .timestamp()
+            .saturating_add(FEE_UPDATE_TIMELOCK_SECONDS);
+        env.storage().instance().set(
+            &PENDING_FEE,
+            &PendingFeeUpdate {
+                new_fee_bps,
+                executable_at,
+            },
+        );
+        env.storage().instance().extend_ttl(1000, 10000);
+
+        FeeUpdateProposed {
+            admin: state.admin,
+            old_fee_bps,
+            new_fee_bps,
+            executable_at,
+        }
+        .publish(&env);
+
+        Ok(())
+    }
+
+    /// Admin-only: apply a proposed fee update once its notice period has
+    /// elapsed. Premature calls are rejected with `FeeUpdateTimelockActive`.
+    pub fn apply_fee_update(env: Env) -> Result<(), FeePoolError> {
+        let mut state: FeePoolState = env
+            .storage()
+            .instance()
+            .get(&STATE)
+            .ok_or(FeePoolError::NotInitialised)?;
+        state.admin.require_auth();
+
+        let pending: PendingFeeUpdate = env
+            .storage()
+            .instance()
+            .get(&PENDING_FEE)
+            .ok_or(FeePoolError::NoPendingFeeUpdate)?;
+
+        if env.ledger().timestamp() < pending.executable_at {
+            return Err(FeePoolError::FeeUpdateTimelockActive);
+        }
+
+        let old_fee_bps = state.fee_bps;
+        state.fee_bps = pending.new_fee_bps;
+        env.storage().instance().set(&STATE, &state);
+        env.storage().instance().remove(&PENDING_FEE);
+        env.storage().instance().extend_ttl(1000, 10000);
+
+        FeeUpdateApplied {
+            admin: state.admin,
+            old_fee_bps,
+            new_fee_bps: pending.new_fee_bps,
+        }
+        .publish(&env);
+
+        Ok(())
+    }
+
+    /// Admin-only: cancel a pending fee update before it activates.
+    pub fn cancel_fee_update(env: Env) -> Result<(), FeePoolError> {
+        let state: FeePoolState = env
+            .storage()
+            .instance()
+            .get(&STATE)
+            .ok_or(FeePoolError::NotInitialised)?;
+        state.admin.require_auth();
+
+        let pending: PendingFeeUpdate = env
+            .storage()
+            .instance()
+            .get(&PENDING_FEE)
+            .ok_or(FeePoolError::NoPendingFeeUpdate)?;
+        env.storage().instance().remove(&PENDING_FEE);
+        env.storage().instance().extend_ttl(1000, 10000);
+
+        FeeUpdateCancelled {
+            admin: state.admin,
+            cancelled_fee_bps: pending.new_fee_bps,
+        }
+        .publish(&env);
+
+        Ok(())
     }
 
     // ── register_provider ─────────────────────────────────────────────────────
@@ -192,7 +348,10 @@ impl FeePoolContract {
             .get(&PROVIDERS)
             .unwrap_or(Map::new(&env));
 
-        assert!(!providers.contains_key(&provider), "provider already registered");
+        assert!(
+            !providers.contains_key(provider.clone()),
+            "provider already registered"
+        );
 
         let metrics = ProviderMetrics {
             liquidity,
@@ -412,16 +571,17 @@ impl FeePoolContract {
     // ── get_provider_metrics ──────────────────────────────────────────────────
 
     /// Return metrics for a specific provider (read-only).
-    pub fn get_provider_metrics(env: Env, provider: Address) -> Result<ProviderMetrics, FeePoolError> {
+    pub fn get_provider_metrics(
+        env: Env,
+        provider: Address,
+    ) -> Result<ProviderMetrics, FeePoolError> {
         let providers: Map<Address, ProviderMetrics> = env
             .storage()
             .instance()
             .get(&PROVIDERS)
             .ok_or(FeePoolError::NotInitialised)?;
 
-        providers
-            .get(provider)
-            .ok_or(FeePoolError::NotRegistered)
+        providers.get(provider).ok_or(FeePoolError::NotRegistered)
     }
 
     // ── get_total_shares ───────────────────────────────────────────────────────
@@ -437,8 +597,11 @@ impl FeePoolContract {
 
     /// Return the number of registered providers.
     pub fn get_provider_count(env: Env) -> u32 {
-        let providers: Map<Address, ProviderMetrics> =
-            env.storage().instance().get(&PROVIDERS).unwrap_or(Map::new(&env));
+        let providers: Map<Address, ProviderMetrics> = env
+            .storage()
+            .instance()
+            .get(&PROVIDERS)
+            .unwrap_or(Map::new(&env));
         let count = providers.len();
         env.storage().instance().extend_ttl(1000, 10000);
         count
@@ -446,292 +609,5 @@ impl FeePoolContract {
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use soroban_sdk::{
-        testutils::{Address as _, Ledger},
-        token::{Client as TokenClient, StellarAssetClient},
-        Address, Env,
-    };
-
-    const MINT_AMOUNT: i128 = 10_000_000;
-
-    fn setup() -> (Env, Address, Address, Address, Address, FeePoolContractClient<'static>) {
-        let env = Env::default();
-        env.mock_all_auths();
-
-        let admin = Address::generate(&env);
-        let fee_payer = Address::generate(&env);
-        let platform_treasury = Address::generate(&env);
-
-        // Deploy a test token
-        let token_admin = Address::generate(&env);
-        let token_id = env.register_stellar_asset_contract_v2(token_admin);
-        StellarAssetClient::new(&env, &token_id.address()).mint(&admin, &MINT_AMOUNT);
-        StellarAssetClient::new(&env, &token_id.address()).mint(&fee_payer, &MINT_AMOUNT);
-
-        let contract_id = env.register(FeePoolContract, ());
-        let client = FeePoolContractClient::new(&env, &contract_id);
-
-        (env, admin, fee_payer, platform_treasury, token_id.address(), client)
-    }
-
-    #[test]
-    fn test_initialize() {
-        let (env, admin, _fee_payer, platform_treasury, token, client) = setup();
-
-        client.initialize(&admin, &token, &platform_treasury, &100, &3600);
-
-        let state = client.get_state();
-        assert_eq!(state.token, token);
-        assert_eq!(state.admin, admin);
-        assert_eq!(state.platform_treasury, platform_treasury);
-        assert_eq!(state.fee_bps, 100);
-        assert_eq!(state.distribution_interval, 3600);
-        assert_eq!(state.total_fees, 0);
-        assert_eq!(state.last_distribution, 0);
-    }
-
-    #[test]
-    fn test_register_provider() {
-        let (env, admin, _fee_payer, platform_treasury, token, client) = setup();
-
-        client.initialize(&admin, &token, &platform_treasury, &100, &3600);
-
-        let provider = Address::generate(&env);
-        client.register_provider(&provider, &1_000_000, &95).unwrap();
-
-        let metrics = client.get_provider_metrics(&provider).unwrap();
-        assert_eq!(metrics.liquidity, 1_000_000);
-        assert_eq!(metrics.uptime, 95);
-        assert_eq!(metrics.transaction_count, 0);
-
-        assert_eq!(client.get_total_shares(), 1_000_000);
-        assert_eq!(client.get_provider_count(), 1);
-    }
-
-    #[test]
-    fn test_register_multiple_providers() {
-        let (env, admin, _fee_payer, platform_treasury, token, client) = setup();
-
-        client.initialize(&admin, &token, &platform_treasury, &100, &3600);
-
-        let provider1 = Address::generate(&env);
-        let provider2 = Address::generate(&env);
-        let provider3 = Address::generate(&env);
-
-        client.register_provider(&provider1, &1_000_000, &95).unwrap();
-        client.register_provider(&provider2, &2_000_000, &90).unwrap();
-        client.register_provider(&provider3, &500_000, &98).unwrap();
-
-        assert_eq!(client.get_provider_count(), 3);
-        assert_eq!(client.get_total_shares(), 3_500_000);
-    }
-
-    #[test]
-    fn test_update_metrics() {
-        let (env, admin, _fee_payer, platform_treasury, token, client) = setup();
-
-        client.initialize(&admin, &token, &platform_treasury, &100, &3600);
-
-        let provider = Address::generate(&env);
-        client.register_provider(&provider, &1_000_000, &95).unwrap();
-
-        client
-            .update_metrics(&provider, &1_500_000, &97, &100)
-            .unwrap();
-
-        let metrics = client.get_provider_metrics(&provider).unwrap();
-        assert_eq!(metrics.liquidity, 1_500_000);
-        assert_eq!(metrics.uptime, 97);
-        assert_eq!(metrics.transaction_count, 100);
-
-        assert_eq!(client.get_total_shares(), 1_500_000);
-    }
-
-    #[test]
-    fn test_accumulate_fees() {
-        let (env, admin, fee_payer, platform_treasury, token, client) = setup();
-
-        client.initialize(&admin, &token, &platform_treasury, &100, &3600);
-
-        client.accumulate_fees(&fee_payer, &500_000).unwrap();
-
-        // 1% (fee_bps=100) of 500_000 goes to the platform treasury,
-        // the remainder pools for provider distribution.
-        let state = client.get_state();
-        assert_eq!(state.total_fees, 495_000);
-
-        let tc = TokenClient::new(&env, &token);
-        assert_eq!(tc.balance(&fee_payer), MINT_AMOUNT - 500_000);
-        assert_eq!(tc.balance(&platform_treasury), 5_000);
-        assert_eq!(tc.balance(&client.address), 495_000);
-    }
-
-    #[test]
-    fn test_distribute_single_provider() {
-        let (env, admin, fee_payer, platform_treasury, token, client) = setup();
-
-        client.initialize(&admin, &token, &platform_treasury, &100, &3600);
-
-        let provider = Address::generate(&env);
-        client.register_provider(&provider, &1_000_000, &100).unwrap();
-
-        client.accumulate_fees(&fee_payer, &100_000).unwrap();
-
-        env.ledger().set_timestamp(3600);
-        client.distribute().unwrap();
-
-        let state = client.get_state();
-        assert_eq!(state.total_fees, 0);
-        assert_eq!(state.last_distribution, 3600);
-
-        // Platform kept its 1% cut (1_000); the provider gets the rest (99_000).
-        let tc = TokenClient::new(&env, &token);
-        assert_eq!(tc.balance(&platform_treasury), 1_000);
-        assert_eq!(tc.balance(&provider), 99_000);
-    }
-
-    #[test]
-    fn test_distribute_multiple_providers() {
-        let (env, admin, fee_payer, platform_treasury, token, client) = setup();
-
-        client.initialize(&admin, &token, &platform_treasury, &100, &3600);
-
-        let provider1 = Address::generate(&env);
-        let provider2 = Address::generate(&env);
-        let provider3 = Address::generate(&env);
-
-        // Register providers with different metrics
-        client
-            .register_provider(&provider1, &1_000_000, &100)
-            .unwrap();
-        client
-            .register_provider(&provider2, &2_000_000, &90)
-            .unwrap();
-        client
-            .register_provider(&provider3, &500_000, &95)
-            .unwrap();
-
-        // Add some transaction history
-        client
-            .update_metrics(&provider1, &1_000_000, &100, &100)
-            .unwrap();
-        client
-            .update_metrics(&provider2, &2_000_000, &90, &50)
-            .unwrap();
-        client
-            .update_metrics(&provider3, &500_000, &95, &25)
-            .unwrap();
-
-        client.accumulate_fees(&fee_payer, &1_000_000).unwrap();
-
-        env.ledger().set_timestamp(3600);
-        client.distribute().unwrap();
-
-        let state = client.get_state();
-        assert_eq!(state.total_fees, 0);
-
-        let tc = TokenClient::new(&env, &token);
-        let p1_balance = tc.balance(&provider1);
-        let p2_balance = tc.balance(&provider2);
-        let p3_balance = tc.balance(&provider3);
-
-        // Verify all providers received something
-        assert!(p1_balance > 0);
-        assert!(p2_balance > 0);
-        assert!(p3_balance > 0);
-
-        // Platform kept its 1% cut (10_000); providers split the rest (990_000).
-        assert_eq!(tc.balance(&platform_treasury), 10_000);
-        assert_eq!(p1_balance + p2_balance + p3_balance, 990_000);
-    }
-
-    #[test]
-    fn test_distribution_interval() {
-        let (env, admin, fee_payer, platform_treasury, token, client) = setup();
-
-        client.initialize(&admin, &token, &platform_treasury, &100, &3600);
-
-        let provider = Address::generate(&env);
-        client.register_provider(&provider, &1_000_000, &100).unwrap();
-
-        client.accumulate_fees(&fee_payer, &100_000).unwrap();
-
-        env.ledger().set_timestamp(3600);
-        client.distribute().unwrap();
-
-        client.accumulate_fees(&fee_payer, &50_000).unwrap();
-
-        // Try to distribute before interval elapses
-        env.ledger().set_timestamp(4000);
-        let result = client.try_distribute();
-        assert!(result.is_err());
-
-        // Distribute after interval elapses
-        env.ledger().set_timestamp(7200);
-        client.distribute().unwrap();
-    }
-
-    #[test]
-    fn test_no_fees_available() {
-        let (env, admin, _fee_payer, platform_treasury, token, client) = setup();
-
-        client.initialize(&admin, &token, &platform_treasury, &100, &3600);
-
-        let provider = Address::generate(&env);
-        client.register_provider(&provider, &1_000_000, &100).unwrap();
-
-        env.ledger().set_timestamp(3600);
-        let result = client.try_distribute();
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_error_already_registered() {
-        let (env, admin, _fee_payer, platform_treasury, token, client) = setup();
-
-        client.initialize(&admin, &token, &platform_treasury, &100, &3600);
-
-        let provider = Address::generate(&env);
-        client.register_provider(&provider, &1_000_000, &95).unwrap();
-
-        let result = client.try_register_provider(&provider, &2_000_000, &90);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_error_not_registered() {
-        let (env, admin, _fee_payer, platform_treasury, token, client) = setup();
-
-        client.initialize(&admin, &token, &platform_treasury, &100, &3600);
-
-        let provider = Address::generate(&env);
-        let result = client.try_get_provider_metrics(&provider);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_error_invalid_liquidity() {
-        let (env, admin, _fee_payer, platform_treasury, token, client) = setup();
-
-        client.initialize(&admin, &token, &platform_treasury, &100, &3600);
-
-        let provider = Address::generate(&env);
-        let result = client.try_register_provider(&provider, &0, &95);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_error_invalid_uptime() {
-        let (env, admin, _fee_payer, platform_treasury, token, client) = setup();
-
-        client.initialize(&admin, &token, &platform_treasury, &100, &3600);
-
-        let provider = Address::generate(&env);
-        let result = client.try_register_provider(&provider, &1_000_000, &101);
-        assert!(result.is_err());
-    }
-}
+mod test;

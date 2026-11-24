@@ -9,6 +9,12 @@
 //! case it swaps just enough of the overweight asset (via the existing
 //! `contracts/router` DEX router) to bring the ratio back to target.
 //!
+//! Only admin-authorized rebalancer bots may trigger a swap. Each call
+//! authenticates the bot with `require_auth`, checks the bot allowlist, and
+//! emits a `rebalance_needed` alert as soon as the threshold is crossed, so
+//! off-chain keepers can observe the imbalance even if the swap later fails
+//! its price guards.
+//!
 //! ## What "the pool" is
 //!
 //! The issue's acceptance criteria talks about rebalancing "local fiat
@@ -50,6 +56,7 @@ use soroban_sdk::{
 };
 
 const CONFIG: Symbol = symbol_short!("CONFIG");
+const BOTS: Symbol = symbol_short!("BOTS");
 
 /// A pool drifts more than this many basis points away from
 /// `target_ratio_bps` before `check_and_rebalance` does anything. 500 bps =
@@ -83,6 +90,12 @@ pub enum RebalancerError {
     /// The router's executed swap output was worse than the oracle-derived
     /// minimum this contract requires.
     OracleSlippageExceeded = 6,
+    /// Caller is not an authorized rebalancer bot.
+    UnauthorizedRebalancer = 7,
+    /// The oracle quote would not move the pool closer to target.
+    SwapDoesNotImproveRatio = 8,
+    /// Threshold values were outside their valid range.
+    InvalidThresholds = 9,
 }
 
 #[contracttype]
@@ -111,6 +124,31 @@ pub struct RebalancerConfig {
     pub path_b_to_a: Vec<Address>,
 }
 
+/// Direction of the arbitrage trade that would restore the target ratio.
+#[contracttype]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RebalanceDirection {
+    None,
+    SellAssetA,
+    SellAssetB,
+}
+
+/// Read-only answer from `check_rebalance_needed`: whether the pool has
+/// drifted beyond its threshold and, if so, the exact trade that would bring
+/// it back to target.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RebalanceRecommendation {
+    pub needed: bool,
+    pub direction: RebalanceDirection,
+    pub amount: i128,
+    pub current_ratio_bps: u32,
+    pub deviation_bps: u32,
+    pub balance_a: i128,
+    pub balance_b: i128,
+    pub target_ratio_bps: u32,
+}
+
 // -- Events -------------------------------------------------------------
 
 #[contractevent(topics = ["rebalancer", "rebalance_executed"])]
@@ -132,6 +170,19 @@ pub struct RebalanceSkipped {
     pub balance_b: i128,
     pub current_ratio_bps: u32,
     pub target_ratio_bps: u32,
+}
+
+/// Alert emitted when an imbalance beyond the configured threshold is
+/// detected, before any swap is attempted. Keepers can subscribe to this
+/// event even when they do not call `trigger_rebalance` themselves.
+#[contractevent(topics = ["rebalancer", "rebalance_needed"])]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RebalanceNeeded {
+    pub current_ratio_bps: u32,
+    pub target_ratio_bps: u32,
+    pub deviation_bps: u32,
+    pub direction: RebalanceDirection,
+    pub recommended_amount: i128,
 }
 
 #[contract]
@@ -192,6 +243,12 @@ impl RebalancerContract {
         let mut config = Self::get_config_internal(&env)?;
         config.admin.require_auth();
 
+        if imbalance_threshold_bps > BPS_DENOMINATOR as u32
+            || max_slippage_bps > BPS_DENOMINATOR as u32
+        {
+            return Err(RebalancerError::InvalidThresholds);
+        }
+
         config.imbalance_threshold_bps = imbalance_threshold_bps;
         config.max_slippage_bps = max_slippage_bps;
         env.storage().instance().set(&CONFIG, &config);
@@ -199,87 +256,125 @@ impl RebalancerContract {
         Ok(())
     }
 
+    /// Admin-only: authorize an address to trigger rebalances.
+    pub fn authorize_rebalancer_bot(env: Env, bot: Address) -> Result<(), RebalancerError> {
+        let config = Self::get_config_internal(&env)?;
+        config.admin.require_auth();
+
+        let mut bots: Vec<Address> = env
+            .storage()
+            .instance()
+            .get(&BOTS)
+            .unwrap_or_else(|| Vec::new(&env));
+        if !bots.iter().any(|authorized| authorized == bot) {
+            bots.push_back(bot);
+            env.storage().instance().set(&BOTS, &bots);
+            env.storage().instance().extend_ttl(1000, 10000);
+        }
+        Ok(())
+    }
+
+    /// Admin-only: remove an address from the bot allowlist.
+    pub fn revoke_rebalancer_bot(env: Env, bot: Address) -> Result<(), RebalancerError> {
+        let config = Self::get_config_internal(&env)?;
+        config.admin.require_auth();
+
+        let bots: Vec<Address> = env
+            .storage()
+            .instance()
+            .get(&BOTS)
+            .unwrap_or_else(|| Vec::new(&env));
+        let mut remaining = Vec::new(&env);
+        let mut found = false;
+        for authorized in bots.iter() {
+            if authorized == bot {
+                found = true;
+            } else {
+                remaining.push_back(authorized);
+            }
+        }
+        if found {
+            env.storage().instance().set(&BOTS, &remaining);
+            env.storage().instance().extend_ttl(1000, 10000);
+        }
+        Ok(())
+    }
+
+    /// Whether `bot` is currently allowed to trigger a rebalance.
+    pub fn is_authorized_rebalancer_bot(env: Env, bot: Address) -> bool {
+        let bots: Vec<Address> = env
+            .storage()
+            .instance()
+            .get(&BOTS)
+            .unwrap_or_else(|| Vec::new(&env));
+        bots.iter().any(|authorized| authorized == bot)
+    }
+
+    /// Read-only deviation report: whether the pool has drifted beyond its
+    /// threshold and, if so, which asset to sell and exactly how much.
+    pub fn check_rebalance_needed(env: Env) -> Result<RebalanceRecommendation, RebalancerError> {
+        let config = Self::get_config_internal(&env)?;
+        Self::recommend(&env, &config)
+    }
+
     /// Check the current `asset_a`/`asset_b` split against the target
     /// ratio; if it has drifted more than `imbalance_threshold_bps`, swap
     /// just enough through `router` to bring it back to target. A no-op
     /// (returns `Ok(0)`, emits `rebalance_skipped`) when already within
-    /// tolerance. Callable by anyone (a keeper pattern, matching this
-    /// repo's `timelock::execute_withdrawal` precedent): the threshold and
-    /// oracle-bounded slippage are the safeguards, not caller
-    /// authorization.
-    pub fn check_and_rebalance(env: Env) -> Result<i128, RebalancerError> {
+    /// tolerance.
+    ///
+    /// Only admin-authorized bots may trigger a rebalance. The threshold,
+    /// oracle quote, expected improvement, and oracle-derived slippage bound
+    /// are all enforced on-chain before any swap is routed.
+    pub fn check_and_rebalance(env: Env, bot: Address) -> Result<i128, RebalancerError> {
         let config = Self::get_config_internal(&env)?;
-        let contract_address = env.current_contract_address();
+        if !Self::is_authorized_rebalancer_bot(env.clone(), bot.clone()) {
+            return Err(RebalancerError::UnauthorizedRebalancer);
+        }
+        bot.require_auth();
 
-        let balance_a = token::Client::new(&env, &config.asset_a).balance(&contract_address);
-        let balance_b = token::Client::new(&env, &config.asset_b).balance(&contract_address);
-
-        if balance_a <= 0 && balance_b <= 0 {
+        let recommendation = Self::recommend(&env, &config)?;
+        if recommendation.balance_a <= 0 && recommendation.balance_b <= 0 {
             return Err(RebalancerError::NothingToRebalance);
         }
-
-        let total = balance_a
-            .checked_add(balance_b)
-            .ok_or(RebalancerError::Overflow)?;
-        // Both non-negative and not both zero, checked above; total > 0.
-        let current_ratio_bps =
-            Self::mul_div(balance_a, BPS_DENOMINATOR, total)?.clamp(0, BPS_DENOMINATOR) as u32;
-
-        let drift_bps = current_ratio_bps.abs_diff(config.target_ratio_bps);
-
-        if drift_bps <= config.imbalance_threshold_bps {
+        if !recommendation.needed {
             RebalanceSkipped {
-                balance_a,
-                balance_b,
-                current_ratio_bps,
+                balance_a: recommendation.balance_a,
+                balance_b: recommendation.balance_b,
+                current_ratio_bps: recommendation.current_ratio_bps,
                 target_ratio_bps: config.target_ratio_bps,
             }
             .publish(&env);
             return Ok(0);
         }
 
-        // Solve for the swap amount that brings asset_a's share to exactly
-        // target_ratio_bps, given the current total. Deliberately ignores
-        // the swap's own price impact on `total` (a real swap has a fee and
-        // slippage, so the post-swap ratio will land close to, not exactly
-        // at, target) — see the module doc's "Direction of a single swap".
-        let target_a = Self::mul_div(total, config.target_ratio_bps as i128, BPS_DENOMINATOR)?;
+        RebalanceNeeded {
+            current_ratio_bps: recommendation.current_ratio_bps,
+            target_ratio_bps: config.target_ratio_bps,
+            deviation_bps: recommendation.deviation_bps,
+            direction: recommendation.direction,
+            recommended_amount: recommendation.amount,
+        }
+        .publish(&env);
 
-        let (sold_asset_a, amount_to_swap, asset_in, asset_out, path) = if balance_a > target_a {
-            (
-                true,
-                balance_a
-                    .checked_sub(target_a)
-                    .ok_or(RebalancerError::Overflow)?,
+        let contract_address = env.current_contract_address();
+        let balance_a = recommendation.balance_a;
+        let balance_b = recommendation.balance_b;
+        let amount_to_swap = recommendation.amount;
+
+        let (asset_in, asset_out, path) = match recommendation.direction {
+            RebalanceDirection::SellAssetA => (
                 config.asset_a.clone(),
                 config.asset_b.clone(),
                 config.path_a_to_b.clone(),
-            )
-        } else {
-            let target_b = total
-                .checked_sub(target_a)
-                .ok_or(RebalancerError::Overflow)?;
-            (
-                false,
-                balance_b
-                    .checked_sub(target_b)
-                    .ok_or(RebalancerError::Overflow)?,
+            ),
+            RebalanceDirection::SellAssetB => (
                 config.asset_b.clone(),
                 config.asset_a.clone(),
                 config.path_b_to_a.clone(),
-            )
+            ),
+            RebalanceDirection::None => return Ok(0),
         };
-
-        if amount_to_swap <= 0 {
-            RebalanceSkipped {
-                balance_a,
-                balance_b,
-                current_ratio_bps,
-                target_ratio_bps: config.target_ratio_bps,
-            }
-            .publish(&env);
-            return Ok(0);
-        }
 
         let oracle_quote: i128 = env.invoke_contract(
             &config.oracle,
@@ -291,6 +386,46 @@ impl RebalancerContract {
                 amount_to_swap.into_val(&env),
             ],
         );
+        if oracle_quote <= 0 {
+            return Err(RebalancerError::OracleSlippageExceeded);
+        }
+
+        // Before touching the router, verify that the oracle's expected
+        // execution actually reduces the deviation. This blocks a "rebalance"
+        // that would either leave the pool where it was or push it further
+        // away from its target weight.
+        let (expected_a, expected_b) = if recommendation.direction == RebalanceDirection::SellAssetA
+        {
+            (
+                balance_a
+                    .checked_sub(amount_to_swap)
+                    .ok_or(RebalancerError::Overflow)?,
+                balance_b
+                    .checked_add(oracle_quote)
+                    .ok_or(RebalancerError::Overflow)?,
+            )
+        } else {
+            (
+                balance_a
+                    .checked_add(oracle_quote)
+                    .ok_or(RebalancerError::Overflow)?,
+                balance_b
+                    .checked_sub(amount_to_swap)
+                    .ok_or(RebalancerError::Overflow)?,
+            )
+        };
+        let expected_total = expected_a
+            .checked_add(expected_b)
+            .ok_or(RebalancerError::Overflow)?;
+        if expected_total > 0 {
+            let expected_ratio_bps = Self::mul_div(expected_a, BPS_DENOMINATOR, expected_total)?
+                .clamp(0, BPS_DENOMINATOR) as u32;
+            if expected_ratio_bps.abs_diff(config.target_ratio_bps) >= recommendation.deviation_bps
+            {
+                return Err(RebalancerError::SwapDoesNotImproveRatio);
+            }
+        }
+
         let min_amount_out = Self::mul_div(
             oracle_quote,
             (BPS_DENOMINATOR as u32 - config.max_slippage_bps) as i128,
@@ -355,7 +490,7 @@ impl RebalancerContract {
             balance_a_after,
             balance_b_after,
             amount_swapped: amount_to_swap,
-            sold_asset_a,
+            sold_asset_a: recommendation.direction == RebalanceDirection::SellAssetA,
         }
         .publish(&env);
 
@@ -370,24 +505,102 @@ impl RebalancerContract {
     /// fire right now, with no state change and no swap.
     pub fn preview(env: Env) -> Result<(i128, i128, u32, bool), RebalancerError> {
         let config = Self::get_config_internal(&env)?;
-        let contract_address = env.current_contract_address();
-        let balance_a = token::Client::new(&env, &config.asset_a).balance(&contract_address);
-        let balance_b = token::Client::new(&env, &config.asset_b).balance(&contract_address);
-        let total = balance_a
-            .checked_add(balance_b)
-            .ok_or(RebalancerError::Overflow)?;
-        if total <= 0 {
-            return Ok((balance_a, balance_b, 0, false));
-        }
-        let current_ratio_bps =
-            Self::mul_div(balance_a, BPS_DENOMINATOR, total)?.clamp(0, BPS_DENOMINATOR) as u32;
-        let drift_bps = current_ratio_bps.abs_diff(config.target_ratio_bps);
-        let would_rebalance = drift_bps > config.imbalance_threshold_bps;
-        Ok((balance_a, balance_b, current_ratio_bps, would_rebalance))
+        let recommendation = Self::recommend(&env, &config)?;
+        Ok((
+            recommendation.balance_a,
+            recommendation.balance_b,
+            recommendation.current_ratio_bps,
+            recommendation.needed,
+        ))
     }
 }
 
 impl RebalancerContract {
+    /// Shared ratio math for `check_rebalance_needed`, `preview`, and
+    /// `check_and_rebalance`. Keeping one implementation means the public
+    /// recommendation and the trade actually executed can never disagree
+    /// about direction or sizing.
+    fn recommend(
+        env: &Env,
+        config: &RebalancerConfig,
+    ) -> Result<RebalanceRecommendation, RebalancerError> {
+        let contract_address = env.current_contract_address();
+        let balance_a = token::Client::new(env, &config.asset_a).balance(&contract_address);
+        let balance_b = token::Client::new(env, &config.asset_b).balance(&contract_address);
+        let total = balance_a
+            .checked_add(balance_b)
+            .ok_or(RebalancerError::Overflow)?;
+
+        if total <= 0 {
+            return Ok(RebalanceRecommendation {
+                needed: false,
+                direction: RebalanceDirection::None,
+                amount: 0,
+                current_ratio_bps: 0,
+                deviation_bps: 0,
+                balance_a,
+                balance_b,
+                target_ratio_bps: config.target_ratio_bps,
+            });
+        }
+
+        let current_ratio_bps =
+            Self::mul_div(balance_a, BPS_DENOMINATOR, total)?.clamp(0, BPS_DENOMINATOR) as u32;
+        let deviation_bps = current_ratio_bps.abs_diff(config.target_ratio_bps);
+        let base = |direction, amount| RebalanceRecommendation {
+            needed: false,
+            direction,
+            amount,
+            current_ratio_bps,
+            deviation_bps,
+            balance_a,
+            balance_b,
+            target_ratio_bps: config.target_ratio_bps,
+        };
+
+        if deviation_bps <= config.imbalance_threshold_bps {
+            return Ok(base(RebalanceDirection::None, 0));
+        }
+
+        // Size the trade from the current total so one call lands on target
+        // without overshooting; the post-swap total changes with fees and
+        // price impact, so a keeper can call again for tighter convergence.
+        let target_a = Self::mul_div(total, config.target_ratio_bps as i128, BPS_DENOMINATOR)?;
+        let (direction, amount) = if balance_a > target_a {
+            (
+                RebalanceDirection::SellAssetA,
+                balance_a
+                    .checked_sub(target_a)
+                    .ok_or(RebalancerError::Overflow)?,
+            )
+        } else {
+            let target_b = total
+                .checked_sub(target_a)
+                .ok_or(RebalancerError::Overflow)?;
+            (
+                RebalanceDirection::SellAssetB,
+                balance_b
+                    .checked_sub(target_b)
+                    .ok_or(RebalancerError::Overflow)?,
+            )
+        };
+
+        if amount <= 0 {
+            return Ok(base(RebalanceDirection::None, 0));
+        }
+
+        Ok(RebalanceRecommendation {
+            needed: true,
+            direction,
+            amount,
+            current_ratio_bps,
+            deviation_bps,
+            balance_a,
+            balance_b,
+            target_ratio_bps: config.target_ratio_bps,
+        })
+    }
+
     fn get_config_internal(env: &Env) -> Result<RebalancerConfig, RebalancerError> {
         env.storage()
             .instance()
@@ -421,363 +634,4 @@ impl RebalancerContract {
 }
 
 #[cfg(test)]
-mod test {
-    extern crate std;
-
-    use super::*;
-    use soroban_sdk::testutils::Address as _;
-
-    const STROOP: i128 = 1;
-    const UNIT: i128 = 10_000_000 * STROOP;
-
-    /// A test double for `contracts/router`'s `execute_swap`, matching
-    /// only its call signature and externally-visible effect (moves
-    /// `amount_in` of `asset_in` from `caller` to itself, sends
-    /// `amount_in` of `asset_out` back at a fixed 1:1 rate). Does not
-    /// reimplement path resolution or per-pool slippage, since
-    /// `check_and_rebalance` treats the router as an opaque dependency
-    /// and this test only needs to prove the rebalancer calls it
-    /// correctly and reacts correctly to its result.
-    #[contract]
-    struct MockRouter;
-
-    #[contractimpl]
-    impl MockRouter {
-        #[allow(clippy::too_many_arguments)]
-        pub fn execute_swap(
-            env: Env,
-            caller: Address,
-            _path: Vec<Address>,
-            asset_in: Address,
-            asset_out: Address,
-            amount_in: i128,
-            min_amount_out: i128,
-            _deadline: u32,
-        ) -> i128 {
-            let amount_out = amount_in;
-            assert!(amount_out >= min_amount_out, "MockRouter: slippage");
-            let this_contract = env.current_contract_address();
-            token::Client::new(&env, &asset_in).transfer(&caller, &this_contract, &amount_in);
-            // A real DEX pool pays out of its own held liquidity, not by
-            // minting fresh supply, and `StellarAssetClient::mint` needs
-            // the token's admin to authorize it anyway (an authorization
-            // this contract, as a stand-in for an arbitrary DEX pool, has
-            // no legitimate way to obtain) — so this mock is pre-funded
-            // with `asset_out` by the test `setup` helper instead.
-            token::Client::new(&env, &asset_out).transfer(&this_contract, &caller, &amount_out);
-            amount_out
-        }
-    }
-
-    /// A test double for `contracts/oracle`'s `get_rate`: always quotes
-    /// 1:1 (`amount_in` back), matching `MockRouter`'s actual executed
-    /// rate above, so the oracle-derived slippage bound in
-    /// `check_and_rebalance` never itself blocks a swap in these tests
-    /// unless a test deliberately changes one side.
-    #[contract]
-    struct MockOracle;
-
-    #[contractimpl]
-    impl MockOracle {
-        pub fn get_rate(
-            _env: Env,
-            _asset_in: Address,
-            _asset_out: Address,
-            amount_in: i128,
-        ) -> i128 {
-            amount_in
-        }
-    }
-
-    fn setup_token(env: &Env) -> Address {
-        let token_admin = Address::generate(env);
-        env.register_stellar_asset_contract_v2(token_admin)
-            .address()
-    }
-
-    struct TestSetup<'a> {
-        client: RebalancerContractClient<'a>,
-        asset_a: Address,
-        asset_b: Address,
-        contract_id: Address,
-    }
-
-    /// Wires up a rebalancer against a mock router and mock oracle (see
-    /// their doc comments above for why these are hand-written test
-    /// doubles rather than the real `router`/`oracle` crates: both are
-    /// `cdylib`-only, like every contract in this workspace, so they
-    /// cannot be linked as a Rust library dependency — the same reason
-    /// `router`'s own tests use an inline `MockPool` rather than a real
-    /// pool contract).
-    fn setup(env: &Env, target_ratio_bps: u32, balance_a: i128, balance_b: i128) -> TestSetup<'_> {
-        // `check_and_rebalance` requires no auth at its own root (see its
-        // "callable by anyone" doc comment), but its nested router/token
-        // calls do require the rebalancer contract's own address as an
-        // authorizer two frames down. Strict `mock_all_auths()` only mocks
-        // auths present at the root invocation, so it rejects that nested
-        // requirement as "non-root auth"; the non-root-allowing variant is
-        // needed here, matching this contract's actual keeper-callable
-        // design rather than being a test-only relaxation of a real check.
-        env.mock_all_auths_allowing_non_root_auth();
-        let admin = Address::generate(env);
-        let asset_a = setup_token(env);
-        let asset_b = setup_token(env);
-
-        let router_id = env.register(MockRouter, ());
-        let oracle_id = env.register(MockOracle, ());
-
-        let contract_id = env.register(RebalancerContract, ());
-        let client = RebalancerContractClient::new(env, &contract_id);
-        client.initialize(
-            &admin,
-            &asset_a,
-            &asset_b,
-            &target_ratio_bps,
-            &router_id,
-            &oracle_id,
-            &Vec::new(env),
-            &Vec::new(env),
-        );
-
-        if balance_a > 0 {
-            token::StellarAssetClient::new(env, &asset_a).mint(&contract_id, &balance_a);
-        }
-        if balance_b > 0 {
-            token::StellarAssetClient::new(env, &asset_b).mint(&contract_id, &balance_b);
-        }
-
-        // Pre-fund the mock router's own balance so it can pay out swaps
-        // by transferring, not minting (see `MockRouter::execute_swap`'s
-        // doc comment). A generous, fixed amount independent of the
-        // test's own balances is enough for every test's swap sizes.
-        let router_liquidity = 10_000_000 * UNIT;
-        token::StellarAssetClient::new(env, &asset_a).mint(&router_id, &router_liquidity);
-        token::StellarAssetClient::new(env, &asset_b).mint(&router_id, &router_liquidity);
-
-        TestSetup {
-            client,
-            asset_a,
-            asset_b,
-            contract_id,
-        }
-    }
-
-    #[test]
-    fn preview_reports_current_split_and_no_rebalance_within_tolerance() {
-        let env = Env::default();
-        // 60/40 target, actual 62/38: 2pp drift, under the 5pp threshold.
-        let setup = setup(&env, 6_000, 62 * UNIT, 38 * UNIT);
-
-        let (balance_a, balance_b, ratio_bps, would_rebalance) = setup.client.preview();
-        assert_eq!(balance_a, 62 * UNIT);
-        assert_eq!(balance_b, 38 * UNIT);
-        assert_eq!(ratio_bps, 6_200);
-        assert!(!would_rebalance);
-    }
-
-    #[test]
-    fn check_and_rebalance_is_a_no_op_within_threshold() {
-        let env = Env::default();
-        let setup = setup(&env, 6_000, 62 * UNIT, 38 * UNIT);
-
-        let result = setup.client.check_and_rebalance();
-        assert_eq!(result, 0);
-
-        // Balances must be completely untouched.
-        assert_eq!(
-            token::Client::new(&env, &setup.asset_a).balance(&setup.contract_id),
-            62 * UNIT
-        );
-        assert_eq!(
-            token::Client::new(&env, &setup.asset_b).balance(&setup.contract_id),
-            38 * UNIT
-        );
-    }
-
-    #[test]
-    fn check_and_rebalance_swaps_asset_a_when_it_is_overweight() {
-        let env = Env::default();
-        // 60/40 target, actual 70/30: asset_a is 10pp over target.
-        let setup = setup(&env, 6_000, 70 * UNIT, 30 * UNIT);
-
-        let preview_before = setup.client.preview();
-        assert!(preview_before.3, "preview must predict a rebalance fires");
-
-        let received = setup.client.check_and_rebalance();
-
-        // Excess = 70 - (100 * 0.60) = 10 units of asset_a sold; the
-        // settlement pool executes 1:1, so exactly 10 units of asset_b
-        // are received.
-        let expected_swap = 10 * UNIT;
-        assert_eq!(received, expected_swap);
-
-        let balance_a_after = token::Client::new(&env, &setup.asset_a).balance(&setup.contract_id);
-        let balance_b_after = token::Client::new(&env, &setup.asset_b).balance(&setup.contract_id);
-        assert_eq!(balance_a_after, 60 * UNIT);
-        assert_eq!(balance_b_after, 40 * UNIT);
-    }
-
-    #[test]
-    fn check_and_rebalance_swaps_asset_b_when_it_is_overweight() {
-        let env = Env::default();
-        // 60/40 target, actual 40/60: asset_b is 20pp over target.
-        let setup = setup(&env, 6_000, 40 * UNIT, 60 * UNIT);
-
-        setup.client.check_and_rebalance();
-
-        let balance_a_after = token::Client::new(&env, &setup.asset_a).balance(&setup.contract_id);
-        let balance_b_after = token::Client::new(&env, &setup.asset_b).balance(&setup.contract_id);
-        assert_eq!(balance_a_after, 60 * UNIT);
-        assert_eq!(balance_b_after, 40 * UNIT);
-    }
-
-    #[test]
-    fn rebalance_at_the_exact_threshold_boundary_is_a_no_op() {
-        let env = Env::default();
-        // 60/40 target, actual 65/35: exactly 5pp drift, the threshold
-        // itself, not past it.
-        let setup = setup(&env, 6_000, 65 * UNIT, 35 * UNIT);
-
-        let received = setup.client.check_and_rebalance();
-        assert_eq!(received, 0);
-    }
-
-    #[test]
-    fn rebalance_just_past_the_threshold_boundary_fires() {
-        let env = Env::default();
-        // Basis points only resolve to 1/10,000 of the total, so "just
-        // past" the 500 bps boundary must move by at least that much of
-        // the total (a single stroop is far below that resolution and
-        // does not change the computed ratio at all).
-        let one_bps_of_total = UNIT / 10; // 100 * UNIT total / 10_000 bps
-        let setup = setup(
-            &env,
-            6_000,
-            65 * UNIT + one_bps_of_total,
-            35 * UNIT - one_bps_of_total,
-        );
-
-        let received = setup.client.check_and_rebalance();
-        assert!(received > 0);
-    }
-
-    #[test]
-    fn check_and_rebalance_errors_when_both_balances_are_zero() {
-        let env = Env::default();
-        let setup = setup(&env, 5_000, 0, 0);
-
-        let result = setup.client.try_check_and_rebalance();
-        assert_eq!(result, Err(Ok(RebalancerError::NothingToRebalance)));
-    }
-
-    #[test]
-    fn check_and_rebalance_is_callable_by_anyone_with_no_auth() {
-        // Keeper pattern: no caller address is even taken, so there is
-        // nothing to authorize. This test's absence of `mock_all_auths`
-        // for the CALL itself (only `initialize`/`add_pool`/etc. during
-        // setup use it) is the proof: if `check_and_rebalance` required
-        // an auth it doesn't declare a parameter for, this would panic.
-        let env = Env::default();
-        let setup = setup(&env, 6_000, 70 * UNIT, 30 * UNIT);
-
-        let result = setup.client.try_check_and_rebalance();
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn initialize_rejects_a_zero_target_ratio() {
-        let env = Env::default();
-        env.mock_all_auths();
-        let admin = Address::generate(&env);
-        let asset_a = setup_token(&env);
-        let asset_b = setup_token(&env);
-        let router_id = Address::generate(&env);
-        let oracle_id = Address::generate(&env);
-
-        let contract_id = env.register(RebalancerContract, ());
-        let client = RebalancerContractClient::new(&env, &contract_id);
-
-        let result = client.try_initialize(
-            &admin,
-            &asset_a,
-            &asset_b,
-            &0u32,
-            &router_id,
-            &oracle_id,
-            &Vec::new(&env),
-            &Vec::new(&env),
-        );
-        assert_eq!(result, Err(Ok(RebalancerError::InvalidTargetRatio)));
-    }
-
-    #[test]
-    fn initialize_rejects_a_target_ratio_of_ten_thousand_bps() {
-        // 10_000 bps (100%) would mean "always fully in asset_a", which
-        // has no meaningful rebalance target on the other side; the valid
-        // range is the open interval (0, 10_000).
-        let env = Env::default();
-        env.mock_all_auths();
-        let admin = Address::generate(&env);
-        let asset_a = setup_token(&env);
-        let asset_b = setup_token(&env);
-        let router_id = Address::generate(&env);
-        let oracle_id = Address::generate(&env);
-
-        let contract_id = env.register(RebalancerContract, ());
-        let client = RebalancerContractClient::new(&env, &contract_id);
-
-        let result = client.try_initialize(
-            &admin,
-            &asset_a,
-            &asset_b,
-            &10_000u32,
-            &router_id,
-            &oracle_id,
-            &Vec::new(&env),
-            &Vec::new(&env),
-        );
-        assert_eq!(result, Err(Ok(RebalancerError::InvalidTargetRatio)));
-    }
-
-    #[test]
-    fn double_initialize_is_rejected() {
-        let env = Env::default();
-        let setup = setup(&env, 6_000, 60 * UNIT, 40 * UNIT);
-        let config = setup.client.get_config();
-
-        let result = setup.client.try_initialize(
-            &config.admin,
-            &setup.asset_a,
-            &setup.asset_b,
-            &6_000u32,
-            &config.router,
-            &config.oracle,
-            &config.path_a_to_b,
-            &config.path_b_to_a,
-        );
-        assert_eq!(result, Err(Ok(RebalancerError::AlreadyInitialized)));
-    }
-
-    #[test]
-    fn configure_thresholds_by_non_admin_requires_auth() {
-        let env = Env::default();
-        let setup = setup(&env, 6_000, 60 * UNIT, 40 * UNIT);
-
-        env.set_auths(&[]);
-        let result = setup.client.try_configure_thresholds(&200u32, &50u32);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn configure_thresholds_updates_the_effective_threshold() {
-        let env = Env::default();
-        let setup = setup(&env, 6_000, 62 * UNIT, 38 * UNIT);
-
-        // 2pp drift was previously within the default 5pp threshold; tighten
-        // the threshold to 1pp so the same drift now fires.
-        setup.client.configure_thresholds(&100u32, &100u32);
-
-        let (_, _, _, would_rebalance) = setup.client.preview();
-        assert!(would_rebalance);
-    }
-}
+mod test;
