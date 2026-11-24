@@ -54,6 +54,12 @@ type MockClient = {
   handlers: Map<string, (...args: unknown[]) => void>;
 };
 
+const TX_SUB_ID = "5d3c2b1a-0000-4000-8000-000000000123";
+const TX_FOREIGN_ID = "7e8f9a0b-1111-4000-8000-000000000456";
+
+/** Lets the async message handler (ownership lookup) settle before asserting. */
+const flushAsync = () => new Promise((resolve) => setImmediate(resolve));
+
 function createMockClient(): MockClient {
   const handlers = new Map<string, (...args: unknown[]) => void>();
 
@@ -439,23 +445,34 @@ describe("WebSocketManager", () => {
 
     client.send.mockClear();
 
+    // The caller owns the transaction, so the topic authorizer lets the subscription through.
+    const ownerModel = MockTransactionModel.mock.results.at(-1)!.value as {
+      findById: jest.Mock;
+    };
+    ownerModel.findById.mockResolvedValue({
+      id: TX_SUB_ID,
+      userId: "user-subscription",
+    });
+
     // Send subscription message
     client.handlers.get("message")?.(
       JSON.stringify({
         type: "subscribe",
-        data: { transactionId: "tx-sub-123", correlation_id: "subscribe-correlation" },
+        data: { transactionId: TX_SUB_ID, correlation_id: "subscribe-correlation" },
       }),
     );
+    await flushAsync();
 
+    expect(ownerModel.findById).toHaveBeenCalledWith(TX_SUB_ID, "user-subscription");
     expect(JSON.parse(client.send.mock.calls[0][0] as string)).toEqual({
       type: "subscribe.ack",
       correlation_id: "subscribe-correlation",
-      data: { transactionId: "tx-sub-123" },
+      data: { transactionId: TX_SUB_ID },
     });
 
     // Broadcast to that transaction ID
     await manager.broadcastTransactionUpdate({
-      id: "tx-sub-123",
+      id: TX_SUB_ID,
       status: "processing",
       correlationId: "payment-correlation",
     });
@@ -468,8 +485,52 @@ describe("WebSocketManager", () => {
     // Verify the message was published to Redis
     expect(pubClient.publish).toHaveBeenCalledWith(
       "transaction.updates",
-      expect.stringContaining('"transactionId":"tx-sub-123"'),
+      expect.stringContaining(`"transactionId":"${TX_SUB_ID}"`),
     );
+
+    await manager.close();
+  });
+
+  it("rejects subscriptions to transactions the caller does not own", async () => {
+    process.env.REDIS_URL = "";
+    mockVerifyToken.mockReturnValue({
+      userId: "user-intruder",
+      email: "intruder@example.com",
+    });
+
+    const manager = new WebSocketManager({} as Server);
+    const client = createMockClient();
+    await manager.redisReady;
+    connectClient(client);
+    client.send.mockClear();
+
+    const model = MockTransactionModel.mock.results.at(-1)!.value as {
+      findById: jest.Mock;
+    };
+    // The user-scoped lookup returns nothing for a transaction owned by someone else.
+    model.findById.mockResolvedValue(null);
+
+    client.handlers.get("message")?.(
+      JSON.stringify({
+        type: "subscribe",
+        data: { transactionId: TX_FOREIGN_ID },
+      }),
+    );
+    await flushAsync();
+
+    expect(model.findById).toHaveBeenCalledWith(TX_FOREIGN_ID, "user-intruder");
+    expect(JSON.parse(client.send.mock.calls[0][0] as string)).toMatchObject({
+      type: "error",
+      data: {
+        code: "forbidden_topic",
+        topic: `transaction:${TX_FOREIGN_ID}`,
+      },
+    });
+    expect(client.close).toHaveBeenCalledWith(4403, "Unauthorized topic");
+
+    // No broadcast reaches a client that was never subscribed.
+    await manager.broadcastTransactionUpdate({ id: TX_FOREIGN_ID, status: "completed" });
+    expect(client.send).toHaveBeenCalledTimes(1);
 
     await manager.close();
   });
