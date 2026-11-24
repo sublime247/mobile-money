@@ -136,7 +136,9 @@ describe("transactionController - TOTP withdrawal checks", () => {
       },
       headers: {},
       header: jest.fn().mockReturnValue(undefined) as any,
-    };
+      // The controller reads the caller from the JWT middleware, not the body.
+      jwtUser: { userId: "user-totp-123" },
+    } as Partial<Request>;
     res = {
       status: jest.fn().mockReturnThis() as any,
       json: jest.fn() as any,
