@@ -44,12 +44,15 @@ interface FakeServer {
 const servers: Record<string, FakeServer> = {};
 const urls = ["https://primary.example", "https://secondary.example"];
 
+/** Root document as served by Horizon's `GET /`, reporting ledger 1,000. */
+const rootBody = { history_latest_ledger: 1_000 };
+
 function makeProbe(failFirst = false): jest.Mock {
   return jest.fn(async (url: string) => {
     if (failFirst && url === urls[0]) {
       return { status: 503 };
     }
-    return { status: 200 };
+    return { status: 200, body: rootBody };
   });
 }
 
@@ -76,7 +79,7 @@ describe("Horizon health probe scheduler", () => {
     pool.startHealthProbes();
     await jest.advanceTimersByTimeAsync(0);
     expect(probe).toHaveBeenCalledTimes(2);
-    expect(probe).toHaveBeenCalledWith(urls[0], 2000);
+    expect(probe).toHaveBeenCalledWith(urls[0], 3000);
 
     await jest.advanceTimersByTimeAsync(15_000);
     expect(probe).toHaveBeenCalledTimes(4);
@@ -119,7 +122,7 @@ describe("Horizon circuit breaker failover", () => {
       if (url === urls[0]) {
         await new Promise((resolve) => setTimeout(resolve, 60));
       }
-      return { status: 200 };
+      return { status: 200, body: rootBody };
     });
     const pool = new HorizonPool(urls, {
       probe,
