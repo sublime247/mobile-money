@@ -127,25 +127,22 @@ export class KYCController {
       const applicant = await this.kycService.createApplicant(validatedData);
       await this.storeApplicantReference(userId, applicant.id);
 
-      try {
-        const pepService = getPepCheckService();
-        await pepService.ensureSeeded();
-        const pepMatch = await pepService.screenCustomer(
-          validatedData.first_name,
-          validatedData.last_name,
-          validatedData.address?.country || "",
-        );
+      const pepService = getPepCheckService();
+      await pepService.ensureSeeded();
+      const pepMatch = await pepService.screenCustomer(
+        validatedData.first_name,
+        validatedData.last_name,
+        validatedData.address?.country || "",
+        userId,
+      );
 
-        if (pepMatch.matched) {
-          logger.warn("PEP match detected for applicant", {
-            applicantId: applicant.id,
-            userId,
-            score: pepMatch.score,
-          });
-          await pepService.flagForReview(userId, pepMatch);
-        }
-      } catch (pepErr) {
-        logger.error("Error during PEP screening", { error: (pepErr as Error).message });
+      if (pepMatch.matched) {
+        logger.warn("PEP match detected for applicant", {
+          applicantId: applicant.id,
+          userId,
+          score: pepMatch.score,
+        });
+        await pepService.flagForReview(userId, pepMatch);
       }
 
       res.status(201).json({

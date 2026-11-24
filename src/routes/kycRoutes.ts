@@ -18,6 +18,10 @@ import {
 import { GetObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { getS3Client, s3Config, getSignedObjectUrl } from "../config/s3";
 import { kycSanitizeBody } from "../validators/kycSanitizer";
+import {
+  extractAndVerifyIdentity,
+  IdentityVerification,
+} from "../services/compliance/ocrService";
 
 const COMPLIANCE_OFFICER_ROLE = "compliance_officer";
 const REDACTED_FILE_URL = "[REDACTED]";
@@ -267,6 +271,67 @@ export const createKYCRoutes = (db: Pool): Router => {
           fileBuffer: req.file.buffer,
         });
 
+        const documentType = String(document_type || "").toLowerCase();
+        const isIdentityDocument =
+          documentType === "passport" ||
+          documentType === "national_id" ||
+          documentType === "national_identity_card";
+        let ocrVerification:
+          | (IdentityVerification & { status: "checked" | "manual_review" })
+          | undefined;
+
+        if (isIdentityDocument) {
+          try {
+            if (
+              req.file.mimetype !== "image/jpeg" &&
+              req.file.mimetype !== "image/jpg" &&
+              req.file.mimetype !== "image/png"
+            ) {
+              throw new Error("OCR supports identity document photos only");
+            }
+
+            const applicant = await kycService.getApplicant(applicant_id);
+            if (!applicant.first_name || !applicant.last_name || !applicant.dob) {
+              throw new Error("Submitted identity details are incomplete");
+            }
+
+            const verification = await extractAndVerifyIdentity(
+              req.file.buffer,
+              req.file.mimetype,
+              {
+                fullName: `${applicant.first_name} ${applicant.last_name}`,
+                dateOfBirth: applicant.dob,
+              },
+            );
+            ocrVerification = {
+              ...verification,
+              status: verification.manualReviewRequired
+                ? "manual_review"
+                : "checked",
+            };
+          } catch (error) {
+            logger.warn(
+              { error, applicantId: applicant_id, documentId: documentResult.rows[0].id },
+              "KYC OCR verification requires manual review",
+            );
+            ocrVerification = {
+              nameSimilarity: 0,
+              dateOfBirthMatches: false,
+              manualReviewRequired: true,
+              status: "manual_review",
+            };
+          }
+
+          if (ocrVerification.manualReviewRequired) {
+            await db.query(
+              `UPDATE kyc_applicants
+               SET verification_status = 'review', updated_at = NOW()
+               WHERE user_id = $1 AND applicant_id = $2`,
+              [userId, applicant_id],
+            );
+          }
+        }
+
         const canViewRaw = canViewRawKycUploads(req) || Boolean(res.locals.canViewRawKycUploads);
         let responseFileUrl: string = REDACTED_FILE_URL;
 
@@ -286,6 +351,7 @@ export const createKYCRoutes = (db: Pool): Router => {
             file_url: responseFileUrl,
             applicant_id,
             uploaded_at: documentResult.rows[0].created_at,
+            ocr_verification: ocrVerification,
           },
         });
       } catch (error) {

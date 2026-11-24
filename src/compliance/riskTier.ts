@@ -20,7 +20,7 @@
 
 import logger from "../utils/logger";
 import { pool } from "../config/database";
-import { queryRead, queryWrite } from "../config/database";
+import { queryRead } from "../config/database";
 import { KYCLevel } from "../config/limits";
 
 // ─── Risk Tier ───────────────────────────────────────────────────────────────
@@ -93,6 +93,7 @@ export interface RiskInput {
   openDisputesLast30Days: number;
   amlAlertsLast30Days: number;
   highSeverityAmlAlertsLast30Days: number;
+  pepMatchesLast30Days?: number;
 }
 
 // ─── Calculator ───────────────────────────────────────────────────────────────
@@ -186,6 +187,15 @@ export function calculateRiskScore(input: RiskInput): RiskScore {
     });
   }
 
+  if ((input.pepMatchesLast30Days ?? 0) > 0) {
+    score += 70;
+    factors.push({
+      name: "pep_match",
+      points: 70,
+      detail: `${input.pepMatchesLast30Days} confirmed PEP match(es) in the last 30 days`,
+    });
+  }
+
   // Determine tier
   let tier: RiskTier;
   if (score >= HIGH_THRESHOLD) {
@@ -263,10 +273,14 @@ async function gatherRiskInput(userId: string): Promise<RiskInput> {
       queryRead<{
         total: string;
         high_severity: string;
+        pep_matches: string;
       }>(
         `SELECT
            COUNT(*)                                        AS total,
-           COUNT(*) FILTER (WHERE severity = 'high')      AS high_severity
+           COUNT(*) FILTER (WHERE severity = 'high')      AS high_severity,
+           COUNT(*) FILTER (
+             WHERE rule_hits @> '{"rule":"pep_screening"}'::jsonb
+           ) AS pep_matches
          FROM aml_alerts
          WHERE user_id = $1
            AND created_at >= $2
@@ -290,6 +304,7 @@ async function gatherRiskInput(userId: string): Promise<RiskInput> {
     openDisputesLast30Days: parseInt(disp?.disputed ?? "0", 10),
     amlAlertsLast30Days: parseInt(aml?.total ?? "0", 10),
     highSeverityAmlAlertsLast30Days: parseInt(aml?.high_severity ?? "0", 10),
+    pepMatchesLast30Days: parseInt(aml?.pep_matches ?? "0", 10),
   };
 }
 
@@ -303,22 +318,60 @@ async function persistRiskTier(
   userId: string,
   riskScore: RiskScore,
 ): Promise<void> {
-  await queryWrite(
-    `UPDATE users
-     SET risk_tier               = $1,
-         risk_score              = $2,
-         risk_score_calculated_at = $3,
-         mandatory_2fa_withdrawals = $4,
-         updated_at              = NOW()
-     WHERE id = $5`,
-    [
-      riskScore.tier,
-      riskScore.score,
-      riskScore.calculatedAt,
-      riskScore.mandatory2FA,
-      userId,
-    ],
-  );
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const current = await client.query<{
+      risk_tier: RiskTier | null;
+      risk_score: number | null;
+    }>(
+      `SELECT risk_tier, risk_score FROM users WHERE id = $1 FOR UPDATE`,
+      [userId],
+    );
+    if (current.rows.length === 0) {
+      throw new Error(`Cannot persist risk tier for unknown user ${userId}`);
+    }
+
+    const previous = current.rows[0];
+    await client.query(
+      `UPDATE users
+       SET risk_tier = $1,
+           risk_score = $2,
+           risk_score_calculated_at = $3,
+           mandatory_2fa_withdrawals = $4,
+           updated_at = NOW()
+       WHERE id = $5`,
+      [
+        riskScore.tier,
+        riskScore.score,
+        riskScore.calculatedAt,
+        riskScore.mandatory2FA,
+        userId,
+      ],
+    );
+
+    if (previous.risk_tier !== riskScore.tier) {
+      await client.query(
+        `INSERT INTO customer_risk_audit (
+           user_id, previous_tier, new_tier, previous_score, new_score, justification
+         ) VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          userId,
+          previous.risk_tier,
+          riskScore.tier,
+          previous.risk_score,
+          riskScore.score,
+          JSON.stringify(riskScore.factors),
+        ],
+      );
+    }
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -332,18 +385,7 @@ async function persistRiskTier(
 export async function evaluateCustomerRisk(userId: string): Promise<RiskScore> {
   const input = await gatherRiskInput(userId);
   const riskScore = calculateRiskScore(input);
-
-  try {
-    await persistRiskTier(userId, riskScore);
-  } catch (err) {
-    // Persistence failure is logged but not re-thrown — the score is still
-    // returned to the caller so runtime checks (e.g. pre-transaction limit
-    // enforcement) continue to work even if the DB write fails transiently.
-    logger.error(
-      `[riskTier] Failed to persist risk tier for user ${userId}:`,
-      err,
-    );
-  }
+  await persistRiskTier(userId, riskScore);
 
   logger.info({
     event: "risk_tier_calculated",
@@ -380,5 +422,7 @@ export async function getEffectiveDailyLimit(
   const riskLimit = RISK_DAILY_LIMITS[storedTier] ?? RISK_DAILY_LIMITS.low;
 
   // Apply the more restrictive of the two limits.
-  return Math.min(kycBasedLimitXaf, riskLimit);
+  const adjustedKycLimit =
+    storedTier === "high" ? kycBasedLimitXaf * 0.5 : kycBasedLimitXaf;
+  return Math.min(adjustedKycLimit, riskLimit);
 }

@@ -12,6 +12,7 @@
 
 import { pool } from "../../config/database";
 import logger from "../../utils/logger";
+import { evaluateCustomerRisk } from "../../compliance/riskTier";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                             */
@@ -228,12 +229,18 @@ export class PepCheckService {
     firstName: string,
     lastName: string,
     country?: string,
+    userId?: string,
   ): Promise<PepMatchResult> {
     try {
       const fullName = `${firstName} ${lastName}`.trim();
 
       // Fetch all PEP records (cached in production)
-      const result = await pool.query("SELECT * FROM pep_records");
+      const result = await pool.query(
+        `SELECT id, full_name AS "fullName", first_name AS "firstName",
+                last_name AS "lastName", country, source, category, position,
+                external_id AS "externalId"
+         FROM pep_records`,
+      );
       const records: PepRecord[] = result.rows;
 
       const matches: Array<{ record: PepRecord; score: number }> = [];
@@ -270,22 +277,28 @@ export class PepCheckService {
         );
 
         // Log the PEP screening event
-        await pool.query(
-          `INSERT INTO aml_alerts (user_id, severity, status, rule_hits, reasons)
-           VALUES (NULL, 'medium', 'pending_review', $1, $2)`,
-          [
-            JSON.stringify({
-              rule: "pep_screening",
-              matches: matches.map((m) => ({
-                name: m.record.fullName,
-                score: m.score,
-                source: m.record.source,
-                position: m.record.position,
-              })),
-            }),
-            [`PEP match: ${matches[0].record.fullName} (score: ${matches[0].score.toFixed(2)})`],
-          ],
-        );
+        if (userId) {
+          await pool.query(
+            `INSERT INTO aml_alerts (
+               transaction_id, user_id, severity, status, rule_hits, reasons
+             )
+             VALUES (NULL, $1, 'high', 'pending_review', $2, $3)`,
+            [
+              userId,
+              JSON.stringify({
+                rule: "pep_screening",
+                matches: matches.map((m) => ({
+                  name: m.record.fullName,
+                  score: m.score,
+                  source: m.record.source,
+                  position: m.record.position,
+                })),
+              }),
+              [`PEP match: ${matches[0].record.fullName} (score: ${matches[0].score.toFixed(2)})`],
+            ],
+          );
+          await evaluateCustomerRisk(userId);
+        }
       }
 
       return {
@@ -295,7 +308,7 @@ export class PepCheckService {
       };
     } catch (err) {
       logger.error({ err, firstName, lastName }, "[PepCheck] Screening error");
-      return { matched: false, score: 0, matches: [] };
+      throw err;
     }
   }
 
@@ -324,9 +337,11 @@ export class PepCheckService {
         ],
       );
 
+      await evaluateCustomerRisk(userId);
       logger.warn({ userId, pepResult }, "[PepCheck] Flagged user for PEP review");
     } catch (err) {
       logger.error({ err, userId }, "[PepCheck] Failed to flag user for review");
+      throw err;
     }
   }
 

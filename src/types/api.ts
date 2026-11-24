@@ -164,6 +164,10 @@ export interface LimitExceededDetails {
   remainingLimit: number;
   message?: string;
   upgradeAvailable?: boolean;
+  dailyLimitUsd?: number;
+  monthlyLimitUsd?: number;
+  currentDailyTotalUsd?: number;
+  currentMonthlyTotalUsd?: number;
 }
 
 export interface LimitExceededErrorResponse extends ErrorResponse {
