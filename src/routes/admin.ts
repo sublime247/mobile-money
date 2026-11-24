@@ -60,8 +60,23 @@ import { AuditLogFilter, AuditLogModel } from "../models/auditLog";
 import { sarReportService } from "../services/sarReportService";
 
 import adminControllerRouter from "../controllers/adminController";
+import { csrfProtection, issueCsrfToken } from "../middleware/csrfProtection";
 
 const router = Router();
+
+// Double Submit Cookie CSRF check for browser (cookie-bearing) sessions on
+// every state-changing admin endpoint (#2565). Must run before any handler.
+router.use(csrfProtection());
+
+/**
+ * GET /api/admin/csrf-token
+ * Rotate the CSRF token for the current browser session (e.g. after expiry).
+ */
+router.get("/csrf-token", (_req: Request, res: Response) => {
+  const csrfToken = issueCsrfToken(res);
+  res.json({ csrfToken });
+});
+
 router.use("/monitoring", adminControllerRouter);
 
 /**
