@@ -1,5 +1,5 @@
 import logger from "../utils/logger";
-import { Router, Request, Response } from "express";
+import { Router, Request, Response, json } from "express";
 import { v4 as uuidv4 } from "uuid";
 import { StrKey } from "@stellar/stellar-sdk";
 import { Pool } from "pg";
@@ -7,6 +7,7 @@ import { Sep12Service, Sep12CustomerStatus } from "./sep12";
 import { PostgresSep24TransactionStore } from "./sep24Store";
 
 import { sep6InfoResponseSchema, Sep6InfoResponse } from "../schemas/sep6";
+import { validateCemacRib } from "../utils/bankValidator";
 
 export interface Sep6AssetConfig {
   asset_code: string;
@@ -227,12 +228,30 @@ export const createSep6Router = (db: Pool): Router => {
   });
 
   /**
-   * GET /withdraw
-   * Returns the anchor's Stellar account where the user should send the digital asset.
+   * Withdrawal handler shared by GET /withdraw (SEP-6) and POST /withdraw.
+   * Returns the anchor's Stellar account where the user should send the
+   * digital asset, after validating any supplied CEMAC RIB.
    */
-  sep6Router.get("/withdraw", async (req: Request, res: Response) => {
+  type WithdrawParams = Record<string, unknown>;
+
+  const firstString = (value: unknown): string | undefined => {
+    if (typeof value === "string") return value;
+    if (Array.isArray(value) && typeof value[0] === "string") return value[0];
+    return undefined;
+  };
+
+  const handleWithdraw = async (params: WithdrawParams, res: Response) => {
     try {
-      const { asset_code, type, dest, dest_extra, account } = req.query;
+      const asset_code = firstString(params.asset_code);
+      const type = firstString(params.type);
+      const dest =
+        firstString(params.dest) ?? firstString(params.rib) ?? undefined;
+      const dest_extra = firstString(params.dest_extra);
+      const account = firstString(params.account);
+      const countryCode =
+        firstString(params.country_code) ??
+        firstString(params.bank_country_code) ??
+        firstString(params.dest_country_code);
       const config = getSep6Config();
 
       if (!asset_code || !type || !dest) {
@@ -241,15 +260,30 @@ export const createSep6Router = (db: Pool): Router => {
           .json({ error: "asset_code, type, and dest are required" });
       }
 
-      if (account && !StrKey.isValidEd25519PublicKey(account as string)) {
+      if (account && !StrKey.isValidEd25519PublicKey(account)) {
         return res.status(400).json({ error: "invalid 'account'" });
+      }
+
+      // Validate the destination bank identifier before creating any
+      // withdrawal transaction (#2431). CEMAC countries use a 23-digit RIB
+      // with a modulo-97 key; non-CEMAC corridors are left untouched.
+      const ribValidation = validateCemacRib(dest, countryCode, "dest");
+      if (!ribValidation.valid) {
+        return res.status(400).json({
+          error: "invalid_rib",
+          message: ribValidation.error,
+          details: {
+            field: "dest",
+            country: countryCode ?? ribValidation.country ?? null,
+          },
+        });
       }
 
       if (account) {
         const customer = await sep12Service.getCustomer(
-          account as string,
-          req.query.memo as string,
-          req.query.memo_type as string,
+          account,
+          firstString(params.memo),
+          firstString(params.memo_type),
         );
 
         if (customer.status === Sep12CustomerStatus.NEEDS_INFO) {
@@ -294,6 +328,14 @@ export const createSep6Router = (db: Pool): Router => {
       logger.error("[SEP-6 Withdraw Error]:", error);
       res.status(500).json({ error: "Internal Server Error" });
     }
+  };
+
+  sep6Router.get("/withdraw", (req: Request, res: Response) => {
+    void handleWithdraw(req.query as WithdrawParams, res);
+  });
+
+  sep6Router.post("/withdraw", json(), (req: Request, res: Response) => {
+    void handleWithdraw(req.body ?? {}, res);
   });
 
   return sep6Router;

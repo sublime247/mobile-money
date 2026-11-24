@@ -15,6 +15,7 @@ import {
   getStellarServer,
 } from "../config/stellar";
 import { hasTrustline } from "./trustlines";
+import { enforceSep8Approval, Sep8ClientOptions } from "./sep8";
 
 type StellarOperation = Parameters<TransactionBuilder["addOperation"]>[0];
 type StellarTimebounds = { minTime: string; maxTime: string };
@@ -405,13 +406,29 @@ function validateEnvelopeFeeLimit(
   }
 }
 
+export interface SubmitTransactionOptions {
+  /**
+   * Injectable network dependencies for the SEP-08 approval gate. Supplying
+   * these replaces HTTP calls but never disables the gate for regulated
+   * assets.
+   */
+  sep8?: Sep8ClientOptions;
+}
+
 export const submitTransaction = async (
   envelope: string,
+  options: SubmitTransactionOptions = {},
 ): Promise<SubmitTransactionResult> => {
   const server = getStellarServer();
 
   try {
-    const transaction = parseTransactionEnvelope(envelope);
+    // Regulated assets must be approved before network submission (#2432).
+    // The gate is a no-op for native/non-regulated assets; a revised XDR is
+    // returned here and replaces the envelope submitted below.
+    const approval = await enforceSep8Approval(envelope, options.sep8);
+    const approvedEnvelope = approval.envelope;
+
+    const transaction = parseTransactionEnvelope(approvedEnvelope);
     validateEnvelopeFeeLimit(transaction);
 
     const response = await server.submitTransaction(transaction);
@@ -423,7 +440,7 @@ export const submitTransaction = async (
     return {
       success: true,
       transactionHash: response.hash,
-      envelope,
+      envelope: approvedEnvelope,
       feeCharged: Number(
         (response as { fee_charged?: number | string }).fee_charged ??
           transaction.fee,

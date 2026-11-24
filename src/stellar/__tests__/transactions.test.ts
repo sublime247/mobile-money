@@ -14,9 +14,19 @@ jest.mock("../../config/stellar", () => ({
 }));
 
 import { getFeeBumpConfig, getStellarServer } from "../../config/stellar";
+import { enforceSep8Approval } from "../sep8";
+
+jest.mock("../sep8", () => ({
+  enforceSep8Approval: jest.fn(async (envelope: string) => ({
+    regulated: false,
+    status: null,
+    envelope,
+  })),
+}));
 
 const mockGetStellarServer = getStellarServer as jest.Mock;
 const mockGetFeeBumpConfig = getFeeBumpConfig as jest.Mock;
+const mockEnforceSep8Approval = enforceSep8Approval as jest.Mock;
 
 const sourceKeypair = StellarSdk.Keypair.random();
 const feePayerKeypair = StellarSdk.Keypair.random();
@@ -63,6 +73,12 @@ function makePaymentOperation() {
 
 describe("stellar fee bump transactions", () => {
   beforeEach(() => {
+    mockEnforceSep8Approval.mockReset();
+    mockEnforceSep8Approval.mockImplementation(async (envelope: string) => ({
+      regulated: false,
+      status: null,
+      envelope,
+    }));
     mockGetFeeBumpConfig.mockReturnValue({
       feePayerPublicKey: feePayerKeypair.publicKey(),
       feePayerPrivateKey: feePayerKeypair.secret(),
@@ -247,6 +263,68 @@ describe("stellar fee bump transactions", () => {
     expect(result.usedFeeBump).toBe(true);
     expect(result.fee).toBeGreaterThanOrEqual(100);
     expect(result.envelope).toBeDefined();
+  });
+
+  it("submits the revised XDR returned by the SEP-08 gate", async () => {
+    const server = makeServer();
+    mockGetStellarServer.mockReturnValue(server);
+    const original = (
+      await buildTransactionWithFeeBump({
+        sourceAccount: sourceKeypair.publicKey(),
+        operations: [makePaymentOperation()],
+        enableFeeBump: true,
+      })
+    ).envelope;
+
+    const revisedEnvelope = new StellarSdk.TransactionBuilder(
+      makeAccount(sourceKeypair.publicKey(), "123"),
+      {
+        fee: "100",
+        networkPassphrase: StellarSdk.Networks.TESTNET,
+      },
+    )
+      .addOperation(
+        StellarSdk.Operation.payment({
+          destination,
+          asset: StellarSdk.Asset.native(),
+          amount: "2",
+        }),
+      )
+      .setTimeout(30)
+      .build()
+      .toEnvelope()
+      .toXDR("base64");
+
+    mockEnforceSep8Approval.mockResolvedValueOnce({
+      regulated: true,
+      status: "revised",
+      envelope: revisedEnvelope,
+      response: { status: "revised", tx: revisedEnvelope, message: "revised" },
+    });
+
+    const sep8Options = { approvalServerUrl: "https://approval.example.com" };
+    const result = await submitTransaction(original, { sep8: sep8Options });
+
+    expect(result.success).toBe(true);
+    expect(result.envelope).toBe(revisedEnvelope);
+    expect(mockEnforceSep8Approval).toHaveBeenCalledWith(original, sep8Options);
+    const submitted = server.submitTransaction.mock.calls[0][0];
+    expect(submitted).toBeInstanceOf(StellarSdk.Transaction);
+    expect(Number((submitted.operations[0] as any).amount)).toBe(2);
+  });
+
+  it("does not reach Horizon when the SEP-08 gate rejects a transaction", async () => {
+    const server = makeServer();
+    mockGetStellarServer.mockReturnValue(server);
+    mockEnforceSep8Approval.mockRejectedValueOnce(
+      new Error("SEP-08 rejected: account is sanctioned"),
+    );
+
+    const result = await submitTransaction("irrelevant-envelope");
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("SEP-08 rejected");
+    expect(server.submitTransaction).not.toHaveBeenCalled();
   });
 });
 
