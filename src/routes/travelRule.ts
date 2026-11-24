@@ -284,4 +284,58 @@ travelRuleRoutes.get(
   },
 );
 
+// ---------------------------------------------------------------------------
+// IVMS 101 endpoint — issue #2466
+// ---------------------------------------------------------------------------
+
+import {
+  buildIVMS101FromRecord,
+  validateIVMS101Input,
+} from "../compliance/ivms101.js";
+
+/**
+ * GET /api/v1/compliance/travel-rule/:transactionId/ivms101
+ *
+ * Returns the IVMS 101 JSON payload for the Travel Rule record associated
+ * with a transaction.  Useful for interVASP message exchange.
+ */
+travelRuleRoutes.get(
+  "/:transactionId/ivms101",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    if (!requireAdmin(req, res)) return;
+
+    try {
+      const record = await travelRuleService.findByTransactionId(
+        req.params.transactionId,
+      );
+
+      if (!record) {
+        return res
+          .status(404)
+          .json({ error: "No Travel Rule record for this transaction" });
+      }
+
+      // Validate mandatory IVMS 101 fields before serializing
+      const validation = validateIVMS101Input(record.sender, record.receiver);
+      if (!validation.valid) {
+        return res.status(422).json({
+          error: "IVMS 101 validation failed",
+          details: validation.errors,
+        });
+      }
+
+      const payload = buildIVMS101FromRecord(record, { strict: false });
+      res.json(payload);
+    } catch (err) {
+      logger.error(
+        "[travel-rule] ivms101 error:",
+        err instanceof Error ? err.message : err,
+      );
+      throw createError(ERROR_CODES.INTERNAL_ERROR, "IVMS 101 generation failed", {
+        error: "IVMS 101 generation failed",
+      });
+    }
+  },
+);
 
