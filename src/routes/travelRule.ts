@@ -10,6 +10,14 @@ import { travelRuleService, TravelRuleRecord } from "../compliance/travelRule";
 import { createError } from "../middleware/errorHandler";
 import { ERROR_CODES } from "../constants/errorCodes";
 import { travelRuleCheckHandler } from "../controllers/complianceController";
+import {
+  buildIVMS101FromRecord,
+  buildIVMS101Payload,
+} from "../compliance/ivms101.js";
+import {
+  serializeIVMS101Payload,
+  validateIVMS101Payload,
+} from "../compliance/ivms101Validator.js";
 
 export const travelRuleRoutes = Router();
 
@@ -55,6 +63,49 @@ function serializeRecord(r: TravelRuleRecord) {
     exportedAt: r.exportedAt?.toISOString() ?? null,
     exportedBy: r.exportedBy ?? null,
   };
+}
+
+function setStructuredAddress(
+  person: { geographicAddress?: unknown },
+  addressInput: unknown,
+): void {
+  if (
+    !addressInput ||
+    typeof addressInput !== "object" ||
+    Array.isArray(addressInput)
+  ) {
+    return;
+  }
+
+  const address = addressInput as Record<string, unknown>;
+  const structuredAddress: Record<string, unknown> = {
+    addressType: address.addressType || "GEOG",
+    country: address.country,
+  };
+  const addressFields: Array<[string, string]> = [
+    ["street", "streetName"],
+    ["streetName", "streetName"],
+    ["buildingNumber", "buildingNumber"],
+    ["buildingName", "buildingName"],
+    ["department", "department"],
+    ["subDepartment", "subDepartment"],
+    ["floor", "floor"],
+    ["postBox", "postBox"],
+    ["room", "room"],
+    ["townName", "townName"],
+    ["city", "townName"],
+    ["postCode", "postCode"],
+    ["townLocationName", "townLocationName"],
+    ["districtName", "districtName"],
+    ["countrySubDivision", "countrySubDivision"],
+  ];
+
+  for (const [source, target] of addressFields) {
+    if (address[source] !== undefined)
+      structuredAddress[target] = address[source];
+  }
+
+  Object.assign(person, { geographicAddress: [structuredAddress] });
 }
 
 /**
@@ -202,9 +253,7 @@ travelRuleRoutes.post(
   requireAuth,
   async (req: Request, res: Response) => {
     try {
-      const { buildIvms101Payload, isTravelRuleRequired } = await import(
-        "../compliance/ivms101"
-      );
+      const { isTravelRuleRequired } = await import("../compliance/ivms101");
 
       const {
         originatorName,
@@ -218,36 +267,65 @@ travelRuleRoutes.post(
         originatingVaspName,
         beneficiaryVaspName,
         amount,
-        currency,
-      } = req.body;
+      } = req.body ?? {};
 
       if (!originatorName || !originatorAccount || !beneficiaryName || !beneficiaryAccount) {
         return res.status(400).json({ error: "Missing required originator or beneficiary details" });
       }
 
       const required = isTravelRuleRequired(Number(amount) || 0);
-      const payload = buildIvms101Payload({
-        originatorName,
-        originatorAccount,
+      const payload = buildIVMS101Payload(
+        {
+          name: originatorName,
+          account: originatorAccount,
+          address:
+            typeof originatorAddress === "string"
+              ? originatorAddress
+              : undefined,
+          dob: originatorDob,
+          idNumber: originatorIdNumber,
+        },
+        {
+          name: beneficiaryName,
+          account: beneficiaryAccount,
+          address:
+            typeof beneficiaryAddress === "string"
+              ? beneficiaryAddress
+              : undefined,
+        },
+        {
+          originatingVasp: originatingVaspName,
+          beneficiaryVasp: beneficiaryVaspName,
+          strict: false,
+        },
+      );
+
+      setStructuredAddress(
+        payload.originator.originatorPersons[0].naturalPerson,
         originatorAddress,
-        originatorDob,
-        originatorIdNumber,
-        beneficiaryName,
-        beneficiaryAccount,
+      );
+      setStructuredAddress(
+        payload.beneficiary.beneficiaryPersons[0].naturalPerson,
         beneficiaryAddress,
-        originatingVaspName,
-        beneficiaryVaspName,
-        amount: Number(amount) || 0,
-        currency: currency || "USD",
-      });
+      );
+
+      const validation = validateIVMS101Payload(payload);
+      if (!validation.valid) {
+        return res.status(422).json({
+          error: "IVMS 101 validation failed",
+          details: validation.errors,
+        });
+      }
 
       return res.status(200).json({
         travelRuleRequired: required,
-        ivms101: payload,
+        ivms101: JSON.parse(serializeIVMS101Payload(payload)),
       });
-    } catch (err: any) {
-      logger.error("[travel-rule] ivms101 error:", err.message);
-      return res.status(400).json({ error: err.message || "Failed to generate IVMS 101 payload" });
+    } catch {
+      logger.error("[travel-rule] IVMS 101 request could not be processed");
+      return res
+        .status(400)
+        .json({ error: "Failed to generate IVMS 101 payload" });
     }
   },
 );
@@ -284,15 +362,6 @@ travelRuleRoutes.get(
   },
 );
 
-// ---------------------------------------------------------------------------
-// IVMS 101 endpoint — issue #2466
-// ---------------------------------------------------------------------------
-
-import {
-  buildIVMS101FromRecord,
-  validateIVMS101Input,
-} from "../compliance/ivms101.js";
-
 /**
  * GET /api/v1/compliance/travel-rule/:transactionId/ivms101
  *
@@ -316,8 +385,8 @@ travelRuleRoutes.get(
           .json({ error: "No Travel Rule record for this transaction" });
       }
 
-      // Validate mandatory IVMS 101 fields before serializing
-      const validation = validateIVMS101Input(record.sender, record.receiver);
+      const payload = buildIVMS101FromRecord(record, { strict: false });
+      const validation = validateIVMS101Payload(payload);
       if (!validation.valid) {
         return res.status(422).json({
           error: "IVMS 101 validation failed",
@@ -325,17 +394,12 @@ travelRuleRoutes.get(
         });
       }
 
-      const payload = buildIVMS101FromRecord(record, { strict: false });
-      res.json(payload);
-    } catch (err) {
-      logger.error(
-        "[travel-rule] ivms101 error:",
-        err instanceof Error ? err.message : err,
-      );
+      res.type("application/json").send(serializeIVMS101Payload(payload));
+    } catch {
+      logger.error("[travel-rule] IVMS 101 export could not be processed");
       throw createError(ERROR_CODES.INTERNAL_ERROR, "IVMS 101 generation failed", {
         error: "IVMS 101 generation failed",
       });
     }
   },
 );
-
