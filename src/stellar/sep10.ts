@@ -6,6 +6,21 @@ import { v4 as uuidv4 } from "uuid";
 import { getStellarServer, getNetworkPassphrase } from "../config/stellar";
 import { ERROR_CODES } from "../constants/errorCodes";
 import { createError } from "../middleware/errorHandler";
+import {
+  assertClientDomainAuthorized,
+  verifyClientDomain,
+  parseStellarTomlAccounts,
+  lookupClientDomainDnsTxt,
+  clearClientDomainVerifierCache,
+} from "./clientDomainVerifier";
+
+export {
+  assertClientDomainAuthorized,
+  verifyClientDomain,
+  parseStellarTomlAccounts,
+  lookupClientDomainDnsTxt,
+  clearClientDomainVerifierCache,
+};
 
 /**
  * SEP-10: Stellar Authentication
@@ -162,6 +177,7 @@ const LOCAL_DOMAIN_PATTERN = /^(?:localhost|127\.0\.0\.1)(?::\d{1,5})?$/;
 /** Clear the stellar.toml signing-key cache (used by tests). */
 export function clearClientDomainCache(): void {
   clientDomainCache.clear();
+  clearClientDomainVerifierCache();
 }
 
 function isLocalDomain(domain: string): boolean {
@@ -792,20 +808,35 @@ export class Sep10Service {
       const clientDomainStr = parseClientDomain(
         Buffer.from(clientDomainOp.value).toString("utf8"),
       );
+
+      // Verify client domain authorization via stellar.toml (SIGNING_KEY or ACCOUNTS) or DNS TXT (#2562)
+      const domainVerificationKey = clientDomainOp.source || clientPublicKey;
+      const authResult = await assertClientDomainAuthorized(
+        clientDomainStr,
+        domainVerificationKey,
+        { fetchFn },
+      );
+
       const clientDomainSigningKey = await fetchClientDomainSigningKey(
         clientDomainStr,
         fetchFn,
       );
 
-      if (clientDomainOp.source !== clientDomainSigningKey) {
+      if (
+        clientDomainOp.source &&
+        clientDomainOp.source !== clientDomainSigningKey &&
+        !authResult.accounts?.includes(clientDomainOp.source) &&
+        !authResult.authorizedKeys?.includes(clientDomainOp.source)
+      ) {
         throw new Error(
           `client_domain operation source does not match ${clientDomainStr} SIGNING_KEY`,
         );
       }
 
-      if (!isSignedBy(transaction, clientDomainSigningKey)) {
+      const signingKeyToVerify = clientDomainOp.source || clientDomainSigningKey;
+      if (!isSignedBy(transaction, signingKeyToVerify)) {
         throw new Error(
-          `Transaction is not signed by client domain SIGNING_KEY (${clientDomainSigningKey})`,
+          `Transaction is not signed by client domain SIGNING_KEY (${signingKeyToVerify})`,
         );
       }
     }
