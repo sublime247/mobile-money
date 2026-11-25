@@ -102,4 +102,51 @@ describe("travelRuleRoutes", () => {
     expect(found.status).toBe(200);
     expect(found.body.transactionId).toBe("txn-2");
   });
+
+  it("validates and serializes IVMS 101 data before returning an exchange payload", async () => {
+    const response = await request(buildApp())
+      .post("/ivms101")
+      .send({
+        originatorName: "Alice Smith",
+        originatorAccount: "originator-account",
+        originatorAddress: {
+          street: "1 Main Street",
+          city: "London",
+          postCode: "SW1A 1AA",
+          country: "GB",
+        },
+        beneficiaryName: "Bob Jones",
+        beneficiaryAccount: "beneficiary-account",
+        amount: 1500,
+        currency: "USD",
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.travelRuleRequired).toBe(true);
+    expect(response.body.ivms101.IVMS101Version).toBe("2019-01-21");
+    expect(
+      response.body.ivms101.originator.originatorPersons[0].naturalPerson
+        .geographicAddress[0],
+    ).toMatchObject({
+      streetName: "1 Main Street",
+      townName: "London",
+      country: "GB",
+    });
+  });
+
+  it("returns JSON pointer errors for incomplete originator identity data", async () => {
+    const response = await request(buildApp()).post("/ivms101").send({
+      originatorName: "Alice Smith",
+      originatorAccount: "originator-account",
+      beneficiaryName: "Bob Jones",
+      beneficiaryAccount: "beneficiary-account",
+    });
+
+    expect(response.status).toBe(422);
+    expect(response.body.details).toContainEqual(
+      expect.objectContaining({
+        path: "/originator/originatorPersons/0/naturalPerson/nationalIdentification",
+      }),
+    );
+  });
 });
