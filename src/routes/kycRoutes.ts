@@ -3,6 +3,7 @@ import { validateExpiryDate } from "../utils/validators";
 import { NextFunction, Router } from "express";
 import { Pool } from "pg";
 import { KYCController } from "../controllers/kycController";
+import { KycWebhookController } from "../controllers/kycWebhookController";
 import { authenticateToken } from "../middleware/auth";
 import { upload, uploadErrorMessages } from "../middleware/upload";
 import { uploadToS3 } from "../services/s3Upload";
@@ -93,9 +94,13 @@ export const createKYCRoutes = (db: Pool): Router => {
   const router = Router();
   const kycController = new KYCController(db);
   const kycService = new KYCService(db);
+  const kycWebhookController = new KycWebhookController(db);
 
   // Webhook endpoint (no auth required - verified by signature)
   router.post("/webhooks", kycController.handleWebhook);
+
+  // External KYC provider async callback
+  router.post("/webhook/callback", kycWebhookController.handleCallback);
 
   // All remaining KYC routes require authentication
   router.use(authenticateToken);
