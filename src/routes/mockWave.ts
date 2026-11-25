@@ -1,11 +1,12 @@
 import { Router, Request, Response } from "express";
 import { WaveSimulator } from "../services/mock/waveSimulator";
+import { verifyWaveSignature } from "../providers/wave/waveSignatureValidator";
 import logger from "../utils/logger";
 
 const router = Router();
 const simulator = new WaveSimulator();
 
-router.post("/checkout/sessions", (req: Request, res: Response) => {
+router.post("/checkout/sessions", verifyWaveSignature, (req: Request, res: Response) => {
   try {
     const {
       amount,
