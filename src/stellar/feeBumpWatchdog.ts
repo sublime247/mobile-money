@@ -1,17 +1,29 @@
-import { getStellarServer } from "../config/stellar";
+import * as StellarSdk from "@stellar/stellar-sdk";
+import {
+  getFeeBumpConfig,
+  getNetworkPassphrase,
+  getStellarServer,
+} from "../config/stellar";
 import { pool } from "../config/database";
 import { TransactionModel } from "../models/transaction";
 import logger from "../utils/logger";
 import {
   createFeeBumpForPendingTransaction,
+  PendingFeeBumpOptions,
   PendingFeeBumpResult,
   SubmitTransactionResult,
   submitTransaction,
 } from "./transactions";
+import {
+  ESCALATION_THRESHOLD_MS,
+  isPastEscalationThreshold,
+  LEDGER_CLOSE_TIME_MS,
+  planFeeBumpEscalation,
+} from "./feeBumpEscalator";
 
-export const DEFAULT_PENDING_TRANSACTION_AGE_MS = 60_000;
+export const DEFAULT_PENDING_TRANSACTION_AGE_MS = ESCALATION_THRESHOLD_MS;
 export const DEFAULT_MAX_FEE_BUMPS = 3;
-export const DEFAULT_LEDGER_CLOSE_TIME_MS = 5_000;
+export const DEFAULT_LEDGER_CLOSE_TIME_MS = LEDGER_CLOSE_TIME_MS;
 
 export interface PendingStellarTransaction {
   id: string;
@@ -26,11 +38,16 @@ export interface FeeBumpWatchdogOptions {
   ageThresholdMs?: number;
   ledgerCloseTimeMs?: number;
   maxFeeBumps?: number;
+  /** Fee ceiling in stroops; defaults to the configured maximum fee. */
+  maxFee?: number;
   now?: () => number;
   loadPending?: () => Promise<PendingStellarTransaction[]>;
   getLedgerClosedAt?: () => Promise<number>;
   isConfirmed?: (hash: string) => Promise<boolean>;
-  bumpFee?: (envelope: string) => PendingFeeBumpResult;
+  bumpFee?: (
+    envelope: string,
+    options: PendingFeeBumpOptions,
+  ) => PendingFeeBumpResult;
   submit?: (envelope: string) => Promise<SubmitTransactionResult>;
   onBumped?: (
     record: PendingStellarTransaction,
@@ -45,6 +62,17 @@ export interface FeeBumpWatchdogResult {
   confirmed: number;
   skipped: number;
   failed: number;
+}
+
+/** Parse the un-bumped inner transaction from a stored envelope. */
+export function readInnerTransaction(envelope: string): StellarSdk.Transaction {
+  const parsed = StellarSdk.TransactionBuilder.fromXDR(
+    envelope,
+    getNetworkPassphrase(),
+  );
+  return parsed instanceof StellarSdk.FeeBumpTransaction
+    ? (parsed.innerTransaction as StellarSdk.Transaction)
+    : (parsed as StellarSdk.Transaction);
 }
 
 export async function loadPendingStellarTransactions(): Promise<
@@ -74,7 +102,9 @@ export async function loadPendingStellarTransactions(): Promise<
       return {
         id: row.id,
         hash: stellar.transactionHash,
-        envelope: stellar.envelope,
+        // Always bump the original inner envelope: a stored fee bump cannot be
+        // wrapped again, so re-bumps must start from the un-bumped transaction.
+        envelope: stellar.originalEnvelope ?? stellar.envelope,
         submittedAt: stellar.submittedAt,
         feeBumps: Array.isArray(stellar.feeBumps) ? stellar.feeBumps : [],
         metadata: row.metadata ?? {},
@@ -125,6 +155,7 @@ export async function persistFeeBump(
     stellar: {
       ...stellar,
       transactionHash: result.transactionHash ?? bump.feeBumpTransactionHash,
+      originalEnvelope: stellar.originalEnvelope ?? record.envelope,
       envelope: bump.envelope,
       submittedAt: new Date().toISOString(),
       originalFee: bump.originalFee,
@@ -154,6 +185,8 @@ export async function runFeeBumpWatchdogOnce(
     options.getLedgerClosedAt ?? getLatestLedgerClosedAt;
   const isConfirmed = options.isConfirmed ?? isTransactionConfirmed;
   const bumpFee = options.bumpFee ?? createFeeBumpForPendingTransaction;
+  const maxFee =
+    options.maxFee ?? getFeeBumpConfig().maxFeePerTransaction;
   const submit = options.submit ?? submitTransaction;
   const onBumped = options.onBumped ?? persistFeeBump;
 
@@ -186,8 +219,7 @@ export async function runFeeBumpWatchdogOnce(
 
     const submittedAt = new Date(record.submittedAt).getTime();
     if (
-      !Number.isFinite(submittedAt) ||
-      referenceTime - submittedAt < ageThresholdMs
+      !isPastEscalationThreshold(submittedAt, referenceTime, ageThresholdMs)
     ) {
       result.skipped += 1;
       continue;
@@ -208,7 +240,29 @@ export async function runFeeBumpWatchdogOnce(
         continue;
       }
 
-      const bump = bumpFee(record.envelope);
+      const bumps = (record.feeBumps ?? []) as Array<{ fee?: unknown }>;
+      const lastFee = Number(bumps[bumps.length - 1]?.fee);
+      const inner = readInnerTransaction(record.envelope);
+      const decision = planFeeBumpEscalation({
+        originalFee: Number(inner.fee),
+        operationCount: inner.operations.length,
+        bumpCount: bumps.length,
+        currentFee: Number.isFinite(lastFee) ? lastFee : undefined,
+        maxFee,
+      });
+      if (!decision.shouldBump || decision.multiplier === undefined) {
+        logger.warn(
+          { transaction_id: record.id, transaction_hash: record.hash, reason: decision.reason },
+          "Fee bump escalation skipped for pending transaction",
+        );
+        result.skipped += 1;
+        continue;
+      }
+
+      const bump = bumpFee(record.envelope, {
+        multiplier: decision.multiplier,
+        maxFee,
+      });
       const submission = await submit(bump.envelope);
       if (!submission.success) {
         throw new Error(submission.error ?? "Fee bump submission failed");
