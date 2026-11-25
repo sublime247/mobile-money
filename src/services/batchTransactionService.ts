@@ -30,6 +30,11 @@
 import { EventEmitter } from "events";
 import logger from "../utils/logger";
 import { MobileMoneyService } from "./mobilemoney/mobileMoneyService";
+import {
+  classifyProviderFailure,
+  recordProviderRequestError,
+  timeRemittanceStep,
+} from "../monitoring/remittanceMetrics";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -97,7 +102,7 @@ async function runWithConcurrency<T>(
   async function worker(): Promise<void> {
     while (index < tasks.length) {
       const current = index++;
-      // eslint-disable-next-line no-await-in-loop
+       
       results[current] = await tasks[current]();
     }
   }
@@ -251,6 +256,8 @@ export class BatchTransactionService extends EventEmitter {
     timeoutMs: number,
   ): Promise<BatchItemOutcome> {
     const start = Date.now();
+    // Corridor is optional caller metadata; it becomes a bounded metric label.
+    const corridor = item.metadata?.corridor;
 
     try {
       const providerCall =
@@ -278,7 +285,13 @@ export class BatchTransactionService extends EventEmitter {
         ),
       );
 
-      const result = await Promise.race([providerCall, timeoutPromise]);
+      const result = await timeRemittanceStep(corridor, "provider_call", () =>
+        Promise.race([providerCall, timeoutPromise]),
+      );
+      if (!result.success) {
+        const { status, errorCode } = classifyProviderFailure(result.error);
+        recordProviderRequestError(item.provider, status, errorCode);
+      }
 
       const durationMs = Date.now() - start;
       const outcome: BatchItemOutcome = {
@@ -300,6 +313,8 @@ export class BatchTransactionService extends EventEmitter {
     } catch (err) {
       const durationMs = Date.now() - start;
       const errMsg = err instanceof Error ? err.message : String(err);
+      const { status, errorCode } = classifyProviderFailure(errMsg);
+      recordProviderRequestError(item.provider, status, errorCode);
 
       logger.error(
         { batchId, idempotencyKey: item.idempotencyKey, error: errMsg },
