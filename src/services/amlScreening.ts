@@ -12,6 +12,7 @@
  * written for AML reporting (`aml_screening_audit`).
  */
 
+import { bestJaroWinklerMatch } from "./compliance/fuzzyMatcher";
 import crypto from "crypto";
 import logger from "../utils/logger";
 import { pool } from "../config/database";
@@ -35,7 +36,12 @@ export interface AmlSanctionEntity {
   source: string;
   category?: string;
   external_id?: string;
+  /** Known aliases / alternate spellings (AKA) of this entry. */
+  aliases?: string[] | null;
 }
+
+/** Algorithm that produced a match's score. */
+export type AmlMatchAlgorithm = "jaro_winkler" | "composite";
 
 export interface AmlScreeningMatch {
   party: AmlScreeningParty;
@@ -46,6 +52,9 @@ export interface AmlScreeningMatch {
   source: string;
   category?: string;
   externalId?: string;
+  /** Spelling (primary name or alias) that produced the score. */
+  matchedAlias?: string;
+  algorithm?: AmlMatchAlgorithm;
 }
 
 export interface AmlScreeningAuditRecord {
@@ -60,6 +69,10 @@ export interface AmlScreeningAuditRecord {
   source: string;
   /** Reference of the matched list entry (e.g. OFAC-456), when known. */
   listReference?: string;
+  /** Alias / spelling that matched, when it differs from matchedName. */
+  matchedAlias?: string;
+  /** Algorithm that produced `score`. */
+  matchAlgorithm?: AmlMatchAlgorithm;
   dailyVolumeUsd: number;
   status: AmlScreeningStatus;
   createdAt: string;
@@ -328,7 +341,7 @@ export class AmlScreeningService {
 
     try {
       const { rows } = await pool.query<AmlSanctionEntity>(
-        `SELECT name, country, source, category, external_id
+        `SELECT name, country, source, category, external_id, aliases
            FROM sanction_list
           WHERE source = ANY($1::text[])`,
         [["OFAC", "UN", "EU"]],
@@ -356,17 +369,27 @@ export class AmlScreeningService {
     const matches: AmlScreeningMatch[] = [];
 
     for (const entity of entities) {
-      const score = nameSimilarityScore(name, entity.name);
+      // Jaro-Winkler over the primary name and every alias (#2560), alongside
+      // the existing composite Levenshtein score; the higher one wins.
+      const composite = nameSimilarityScore(name, entity.name);
+      const jw = bestJaroWinklerMatch(name, {
+        name: entity.name,
+        aliases: entity.aliases,
+      });
+      const useJw = jw.score > composite;
+      const score = useJw ? jw.score : composite;
       if (score >= this.config.matchThreshold) {
         matches.push({
           party,
           listType: "sanctions",
           screenedName: name,
           matchedName: entity.name,
-          score,
+          score: Math.round(score * 10_000) / 10_000,
           source: entity.source,
           category: entity.category,
           externalId: entity.external_id,
+          matchedAlias: useJw ? jw.matchedAlias : entity.name,
+          algorithm: useJw ? "jaro_winkler" : "composite",
         });
       }
     }
@@ -477,6 +500,9 @@ export class AmlScreeningService {
         matchedName: match.matchedName,
         score: match.score,
         source: match.source,
+        listReference: match.externalId,
+        matchedAlias: match.matchedAlias,
+        matchAlgorithm: match.algorithm,
         dailyVolumeUsd,
         status: PENDING_COMPLIANCE_REVIEW,
       });
@@ -565,6 +591,8 @@ export class AmlScreeningService {
         score: match.score,
         source: match.source,
         listReference: match.externalId,
+        matchedAlias: match.matchedAlias,
+        matchAlgorithm: match.algorithm,
         dailyVolumeUsd: 0,
         status,
       });
@@ -637,8 +665,9 @@ export class AmlScreeningService {
         `INSERT INTO aml_screening_audit (
             id, transaction_id, user_id, party, list_type, screened_name,
             matched_name, score, source, daily_volume_usd, status,
-            previous_hash, record_hash, created_at, list_reference
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+            previous_hash, record_hash, created_at, list_reference,
+            matched_alias, match_algorithm
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
          ON CONFLICT (id) DO NOTHING`,
         [
           record.id,
@@ -656,6 +685,8 @@ export class AmlScreeningService {
           record.recordHash,
           record.createdAt,
           record.listReference ?? null,
+          record.matchedAlias ?? null,
+          record.matchAlgorithm ?? null,
         ],
       );
     } catch (error) {
@@ -699,6 +730,8 @@ export class AmlScreeningService {
       // Only hashed when present so records written before this field existed
       // keep verifying.
       ...(record.listReference ? { listReference: record.listReference } : {}),
+      ...(record.matchedAlias ? { matchedAlias: record.matchedAlias } : {}),
+      ...(record.matchAlgorithm ? { matchAlgorithm: record.matchAlgorithm } : {}),
     });
     return crypto.createHash("sha256").update(canonical).digest("hex");
   }
