@@ -22,7 +22,12 @@ import logger from "../../utils/logger";
 // Types
 // ---------------------------------------------------------------------------
 
-export type QuoteStatus = "active" | "pending_execution" | "cancelled" | "expired";
+export type QuoteStatus =
+  | "active"
+  | "pending_execution"
+  | "executed"
+  | "cancelled"
+  | "expired";
 
 export interface Sep38Quote {
   id: string;
@@ -423,6 +428,73 @@ export async function cancelQuote(
   );
 
   return cancelled;
+}
+
+/**
+ * Transition a quote to its terminal `executed` state after settlement
+ * (#2557). The UPDATE is conditional on the quote still being executable and
+ * unexpired, so even without the Redis execution lock a quote can be marked
+ * executed at most once.
+ *
+ * Throws with `statusCode` 409 when the quote is no longer executable.
+ */
+export async function markQuoteExecuted(id: string): Promise<Sep38Quote> {
+  const notExecutable = () => {
+    const err = new Error(
+      "Quote cannot be executed: it was already executed, cancelled or expired",
+    ) as Error & { statusCode: number };
+    err.statusCode = 409;
+    return err;
+  };
+
+  let executed: Sep38Quote | undefined;
+
+  const useMemory =
+    process.env.NODE_ENV === "test" && !process.env.TEST_WITH_REAL_DB;
+
+  if (!useMemory) {
+    try {
+      const result = await queryWrite<Record<string, any>>(
+        `UPDATE sep38_quotes
+         SET status = 'executed'
+         WHERE id = $1
+           AND status IN ('active', 'pending_execution')
+           AND expires_at > NOW()
+         RETURNING *`,
+        [id],
+      );
+      if (result.rows.length > 0) {
+        executed = rowToQuote(result.rows[0]);
+      } else if (!inMemoryQuotes.has(id)) {
+        throw notExecutable();
+      }
+    } catch (err: any) {
+      if (err.statusCode) throw err;
+      logger.warn({ err, id }, "[SEP38] DB update failed — checking fallback memory store");
+    }
+  }
+
+  if (!executed) {
+    const memQuote = inMemoryQuotes.get(id);
+    if (
+      memQuote &&
+      (memQuote.status === "active" || memQuote.status === "pending_execution") &&
+      memQuote.expiresAt > new Date()
+    ) {
+      memQuote.status = "executed";
+      memQuote.updatedAt = new Date();
+      executed = memQuote;
+    } else {
+      throw notExecutable();
+    }
+  }
+
+  // The reserved liquidity has now been consumed by the settlement.
+  await releaseLiquidity(executed.reservedAmount);
+  await layeredCache.del(cacheKey(id));
+
+  logger.info({ quoteId: id }, "[SEP38] Firm quote executed");
+  return executed;
 }
 
 /**
