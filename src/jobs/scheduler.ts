@@ -45,6 +45,7 @@ import { runQuoteExpirationJob } from "./quoteExpirationJob";
 import { runSep24InteractiveExpirationJob } from "./sep24InteractiveExpirationJob";
 import { runDailySarSummaryJob } from "./dailySarSummaryJob";
 import { runPartitionManagerJob } from "./partitionManager";
+import { runAuditPartitionJob } from "./auditPartitionJob";
 import { withJobTrace } from "../queue/jobTracing";
 import { runKycRetentionPurgeJob } from "./kycRetentionPurgeJob";
 import { runRiskTierRecalculationJob } from "./riskTierRecalculationJob";
@@ -300,6 +301,14 @@ const JOBS: JobConfig[] = [
     schedule: process.env.AUDIT_LOG_PARTITION_CRON || "15 0 * * *",
     timezone: "UTC",
     handler: runPartitionManagerJob,
+  },
+  {
+    name: "audit-log-partition-verify",
+    // Daily at 00:30 UTC - verifies the next 3 months of audit_logs partitions
+    // exist (creating any missing) and that date-range queries are pruned
+    schedule: process.env.AUDIT_PARTITION_VERIFY_CRON || "30 0 * * *",
+    timezone: "UTC",
+    handler: () => runAuditPartitionJob(),
   },
   {
     name: "dlq-cleanup",
