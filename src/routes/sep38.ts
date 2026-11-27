@@ -1,7 +1,17 @@
 import { Router, Request, Response } from "express";
 import { sep38RateLimiter } from "../middleware/rateLimiter";
 import { rateProvider, Sep38Fee } from "../services/sep38/rateProvider";
-import { createQuote, getQuote } from "../services/sep38/quoteService";
+import {
+  createQuote,
+  getQuote,
+  markQuoteExecuted,
+  Sep38Quote,
+} from "../services/sep38/quoteService";
+import {
+  isQuoteLockConflictError,
+  withQuoteLock,
+} from "../stellar/quoteLockService";
+import logger from "../utils/logger";
 
 const FEE_PRECISION = 7;
 
@@ -73,6 +83,7 @@ function feeBreakdownFromQuote(quote: {
  *   GET  /prices       — indicative price for a sell/buy asset pair
  *   POST /quote        — firm (locked) price quote booked in pending_execution
  *   GET  /quote/:id    — retrieve a booked quote by ID
+ *   POST /quote/:id/execute — settle a firm quote exactly once (Redis-locked)
  *
  * All endpoints are protected by the sep38RateLimiter (60 req/min per
  * authenticated client / IP) to prevent high-frequency scraping.
@@ -308,6 +319,136 @@ router.get(
       created_at: quote.createdAt.toISOString(),
       type: "firm",
     });
+  },
+);
+
+// ---------------------------------------------------------------------------
+// POST /quote/:id/execute
+// ---------------------------------------------------------------------------
+
+export interface QuoteSettlementContext {
+  quote: Sep38Quote;
+  /** Request body forwarded verbatim (e.g. destination account, memo). */
+  params: Record<string, unknown>;
+}
+
+export interface QuoteSettlementResult {
+  /** Reference of the fiat debit / crypto credit, e.g. a Stellar tx hash. */
+  reference?: string;
+  [key: string]: unknown;
+}
+
+export type QuoteSettlementHandler = (
+  ctx: QuoteSettlementContext,
+) => Promise<QuoteSettlementResult | void>;
+
+const defaultSettlementHandler: QuoteSettlementHandler = async ({ quote }) => {
+  logger.info(
+    { quoteId: quote.id },
+    "[SEP38] No settlement handler registered — quote consumed without an on-chain leg",
+  );
+};
+
+let settlementHandler: QuoteSettlementHandler = defaultSettlementHandler;
+
+/**
+ * Registers the function that performs the fiat debit / crypto credit for an
+ * executed quote. It always runs while the quote's execution lock is held.
+ * Pass `null` to restore the default (no-op) handler.
+ */
+export function setQuoteSettlementHandler(
+  handler: QuoteSettlementHandler | null,
+): void {
+  settlementHandler = handler ?? defaultSettlementHandler;
+}
+
+/**
+ * Executes a firm quote. The whole check → settle → mark-executed sequence
+ * runs under a Redis distributed lock on the quote ID (#2557):
+ *
+ *   409 — another request is executing this quote right now, or the quote
+ *         was already executed / cancelled
+ *   403 — caller does not own the quote
+ *   404 — unknown quote
+ *   410 — quote expired before execution
+ *
+ * The lock is released as soon as settlement completes or fails.
+ */
+router.post(
+  "/quote/:id/execute",
+  sep38RateLimiter,
+  async (req: Request, res: Response) => {
+    const { id } = req.params;
+    if (!id || typeof id !== "string" || id.trim().length === 0) {
+      return res.status(400).json({
+        error: "Bad Request",
+        message: "Quote ID parameter is required",
+      });
+    }
+
+    const callerId =
+      (req as any).jwtUser?.sub || (req as any).user?.id || req.ip || "anonymous";
+
+    try {
+      return await withQuoteLock(id, async () => {
+        const quote = await getQuote(id);
+        if (!quote) {
+          return res.status(404).json({ error: "Not Found", message: "Quote not found" });
+        }
+
+        if (quote.ownerId !== callerId) {
+          return res.status(403).json({
+            error: "Forbidden",
+            message: "You are not the owner of this quote",
+          });
+        }
+
+        if (quote.status === "expired" || new Date() >= new Date(quote.expiresAt)) {
+          return res.status(410).json({ error: "Gone", message: "Quote has expired" });
+        }
+
+        if (quote.status !== "active" && quote.status !== "pending_execution") {
+          return res.status(409).json({
+            error: "Conflict",
+            message: `Quote cannot be executed: current status is '${quote.status}'`,
+          });
+        }
+
+        const settlement = await settlementHandler({
+          quote,
+          params: (req.body ?? {}) as Record<string, unknown>,
+        });
+        const executed = await markQuoteExecuted(id);
+
+        return res.status(200).json({
+          id: executed.id,
+          status: executed.status,
+          price: executed.price,
+          sell_asset: executed.sellAsset,
+          buy_asset: executed.buyAsset,
+          sell_amount: executed.sellAmount,
+          buy_amount: executed.buyAmount,
+          settlement: settlement ?? null,
+          executed_at: executed.updatedAt.toISOString(),
+        });
+      });
+    } catch (err: any) {
+      if (isQuoteLockConflictError(err)) {
+        return res.status(409).json({
+          error: "Conflict",
+          code: err.code,
+          message: "Quote execution already in progress",
+        });
+      }
+      if (err?.statusCode === 409) {
+        return res.status(409).json({ error: "Conflict", message: err.message });
+      }
+      logger.error({ err, quoteId: id }, "[SEP38] Quote execution failed");
+      return res.status(500).json({
+        error: "Internal Server Error",
+        message: "Quote execution failed",
+      });
+    }
   },
 );
 

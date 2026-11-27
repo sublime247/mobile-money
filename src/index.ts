@@ -106,6 +106,7 @@ import waveWebhookRouter from "./providers/wave/waveWebhook";
 import { createMpesaC2BRouter } from "./providers/mpesa/c2b";
 import orangeMadagascarCallbacksRouter from "./routes/orangeMadagascarCallbacks";
 import orangeGuineaCallbacksRouter from "./routes/orangeGuineaCallbacks";
+import { createMoovRouter } from "./routes/moovRoutes";
 import { createOrangeQrRouter } from "./providers/orange/qrCode";
 import multisigCallbacksRouter from "./routes/multisigCallbacks";
 import adminWithdrawalsRouter from "./routes/adminWithdrawals";
@@ -564,6 +565,7 @@ app.use("/sep8", sepRateLimiter, createSep8Router(pool));
 app.use("/sep31", sepRateLimiter, sep31Router);
 app.use("/sep24", sepRateLimiter, sep24Router);
 app.use("/sep38", sepRateLimiter, sep38Router);
+app.use("/api/v1/moov", requireAuth, createMoovRouter());
 app.use("/sep12", sepRateLimiter, createSep12Router(pool));
 app.use("/sep30", sepRateLimiter, sep30Routes);
 
